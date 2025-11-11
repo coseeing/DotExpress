@@ -1,0 +1,9 @@
+.pytest_cache/
+__pycache__/
+build/
+dist/
+louis/tables/
+promp/
+venv/
+AGENTS.md
+memo.txt

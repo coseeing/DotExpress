@@ -9,7 +9,27 @@ Note that importing this module for the first time will add all tables to the in
 
 from . import addTable
 
-_ = lambda i:i
+
+from pathlib import Path
+import sys
+def resource_path(relative_path: str) -> Path:
+	if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+		base_path = Path(sys._MEIPASS)
+	else:
+		base_path = Path(__file__).resolve().parent.parent
+	return base_path / relative_path
+
+
+import gettext
+LOCALE_DOMAIN = "dotexpress"
+LOCALE_LANGUAGES = ["zh_TW"]
+_translation = gettext.translation(
+	LOCALE_DOMAIN,
+	localedir=str(resource_path("locales")),
+	languages=LOCALE_LANGUAGES,
+	fallback=True,
+)
+_ = _translation.gettext
 
 # Translators: The name of a braille table displayed in the
 # braille settings dialog.

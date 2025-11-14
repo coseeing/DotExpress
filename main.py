@@ -36,10 +36,10 @@ language_detector = LanguageDetector(["en", "zh_TW", "ja"])
 # print(list(res))
 text = "我們 Coseeing　 透過開發創新工具，讓視障者看見更多資訊和可能；透過舉辦推廣活動, 讓大眾看見障礙者面臨的實際挑戰和需求。希望以多元的形式與持續的行動，讓所有人都能共同看見這精采的世界以及獨特的彼此"
 text = "I am a student. I want to school every day"
-text = "coseeing.org"
 res = language_detector.add_detected_language_commands([text])
 print(list(res))
-translate_with_language("zh-tw.ctb", text)
+r = translate_with_language("ja-rokutenkanji.utb", text)
+
 
 # item = "我們 Coseeing 透過開發創新工具，讓視障者看見更多資訊和可能。"
 # item = "我？！的"

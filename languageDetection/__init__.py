@@ -182,6 +182,7 @@ class LanguageDetector(object):
 		self.blockLanguages = blockLanguages
 
 	def add_detected_language_commands(self, speechSequence):
+		yield LangChangeCommand(config.get_lang())
 		sb = StringIO()
 		charset = None
 		# defaultLang = getSynth().language

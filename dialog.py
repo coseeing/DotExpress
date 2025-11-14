@@ -3,9 +3,30 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from pathlib import Path
+import gettext
+import sys
 from typing import List
 
 import wx
+
+
+def resource_path(relative_path: str) -> Path:
+	if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+		base_path = Path(sys._MEIPASS)
+	else:
+		base_path = Path(__file__).resolve().parent
+	return base_path / relative_path
+
+
+LOCALE_DOMAIN = "dotexpress"
+LOCALE_LANGUAGES = ["zh_TW"]
+_translation = gettext.translation(
+	LOCALE_DOMAIN,
+	localedir=str(resource_path("locales")),
+	languages=LOCALE_LANGUAGES,
+	fallback=True,
+)
+_ = _translation.gettext
 
 
 @dataclass
@@ -18,11 +39,11 @@ class AddSymbolDialog(wx.Dialog):
 	"""Simple dialog to capture original text for a new dictionary entry."""
 
 	def __init__(self, parent: wx.Window | None):
-		super().__init__(parent, title="新增字典條目")
+		super().__init__(parent, title=_("Add Dictionary Entry"))
 
 		main_sizer = wx.BoxSizer(wx.VERTICAL)
 
-		label = wx.StaticText(self, label="原始文字")
+		label = wx.StaticText(self, label=_("Source Text"))
 		main_sizer.Add(label, 0, wx.ALL, 8)
 
 		self.identifier_ctrl = wx.TextCtrl(self)
@@ -49,7 +70,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 	"""Dialog for editing custom dictionary mappings stored on disk."""
 
 	def __init__(self, parent: wx.Window | None, dictionary_path: Path | None = None):
-		super().__init__(parent, title="自訂字典管理", style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+		super().__init__(parent, title=_("Custom Dictionary Manager"), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
 
 		self.dictionary_path = Path(dictionary_path) if dictionary_path else (Path("data") / "dictionary.csv")
 		self.entries: List[DictionaryEntry] = self._load_entries()
@@ -70,15 +91,15 @@ class SpeechSymbolsDialog(wx.Dialog):
 
 		# List of existing entries
 		self.list_ctrl = wx.ListCtrl(self, style=wx.LC_REPORT | wx.BORDER_SUNKEN)
-		self.list_ctrl.InsertColumn(0, "原始文字", width=200)
-		self.list_ctrl.InsertColumn(1, "點字", width=250)
+		self.list_ctrl.InsertColumn(0, _("Source Text"), width=200)
+		self.list_ctrl.InsertColumn(1, _("Braille"), width=250)
 		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_item_selected)
 		main_sizer.Add(self.list_ctrl, 1, wx.EXPAND | wx.ALL, 8)
 
 		# Buttons: add / remove
 		button_sizer = wx.BoxSizer(wx.HORIZONTAL)
-		self.add_button = wx.Button(self, label="新增")
-		self.remove_button = wx.Button(self, label="刪除")
+		self.add_button = wx.Button(self, label=_("Add"))
+		self.remove_button = wx.Button(self, label=_("Delete"))
 		self.remove_button.Disable()
 		button_sizer.Add(self.add_button, 0, wx.RIGHT, 8)
 		button_sizer.Add(self.remove_button, 0)
@@ -88,14 +109,14 @@ class SpeechSymbolsDialog(wx.Dialog):
 		self.remove_button.Bind(wx.EVT_BUTTON, self._on_remove_clicked)
 
 		# Editing area
-		edit_box = wx.StaticBoxSizer(wx.VERTICAL, self, label="編輯選定條目")
+		edit_box = wx.StaticBoxSizer(wx.VERTICAL, self, label=_("Edit Selected Entry"))
 
-		source_label = wx.StaticText(edit_box.GetStaticBox(), label="原始文字")
+		source_label = wx.StaticText(edit_box.GetStaticBox(), label=_("Source Text"))
 		self.source_text = wx.TextCtrl(edit_box.GetStaticBox(), style=wx.TE_READONLY)
 		edit_box.Add(source_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
 		edit_box.Add(self.source_text, 0, wx.EXPAND | wx.ALL, 8)
 
-		braille_label = wx.StaticText(edit_box.GetStaticBox(), label="自訂點字")
+		braille_label = wx.StaticText(edit_box.GetStaticBox(), label=_("Custom Braille"))
 		self.braille_text = wx.TextCtrl(edit_box.GetStaticBox())
 		self.braille_text.Bind(wx.EVT_TEXT, self._on_braille_changed)
 		edit_box.Add(braille_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
@@ -165,10 +186,15 @@ class SpeechSymbolsDialog(wx.Dialog):
 				return
 			identifier = dialog.get_identifier()
 			if not identifier:
-				wx.MessageBox("請輸入原始文字。", "提示", wx.OK | wx.ICON_INFORMATION, parent=self)
+				wx.MessageBox(_("Please enter the source text."), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 				return
 			if any(entry.text == identifier for entry in self.entries):
-				wx.MessageBox(f'原始文字 "{identifier}" 已存在。', "錯誤", wx.OK | wx.ICON_ERROR, parent=self)
+				wx.MessageBox(
+					_('Source text "{identifier}" already exists.').format(identifier=identifier),
+					_("Error"),
+					wx.OK | wx.ICON_ERROR,
+					parent=self,
+				)
 				return
 
 		self.entries.append(DictionaryEntry(text=identifier, braille=""))
@@ -198,7 +224,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 		try:
 			self._save_entries()
 		except IOError as exc:
-			wx.MessageBox(f"儲存失敗：{exc}", "錯誤", wx.OK | wx.ICON_ERROR, parent=self)
+			wx.MessageBox(_("Failed to save: {error}").format(error=exc), _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
 			return
 		event.Skip()
 

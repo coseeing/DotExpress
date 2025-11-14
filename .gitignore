@@ -2,8 +2,10 @@
 __pycache__/
 build/
 dist/
+include/
 louis/tables/
 promp/
 venv/
+DotExpress.spec
 AGENTS.md
 memo.txt

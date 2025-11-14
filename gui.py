@@ -1,4 +1,5 @@
 from pathlib import Path
+import gettext
 import sys
 
 import wx
@@ -20,13 +21,24 @@ def resource_path(relative_path: str) -> Path:
 	return base_path / relative_path
 
 
+LOCALE_DOMAIN = "dotexpress"
+LOCALE_LANGUAGES = ["zh_TW"]
+_translation = gettext.translation(
+	LOCALE_DOMAIN,
+	localedir=str(resource_path("locales")),
+	languages=LOCALE_LANGUAGES,
+	fallback=True,
+)
+_ = _translation.gettext
+
+
 language_detector = LanguageDetector(["en", "zh", "ja"])
 
 language_map_translate_table = {
 	"default": "zh-tw.ctb",
 	"en": "en-ueb-g1.ctb",
 	"zh": "zh-tw.ctb",
-	"ja": "ja-kantenji.utb",
+	"ja": "ja-rokutenkanji.utb",
 }
 
 
@@ -72,7 +84,7 @@ class BrailleFrame(wx.Frame):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
-		self.SetTitle("文字轉 Unicode 點字")
+		self.SetTitle(_("DotExpress"))
 		self.SetSize((800, 600))
 
 		panel = wx.Panel(self)
@@ -80,14 +92,15 @@ class BrailleFrame(wx.Frame):
 
 		# Top controls: label, table selection, convert button
 		top_box = wx.BoxSizer(wx.HORIZONTAL)
-		lbl = wx.StaticText(panel, label="轉譯表")
+		lbl = wx.StaticText(panel, label=_("Translation Table"))
 		self.table_choice = wx.Choice(panel)
-		output_lbl = wx.StaticText(panel, label="輸出形式")
-		self.output_choice = wx.Choice(panel, choices=["unicode", "ascii"])
-		width_lbl = wx.StaticText(panel, label="寬度")
+		output_lbl = wx.StaticText(panel, label=_("Output Format"))
+		self._output_modes = [("unicode", _("Unicode")), ("ascii", _("ASCII"))]
+		self.output_choice = wx.Choice(panel, choices=[label for _, label in self._output_modes])
+		width_lbl = wx.StaticText(panel, label=_("Width"))
 		self.width_spin = wx.SpinCtrl(panel, min=10, max=200, initial=40)
-		self.dictionary_btn = wx.Button(panel, label="字典")
-		self.convert_btn = wx.Button(panel, label="轉譯")
+		self.dictionary_btn = wx.Button(panel, label=_("Dictionary"))
+		self.convert_btn = wx.Button(panel, label=_("Convert"))
 
 		top_box.Add(lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
 		top_box.Add(self.table_choice, 1, wx.RIGHT, 8)
@@ -133,7 +146,12 @@ class BrailleFrame(wx.Frame):
 
 	def on_convert(self, _evt):
 		if self.table_choice.GetSelection() == wx.NOT_FOUND:
-			wx.MessageBox("請先選擇轉譯表。", "提示", wx.OK | wx.ICON_INFORMATION, parent=self)
+			wx.MessageBox(
+				_("Please select a translation table first."),
+				_("Info"),
+				wx.OK | wx.ICON_INFORMATION,
+				parent=self,
+			)
 			return
 		table_file = self._display_to_file[self.table_choice.GetSelection()]
 		raw_text = self.input_txt.GetValue()
@@ -162,14 +180,25 @@ class BrailleFrame(wx.Frame):
 		try:
 			braille_wrapped, text_wrapped = translate_and_wrap_both(table_file, text, width)
 		except Exception as e:
-			raise e
-			wx.MessageBox(f"轉譯失敗：{e}", "錯誤", wx.OK | wx.ICON_ERROR, parent=self)
-			return
-		if self.output_choice.GetSelection() == wx.NOT_FOUND:
-			wx.MessageBox("請先選擇輸出形式。", "提示", wx.OK | wx.ICON_INFORMATION, parent=self)
+			wx.MessageBox(
+				_("Translation failed: {error}").format(error=e),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
 			return
 
-		output_mode = self.output_choice.GetStringSelection()
+		selection = self.output_choice.GetSelection()
+		if selection == wx.NOT_FOUND:
+			wx.MessageBox(
+				_("Please select the output format first."),
+				_("Info"),
+				wx.OK | wx.ICON_INFORMATION,
+				parent=self,
+			)
+			return
+
+		output_mode = self._output_modes[selection][0]
 		display_text = braille_wrapped
 		if output_mode == "ascii":
 			try:
@@ -180,11 +209,16 @@ class BrailleFrame(wx.Frame):
 					to_field="Ascii",
 				)
 			except Exception as e:
-				wx.MessageBox(f"ASCII 轉換失敗：{e}", "錯誤", wx.OK | wx.ICON_ERROR, parent=self)
+				wx.MessageBox(
+					_("ASCII conversion failed: {error}").format(error=e),
+					_("Error"),
+					wx.OK | wx.ICON_ERROR,
+					parent=self,
+				)
 				return
 
 		self.output_txt.SetValue(display_text)
-		wx.MessageBox("轉譯已完成。", "提示", wx.OK | wx.ICON_INFORMATION, parent=self)
+		wx.MessageBox(_("Conversion completed."), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 		# Update input area to visually match line wrapping by braille width
 		# self.input_txt.SetValue(text_wrapped)
 

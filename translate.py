@@ -406,28 +406,37 @@ class TranslationResult:
 		current_braille_parts: list[str] = []
 
 		raw_len = len(self.raw)
-		line_start = True
+
+		# line_start_blank 是為了分辨是原文就在開頭的空白與後續因點字規則需要而插入的空白
+		line_start_blank = True
+		full_line_break = False
+
 		for i, token in enumerate(self.raw):
 									# Treat explicit newline in source as a hard line break.
 			if token == "\n":
-				if current_len < width and current_len > 0:
+				if current_len < width and current_len > 0 or current_len == 0 and not full_line_break:
 					current_raw_parts.append("")
 					current_braille_parts.append(blank * (width - current_len))
-				if current_len > 0:
+
+				# 不能與上面條件相同，要移除 current_len < width 因為這樣如果單一 token 超過寬度雖然會爆版，但仍能顯示
+				if current_len > 0 or current_len == 0 and not full_line_break:
 					raw_lines.append(current_raw_parts)
 					braille_lines.append(current_braille_parts)
 					current_raw_parts = []
 					current_braille_parts = []
 					current_len = 0
-				line_start = True
+
+				line_start_blank = True
+				full_line_break = False
 				continue
 			elif token == " ":
-				if current_len == 0 and not line_start:
+				if current_len == 0 and not line_start_blank:
 					continue
 
 			if token != " ":
-				line_start = False
+				line_start_blank = False
 
+			full_line_break = False
 			start = self.raw_to_braille_pos[i]
 			end = self.raw_to_braille_pos[i + 1] if i + 1 < raw_len else len(self.braille)
 			seg_len = end - start
@@ -462,6 +471,7 @@ class TranslationResult:
 				current_raw_parts = []
 				current_braille_parts = []
 				current_len = 0
+				full_line_break = True
 
 		if current_len > 0 or not braille_lines:
 			current_raw_parts.append("")

@@ -2,6 +2,7 @@
 __pycache__/
 build/
 dist/
+data/dictionary.csv
 include/
 louis/tables/
 promp/

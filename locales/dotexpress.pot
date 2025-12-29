@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-11 18:00+0800\n"
+"POT-Creation-Date: 2025-12-29 16:19+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,902 +17,950 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: gui.py:87
-msgid "Text to Unicode Braille"
+#: gui.py:90
+msgid "DotExpress(20251229)"
 msgstr ""
 
-#: gui.py:95
-msgid "Translation Table"
+#: gui.py:98
+msgid "Translation Tables..."
 msgstr ""
 
-#: gui.py:97
+#: gui.py:99
 msgid "Output Format"
 msgstr ""
 
-#: gui.py:98
+#: gui.py:100
 msgid "Unicode"
 msgstr ""
 
-#: gui.py:98
+#: gui.py:100
 msgid "ASCII"
 msgstr ""
 
-#: gui.py:100
+#: gui.py:102
 msgid "Width"
 msgstr ""
 
-#: gui.py:102
+#: gui.py:104
 msgid "Dictionary"
 msgstr ""
 
-#: gui.py:103
+#: gui.py:105
 msgid "Convert"
 msgstr ""
 
-#: gui.py:150
+#: gui.py:145
 msgid "Please select a translation table first."
 msgstr ""
 
-#: gui.py:151 gui.py:195 gui.py:221 dialog.py:189
+#: gui.py:146 gui.py:199 gui.py:225 dialog.py:136 dialog.py:149 dialog.py:158
 msgid "Info"
 msgstr ""
 
-#: gui.py:184
+#: gui.py:170 gui.py:188
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr ""
 
-#: gui.py:185 gui.py:214 dialog.py:194 dialog.py:227
+#: gui.py:171 gui.py:189 gui.py:218 dialog.py:290 dialog.py:313 dialog.py:353
 msgid "Error"
 msgstr ""
 
-#: gui.py:194
+#: gui.py:198
 msgid "Please select the output format first."
 msgstr ""
 
-#: gui.py:213
+#: gui.py:217
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr ""
 
-#: gui.py:221
+#: gui.py:225
 msgid "Conversion completed."
 msgstr ""
 
-#: dialog.py:42
+#: dialog.py:35
+msgid "General"
+msgstr ""
+
+#: dialog.py:36
+msgid "Bopomofo"
+msgstr ""
+
+#: dialog.py:37
+msgid "Unicode Braille"
+msgstr ""
+
+#: dialog.py:61
+msgid "Edit Dictionary Entry"
+msgstr ""
+
+#: dialog.py:61
 msgid "Add Dictionary Entry"
 msgstr ""
 
-#: dialog.py:46 dialog.py:94 dialog.py:114
+#: dialog.py:68 dialog.py:199
 msgid "Source Text"
 msgstr ""
 
-#: dialog.py:73
-msgid "Custom Dictionary Manager"
-msgstr ""
-
-#: dialog.py:95
+#: dialog.py:70 dialog.py:200
 msgid "Braille"
 msgstr ""
 
-#: dialog.py:101
-msgid "Add"
+#: dialog.py:72 dialog.py:201
+msgid "Type"
 msgstr ""
 
-#: dialog.py:102
-msgid "Delete"
-msgstr ""
-
-#: dialog.py:112
-msgid "Edit Selected Entry"
-msgstr ""
-
-#: dialog.py:119
-msgid "Custom Braille"
-msgstr ""
-
-#: dialog.py:189
+#: dialog.py:136
 msgid "Please enter the source text."
 msgstr ""
 
-#: dialog.py:193
+#: dialog.py:149
+msgid "Please enter the a valid Bopomofo sequence."
+msgstr ""
+
+#: dialog.py:158
+msgid "Please enter the a valid Unicode Braille sequence."
+msgstr ""
+
+#: dialog.py:178
+msgid "Custom Dictionary Manager"
+msgstr ""
+
+#: dialog.py:195
+msgid "Dictionary entries"
+msgstr ""
+
+#: dialog.py:208
+msgid "Add"
+msgstr ""
+
+#: dialog.py:209
+msgid "Edit"
+msgstr ""
+
+#: dialog.py:210
+msgid "Delete"
+msgstr ""
+
+#: dialog.py:289 dialog.py:312
 #, python-brace-format
 msgid "Source text \"{identifier}\" already exists."
 msgstr ""
 
-#: dialog.py:227
+#: dialog.py:353
 #, python-brace-format
 msgid "Failed to save: {error}"
 msgstr ""
 
-#: brailleTables/__tables.py:25
+#: dialog.py:370
+msgid "Default Translation Table"
+msgstr ""
+
+#: dialog.py:371
+msgid "English Translation Table"
+msgstr ""
+
+#: dialog.py:372
+msgid "Chinese Translation Table"
+msgstr ""
+
+#: dialog.py:373
+msgid "Japanese Translation Table"
+msgstr ""
+
+#: dialog.py:377
+msgid "Translation Tables Setting"
+msgstr ""
+
+#: brailleTables/__tables.py:36
 msgid "Afrikaans grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:28
+#: brailleTables/__tables.py:39
 msgid "Afrikaans grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:31
+#: brailleTables/__tables.py:42
 msgid "Akkadian (US) grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:34
+#: brailleTables/__tables.py:45
 msgid "Akkadian (Borger) grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:37
+#: brailleTables/__tables.py:48
 msgid "Arabic 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:40
+#: brailleTables/__tables.py:51
 msgid "Arabic grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:43
+#: brailleTables/__tables.py:54
 msgid "Arabic grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:46
+#: brailleTables/__tables.py:57
 msgid "Assamese grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:49
+#: brailleTables/__tables.py:60
 msgid "Bashkir grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:52
+#: brailleTables/__tables.py:63
 msgid "Bengali grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:55
+#: brailleTables/__tables.py:66
 msgid "Belarusian computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:58
+#: brailleTables/__tables.py:69
 msgid "Belarusian literary braille"
 msgstr ""
 
-#: brailleTables/__tables.py:61
+#: brailleTables/__tables.py:72
 msgid "Belarusian literary braille (detailed)"
 msgstr ""
 
-#: brailleTables/__tables.py:64
+#: brailleTables/__tables.py:75
 msgid "Bulgarian 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:67
+#: brailleTables/__tables.py:78
 msgid "Bulgarian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:70
+#: brailleTables/__tables.py:81
 msgid "Catalan grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:73
+#: brailleTables/__tables.py:84
 msgid "Central Kurdish grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:76
+#: brailleTables/__tables.py:87
 msgid "Coptic 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:79
+#: brailleTables/__tables.py:90
 msgid "Coptic grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:82
+#: brailleTables/__tables.py:93
 msgid "Cuneiform (transliterated) grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:85
+#: brailleTables/__tables.py:96
 msgid "Cuneiform (transliterated, compact diacritics) grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:88
+#: brailleTables/__tables.py:99
 msgid "Welsh grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:91
+#: brailleTables/__tables.py:102
 msgid "Welsh grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:94
+#: brailleTables/__tables.py:105
 msgid "Czech 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:97
+#: brailleTables/__tables.py:108
 msgid "Czech grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:101
+#: brailleTables/__tables.py:112
 msgid "Danish 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:104
+#: brailleTables/__tables.py:115
 msgid "Danish 8 dot computer braille (1993)"
 msgstr ""
 
-#: brailleTables/__tables.py:107
+#: brailleTables/__tables.py:118
 msgid "Danish 6 dot grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:110
+#: brailleTables/__tables.py:121
 msgid "Danish 6 dot grade 1 (1993)"
 msgstr ""
 
-#: brailleTables/__tables.py:113
+#: brailleTables/__tables.py:124
 msgid "Danish 8 dot grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:116
+#: brailleTables/__tables.py:127
 msgid "Danish 8 dot grade 1 (1993)"
 msgstr ""
 
-#: brailleTables/__tables.py:119
+#: brailleTables/__tables.py:130
 msgid "Danish 6 dot grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:122
+#: brailleTables/__tables.py:133
 msgid "Danish 6 dot grade 2 (1993)"
 msgstr ""
 
-#: brailleTables/__tables.py:125
+#: brailleTables/__tables.py:136
 msgid "Danish 8 dot grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:128
+#: brailleTables/__tables.py:139
 msgid "Danish 8 dot grade 2 (1993)"
 msgstr ""
 
-#: brailleTables/__tables.py:132
+#: brailleTables/__tables.py:143
 msgid "German 6 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:135
+#: brailleTables/__tables.py:146
 msgid "German 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:138
+#: brailleTables/__tables.py:149
 msgid "German grade 0"
 msgstr ""
 
-#: brailleTables/__tables.py:142
+#: brailleTables/__tables.py:153
 msgid "German grade 0 (detailed)"
 msgstr ""
 
-#: brailleTables/__tables.py:145
+#: brailleTables/__tables.py:156
 msgid "German grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:149
+#: brailleTables/__tables.py:160
 msgid "German grade 1 (detailed)"
 msgstr ""
 
-#: brailleTables/__tables.py:152
+#: brailleTables/__tables.py:163
 msgid "German grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:155
+#: brailleTables/__tables.py:166
 msgid "German grade 2 (detailed)"
 msgstr ""
 
-#: brailleTables/__tables.py:159
+#: brailleTables/__tables.py:170
 msgid "Greek (Greece)"
 msgstr ""
 
-#: brailleTables/__tables.py:162
+#: brailleTables/__tables.py:173
 msgid "English (U.K.) 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:165
+#: brailleTables/__tables.py:176
 msgid "English (U.K.) grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:168
+#: brailleTables/__tables.py:179
 msgid "English (U.K.) grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:171
+#: brailleTables/__tables.py:182
 msgid "English North American Braille Computer Code"
 msgstr ""
 
-#: brailleTables/__tables.py:174
+#: brailleTables/__tables.py:185
 msgid "Unified English Braille Code grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:177
+#: brailleTables/__tables.py:188
 msgid "Unified English Braille Code grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:180
+#: brailleTables/__tables.py:191
 msgid "English (U.S.) 6 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:183
+#: brailleTables/__tables.py:194
 msgid "English (U.S.) 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:186
+#: brailleTables/__tables.py:197
 msgid "English (U.S.) grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:189
+#: brailleTables/__tables.py:200
 msgid "English (U.S.) grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:192
+#: brailleTables/__tables.py:203
 msgid "Esperanto grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:197
+#: brailleTables/__tables.py:208
 msgid "Spanish 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:203
+#: brailleTables/__tables.py:214
 msgid "Spanish grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:206
+#: brailleTables/__tables.py:217
 msgid "Spanish grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:209
+#: brailleTables/__tables.py:220
 msgid "Estonian grade 0"
 msgstr ""
 
-#: brailleTables/__tables.py:212
+#: brailleTables/__tables.py:223
 msgid "Ethiopic grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:215
+#: brailleTables/__tables.py:226
 msgid "Persian 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:218
+#: brailleTables/__tables.py:229
 msgid "Persian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:221
+#: brailleTables/__tables.py:232
 msgid "Finnish 6 dot"
 msgstr ""
 
-#: brailleTables/__tables.py:226
+#: brailleTables/__tables.py:237
 msgid "Finnish 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:232
+#: brailleTables/__tables.py:243
 msgid "Filipino grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:235
+#: brailleTables/__tables.py:246
 msgid "French (unified) 6 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:240
+#: brailleTables/__tables.py:251
 msgid "French (unified) 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:246
+#: brailleTables/__tables.py:257
 msgid "French (unified) grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:249
+#: brailleTables/__tables.py:260
 msgid "Irish grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:252
+#: brailleTables/__tables.py:263
 msgid "Irish grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:255
+#: brailleTables/__tables.py:266
 msgid "Gujarati grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:258
+#: brailleTables/__tables.py:269
 msgid "Greek international braille (2-cell accented letters)"
 msgstr ""
 
-#: brailleTables/__tables.py:261
+#: brailleTables/__tables.py:272
 msgid "Greek international braille (single-cell accented letters)"
 msgstr ""
 
-#: brailleTables/__tables.py:264
+#: brailleTables/__tables.py:275
 msgid "Spanish for Greek text"
 msgstr ""
 
-#: brailleTables/__tables.py:267
+#: brailleTables/__tables.py:278
 msgid "Hebrew (Biblical) IHBC"
 msgstr ""
 
-#: brailleTables/__tables.py:270
+#: brailleTables/__tables.py:281
 msgid "Hebrew (Biblical) full cantillation"
 msgstr ""
 
-#: brailleTables/__tables.py:273
+#: brailleTables/__tables.py:284
 msgid "Hebrew (Biblical) Slim"
 msgstr ""
 
-#: brailleTables/__tables.py:276
+#: brailleTables/__tables.py:287
 msgid "Israeli grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:281
+#: brailleTables/__tables.py:292
 msgid "Hebrew computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:287
+#: brailleTables/__tables.py:298
 msgid "Hindi grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:292
+#: brailleTables/__tables.py:303
 msgid "Croatian 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:298
+#: brailleTables/__tables.py:309
 msgid "Croatian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:301
+#: brailleTables/__tables.py:312
 msgid "Hungarian 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:304
+#: brailleTables/__tables.py:315
 msgid "Hungarian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:307
+#: brailleTables/__tables.py:318
 msgid "Hungarian grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:310
+#: brailleTables/__tables.py:321
 msgid "Icelandic 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:313
+#: brailleTables/__tables.py:324
 msgid "International Phonetic Alphabet"
 msgstr ""
 
-#: brailleTables/__tables.py:318
+#: brailleTables/__tables.py:329
 msgid "Italian 6 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:324
+#: brailleTables/__tables.py:335
 msgid "Italian 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:330
+#: brailleTables/__tables.py:341
 msgid "Japanese (Kantenji) literary braille"
 msgstr ""
 
-#: brailleTables/__tables.py:338
+#: brailleTables/__tables.py:349
 msgid "Japanese (Rokuten Kanji) Braille"
 msgstr ""
 
-#: brailleTables/__tables.py:342
+#: brailleTables/__tables.py:353
 msgid "Kannada grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:345
+#: brailleTables/__tables.py:356
 msgid "Georgian literary braille"
 msgstr ""
 
-#: brailleTables/__tables.py:348
+#: brailleTables/__tables.py:359
 msgid "Kazakh grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:351
+#: brailleTables/__tables.py:362
 msgid "Khmer grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:354
+#: brailleTables/__tables.py:365
 msgid "Northern Kurdish grade 0"
 msgstr ""
 
-#: brailleTables/__tables.py:357
+#: brailleTables/__tables.py:368
 msgid "Korean grade 1 (2006)"
 msgstr ""
 
-#: brailleTables/__tables.py:360
+#: brailleTables/__tables.py:371
 msgid "Korean grade 2 (2006)"
 msgstr ""
 
-#: brailleTables/__tables.py:363
+#: brailleTables/__tables.py:374
 msgid "Korean grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:366
+#: brailleTables/__tables.py:377
 msgid "Korean grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:369
+#: brailleTables/__tables.py:380
 msgid "Kashmiri grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:372
+#: brailleTables/__tables.py:383
 msgid "Lao Grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:375
+#: brailleTables/__tables.py:386
 msgid "Luganda literary braille"
 msgstr ""
 
-#: brailleTables/__tables.py:378
+#: brailleTables/__tables.py:389
 msgid "Lithuanian 8 dot"
 msgstr ""
 
-#: brailleTables/__tables.py:381
+#: brailleTables/__tables.py:392
 msgid "Lithuanian 6 dot"
 msgstr ""
 
-#: brailleTables/__tables.py:384
+#: brailleTables/__tables.py:395
 msgid "Latvian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:387
+#: brailleTables/__tables.py:398
 msgid "Malayalam grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:390
+#: brailleTables/__tables.py:401
 msgid "Manipuri grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:393
+#: brailleTables/__tables.py:404
 msgid "Malay grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:396
+#: brailleTables/__tables.py:407
 msgid "Mongolian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:399
+#: brailleTables/__tables.py:410
 msgid "Mongolian grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:402
+#: brailleTables/__tables.py:413
 msgid "Marathi grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:405
+#: brailleTables/__tables.py:416
 msgid "Burmese grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:408
+#: brailleTables/__tables.py:419
 msgid "Burmese grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:411
+#: brailleTables/__tables.py:422
 msgid "Dutch 6 dot"
 msgstr ""
 
-#: brailleTables/__tables.py:414
+#: brailleTables/__tables.py:425
 msgid "Dutch 8 dot"
 msgstr ""
 
-#: brailleTables/__tables.py:417
+#: brailleTables/__tables.py:428
 msgid "Norwegian 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:420
+#: brailleTables/__tables.py:431
 msgid "Norwegian grade 0"
 msgstr ""
 
-#: brailleTables/__tables.py:423
+#: brailleTables/__tables.py:434
 msgid "Norwegian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:426
+#: brailleTables/__tables.py:437
 msgid "Norwegian grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:429
+#: brailleTables/__tables.py:440
 msgid "Norwegian grade 3"
 msgstr ""
 
-#: brailleTables/__tables.py:432
+#: brailleTables/__tables.py:443
 msgid "Nepali grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:435
+#: brailleTables/__tables.py:446
 msgid "Sepedi grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:438
+#: brailleTables/__tables.py:449
 msgid "Sepedi grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:441
+#: brailleTables/__tables.py:452
 msgid "Chichewa (Malawi) literary braille"
 msgstr ""
 
-#: brailleTables/__tables.py:444
+#: brailleTables/__tables.py:455
 msgid "Oriya grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:449
+#: brailleTables/__tables.py:460
 msgid "Polish 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:455
+#: brailleTables/__tables.py:466
 msgid "Polish literary braille"
 msgstr ""
 
-#: brailleTables/__tables.py:458
+#: brailleTables/__tables.py:469
 msgid "Portuguese 6 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:461
+#: brailleTables/__tables.py:472
 msgid "Portuguese 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:464
+#: brailleTables/__tables.py:475
 msgid "Portuguese grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:467
+#: brailleTables/__tables.py:478
 msgid "Portuguese grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:470
+#: brailleTables/__tables.py:481
 msgid "Punjabi grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:473
+#: brailleTables/__tables.py:484
 msgid "Romanian 6 dot"
 msgstr ""
 
-#: brailleTables/__tables.py:476
+#: brailleTables/__tables.py:487
 msgid "Romanian"
 msgstr ""
 
-#: brailleTables/__tables.py:479
+#: brailleTables/__tables.py:490
 msgid "Russian 6 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:482
+#: brailleTables/__tables.py:493
 msgid "Russian 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:485
+#: brailleTables/__tables.py:496
 msgid "Russian literary braille"
 msgstr ""
 
-#: brailleTables/__tables.py:488
+#: brailleTables/__tables.py:499
 msgid "Russian literary braille (detailed)"
 msgstr ""
 
-#: brailleTables/__tables.py:491
+#: brailleTables/__tables.py:502
 msgid "Russian contracted braille"
 msgstr ""
 
-#: brailleTables/__tables.py:494
+#: brailleTables/__tables.py:505
 msgid "Kinyarwanda literary braille"
 msgstr ""
 
-#: brailleTables/__tables.py:497
+#: brailleTables/__tables.py:508
 msgid "Sanskrit grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:500
+#: brailleTables/__tables.py:511
 msgid "Yakut grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:503
+#: brailleTables/__tables.py:514
 msgid "Swedish 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:506
+#: brailleTables/__tables.py:517
 msgid "Slovak grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:509
+#: brailleTables/__tables.py:520
 msgid "Slovenian 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:512
+#: brailleTables/__tables.py:523
 msgid "Slovenian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:515
+#: brailleTables/__tables.py:526
 msgid "Sesotho grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:518
+#: brailleTables/__tables.py:529
 msgid "Sesotho grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:521
+#: brailleTables/__tables.py:532
 msgid "Serbian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:524
+#: brailleTables/__tables.py:535
 msgid "Serbian Cyrillic grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:528
+#: brailleTables/__tables.py:539
 msgid "Swedish uncontracted braille"
 msgstr ""
 
-#: brailleTables/__tables.py:531
+#: brailleTables/__tables.py:542
 msgid "Swedish partially contracted braille"
 msgstr ""
 
-#: brailleTables/__tables.py:534
+#: brailleTables/__tables.py:545
 msgid "Swedish contracted braille"
 msgstr ""
 
-#: brailleTables/__tables.py:538
+#: brailleTables/__tables.py:549
 msgid "Swahili (Kenya) grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:541
+#: brailleTables/__tables.py:552
 msgid "Swahili (Kenya) grade 1.2"
 msgstr ""
 
-#: brailleTables/__tables.py:544
+#: brailleTables/__tables.py:555
 msgid "Swahili (Kenya) grade 1.3"
 msgstr ""
 
-#: brailleTables/__tables.py:547
+#: brailleTables/__tables.py:558
 msgid "Swahili (Kenya) grade 1.4"
 msgstr ""
 
-#: brailleTables/__tables.py:550
+#: brailleTables/__tables.py:561
 msgid "Swahili (Kenya) grade 1.5"
 msgstr ""
 
-#: brailleTables/__tables.py:553
+#: brailleTables/__tables.py:564
 msgid "Swahili (Kenya) Grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:556
+#: brailleTables/__tables.py:567
 msgid "Syriac grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:560
+#: brailleTables/__tables.py:571
 msgid "Tamil grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:563
+#: brailleTables/__tables.py:574
 msgid "Tatar grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:566
+#: brailleTables/__tables.py:577
 msgid "Telugu grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:569
+#: brailleTables/__tables.py:580
 msgid "Thai 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:572
+#: brailleTables/__tables.py:583
 msgid "Thai grade 0"
 msgstr ""
 
-#: brailleTables/__tables.py:575
+#: brailleTables/__tables.py:586
 msgid "Thai grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:578
+#: brailleTables/__tables.py:589
 msgid "Thai grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:581
+#: brailleTables/__tables.py:592
 msgid "Turkish 8 dot computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:584
+#: brailleTables/__tables.py:595
 msgid "Turkish grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:587
+#: brailleTables/__tables.py:598
 msgid "Turkish grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:590
+#: brailleTables/__tables.py:601
 msgid "Setswana grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:593
+#: brailleTables/__tables.py:604
 msgid "Setswana grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:596
+#: brailleTables/__tables.py:607
 msgid "Ugaritic grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:599
+#: brailleTables/__tables.py:610
 msgid "Ukrainian grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:602
+#: brailleTables/__tables.py:613
 msgid "Ukrainian literary braille (detailed)"
 msgstr ""
 
-#: brailleTables/__tables.py:605
+#: brailleTables/__tables.py:616
 msgid "Ukrainian computer braille"
 msgstr ""
 
-#: brailleTables/__tables.py:608
+#: brailleTables/__tables.py:619
 msgid "Urdu grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:611
+#: brailleTables/__tables.py:622
 msgid "Urdu grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:614
+#: brailleTables/__tables.py:625
 msgid "Uzbek grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:617
+#: brailleTables/__tables.py:628
 msgid "Unicode braille"
 msgstr ""
 
-#: brailleTables/__tables.py:620
+#: brailleTables/__tables.py:631
 msgid "Vietnamese grade 0"
 msgstr ""
 
-#: brailleTables/__tables.py:623
+#: brailleTables/__tables.py:634
 msgid "Tshivenda grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:626
+#: brailleTables/__tables.py:637
 msgid "Tshivenda grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:629
+#: brailleTables/__tables.py:640
 msgid "Vietnamese grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:632
+#: brailleTables/__tables.py:643
 msgid "Vietnamese grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:635
+#: brailleTables/__tables.py:646
 msgid "Southern Vietnamese grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:638
+#: brailleTables/__tables.py:649
 msgid "Xhosa grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:641
+#: brailleTables/__tables.py:652
 msgid "Xhosa grade 2"
 msgstr ""
 
-#: brailleTables/__tables.py:644
+#: brailleTables/__tables.py:655
 msgid "Yiddish grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:650
+#: brailleTables/__tables.py:661
 msgid "Chinese common braille (simplified Chinese characters)"
 msgstr ""
 
-#: brailleTables/__tables.py:657
+#: brailleTables/__tables.py:668
 msgid "Chinese (China, Mandarin) Current Braille System (no tones)"
 msgstr ""
 
-#: brailleTables/__tables.py:664
+#: brailleTables/__tables.py:675
 msgid "Chinese (China, Mandarin) Current Braille System"
 msgstr ""
 
-#: brailleTables/__tables.py:671
+#: brailleTables/__tables.py:682
 msgid "Chinese (China, Mandarin) Double-phonic Braille System"
 msgstr ""
 
-#: brailleTables/__tables.py:674
+#: brailleTables/__tables.py:685
 msgid "Chinese (Hong Kong, Cantonese)"
 msgstr ""
 
-#: brailleTables/__tables.py:677
+#: brailleTables/__tables.py:688
 msgid "Chinese (Taiwan, Mandarin)"
 msgstr ""
 
-#: brailleTables/__tables.py:681
+#: brailleTables/__tables.py:692
 msgid "Zulu grade 1"
 msgstr ""
 
-#: brailleTables/__tables.py:684
+#: brailleTables/__tables.py:695
 msgid "Zulu grade 2"
 msgstr ""

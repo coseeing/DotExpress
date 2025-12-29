@@ -5,12 +5,12 @@ import sys
 import wx
 
 import louisHelper
-from brailleTables import listTables, TableType, getDefaultTableForCurLang
 
-from dialog import SpeechSymbolsDialog
+from Bopomofo import normalize_zhuyin_sequence
+from dialog import SpeechSymbolsDialog, TranslationTableDialog
 from languageDetection import LangChangeCommand, LanguageDetector
 from translate import translate, TranslationResult
-from utils import translate__mapping_char, translate__mapping_string
+from utils import apply_dictionary, translate__mapping_char, translate__mapping_string
 
 
 def resource_path(relative_path: str) -> Path:
@@ -44,6 +44,8 @@ language_map_translate_table = {
 
 def translate_with_language(table_file: str, text: str) -> TranslationResult:
 	sequence = language_detector.add_detected_language_commands([text])
+	sequence = list(sequence)
+	print(sequence)
 
 	translate_table = language_map_translate_table["default"]
 	translations = []
@@ -52,8 +54,9 @@ def translate_with_language(table_file: str, text: str) -> TranslationResult:
 			translations.append(translate(translate_table, item))
 		elif isinstance(item, LangChangeCommand):
 			previous_translate_table = translate_table
+			lang = item.lang.split("_")[0]
 			try:
-				translate_table = language_map_translate_table[item.lang]
+				translate_table = language_map_translate_table[lang]
 			except KeyError:
 				translate_table = language_map_translate_table["default"]
 			if translate_table != previous_translate_table:
@@ -84,7 +87,7 @@ class BrailleFrame(wx.Frame):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
-		self.SetTitle(_("DotExpress"))
+		self.SetTitle(_("DotExpress(20251229)"))
 		self.SetSize((800, 600))
 
 		panel = wx.Panel(self)
@@ -92,8 +95,7 @@ class BrailleFrame(wx.Frame):
 
 		# Top controls: label, table selection, convert button
 		top_box = wx.BoxSizer(wx.HORIZONTAL)
-		lbl = wx.StaticText(panel, label=_("Translation Table"))
-		self.table_choice = wx.Choice(panel)
+		self.table_btn = wx.Button(panel, label=_("Translation Tables..."))
 		output_lbl = wx.StaticText(panel, label=_("Output Format"))
 		self._output_modes = [("unicode", _("Unicode")), ("ascii", _("ASCII"))]
 		self.output_choice = wx.Choice(panel, choices=[label for _, label in self._output_modes])
@@ -102,8 +104,7 @@ class BrailleFrame(wx.Frame):
 		self.dictionary_btn = wx.Button(panel, label=_("Dictionary"))
 		self.convert_btn = wx.Button(panel, label=_("Convert"))
 
-		top_box.Add(lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
-		top_box.Add(self.table_choice, 1, wx.RIGHT, 8)
+		top_box.Add(self.table_btn, 0, wx.RIGHT, 8)
 		top_box.Add(output_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
 		top_box.Add(self.output_choice, 0, wx.RIGHT, 8)
 		top_box.Add(width_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
@@ -125,27 +126,21 @@ class BrailleFrame(wx.Frame):
 
 		panel.SetSizer(vbox)
 
-		# Populate tables and bind events
-		self._tables = [t for t in listTables() if t.output]
-		self._display_to_file = [t.fileName for t in self._tables]
-		self.table_choice.AppendItems([t.displayName for t in self._tables])
 		self.output_choice.SetSelection(0)
 
-		# Select default table for current language if available
-		try:
-			default_file = getDefaultTableForCurLang(TableType.OUTPUT)
-			if default_file in self._display_to_file:
-				self.table_choice.SetSelection(self._display_to_file.index(default_file))
-			else:
-				self.table_choice.SetSelection(0 if self._display_to_file else wx.NOT_FOUND)
-		except Exception:
-			self.table_choice.SetSelection(0 if self._display_to_file else wx.NOT_FOUND)
-
+		self.table_btn.Bind(wx.EVT_BUTTON, self.on_open_table_dialog)
 		self.convert_btn.Bind(wx.EVT_BUTTON, self.on_convert)
 		self.dictionary_btn.Bind(wx.EVT_BUTTON, self.on_open_dictionary)
 
+	def on_open_table_dialog(self, _evt):
+		with TranslationTableDialog(self, language_map_translate_table) as dialog:
+			if dialog.ShowModal() == wx.ID_OK:
+				selections = dialog.get_selected_tables()
+				language_map_translate_table.update(selections)
+
 	def on_convert(self, _evt):
-		if self.table_choice.GetSelection() == wx.NOT_FOUND:
+		table_file = language_map_translate_table.get("default")
+		if not table_file:
 			wx.MessageBox(
 				_("Please select a translation table first."),
 				_("Info"),
@@ -153,7 +148,6 @@ class BrailleFrame(wx.Frame):
 				parent=self,
 			)
 			return
-		table_file = self._display_to_file[self.table_choice.GetSelection()]
 		raw_text = self.input_txt.GetValue()
 		width = self.width_spin.GetValue()
 		text = raw_text
@@ -164,12 +158,22 @@ class BrailleFrame(wx.Frame):
 			from_field="Bopomofo",
 			to_field="Braille",
 		)
-		text = translate__mapping_string(
-			text,
-			dictionary_path=Path("data/dictionary.csv"),
-			from_field="text",
-			to_field="braille",
-		)
+
+		try:
+			text = apply_dictionary(
+				text,
+				dictionary_path=Path("data/dictionary.csv"),
+				processing=normalize_zhuyin_sequence,
+			)
+		except Exception as e:
+			wx.MessageBox(
+				_("Translation failed: {error}").format(error=e),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
+			return
+
 		text = translate__mapping_string(
 			text,
 			dictionary_path=resource_path("data/Bopomofo2Braille.csv"),

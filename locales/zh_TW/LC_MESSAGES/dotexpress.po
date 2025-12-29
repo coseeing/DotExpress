@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dotexpress\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-11-11 16:30+0800\n"
-"PO-Revision-Date: 2025-11-11 17:59+0800\n"
+"POT-Creation-Date: 2025-12-29 16:19+0800\n"
+"PO-Revision-Date: 2025-12-29 16:28+0800\n"
 "Last-Translator: Codex <codex@example.com>\n"
 "Language-Team: Chinese (traditional)\n"
 "Language: zh_TW\n"
@@ -18,902 +18,959 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 "X-Generator: Poedit 3.5\n"
 
-#: gui.py:87
-msgid "Text to Unicode Braille"
-msgstr "文字轉 Unicode 點字"
+#: gui.py:90
+msgid "DotExpress(20251229)"
+msgstr "DotExpress(20251229)"
 
-#: gui.py:95
-msgid "Translation Table"
-msgstr "轉譯表"
+#: gui.py:98
+msgid "Translation Tables..."
+msgstr "轉譯表..."
 
-#: gui.py:97
+#: gui.py:99
 msgid "Output Format"
 msgstr "輸出格式"
 
-#: gui.py:98
+#: gui.py:100
 msgid "Unicode"
 msgstr "Unicode"
 
-#: gui.py:98
+#: gui.py:100
 msgid "ASCII"
 msgstr "ASCII"
 
-#: gui.py:100
+#: gui.py:102
 msgid "Width"
 msgstr "寬度"
 
-#: gui.py:102
+#: gui.py:104
 msgid "Dictionary"
 msgstr "字典"
 
-#: gui.py:103
+#: gui.py:105
 msgid "Convert"
 msgstr "轉換"
 
-#: gui.py:150
+#: gui.py:145
 msgid "Please select a translation table first."
 msgstr "請先選擇轉譯表。"
 
-#: gui.py:151 gui.py:195 gui.py:221 dialog.py:189
+#: gui.py:146 gui.py:199 gui.py:225 dialog.py:136 dialog.py:149 dialog.py:158
 msgid "Info"
 msgstr "資訊"
 
-#: gui.py:184
+#: gui.py:170 gui.py:188
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr "轉譯失敗：{error}"
 
-#: gui.py:185 gui.py:214 dialog.py:194 dialog.py:227
+#: gui.py:171 gui.py:189 gui.py:218 dialog.py:290 dialog.py:313 dialog.py:353
 msgid "Error"
 msgstr "錯誤"
 
-#: gui.py:194
+#: gui.py:198
 msgid "Please select the output format first."
 msgstr "請先選擇輸出格式。"
 
-#: gui.py:213
+#: gui.py:217
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr "ASCII 轉換失敗：{error}"
 
-#: gui.py:221
+#: gui.py:225
 msgid "Conversion completed."
 msgstr "轉換完成。"
 
-#: dialog.py:42
+#: dialog.py:35
+msgid "General"
+msgstr "一般"
+
+#: dialog.py:36
+msgid "Bopomofo"
+msgstr "注音"
+
+#: dialog.py:37
+msgid "Unicode Braille"
+msgstr "Unicode 點字"
+
+#: dialog.py:61
+msgid "Edit Dictionary Entry"
+msgstr "編輯字典項目"
+
+#: dialog.py:61
 msgid "Add Dictionary Entry"
 msgstr "新增字典項目"
 
-#: dialog.py:46 dialog.py:94 dialog.py:114
+#: dialog.py:68 dialog.py:199
 msgid "Source Text"
 msgstr "來源文字"
 
-#: dialog.py:73
-msgid "Custom Dictionary Manager"
-msgstr "自訂字典管理器"
-
-#: dialog.py:95
+#: dialog.py:70 dialog.py:200
 msgid "Braille"
 msgstr "點字"
 
-#: dialog.py:101
-msgid "Add"
-msgstr "新增"
+#: dialog.py:72 dialog.py:201
+msgid "Type"
+msgstr "類型"
 
-#: dialog.py:102
-msgid "Delete"
-msgstr "刪除"
-
-#: dialog.py:112
-msgid "Edit Selected Entry"
-msgstr "編輯選取的條目"
-
-#: dialog.py:119
-msgid "Custom Braille"
-msgstr "自訂點字"
-
-#: dialog.py:189
+#: dialog.py:136
 msgid "Please enter the source text."
 msgstr "請輸入來源文字。"
 
-#: dialog.py:193
+#: dialog.py:149
+msgid "Please enter the a valid Bopomofo sequence."
+msgstr "請輸入有效的注音序列。"
+
+#: dialog.py:158
+msgid "Please enter the a valid Unicode Braille sequence."
+msgstr "請輸入有效的 Unicode 點字序列。"
+
+#: dialog.py:178
+msgid "Custom Dictionary Manager"
+msgstr "自訂字典管理器"
+
+#: dialog.py:195
+msgid "Dictionary entries"
+msgstr "字典項目"
+
+#: dialog.py:208
+msgid "Add"
+msgstr "新增"
+
+#: dialog.py:209
+msgid "Edit"
+msgstr "編輯"
+
+#: dialog.py:210
+msgid "Delete"
+msgstr "刪除"
+
+#: dialog.py:289 dialog.py:312
 #, python-brace-format
 msgid "Source text \"{identifier}\" already exists."
 msgstr "來源文字「{identifier}」已存在。"
 
-#: dialog.py:227
+#: dialog.py:353
 #, python-brace-format
 msgid "Failed to save: {error}"
 msgstr "儲存失敗：{error}"
 
-#: brailleTables/__tables.py:25
+#: dialog.py:370
+msgid "Default Translation Table"
+msgstr "預設轉譯表"
+
+#: dialog.py:371
+msgid "English Translation Table"
+msgstr "英文轉譯表"
+
+#: dialog.py:372
+msgid "Chinese Translation Table"
+msgstr "中文轉譯表"
+
+#: dialog.py:373
+msgid "Japanese Translation Table"
+msgstr "日文轉譯表"
+
+#: dialog.py:377
+msgid "Translation Tables Setting"
+msgstr "轉譯表設定"
+
+#: brailleTables/__tables.py:36
 msgid "Afrikaans grade 1"
 msgstr "南非文一級"
 
-#: brailleTables/__tables.py:28
+#: brailleTables/__tables.py:39
 msgid "Afrikaans grade 2"
 msgstr "南非文二級"
 
-#: brailleTables/__tables.py:31
+#: brailleTables/__tables.py:42
 msgid "Akkadian (US) grade 1"
 msgstr "阿卡德文 (美國) 一級"
 
-#: brailleTables/__tables.py:34
+#: brailleTables/__tables.py:45
 msgid "Akkadian (Borger) grade 1"
 msgstr "阿卡德文 (博格) 一級"
 
-#: brailleTables/__tables.py:37
+#: brailleTables/__tables.py:48
 msgid "Arabic 8 dot computer braille"
 msgstr "阿拉伯文八點 (電腦)"
 
-#: brailleTables/__tables.py:40
+#: brailleTables/__tables.py:51
 msgid "Arabic grade 1"
 msgstr "阿拉伯文一級"
 
-#: brailleTables/__tables.py:43
+#: brailleTables/__tables.py:54
 msgid "Arabic grade 2"
 msgstr "阿拉伯文二級"
 
-#: brailleTables/__tables.py:46
+#: brailleTables/__tables.py:57
 msgid "Assamese grade 1"
 msgstr "阿薩姆文一級"
 
-#: brailleTables/__tables.py:49
+#: brailleTables/__tables.py:60
 msgid "Bashkir grade 1"
 msgstr "巴什喀爾文一級"
 
-#: brailleTables/__tables.py:52
+#: brailleTables/__tables.py:63
 msgid "Bengali grade 1"
 msgstr "孟加拉文一級"
 
-#: brailleTables/__tables.py:55
+#: brailleTables/__tables.py:66
 msgid "Belarusian computer braille"
 msgstr "白俄羅斯文 (電腦)"
 
-#: brailleTables/__tables.py:58
+#: brailleTables/__tables.py:69
 msgid "Belarusian literary braille"
 msgstr "白俄羅斯文書寫"
 
-#: brailleTables/__tables.py:61
+#: brailleTables/__tables.py:72
 msgid "Belarusian literary braille (detailed)"
 msgstr "白俄羅斯文書寫 (詳細)"
 
-#: brailleTables/__tables.py:64
+#: brailleTables/__tables.py:75
 msgid "Bulgarian 8 dot computer braille"
 msgstr "保加利亞文八點 (電腦)"
 
-#: brailleTables/__tables.py:67
+#: brailleTables/__tables.py:78
 msgid "Bulgarian grade 1"
 msgstr "保加利亞文一級"
 
-#: brailleTables/__tables.py:70
+#: brailleTables/__tables.py:81
 msgid "Catalan grade 1"
 msgstr "卡達隆尼亞文一級"
 
-#: brailleTables/__tables.py:73
+#: brailleTables/__tables.py:84
 msgid "Central Kurdish grade 1"
 msgstr "中庫德文一級"
 
-#: brailleTables/__tables.py:76
+#: brailleTables/__tables.py:87
 msgid "Coptic 8 dot computer braille"
 msgstr "科普特文八點 (電腦)"
 
-#: brailleTables/__tables.py:79
+#: brailleTables/__tables.py:90
 msgid "Coptic grade 1"
 msgstr "科普特文一級"
 
-#: brailleTables/__tables.py:82
+#: brailleTables/__tables.py:93
 msgid "Cuneiform (transliterated) grade 1"
 msgstr "楔形文字 (音譯) 一級"
 
-#: brailleTables/__tables.py:85
+#: brailleTables/__tables.py:96
 msgid "Cuneiform (transliterated, compact diacritics) grade 1"
 msgstr "楔形文字 (音譯，精簡附加符號) 一級"
 
-#: brailleTables/__tables.py:88
+#: brailleTables/__tables.py:99
 msgid "Welsh grade 1"
 msgstr "威爾斯文一級"
 
-#: brailleTables/__tables.py:91
+#: brailleTables/__tables.py:102
 msgid "Welsh grade 2"
 msgstr "威爾斯文二級"
 
-#: brailleTables/__tables.py:94
+#: brailleTables/__tables.py:105
 msgid "Czech 8 dot computer braille"
 msgstr "捷克文八點 (電腦)"
 
-#: brailleTables/__tables.py:97
+#: brailleTables/__tables.py:108
 msgid "Czech grade 1"
 msgstr "捷克文一級"
 
-#: brailleTables/__tables.py:101
+#: brailleTables/__tables.py:112
 msgid "Danish 8 dot computer braille"
 msgstr "丹麥文八點 (電腦)"
 
-#: brailleTables/__tables.py:104
+#: brailleTables/__tables.py:115
 msgid "Danish 8 dot computer braille (1993)"
 msgstr "丹麥文八點 (電腦) (1993)"
 
-#: brailleTables/__tables.py:107
+#: brailleTables/__tables.py:118
 msgid "Danish 6 dot grade 1"
 msgstr "丹麥文六點一級"
 
-#: brailleTables/__tables.py:110
+#: brailleTables/__tables.py:121
 msgid "Danish 6 dot grade 1 (1993)"
 msgstr "丹麥文六點一級 (1993)"
 
-#: brailleTables/__tables.py:113
+#: brailleTables/__tables.py:124
 msgid "Danish 8 dot grade 1"
 msgstr "丹麥文八點一級"
 
-#: brailleTables/__tables.py:116
+#: brailleTables/__tables.py:127
 msgid "Danish 8 dot grade 1 (1993)"
 msgstr "丹麥文八點一級 (1993)"
 
-#: brailleTables/__tables.py:119
+#: brailleTables/__tables.py:130
 msgid "Danish 6 dot grade 2"
 msgstr "丹麥文六點二級"
 
-#: brailleTables/__tables.py:122
+#: brailleTables/__tables.py:133
 msgid "Danish 6 dot grade 2 (1993)"
 msgstr "丹麥文六點二級 (1993)"
 
-#: brailleTables/__tables.py:125
+#: brailleTables/__tables.py:136
 msgid "Danish 8 dot grade 2"
 msgstr "丹麥文八點二級"
 
-#: brailleTables/__tables.py:128
+#: brailleTables/__tables.py:139
 msgid "Danish 8 dot grade 2 (1993)"
 msgstr "丹麥文八點二級 (1993)"
 
-#: brailleTables/__tables.py:132
+#: brailleTables/__tables.py:143
 msgid "German 6 dot computer braille"
 msgstr "德文六點 (電腦)"
 
-#: brailleTables/__tables.py:135
+#: brailleTables/__tables.py:146
 msgid "German 8 dot computer braille"
 msgstr "德文八點 (電腦)"
 
-#: brailleTables/__tables.py:138
+#: brailleTables/__tables.py:149
 msgid "German grade 0"
 msgstr "德文零級"
 
-#: brailleTables/__tables.py:142
+#: brailleTables/__tables.py:153
 msgid "German grade 0 (detailed)"
 msgstr "德文零級 (詳細)"
 
-#: brailleTables/__tables.py:145
+#: brailleTables/__tables.py:156
 msgid "German grade 1"
 msgstr "德文一級"
 
-#: brailleTables/__tables.py:149
+#: brailleTables/__tables.py:160
 msgid "German grade 1 (detailed)"
 msgstr "德文一級 (詳細)"
 
-#: brailleTables/__tables.py:152
+#: brailleTables/__tables.py:163
 msgid "German grade 2"
 msgstr "德文二級"
 
-#: brailleTables/__tables.py:155
+#: brailleTables/__tables.py:166
 msgid "German grade 2 (detailed)"
 msgstr "德文二級 (詳細)"
 
-#: brailleTables/__tables.py:159
+#: brailleTables/__tables.py:170
 msgid "Greek (Greece)"
 msgstr "希臘文 (希臘)"
 
-#: brailleTables/__tables.py:162
+#: brailleTables/__tables.py:173
 msgid "English (U.K.) 8 dot computer braille"
 msgstr "英文 (英國) 八點 (電腦)"
 
-#: brailleTables/__tables.py:165
+#: brailleTables/__tables.py:176
 msgid "English (U.K.) grade 1"
 msgstr "英文 (英國) 一級"
 
-#: brailleTables/__tables.py:168
+#: brailleTables/__tables.py:179
 msgid "English (U.K.) grade 2"
 msgstr "英文 (英國) 二級"
 
-#: brailleTables/__tables.py:171
+#: brailleTables/__tables.py:182
 msgid "English North American Braille Computer Code"
 msgstr "北美英文電腦點字"
 
-#: brailleTables/__tables.py:174
+#: brailleTables/__tables.py:185
 msgid "Unified English Braille Code grade 1"
 msgstr "英文統一一級"
 
-#: brailleTables/__tables.py:177
+#: brailleTables/__tables.py:188
 msgid "Unified English Braille Code grade 2"
 msgstr "英文統一二級"
 
-#: brailleTables/__tables.py:180
+#: brailleTables/__tables.py:191
 msgid "English (U.S.) 6 dot computer braille"
 msgstr "英文 (美國) 六點 (電腦)"
 
-#: brailleTables/__tables.py:183
+#: brailleTables/__tables.py:194
 msgid "English (U.S.) 8 dot computer braille"
 msgstr "英文 (美國) 八點 (電腦)"
 
-#: brailleTables/__tables.py:186
+#: brailleTables/__tables.py:197
 msgid "English (U.S.) grade 1"
 msgstr "英文 (美國) 一級"
 
-#: brailleTables/__tables.py:189
+#: brailleTables/__tables.py:200
 msgid "English (U.S.) grade 2"
 msgstr "英文 (美國) 二級"
 
-#: brailleTables/__tables.py:192
+#: brailleTables/__tables.py:203
 msgid "Esperanto grade 1"
 msgstr "世界文一級"
 
-#: brailleTables/__tables.py:197
+#: brailleTables/__tables.py:208
 msgid "Spanish 8 dot computer braille"
 msgstr "西班牙文八點 (電腦)"
 
-#: brailleTables/__tables.py:203
+#: brailleTables/__tables.py:214
 msgid "Spanish grade 1"
 msgstr "西班牙文一級"
 
-#: brailleTables/__tables.py:206
+#: brailleTables/__tables.py:217
 msgid "Spanish grade 2"
 msgstr "西班牙文二級"
 
-#: brailleTables/__tables.py:209
+#: brailleTables/__tables.py:220
 msgid "Estonian grade 0"
 msgstr "愛沙尼亞文零級"
 
-#: brailleTables/__tables.py:212
+#: brailleTables/__tables.py:223
 msgid "Ethiopic grade 1"
 msgstr "衣索比亞文一級"
 
-#: brailleTables/__tables.py:215
+#: brailleTables/__tables.py:226
 msgid "Persian 8 dot computer braille"
 msgstr "波斯文八點 (電腦)"
 
-#: brailleTables/__tables.py:218
+#: brailleTables/__tables.py:229
 msgid "Persian grade 1"
 msgstr "波斯文一級"
 
-#: brailleTables/__tables.py:221
+#: brailleTables/__tables.py:232
 msgid "Finnish 6 dot"
 msgstr "芬蘭文六點"
 
-#: brailleTables/__tables.py:226
+#: brailleTables/__tables.py:237
 msgid "Finnish 8 dot computer braille"
 msgstr "芬蘭文八點 (電腦)"
 
-#: brailleTables/__tables.py:232
+#: brailleTables/__tables.py:243
 msgid "Filipino grade 2"
 msgstr "菲律賓文二級"
 
-#: brailleTables/__tables.py:235
+#: brailleTables/__tables.py:246
 msgid "French (unified) 6 dot computer braille"
 msgstr "法文統一六點 (電腦)"
 
-#: brailleTables/__tables.py:240
+#: brailleTables/__tables.py:251
 msgid "French (unified) 8 dot computer braille"
 msgstr "法文統一八點 (電腦)"
 
-#: brailleTables/__tables.py:246
+#: brailleTables/__tables.py:257
 msgid "French (unified) grade 2"
 msgstr "法文統一二級"
 
-#: brailleTables/__tables.py:249
+#: brailleTables/__tables.py:260
 msgid "Irish grade 1"
 msgstr "愛爾蘭文一級"
 
-#: brailleTables/__tables.py:252
+#: brailleTables/__tables.py:263
 msgid "Irish grade 2"
 msgstr "愛爾蘭文二級"
 
-#: brailleTables/__tables.py:255
+#: brailleTables/__tables.py:266
 msgid "Gujarati grade 1"
 msgstr "古吉拉特文一級"
 
-#: brailleTables/__tables.py:258
+#: brailleTables/__tables.py:269
 msgid "Greek international braille (2-cell accented letters)"
 msgstr "希臘國際點字 (兩方重音字母)"
 
-#: brailleTables/__tables.py:261
+#: brailleTables/__tables.py:272
 msgid "Greek international braille (single-cell accented letters)"
 msgstr "希臘國際點字 (一方重音字母)"
 
-#: brailleTables/__tables.py:264
+#: brailleTables/__tables.py:275
 msgid "Spanish for Greek text"
 msgstr "西班牙文希臘文自"
 
-#: brailleTables/__tables.py:267
+#: brailleTables/__tables.py:278
 msgid "Hebrew (Biblical) IHBC"
 msgstr "希伯來文 (聖經) IHBC"
 
-#: brailleTables/__tables.py:270
+#: brailleTables/__tables.py:281
 msgid "Hebrew (Biblical) full cantillation"
 msgstr "希伯來文 (聖經) 誦讀音"
 
-#: brailleTables/__tables.py:273
+#: brailleTables/__tables.py:284
 msgid "Hebrew (Biblical) Slim"
 msgstr "希伯來文 (聖經) 精簡"
 
-#: brailleTables/__tables.py:276
+#: brailleTables/__tables.py:287
 msgid "Israeli grade 1"
 msgstr "以色列文一級"
 
-#: brailleTables/__tables.py:281
+#: brailleTables/__tables.py:292
 msgid "Hebrew computer braille"
 msgstr "希伯來文電腦點字"
 
-#: brailleTables/__tables.py:287
+#: brailleTables/__tables.py:298
 msgid "Hindi grade 1"
 msgstr "印度文一級"
 
-#: brailleTables/__tables.py:292
+#: brailleTables/__tables.py:303
 msgid "Croatian 8 dot computer braille"
 msgstr "克羅埃西亞文八點 (電腦)"
 
-#: brailleTables/__tables.py:298
+#: brailleTables/__tables.py:309
 msgid "Croatian grade 1"
 msgstr "克羅埃西亞文一級"
 
-#: brailleTables/__tables.py:301
+#: brailleTables/__tables.py:312
 msgid "Hungarian 8 dot computer braille"
 msgstr "匈牙利文八點 (電腦)"
 
-#: brailleTables/__tables.py:304
+#: brailleTables/__tables.py:315
 msgid "Hungarian grade 1"
 msgstr "匈牙利文一級"
 
-#: brailleTables/__tables.py:307
+#: brailleTables/__tables.py:318
 msgid "Hungarian grade 2"
 msgstr "匈牙利文二級"
 
-#: brailleTables/__tables.py:310
+#: brailleTables/__tables.py:321
 msgid "Icelandic 8 dot computer braille"
 msgstr "冰島文八點 (電腦)"
 
-#: brailleTables/__tables.py:313
+#: brailleTables/__tables.py:324
 msgid "International Phonetic Alphabet"
 msgstr "國際音標"
 
-#: brailleTables/__tables.py:318
+#: brailleTables/__tables.py:329
 msgid "Italian 6 dot computer braille"
 msgstr "義大利文六點 (電腦)"
 
-#: brailleTables/__tables.py:324
+#: brailleTables/__tables.py:335
 msgid "Italian 8 dot computer braille"
 msgstr "義大利文八點 (電腦)"
 
-#: brailleTables/__tables.py:330
+#: brailleTables/__tables.py:341
 msgid "Japanese (Kantenji) literary braille"
 msgstr "日文 (漢點字) 書寫"
 
-#: brailleTables/__tables.py:338
+#: brailleTables/__tables.py:349
 msgid "Japanese (Rokuten Kanji) Braille"
 msgstr "日文 (六點漢字) 點字"
 
-#: brailleTables/__tables.py:342
+#: brailleTables/__tables.py:353
 msgid "Kannada grade 1"
 msgstr "坎那達文一級"
 
-#: brailleTables/__tables.py:345
+#: brailleTables/__tables.py:356
 msgid "Georgian literary braille"
 msgstr "喬治亞文書寫"
 
-#: brailleTables/__tables.py:348
+#: brailleTables/__tables.py:359
 msgid "Kazakh grade 1"
 msgstr "哈薩克文一級"
 
-#: brailleTables/__tables.py:351
+#: brailleTables/__tables.py:362
 msgid "Khmer grade 1"
 msgstr "高棉文一級"
 
-#: brailleTables/__tables.py:354
+#: brailleTables/__tables.py:365
 msgid "Northern Kurdish grade 0"
 msgstr "北庫德文零級"
 
-#: brailleTables/__tables.py:357
+#: brailleTables/__tables.py:368
 msgid "Korean grade 1 (2006)"
 msgstr "韓文一級 (2006)"
 
-#: brailleTables/__tables.py:360
+#: brailleTables/__tables.py:371
 msgid "Korean grade 2 (2006)"
 msgstr "韓文二級 (2006)"
 
-#: brailleTables/__tables.py:363
+#: brailleTables/__tables.py:374
 msgid "Korean grade 1"
 msgstr "韓文一級"
 
-#: brailleTables/__tables.py:366
+#: brailleTables/__tables.py:377
 msgid "Korean grade 2"
 msgstr "韓文二級"
 
-#: brailleTables/__tables.py:369
+#: brailleTables/__tables.py:380
 msgid "Kashmiri grade 1"
 msgstr "喀什米爾文一級"
 
-#: brailleTables/__tables.py:372
+#: brailleTables/__tables.py:383
 msgid "Lao Grade 1"
 msgstr "寮文一級"
 
-#: brailleTables/__tables.py:375
+#: brailleTables/__tables.py:386
 msgid "Luganda literary braille"
 msgstr "盧干達文書寫"
 
-#: brailleTables/__tables.py:378
+#: brailleTables/__tables.py:389
 msgid "Lithuanian 8 dot"
 msgstr "立陶宛文八點"
 
-#: brailleTables/__tables.py:381
+#: brailleTables/__tables.py:392
 msgid "Lithuanian 6 dot"
 msgstr "立陶宛文六點"
 
-#: brailleTables/__tables.py:384
+#: brailleTables/__tables.py:395
 msgid "Latvian grade 1"
 msgstr "拉脫維亞文一級"
 
-#: brailleTables/__tables.py:387
+#: brailleTables/__tables.py:398
 msgid "Malayalam grade 1"
 msgstr "馬來亞拉姆文一級"
 
-#: brailleTables/__tables.py:390
+#: brailleTables/__tables.py:401
 msgid "Manipuri grade 1"
 msgstr "曼尼普爾文一級"
 
-#: brailleTables/__tables.py:393
+#: brailleTables/__tables.py:404
 msgid "Malay grade 2"
 msgstr "馬來文二級"
 
-#: brailleTables/__tables.py:396
+#: brailleTables/__tables.py:407
 msgid "Mongolian grade 1"
 msgstr "蒙古文一級"
 
-#: brailleTables/__tables.py:399
+#: brailleTables/__tables.py:410
 msgid "Mongolian grade 2"
 msgstr "蒙古文二級"
 
-#: brailleTables/__tables.py:402
+#: brailleTables/__tables.py:413
 msgid "Marathi grade 1"
 msgstr "馬拉提文一級"
 
-#: brailleTables/__tables.py:405
+#: brailleTables/__tables.py:416
 msgid "Burmese grade 1"
 msgstr "緬甸文一級"
 
-#: brailleTables/__tables.py:408
+#: brailleTables/__tables.py:419
 msgid "Burmese grade 2"
 msgstr "緬甸文二級"
 
-#: brailleTables/__tables.py:411
+#: brailleTables/__tables.py:422
 msgid "Dutch 6 dot"
 msgstr "荷蘭文六點"
 
-#: brailleTables/__tables.py:414
+#: brailleTables/__tables.py:425
 msgid "Dutch 8 dot"
 msgstr "荷蘭文八點"
 
-#: brailleTables/__tables.py:417
+#: brailleTables/__tables.py:428
 msgid "Norwegian 8 dot computer braille"
 msgstr "挪威文八點 (電腦)"
 
-#: brailleTables/__tables.py:420
+#: brailleTables/__tables.py:431
 msgid "Norwegian grade 0"
 msgstr "挪威文零級"
 
-#: brailleTables/__tables.py:423
+#: brailleTables/__tables.py:434
 msgid "Norwegian grade 1"
 msgstr "挪威文一級"
 
-#: brailleTables/__tables.py:426
+#: brailleTables/__tables.py:437
 msgid "Norwegian grade 2"
 msgstr "挪威文二級"
 
-#: brailleTables/__tables.py:429
+#: brailleTables/__tables.py:440
 msgid "Norwegian grade 3"
 msgstr "挪威文三級"
 
-#: brailleTables/__tables.py:432
+#: brailleTables/__tables.py:443
 msgid "Nepali grade 1"
 msgstr "尼泊爾文一級"
 
-#: brailleTables/__tables.py:435
+#: brailleTables/__tables.py:446
 msgid "Sepedi grade 1"
 msgstr "賽卑第文一級"
 
-#: brailleTables/__tables.py:438
+#: brailleTables/__tables.py:449
 msgid "Sepedi grade 2"
 msgstr "賽卑第文二級"
 
-#: brailleTables/__tables.py:441
+#: brailleTables/__tables.py:452
 msgid "Chichewa (Malawi) literary braille"
 msgstr "齊切瓦文 (馬拉威) 書寫"
 
-#: brailleTables/__tables.py:444
+#: brailleTables/__tables.py:455
 msgid "Oriya grade 1"
 msgstr "歐利亞文一級"
 
-#: brailleTables/__tables.py:449
+#: brailleTables/__tables.py:460
 msgid "Polish 8 dot computer braille"
 msgstr "波蘭文八點 (電腦)"
 
-#: brailleTables/__tables.py:455
+#: brailleTables/__tables.py:466
 msgid "Polish literary braille"
 msgstr "波蘭文書寫"
 
-#: brailleTables/__tables.py:458
+#: brailleTables/__tables.py:469
 msgid "Portuguese 6 dot computer braille"
 msgstr "葡萄牙文六點 (電腦)"
 
-#: brailleTables/__tables.py:461
+#: brailleTables/__tables.py:472
 msgid "Portuguese 8 dot computer braille"
 msgstr "葡萄牙文八點 (電腦)"
 
-#: brailleTables/__tables.py:464
+#: brailleTables/__tables.py:475
 msgid "Portuguese grade 1"
 msgstr "葡萄牙文一級"
 
-#: brailleTables/__tables.py:467
+#: brailleTables/__tables.py:478
 msgid "Portuguese grade 2"
 msgstr "葡萄牙文二級"
 
-#: brailleTables/__tables.py:470
+#: brailleTables/__tables.py:481
 msgid "Punjabi grade 1"
 msgstr "旁遮普文一級"
 
-#: brailleTables/__tables.py:473
+#: brailleTables/__tables.py:484
 msgid "Romanian 6 dot"
 msgstr "羅馬尼亞文六點"
 
-#: brailleTables/__tables.py:476
+#: brailleTables/__tables.py:487
 msgid "Romanian"
 msgstr "羅馬尼亞文"
 
-#: brailleTables/__tables.py:479
+#: brailleTables/__tables.py:490
 msgid "Russian 6 dot computer braille"
 msgstr "俄文六點 (電腦)"
 
-#: brailleTables/__tables.py:482
+#: brailleTables/__tables.py:493
 msgid "Russian 8 dot computer braille"
 msgstr "俄文八點 (電腦)"
 
-#: brailleTables/__tables.py:485
+#: brailleTables/__tables.py:496
 msgid "Russian literary braille"
 msgstr "俄文書寫"
 
-#: brailleTables/__tables.py:488
+#: brailleTables/__tables.py:499
 msgid "Russian literary braille (detailed)"
 msgstr "俄文書寫 (詳細)"
 
-#: brailleTables/__tables.py:491
+#: brailleTables/__tables.py:502
 msgid "Russian contracted braille"
 msgstr "俄文收縮點字"
 
-#: brailleTables/__tables.py:494
+#: brailleTables/__tables.py:505
 msgid "Kinyarwanda literary braille"
 msgstr "金揚萬答文書寫"
 
-#: brailleTables/__tables.py:497
+#: brailleTables/__tables.py:508
 msgid "Sanskrit grade 1"
 msgstr "梵文一級"
 
-#: brailleTables/__tables.py:500
+#: brailleTables/__tables.py:511
 msgid "Yakut grade 1"
 msgstr "雅庫特文一級"
 
-#: brailleTables/__tables.py:503
+#: brailleTables/__tables.py:514
 msgid "Swedish 8 dot computer braille"
 msgstr "瑞典文八點 (電腦)"
 
-#: brailleTables/__tables.py:506
+#: brailleTables/__tables.py:517
 msgid "Slovak grade 1"
 msgstr "斯洛伐克文一級"
 
-#: brailleTables/__tables.py:509
+#: brailleTables/__tables.py:520
 msgid "Slovenian 8 dot computer braille"
 msgstr "斯洛維尼亞文八點 (電腦)"
 
-#: brailleTables/__tables.py:512
+#: brailleTables/__tables.py:523
 msgid "Slovenian grade 1"
 msgstr "斯洛維尼亞文一級"
 
-#: brailleTables/__tables.py:515
+#: brailleTables/__tables.py:526
 msgid "Sesotho grade 1"
 msgstr "賴索托文一級"
 
-#: brailleTables/__tables.py:518
+#: brailleTables/__tables.py:529
 msgid "Sesotho grade 2"
 msgstr "賴索托文二級"
 
-#: brailleTables/__tables.py:521
+#: brailleTables/__tables.py:532
 msgid "Serbian grade 1"
 msgstr "塞爾維亞文一級"
 
-#: brailleTables/__tables.py:524
+#: brailleTables/__tables.py:535
 msgid "Serbian Cyrillic grade 1"
 msgstr "塞爾維亞西里爾字母一級"
 
-#: brailleTables/__tables.py:528
+#: brailleTables/__tables.py:539
 msgid "Swedish uncontracted braille"
 msgstr "瑞典文未收縮點字"
 
-#: brailleTables/__tables.py:531
+#: brailleTables/__tables.py:542
 msgid "Swedish partially contracted braille"
 msgstr "瑞典文部分收縮點字"
 
-#: brailleTables/__tables.py:534
+#: brailleTables/__tables.py:545
 msgid "Swedish contracted braille"
 msgstr "瑞典文收縮點字"
 
-#: brailleTables/__tables.py:538
+#: brailleTables/__tables.py:549
 msgid "Swahili (Kenya) grade 1"
 msgstr "史瓦西里文 (肯亞) 一級"
 
-#: brailleTables/__tables.py:541
+#: brailleTables/__tables.py:552
 msgid "Swahili (Kenya) grade 1.2"
 msgstr "史瓦西里文 (肯亞) 1.2 級"
 
-#: brailleTables/__tables.py:544
+#: brailleTables/__tables.py:555
 msgid "Swahili (Kenya) grade 1.3"
 msgstr "史瓦西里文 (肯亞) 1.3 級"
 
-#: brailleTables/__tables.py:547
+#: brailleTables/__tables.py:558
 msgid "Swahili (Kenya) grade 1.4"
 msgstr "史瓦西里文 (肯亞) 1.4 級"
 
-#: brailleTables/__tables.py:550
+#: brailleTables/__tables.py:561
 msgid "Swahili (Kenya) grade 1.5"
 msgstr "史瓦西里文 (肯亞) 1.5 級"
 
-#: brailleTables/__tables.py:553
+#: brailleTables/__tables.py:564
 msgid "Swahili (Kenya) Grade 2"
 msgstr "史瓦西里文 (肯亞) 二級"
 
-#: brailleTables/__tables.py:556
+#: brailleTables/__tables.py:567
 msgid "Syriac grade 1"
 msgstr "敘利亞文一級"
 
-#: brailleTables/__tables.py:560
+#: brailleTables/__tables.py:571
 msgid "Tamil grade 1"
 msgstr "坦米爾文一級"
 
-#: brailleTables/__tables.py:563
+#: brailleTables/__tables.py:574
 msgid "Tatar grade 1"
 msgstr "韃靼文一級"
 
-#: brailleTables/__tables.py:566
+#: brailleTables/__tables.py:577
 msgid "Telugu grade 1"
 msgstr "特拉古文一級"
 
-#: brailleTables/__tables.py:569
+#: brailleTables/__tables.py:580
 msgid "Thai 8 dot computer braille"
 msgstr "泰文八點 (電腦)"
 
-#: brailleTables/__tables.py:572
+#: brailleTables/__tables.py:583
 msgid "Thai grade 0"
 msgstr "泰文零級"
 
-#: brailleTables/__tables.py:575
+#: brailleTables/__tables.py:586
 msgid "Thai grade 1"
 msgstr "泰文一級"
 
-#: brailleTables/__tables.py:578
+#: brailleTables/__tables.py:589
 msgid "Thai grade 2"
 msgstr "泰文二級"
 
-#: brailleTables/__tables.py:581
+#: brailleTables/__tables.py:592
 msgid "Turkish 8 dot computer braille"
 msgstr "土耳其文八點 (電腦)"
 
-#: brailleTables/__tables.py:584
+#: brailleTables/__tables.py:595
 msgid "Turkish grade 1"
 msgstr "土耳其文一級"
 
-#: brailleTables/__tables.py:587
+#: brailleTables/__tables.py:598
 msgid "Turkish grade 2"
 msgstr "土耳其文二級"
 
-#: brailleTables/__tables.py:590
+#: brailleTables/__tables.py:601
 msgid "Setswana grade 1"
 msgstr "塞茲瓦納文一級"
 
-#: brailleTables/__tables.py:593
+#: brailleTables/__tables.py:604
 msgid "Setswana grade 2"
 msgstr "塞茲瓦納文二級"
 
-#: brailleTables/__tables.py:596
+#: brailleTables/__tables.py:607
 msgid "Ugaritic grade 1"
 msgstr "烏加里特文一級"
 
-#: brailleTables/__tables.py:599
+#: brailleTables/__tables.py:610
 msgid "Ukrainian grade 1"
 msgstr "烏克蘭文一級"
 
-#: brailleTables/__tables.py:602
+#: brailleTables/__tables.py:613
 msgid "Ukrainian literary braille (detailed)"
 msgstr "烏克蘭文書寫 (詳細)"
 
-#: brailleTables/__tables.py:605
+#: brailleTables/__tables.py:616
 msgid "Ukrainian computer braille"
 msgstr "烏克蘭文 (電腦)"
 
-#: brailleTables/__tables.py:608
+#: brailleTables/__tables.py:619
 msgid "Urdu grade 1"
 msgstr "烏都文一級"
 
-#: brailleTables/__tables.py:611
+#: brailleTables/__tables.py:622
 msgid "Urdu grade 2"
 msgstr "烏都文二級"
 
-#: brailleTables/__tables.py:614
+#: brailleTables/__tables.py:625
 msgid "Uzbek grade 1"
 msgstr "烏茲別克文一級"
 
-#: brailleTables/__tables.py:617
+#: brailleTables/__tables.py:628
 msgid "Unicode braille"
 msgstr "Unicode 點字"
 
-#: brailleTables/__tables.py:620
+#: brailleTables/__tables.py:631
 msgid "Vietnamese grade 0"
 msgstr "越南文零級"
 
-#: brailleTables/__tables.py:623
+#: brailleTables/__tables.py:634
 msgid "Tshivenda grade 1"
 msgstr "文達文一級"
 
-#: brailleTables/__tables.py:626
+#: brailleTables/__tables.py:637
 msgid "Tshivenda grade 2"
 msgstr "文達文二級"
 
-#: brailleTables/__tables.py:629
+#: brailleTables/__tables.py:640
 msgid "Vietnamese grade 1"
 msgstr "越南文一級"
 
-#: brailleTables/__tables.py:632
+#: brailleTables/__tables.py:643
 msgid "Vietnamese grade 2"
 msgstr "越南文二級"
 
-#: brailleTables/__tables.py:635
+#: brailleTables/__tables.py:646
 msgid "Southern Vietnamese grade 1"
 msgstr "南越南文一級"
 
-#: brailleTables/__tables.py:638
+#: brailleTables/__tables.py:649
 msgid "Xhosa grade 1"
 msgstr "廓薩文一級"
 
-#: brailleTables/__tables.py:641
+#: brailleTables/__tables.py:652
 msgid "Xhosa grade 2"
 msgstr "廓薩文二級"
 
-#: brailleTables/__tables.py:644
+#: brailleTables/__tables.py:655
 msgid "Yiddish grade 1"
 msgstr "意第緒文一級"
 
-#: brailleTables/__tables.py:650
+#: brailleTables/__tables.py:661
 msgid "Chinese common braille (simplified Chinese characters)"
 msgstr "中國通用盲文 (簡體中文字)"
 
-#: brailleTables/__tables.py:657
+#: brailleTables/__tables.py:668
 msgid "Chinese (China, Mandarin) Current Braille System (no tones)"
 msgstr "中文 (中國) 現行盲文 (無聲調)"
 
-#: brailleTables/__tables.py:664
+#: brailleTables/__tables.py:675
 msgid "Chinese (China, Mandarin) Current Braille System"
 msgstr "中文 (中國) 現行盲文"
 
-#: brailleTables/__tables.py:671
+#: brailleTables/__tables.py:682
 msgid "Chinese (China, Mandarin) Double-phonic Braille System"
 msgstr "中文 (中國) 漢語雙拚盲文"
 
-#: brailleTables/__tables.py:674
+#: brailleTables/__tables.py:685
 msgid "Chinese (Hong Kong, Cantonese)"
 msgstr "中文 (香港) 粵語"
 
-#: brailleTables/__tables.py:677
+#: brailleTables/__tables.py:688
 msgid "Chinese (Taiwan, Mandarin)"
 msgstr "中文 (台灣) 注音"
 
-#: brailleTables/__tables.py:681
+#: brailleTables/__tables.py:692
 msgid "Zulu grade 1"
 msgstr "祖魯文一級"
 
-#: brailleTables/__tables.py:684
+#: brailleTables/__tables.py:695
 msgid "Zulu grade 2"
 msgstr "祖魯文二級"
+
+#~ msgid "Text to Unicode Braille"
+#~ msgstr "文字轉 Unicode 點字"
+
+#~ msgid "Edit Selected Entry"
+#~ msgstr "編輯選取的條目"
+
+#~ msgid "Custom Braille"
+#~ msgstr "自訂點字"

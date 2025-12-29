@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+from typing import Callable
 
 
 def translate__mapping_char(
@@ -91,3 +92,55 @@ def translate__mapping_string(
 	for source, target in replacements:
 		result = result.replace(source, target)
 	return result
+
+
+def apply_dictionary(
+	text: str,
+	dictionary_path: Path | str,
+	processing: Callable[[str], str],
+) -> str:
+	"""
+	支援不同類型字典的轉換
+
+	Args:
+		text: 要轉換的字串
+		dictionary_path: 對照表路徑
+
+	Returns:
+		轉換後的字串
+	"""
+	dictionary_path = Path(dictionary_path)
+	if not dictionary_path.exists():
+		return text
+
+	with dictionary_path.open("r", newline="", encoding="utf-8") as f:
+		reader = csv.DictReader(f)
+		if reader.fieldnames is None:
+			raise ValueError("CSV must contain header row.")
+		if not {"text", "braille", "type"}.issubset(reader.fieldnames):
+			raise ValueError(f"CSV must contain columns: text, braille, type")
+
+		replacements: list[tuple[str, str]] = []
+		for row in reader:
+			source = (row.get("text") or "")
+			target = (row.get("braille") or "")
+			if not source:
+				continue
+
+			type_ = (row.get("type") or "")
+			if type_ == "Bopomofo":
+				try:
+					target = processing(target)
+				except Exception as e:
+					pass
+
+			replacements.append((source, target))
+
+	# 依據來源字串長度由長到短排序，避免較短的匹配先行替換造成重疊問題。
+	replacements.sort(key=lambda item: len(item[0]), reverse=True)
+
+	result = text
+	for source, target in replacements:
+		result = result.replace(source, target)
+	return result
+

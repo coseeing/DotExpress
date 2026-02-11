@@ -182,6 +182,7 @@ class LanguageDetector(object):
 		self.blockLanguages = blockLanguages
 
 	def add_detected_language_commands(self, speechSequence):
+		availableLanguagesBase = frozenset(l.split("_")[0] for l in self.availableLanguagesFull)
 		yield LangChangeCommand(config.get_lang())
 		sb = StringIO()
 		charset = None

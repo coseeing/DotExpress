@@ -398,6 +398,8 @@ class TranslationTableDialog(wx.Dialog):
 		for key, label, lang_code in self._CHOICE_SPECS:
 			static_lbl = wx.StaticText(self, label=label)
 			options = self._options_for_lang(lang_code)
+			if key != "default":
+				options = [TableOption(file_name="", display_name=_("None selected"))] + options
 			choice = wx.Choice(self)
 			choice.AppendItems([option.display_name for option in options])
 			self._choice_controls[key] = choice

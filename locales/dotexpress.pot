@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-12-29 16:19+0800\n"
+"POT-Creation-Date: 2026-02-10 21:09+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,65 +17,65 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: gui.py:90
-msgid "DotExpress(20251229)"
+#: gui.py:98
+msgid "DotExpress"
 msgstr ""
 
-#: gui.py:98
+#: gui.py:106
 msgid "Translation Tables..."
 msgstr ""
 
-#: gui.py:99
+#: gui.py:107
 msgid "Output Format"
 msgstr ""
 
-#: gui.py:100
+#: gui.py:108
 msgid "Unicode"
 msgstr ""
 
-#: gui.py:100
+#: gui.py:108
 msgid "ASCII"
 msgstr ""
 
-#: gui.py:102
+#: gui.py:110
 msgid "Width"
 msgstr ""
 
-#: gui.py:104
+#: gui.py:112
 msgid "Dictionary"
 msgstr ""
 
-#: gui.py:105
+#: gui.py:113
 msgid "Convert"
 msgstr ""
 
-#: gui.py:145
+#: gui.py:153
 msgid "Please select a translation table first."
 msgstr ""
 
-#: gui.py:146 gui.py:199 gui.py:225 dialog.py:136 dialog.py:149 dialog.py:158
+#: gui.py:154 gui.py:201 gui.py:227 dialog.py:136 dialog.py:149 dialog.py:158
 msgid "Info"
 msgstr ""
 
-#: gui.py:170 gui.py:188
+#: gui.py:179 gui.py:190
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr ""
 
-#: gui.py:171 gui.py:189 gui.py:218 dialog.py:290 dialog.py:313 dialog.py:353
+#: gui.py:180 gui.py:191 gui.py:220 dialog.py:290 dialog.py:313 dialog.py:353
 msgid "Error"
 msgstr ""
 
-#: gui.py:198
+#: gui.py:200
 msgid "Please select the output format first."
 msgstr ""
 
-#: gui.py:217
+#: gui.py:219
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr ""
 
-#: gui.py:225
+#: gui.py:227
 msgid "Conversion completed."
 msgstr ""
 
@@ -171,6 +171,10 @@ msgstr ""
 
 #: dialog.py:377
 msgid "Translation Tables Setting"
+msgstr ""
+
+#: dialog.py:402
+msgid "None selected"
 msgstr ""
 
 #: brailleTables/__tables.py:36

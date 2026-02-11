@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dotexpress\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-12-29 16:19+0800\n"
-"PO-Revision-Date: 2025-12-29 16:28+0800\n"
+"POT-Creation-Date: 2026-02-10 21:09+0800\n"
+"PO-Revision-Date: 2026-02-10 21:09+0800\n"
 "Last-Translator: Codex <codex@example.com>\n"
 "Language-Team: Chinese (traditional)\n"
 "Language: zh_TW\n"
@@ -18,65 +18,65 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 "X-Generator: Poedit 3.5\n"
 
-#: gui.py:90
-msgid "DotExpress(20251229)"
-msgstr "DotExpress(20251229)"
-
 #: gui.py:98
+msgid "DotExpress"
+msgstr "DotExpress"
+
+#: gui.py:106
 msgid "Translation Tables..."
 msgstr "轉譯表..."
 
-#: gui.py:99
+#: gui.py:107
 msgid "Output Format"
 msgstr "輸出格式"
 
-#: gui.py:100
+#: gui.py:108
 msgid "Unicode"
 msgstr "Unicode"
 
-#: gui.py:100
+#: gui.py:108
 msgid "ASCII"
 msgstr "ASCII"
 
-#: gui.py:102
+#: gui.py:110
 msgid "Width"
 msgstr "寬度"
 
-#: gui.py:104
+#: gui.py:112
 msgid "Dictionary"
 msgstr "字典"
 
-#: gui.py:105
+#: gui.py:113
 msgid "Convert"
 msgstr "轉換"
 
-#: gui.py:145
+#: gui.py:153
 msgid "Please select a translation table first."
 msgstr "請先選擇轉譯表。"
 
-#: gui.py:146 gui.py:199 gui.py:225 dialog.py:136 dialog.py:149 dialog.py:158
+#: gui.py:154 gui.py:201 gui.py:227 dialog.py:136 dialog.py:149 dialog.py:158
 msgid "Info"
 msgstr "資訊"
 
-#: gui.py:170 gui.py:188
+#: gui.py:179 gui.py:190
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr "轉譯失敗：{error}"
 
-#: gui.py:171 gui.py:189 gui.py:218 dialog.py:290 dialog.py:313 dialog.py:353
+#: gui.py:180 gui.py:191 gui.py:220 dialog.py:290 dialog.py:313 dialog.py:353
 msgid "Error"
 msgstr "錯誤"
 
-#: gui.py:198
+#: gui.py:200
 msgid "Please select the output format first."
 msgstr "請先選擇輸出格式。"
 
-#: gui.py:217
+#: gui.py:219
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr "ASCII 轉換失敗：{error}"
 
-#: gui.py:225
+#: gui.py:227
 msgid "Conversion completed."
 msgstr "轉換完成。"
 
@@ -173,6 +173,10 @@ msgstr "日文轉譯表"
 #: dialog.py:377
 msgid "Translation Tables Setting"
 msgstr "轉譯表設定"
+
+#: dialog.py:402
+msgid "None selected"
+msgstr "未選擇"
 
 #: brailleTables/__tables.py:36
 msgid "Afrikaans grade 1"

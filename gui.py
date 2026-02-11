@@ -32,8 +32,6 @@ _translation = gettext.translation(
 _ = _translation.gettext
 
 
-language_detector = LanguageDetector(["en", "zh", "ja"])
-
 language_map_translate_table = {
 	"default": "zh-tw.ctb",
 	"en": "en-ueb-g1.ctb",
@@ -41,11 +39,19 @@ language_map_translate_table = {
 	"ja": "ja-rokutenkanji.utb",
 }
 
+language_map_translate_table = {
+	"default": "zh-tw.ctb",
+	"en": "",
+	"zh": "",
+	"ja": "",
+}
+
 
 def translate_with_language(table_file: str, text: str) -> TranslationResult:
+	language = [k for k, v in language_map_translate_table.items() if k != 'default' and v != '']
+	language_detector = LanguageDetector(language)
 	sequence = language_detector.add_detected_language_commands([text])
 	sequence = list(sequence)
-	print(sequence)
 
 	translate_table = language_map_translate_table["default"]
 	translations = []
@@ -57,6 +63,8 @@ def translate_with_language(table_file: str, text: str) -> TranslationResult:
 			lang = item.lang.split("_")[0]
 			try:
 				translate_table = language_map_translate_table[lang]
+				if translate_table == "":
+					translate_table = language_map_translate_table["default"]
 			except KeyError:
 				translate_table = language_map_translate_table["default"]
 			if translate_table != previous_translate_table:
@@ -87,7 +95,7 @@ class BrailleFrame(wx.Frame):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
-		self.SetTitle(_("DotExpress(20251229)"))
+		self.SetTitle(_("DotExpress"))
 		self.SetSize((800, 600))
 
 		panel = wx.Panel(self)
@@ -163,6 +171,7 @@ class BrailleFrame(wx.Frame):
 			text = apply_dictionary(
 				text,
 				dictionary_path=Path("data/dictionary.csv"),
+				bopomofo_path=Path(resource_path("data/Bopomofo2Braille.csv")),
 				processing=normalize_zhuyin_sequence,
 			)
 		except Exception as e:
@@ -173,13 +182,6 @@ class BrailleFrame(wx.Frame):
 				parent=self,
 			)
 			return
-
-		text = translate__mapping_string(
-			text,
-			dictionary_path=resource_path("data/Bopomofo2Braille.csv"),
-			from_field="Bopomofo",
-			to_field="Braille",
-		)
 
 		try:
 			braille_wrapped, text_wrapped = translate_and_wrap_both(table_file, text, width)

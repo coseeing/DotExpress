@@ -6,7 +6,7 @@ data/dictionary.csv
 include/
 louis/tables/
 promp/
+storage/
 venv/
 DotExpress.spec
 AGENTS.md
-memo.txt

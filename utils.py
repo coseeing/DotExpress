@@ -1,6 +1,6 @@
 import csv
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable, Tuple
 
 
 def translate__mapping_char(
@@ -47,6 +47,19 @@ def translate__mapping_char(
 	return text.translate(mapping)
 
 
+def mapping(
+	text: str,
+	replacements: Iterable[Tuple[str, str]],
+) -> str:
+	# 依據來源字串長度由長到短排序，避免較短的匹配先行替換造成重疊問題。
+	replacements.sort(key=lambda item: len(item[0]), reverse=True)
+
+	result = text
+	for source, target in replacements:
+		result = result.replace(source, target)
+	return result
+
+
 def translate__mapping_string(
 	text: str,
 	dictionary_path: Path | str,
@@ -85,18 +98,15 @@ def translate__mapping_string(
 				continue
 			replacements.append((source, target))
 
-	# 依據來源字串長度由長到短排序，避免較短的匹配先行替換造成重疊問題。
-	replacements.sort(key=lambda item: len(item[0]), reverse=True)
+	result = mapping(text, replacements)
 
-	result = text
-	for source, target in replacements:
-		result = result.replace(source, target)
 	return result
 
 
 def apply_dictionary(
 	text: str,
 	dictionary_path: Path | str,
+	bopomofo_path: Path | str,
 	processing: Callable[[str], str],
 ) -> str:
 	"""
@@ -113,8 +123,25 @@ def apply_dictionary(
 	if not dictionary_path.exists():
 		return text
 
-	with dictionary_path.open("r", newline="", encoding="utf-8") as f:
-		reader = csv.DictReader(f)
+	with (
+		dictionary_path.open("r", newline="", encoding="utf-8") as f_d,
+		bopomofo_path.open("r", newline="", encoding="utf-8") as f_b,
+	):
+		reader = csv.DictReader(f_b)
+		if reader.fieldnames is None:
+			raise ValueError("CSV must contain header row.")
+		if not {"Bopomofo", "Braille"}.issubset(reader.fieldnames):
+			raise ValueError(f"CSV must contain columns: Bopomofo, Braille")
+
+		replacements_bopomofo: list[tuple[str, str]] = []
+		for row in reader:
+			source = (row.get("Bopomofo") or "")
+			target = (row.get("Braille") or "")
+			if not source:
+				continue
+			replacements_bopomofo.append((source, target))
+
+		reader = csv.DictReader(f_d)
 		if reader.fieldnames is None:
 			raise ValueError("CSV must contain header row.")
 		if not {"text", "braille", "type"}.issubset(reader.fieldnames):
@@ -133,14 +160,9 @@ def apply_dictionary(
 					target = processing(target)
 				except Exception as e:
 					pass
-
+				target = mapping(target, replacements_bopomofo)
 			replacements.append((source, target))
 
-	# 依據來源字串長度由長到短排序，避免較短的匹配先行替換造成重疊問題。
-	replacements.sort(key=lambda item: len(item[0]), reverse=True)
+	result = mapping(text, replacements)
 
-	result = text
-	for source, target in replacements:
-		result = result.replace(source, target)
 	return result
-

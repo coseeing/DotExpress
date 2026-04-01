@@ -1,6 +1,19 @@
 import csv
+import re
 from pathlib import Path
-from typing import Callable, Iterable, Tuple
+from typing import Callable, Iterable, TypedDict
+
+DICTIONARY_MARKER_OPEN = r"\["
+DICTIONARY_MARKER_CLOSE = r"\]"
+DICTIONARY_MARKER_JOIN = f"{DICTIONARY_MARKER_CLOSE}{DICTIONARY_MARKER_OPEN}"
+DICTIONARY_MARKER_PATTERN = re.compile(
+	rf"{re.escape(DICTIONARY_MARKER_OPEN)}|{re.escape(DICTIONARY_MARKER_CLOSE)}"
+)
+
+
+class BracketSegment(TypedDict):
+	text: str
+	atomic: bool
 
 
 def translate__mapping_char(
@@ -49,14 +62,33 @@ def translate__mapping_char(
 
 def mapping(
 	text: str,
-	replacements: Iterable[Tuple[str, str]],
+	replacements: Iterable[tuple[str, str]],
+	*,
+	marker: bool = False,
 ) -> str:
 	# 依據來源字串長度由長到短排序，避免較短的匹配先行替換造成重疊問題。
-	replacements.sort(key=lambda item: len(item[0]), reverse=True)
+	ordered_replacements = sorted(
+		replacements,
+		key=lambda item: len(item[0]),
+		reverse=True,
+	)
 
 	result = text
-	for source, target in replacements:
-		result = result.replace(source, target)
+	for source, target in ordered_replacements:
+		if not marker:
+			result = result.replace(source, target)
+			continue
+
+		segments = split_bracket_segments(result)
+		tmp = ""
+		for segment in segments:
+			text = segment["text"]
+			if not segment["atomic"]:
+				text = text.replace(source, target)
+			else:
+				text = f"{DICTIONARY_MARKER_OPEN}{text}{DICTIONARY_MARKER_CLOSE}"
+			tmp += text
+		result = tmp
 	return result
 
 
@@ -121,12 +153,12 @@ def apply_dictionary(
 	"""
 	dictionary_path = Path(dictionary_path)
 	if not dictionary_path.exists():
-		return text
+		return {
+			"raw": text,
+			"replacement": text,
+		}
 
-	with (
-		dictionary_path.open("r", newline="", encoding="utf-8") as f_d,
-		bopomofo_path.open("r", newline="", encoding="utf-8") as f_b,
-	):
+	with bopomofo_path.open("r", newline="", encoding="utf-8") as f_b:
 		reader = csv.DictReader(f_b)
 		if reader.fieldnames is None:
 			raise ValueError("CSV must contain header row.")
@@ -141,6 +173,27 @@ def apply_dictionary(
 				continue
 			replacements_bopomofo.append((source, target))
 
+	with dictionary_path.open("r", newline="", encoding="utf-8") as f_d:
+		reader = csv.DictReader(f_d)
+		if reader.fieldnames is None:
+			raise ValueError("CSV must contain header row.")
+		if not {"text", "braille", "type"}.issubset(reader.fieldnames):
+			raise ValueError(f"CSV must contain columns: text, braille, type")
+
+		raws: list[tuple[str, str]] = []
+		for row in reader:
+			source = (row.get("text") or "")
+			if not source:
+				continue
+
+			target = (
+				DICTIONARY_MARKER_OPEN
+				+ DICTIONARY_MARKER_JOIN.join([i for i in source])
+				+ DICTIONARY_MARKER_CLOSE
+			)
+			raws.append((source, target))
+
+	with dictionary_path.open("r", newline="", encoding="utf-8") as f_d:
 		reader = csv.DictReader(f_d)
 		if reader.fieldnames is None:
 			raise ValueError("CSV must contain header row.")
@@ -160,9 +213,74 @@ def apply_dictionary(
 					target = processing(target)
 				except Exception as e:
 					pass
+				target = (
+					DICTIONARY_MARKER_OPEN
+					+ DICTIONARY_MARKER_JOIN.join(target)
+					+ DICTIONARY_MARKER_CLOSE
+				)
 				target = mapping(target, replacements_bopomofo)
+			else:
+				target = (
+					DICTIONARY_MARKER_OPEN
+					+ DICTIONARY_MARKER_JOIN.join(target.split("@"))
+					+ DICTIONARY_MARKER_CLOSE
+				)
 			replacements.append((source, target))
 
-	result = mapping(text, replacements)
+	raw = mapping(text, raws, marker=True)
+	replacement = mapping(text, replacements, marker=True)
 
-	return result
+	return {
+		"raw": raw,
+		"replacement": replacement,
+	}
+
+
+def split_bracket_segments(text: str) -> list[BracketSegment]:
+	"""
+	Split text into normal segments and bracketed segments.
+	- Normal segment: (segment, False)
+	- Bracketed segment (content inside outermost markers): (segment, True)
+	This supports multiple bracket groups and nested brackets.
+	"""
+	segments: list[BracketSegment] = []
+	last = 0
+	depth = 0
+	open_start: int | None = None
+
+	for match in DICTIONARY_MARKER_PATTERN.finditer(text):
+		ch = match.group()
+		idx = match.start()
+
+		if ch == DICTIONARY_MARKER_OPEN:
+			if depth == 0:
+				if idx > last:
+					segments.append({
+						"text": text[last:idx],
+						"atomic": False,
+					})
+				open_start = idx
+			depth += 1
+		else:
+			if depth > 0:
+				depth -= 1
+				if depth == 0 and open_start is not None:
+					segments.append({
+						"text": text[open_start + len(DICTIONARY_MARKER_OPEN):idx],
+						"atomic": True,
+					})
+					last = match.end()
+					open_start = None
+
+	if depth > 0 and open_start is not None:
+		segments.append({
+			"text": text[open_start:],
+			"atomic": False,
+		})
+	elif last < len(text):
+		segments.append({
+			"text": text[last:],
+			"atomic": False,
+		})
+
+	return segments

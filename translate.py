@@ -488,15 +488,39 @@ class TranslationResult:
 		return "\n".join(braille_lines_str), "\n".join(raw_lines_str)
 
 
-def translate(table_file: str, text: str) -> TranslationResult:
+def translate(table_file: str, text: str, raw: str) -> TranslationResult:
 	# Use absolute path for the first table so includes resolve relative to it.
 	table_path = os.path.join(TABLES_DIR, table_file)
 	braille_cells, braille_to_raw_pos, raw_to_braille_pos, _ = louisHelper.translate(
 		[table_path], text, mode=4
 	)
-
+	if not raw == text:
+		print(f"text: {repr(text)}")
+		print(f"raw: {repr(raw)}")
 	raw = [s for s in text]
 	braille = [chr(b + BRAILLE_UNICODE_PATTERNS_START) for b in braille_cells]
+
+	return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
+
+
+def translate_as_single_token(table_file: str, text: str, raw: str) -> TranslationResult:
+	"""
+	Translate with liblouis but force the entire input text to be one token.
+	"""
+	table_path = os.path.join(TABLES_DIR, table_file)
+	braille_cells, _braille_to_raw_pos, _raw_to_braille_pos, _ = louisHelper.translate(
+		[table_path], text, mode=4
+	)
+
+	braille = [chr(b + BRAILLE_UNICODE_PATTERNS_START) for b in braille_cells]
+	if text:
+		raw = [raw]
+		braille_to_raw_pos = [0] * len(braille)
+		raw_to_braille_pos = [0]
+	else:
+		raw = []
+		braille_to_raw_pos = []
+		raw_to_braille_pos = []
 
 	return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
 

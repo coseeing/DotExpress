@@ -136,7 +136,7 @@ def normalize_zhuyin_sequence(seq: str) -> str:
     - 補齊特殊聲母的 ㄦ
     - 確保每個音節符合 聲母+韻母+聲調
     """
-    return "".join(parse_zhuyin_sequence(seq))
+    return parse_zhuyin_sequence(seq)
 
 
 if __name__ == "__main__":

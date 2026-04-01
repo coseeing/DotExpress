@@ -38,6 +38,8 @@ This allows users to adjust translation results in real time while maintaining f
 
 Users can define custom mapping rules between source text and target braille to fine-tune translation output.
 
+When the target braille encoding type is set to "General" or "Unicode Braille", the "@" symbol can be inserted between characters as a separator. This allows the system to handle line wrapping at the character level, preventing the entire braille sequence from being treated as a single unit. For the "Bopomofo" type, the "@" symbol is not required, as the system will automatically perform line wrapping based on Bopomofo rules.
+
 ---
 
 ## Editing Dictionaries

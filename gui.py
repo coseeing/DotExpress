@@ -6,12 +6,45 @@ import threading
 import wx
 
 import louisHelper
+from config import (
+	DEFAULT_CONVERSION_WIDTH,
+	DEFAULT_OUTPUT_MODE,
+	DEFAULT_TRANSLATION_TABLES,
+	DEFAULT_VIEW_FONT_SIZE,
+	DEFAULT_VIEW_SCHEME,
+	get_conversion_width,
+	get_output_mode,
+	get_translation_tables,
+	get_view_font_size,
+	get_view_scheme,
+	set_conversion_width,
+	set_output_mode,
+	set_translation_tables,
+	set_view_font_size,
+	set_view_scheme,
+)
 
 from Bopomofo import normalize_zhuyin_sequence
 from dialog import SpeechSymbolsDialog, TranslationTableDialog
 from languageDetection import LangChangeCommand, LanguageDetector
 from translate import translate, translate_as_single_token, TranslationResult
 from utils import apply_dictionary, split_bracket_segments, translate__mapping_char, translate__mapping_string
+
+
+CONVERSION_WIDTH_MIN = 10
+CONVERSION_WIDTH_MAX = 200
+VIEW_FONT_SIZE_MIN = 8
+VIEW_FONT_SIZE_MAX = 48
+VIEW_SCHEMES = {
+	"light": {
+		"background": wx.Colour(255, 255, 255),
+		"foreground": wx.Colour(0, 0, 0),
+	},
+	"dark": {
+		"background": wx.Colour(0, 0, 0),
+		"foreground": wx.Colour(255, 255, 255),
+	},
+}
 
 
 def resource_path(relative_path: str) -> Path:
@@ -33,12 +66,7 @@ _translation = gettext.translation(
 _ = _translation.gettext
 
 
-language_map_translate_table = {
-	"default": "zh-tw.ctb",
-	"en": "en-ueb-g1.ctb",
-	"zh": "zh-tw.ctb",
-	"ja": "ja-rokutenkanji.utb",
-}
+language_map_translate_table = get_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
 
 language_map_translate_table2 = {
 	"default": "zh-tw.ctb",
@@ -102,7 +130,6 @@ def translate_with_language(table_file: str, text: str) -> TranslationResult:
 def translate_and_wrap_both(table_file: str, text: str, width: int) -> tuple[str, str]:
 	"""Translate and wrap, returning both braille and original text lines.
 	"""
-	# text, braille, braille_to_raw_pos, raw_to_braille_pos = translate(table_file, text)
 	translation_result = translate_with_language(table_file, text)
 	translation_result.reclean_braille_endspace()
 	translation_result.bind_word_tokens()
@@ -138,55 +165,174 @@ class BrailleFrame(wx.Frame):
 		panel = wx.Panel(self)
 		vbox = wx.BoxSizer(wx.VERTICAL)
 
-		# Top controls: label, table selection, convert button
-		top_box = wx.BoxSizer(wx.HORIZONTAL)
+		controls_box = wx.BoxSizer(wx.VERTICAL)
+		label_min_width = 90
+		self._output_modes = [("unicode", _("Unicode")), ("ascii", _("ASCII"))]
+		self._view_schemes = [("light", _("Light")), ("dark", _("Dark"))]
+
+		initial_output_mode = self._normalize_output_mode(get_output_mode(DEFAULT_OUTPUT_MODE))
+		initial_width = self._clamp_conversion_width(get_conversion_width(DEFAULT_CONVERSION_WIDTH))
+		initial_font_size = self._clamp_view_font_size(get_view_font_size(DEFAULT_VIEW_FONT_SIZE))
+		initial_scheme = self._normalize_view_scheme(get_view_scheme(DEFAULT_VIEW_SCHEME))
+
+		conversion_row = wx.BoxSizer(wx.HORIZONTAL)
+		conversion_lbl = wx.StaticText(panel, label=_("Conversion"))
+		conversion_lbl.SetMinSize((label_min_width, -1))
 		self.table_btn = wx.Button(panel, label=_("Translation Tables..."))
 		output_lbl = wx.StaticText(panel, label=_("Output Format"))
-		self._output_modes = [("unicode", _("Unicode")), ("ascii", _("ASCII"))]
 		self.output_choice = wx.Choice(panel, choices=[label for _, label in self._output_modes])
 		width_lbl = wx.StaticText(panel, label=_("Width"))
-		self.width_spin = wx.SpinCtrl(panel, min=10, max=200, initial=40)
+		self.width_spin = wx.SpinCtrl(panel, min=CONVERSION_WIDTH_MIN, max=CONVERSION_WIDTH_MAX, initial=initial_width)
 		self.dictionary_btn = wx.Button(panel, label=_("Dictionary"))
 		self.convert_btn = wx.Button(panel, label=_("Convert"))
 
-		top_box.Add(self.table_btn, 0, wx.RIGHT, 8)
-		top_box.Add(output_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
-		top_box.Add(self.output_choice, 0, wx.RIGHT, 8)
-		top_box.Add(width_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
-		top_box.Add(self.width_spin, 0, wx.RIGHT, 8)
-		top_box.Add(self.dictionary_btn, 0)
-		top_box.Add(self.convert_btn, 0, wx.LEFT, 8)
+		conversion_row.Add(conversion_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+		conversion_row.Add(self.table_btn, 0, wx.RIGHT, 8)
+		conversion_row.Add(output_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+		conversion_row.Add(self.output_choice, 0, wx.RIGHT, 8)
+		conversion_row.Add(width_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+		conversion_row.Add(self.width_spin, 0, wx.RIGHT, 8)
+		conversion_row.Add(self.dictionary_btn, 0)
+		conversion_row.Add(self.convert_btn, 0, wx.LEFT, 8)
 
-		# self.dictionary_btn.Disable()
+		view_row = wx.BoxSizer(wx.HORIZONTAL)
+		view_lbl = wx.StaticText(panel, label=_("View"))
+		view_lbl.SetMinSize((label_min_width, -1))
+		font_size_lbl = wx.StaticText(panel, label=_("Font Size"))
+		self.font_size_spin = wx.SpinCtrl(
+			panel,
+			min=VIEW_FONT_SIZE_MIN,
+			max=VIEW_FONT_SIZE_MAX,
+			initial=initial_font_size,
+		)
+		scheme_lbl = wx.StaticText(panel, label=_("Scheme"))
+		self.scheme_choice = wx.Choice(panel, choices=[label for _, label in self._view_schemes])
 
-		vbox.Add(top_box, 0, wx.EXPAND | wx.ALL, 8)
+		view_row.Add(view_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+		view_row.Add(font_size_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+		view_row.Add(self.font_size_spin, 0, wx.RIGHT, 12)
+		view_row.Add(scheme_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+		view_row.Add(self.scheme_choice, 0)
+		view_row.AddStretchSpacer()
 
-		# Middle: input multiline editor
+		controls_box.Add(conversion_row, 0, wx.EXPAND)
+		controls_box.Add(view_row, 0, wx.EXPAND | wx.TOP, 8)
+		vbox.Add(controls_box, 0, wx.EXPAND | wx.ALL, 8)
+
 		self.input_txt = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
 		vbox.Add(self.input_txt, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
 
-		# Bottom: output multiline editor (read-only)
 		self.output_txt = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
 		vbox.Add(self.output_txt, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
 
 		panel.SetSizer(vbox)
 
-		self.output_choice.SetSelection(0)
+		self._set_output_mode_selection(initial_output_mode)
+		self._set_scheme_selection(initial_scheme)
+		self.width_spin.SetValue(initial_width)
+		self.font_size_spin.SetValue(initial_font_size)
 		self._convert_thread = None
 		self._convert_dialog = None
 		self._convert_dialog_timer = None
 		self._convert_job_id = 0
 
+		self._apply_editor_view_settings(initial_font_size, initial_scheme)
+
 		self.table_btn.Bind(wx.EVT_BUTTON, self.on_open_table_dialog)
+		self.output_choice.Bind(wx.EVT_CHOICE, self.on_output_mode_change)
+		self.width_spin.Bind(wx.EVT_SPINCTRL, self.on_width_change)
+		self.width_spin.Bind(wx.EVT_TEXT, self.on_width_change)
 		self.convert_btn.Bind(wx.EVT_BUTTON, self.on_convert)
 		self.dictionary_btn.Bind(wx.EVT_BUTTON, self.on_open_dictionary)
+		self.font_size_spin.Bind(wx.EVT_SPINCTRL, self.on_font_size_change)
+		self.font_size_spin.Bind(wx.EVT_TEXT, self.on_font_size_change)
+		self.scheme_choice.Bind(wx.EVT_CHOICE, self.on_scheme_change)
 		self.Bind(wx.EVT_CLOSE, self._on_close)
+
+	def _clamp_conversion_width(self, width: int) -> int:
+		return max(CONVERSION_WIDTH_MIN, min(CONVERSION_WIDTH_MAX, width))
+
+	def _clamp_view_font_size(self, font_size: int) -> int:
+		return max(VIEW_FONT_SIZE_MIN, min(VIEW_FONT_SIZE_MAX, font_size))
+
+	def _normalize_output_mode(self, output_mode: str) -> str:
+		valid_modes = {mode for mode, _label in self._output_modes}
+		return output_mode if output_mode in valid_modes else DEFAULT_OUTPUT_MODE
+
+	def _normalize_view_scheme(self, scheme: str) -> str:
+		return scheme if scheme in VIEW_SCHEMES else DEFAULT_VIEW_SCHEME
+
+	def _set_output_mode_selection(self, output_mode: str):
+		for index, (mode, _label) in enumerate(self._output_modes):
+			if mode == output_mode:
+				self.output_choice.SetSelection(index)
+				return
+		self.output_choice.SetSelection(0)
+
+	def _get_selected_output_mode(self) -> str:
+		selection = self.output_choice.GetSelection()
+		if selection == wx.NOT_FOUND:
+			return DEFAULT_OUTPUT_MODE
+		return self._output_modes[selection][0]
+
+	def _set_scheme_selection(self, scheme: str):
+		for index, (scheme_key, _label) in enumerate(self._view_schemes):
+			if scheme_key == scheme:
+				self.scheme_choice.SetSelection(index)
+				return
+		self.scheme_choice.SetSelection(0)
+
+	def _get_selected_scheme(self) -> str:
+		selection = self.scheme_choice.GetSelection()
+		if selection == wx.NOT_FOUND:
+			return DEFAULT_VIEW_SCHEME
+		return self._view_schemes[selection][0]
+
+	def _apply_editor_font_size(self, font_size: int):
+		for control in (self.input_txt, self.output_txt):
+			font = control.GetFont()
+			font.SetPointSize(font_size)
+			control.SetFont(font)
+
+	def _apply_editor_scheme(self, scheme: str):
+		scheme_colors = VIEW_SCHEMES[self._normalize_view_scheme(scheme)]
+		for control in (self.input_txt, self.output_txt):
+			control.SetBackgroundColour(scheme_colors["background"])
+			control.SetForegroundColour(scheme_colors["foreground"])
+			control.Refresh()
+
+	def _apply_editor_view_settings(self, font_size: int, scheme: str):
+		self._apply_editor_font_size(font_size)
+		self._apply_editor_scheme(scheme)
+		self.Layout()
+
+	def on_font_size_change(self, _evt):
+		font_size = self._clamp_view_font_size(self.font_size_spin.GetValue())
+		if self.font_size_spin.GetValue() != font_size:
+			self.font_size_spin.SetValue(font_size)
+		self._apply_editor_view_settings(font_size, self._get_selected_scheme())
+		set_view_font_size(font_size)
+
+	def on_scheme_change(self, _evt):
+		scheme = self._normalize_view_scheme(self._get_selected_scheme())
+		self._apply_editor_view_settings(self._clamp_view_font_size(self.font_size_spin.GetValue()), scheme)
+		set_view_scheme(scheme)
+
+	def on_output_mode_change(self, _evt):
+		set_output_mode(self._get_selected_output_mode())
+
+	def on_width_change(self, _evt):
+		width = self._clamp_conversion_width(self.width_spin.GetValue())
+		if self.width_spin.GetValue() != width:
+			self.width_spin.SetValue(width)
+		set_conversion_width(width)
 
 	def on_open_table_dialog(self, _evt):
 		with TranslationTableDialog(self, language_map_translate_table) as dialog:
 			if dialog.ShowModal() == wx.ID_OK:
 				selections = dialog.get_selected_tables()
 				language_map_translate_table.update(selections)
+				set_translation_tables(language_map_translate_table)
 
 	def on_convert(self, _evt):
 		if self._convert_thread and self._convert_thread.is_alive():
@@ -212,10 +358,9 @@ class BrailleFrame(wx.Frame):
 			)
 			return
 
-		output_mode = self._output_modes[selection][0]
-
+		output_mode = self._get_selected_output_mode()
 		raw_text = self.input_txt.GetValue()
-		width = self.width_spin.GetValue()
+		width = self._clamp_conversion_width(self.width_spin.GetValue())
 		self._start_conversion(table_file, raw_text, width, output_mode)
 
 	def on_open_dictionary(self, _evt):
@@ -334,7 +479,6 @@ class BrailleFrame(wx.Frame):
 
 class BrailleApp(wx.App):
 	def OnInit(self):
-		# Initialize liblouis integration (logging + resolver)
 		louisHelper.initialize()
 		self.frame = BrailleFrame(None)
 		self.frame.Show()

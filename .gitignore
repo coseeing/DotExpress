@@ -1,3 +1,6 @@
+.claude
+.codex
+.gemini
 .pytest_cache/
 __pycache__/
 build/
@@ -5,6 +8,7 @@ dist/
 data/dictionary.csv
 include/
 louis/tables/
+openspec/
 promp/
 storage/
 venv/

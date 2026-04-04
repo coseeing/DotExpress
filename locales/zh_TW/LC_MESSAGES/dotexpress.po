@@ -978,3 +978,27 @@ msgstr "祖魯文二級"
 
 #~ msgid "Custom Braille"
 #~ msgstr "自訂點字"
+
+#: gui.py
+msgid "Conversion"
+msgstr "Conversion"
+
+#: gui.py
+msgid "View"
+msgstr "View"
+
+#: gui.py
+msgid "Font Size"
+msgstr "Font Size"
+
+#: gui.py
+msgid "Scheme"
+msgstr "Scheme"
+
+#: gui.py
+msgid "Light"
+msgstr "Light"
+
+#: gui.py
+msgid "Dark"
+msgstr "Dark"

@@ -968,3 +968,27 @@ msgstr ""
 #: brailleTables/__tables.py:695
 msgid "Zulu grade 2"
 msgstr ""
+
+#: gui.py
+msgid "Conversion"
+msgstr ""
+
+#: gui.py
+msgid "View"
+msgstr ""
+
+#: gui.py
+msgid "Font Size"
+msgstr ""
+
+#: gui.py
+msgid "Scheme"
+msgstr ""
+
+#: gui.py
+msgid "Light"
+msgstr ""
+
+#: gui.py
+msgid "Dark"
+msgstr ""

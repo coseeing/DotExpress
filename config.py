@@ -12,6 +12,7 @@ VIEW_SECTION = "view"
 TRANSLATION_TABLES_KEY = "translation_tables"
 OUTPUT_MODE_KEY = "output_mode"
 WIDTH_KEY = "width"
+SELECTED_DICTIONARY_KEY = "selected_dictionary"
 FONT_SIZE_KEY = "font_size"
 SCHEME_KEY = "scheme"
 
@@ -133,6 +134,16 @@ def get_conversion_width(default: int = DEFAULT_CONVERSION_WIDTH) -> int:
 
 def set_conversion_width(width: int) -> None:
     _set_section_value(CONVERSION_SECTION, WIDTH_KEY, width)
+
+
+def get_selected_dictionary(default: str = "default") -> str:
+    data = _load_from_file()
+    value = _get_section(data, CONVERSION_SECTION).get(SELECTED_DICTIONARY_KEY)
+    return value if isinstance(value, str) else default
+
+
+def set_selected_dictionary(dictionary_name: str) -> None:
+    _set_section_value(CONVERSION_SECTION, SELECTED_DICTIONARY_KEY, dictionary_name)
 
 
 def get_view_font_size(default: int = DEFAULT_VIEW_FONT_SIZE) -> int:

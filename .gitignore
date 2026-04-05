@@ -5,7 +5,7 @@
 __pycache__/
 build/
 dist/
-data/dictionary.csv
+dictionary/
 include/
 louis/tables/
 openspec/

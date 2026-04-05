@@ -10,6 +10,7 @@ from typing import List
 import wx
 from brailleTables import listTables
 from Bopomofo import normalize_zhuyin_sequence
+from dictionary_manager import DEFAULT_DICTIONARY_NAME, MAX_DICTIONARY_NAME_LENGTH, normalize_dictionary_name
 
 
 def resource_path(relative_path: str) -> Path:
@@ -128,7 +129,6 @@ class AddSymbolDialog(wx.Dialog):
 		try:
 			identifier = self.get_identifier()
 		except RuntimeError:
-			# Dialog is being torn down; let the default handler proceed to close.
 			event.Skip()
 			return
 
@@ -145,7 +145,7 @@ class AddSymbolDialog(wx.Dialog):
 		if entry_type == "Bopomofo":
 			try:
 				normalize_zhuyin_sequence(braille)
-			except Exception as e:
+			except Exception:
 				wx.MessageBox(_("Please enter the a valid Bopomofo sequence."), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 				try:
 					self.braille_ctrl.SetFocus()
@@ -165,6 +165,61 @@ class AddSymbolDialog(wx.Dialog):
 		event.Skip()
 
 	def __enter__(self) -> "AddSymbolDialog":
+		return self
+
+	def __exit__(self, exc_type, exc, _tb) -> None:
+		self.Destroy()
+
+
+class DictionaryNameDialog(wx.Dialog):
+	"""Dialog for creating a new dictionary file name."""
+
+	def __init__(self, parent: wx.Window | None):
+		super().__init__(parent, title=_("Add Dictionary"))
+
+		main_sizer = wx.BoxSizer(wx.VERTICAL)
+		grid = wx.FlexGridSizer(0, 2, 8, 8)
+		grid.AddGrowableCol(1, 1)
+
+		name_label = wx.StaticText(self, label=_("Dictionary Name"))
+		self.name_ctrl = wx.TextCtrl(self)
+		grid.Add(name_label, 0, wx.ALIGN_CENTER_VERTICAL)
+		grid.Add(self.name_ctrl, 1, wx.EXPAND)
+		main_sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 12)
+
+		button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+		if button_sizer:
+			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
+
+		self.SetSizerAndFit(main_sizer)
+		self.name_ctrl.SetFocus()
+
+	def get_dictionary_name(self) -> str:
+		return self.name_ctrl.GetValue().strip()
+
+	def _on_ok(self, event: wx.CommandEvent) -> None:
+		candidate = self.get_dictionary_name()
+		message = self._validate_name(candidate)
+		if message:
+			wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+			self.name_ctrl.SetFocus()
+			return
+		self.name_ctrl.SetValue(normalize_dictionary_name(candidate))
+		event.Skip()
+
+	def _validate_name(self, candidate: str) -> str | None:
+		if not candidate:
+			return _("Please enter the dictionary name.")
+		if len(candidate) > MAX_DICTIONARY_NAME_LENGTH:
+			return _("Dictionary name must be 1 to 16 characters.")
+		if any(char in candidate for char in (".", "/", "\\")):
+			return _('Dictionary name cannot contain ".", "/", or "\\".')
+		if candidate.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
+			return _('Dictionary name "{name}" is reserved.').format(name=DEFAULT_DICTIONARY_NAME)
+		return None
+
+	def __enter__(self) -> "DictionaryNameDialog":
 		return self
 
 	def __exit__(self, exc_type, exc, _tb) -> None:
@@ -244,7 +299,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 				if entry_type == "Bopomofo":
 					try:
 						normalize_zhuyin_sequence(braille)
-					except Exception as e:
+					except Exception:
 						continue
 
 				entries.append(DictionaryEntry(text=text, braille=braille, entry_type=entry_type))
@@ -337,9 +392,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 			return dialog.get_entry()
 
 	def _identifier_exists(self, identifier: str, exclude_index: int | None = None) -> bool:
-		return any(
-			entry.text == identifier and idx != exclude_index for idx, entry in enumerate(self.entries)
-		)
+		return any(entry.text == identifier and idx != exclude_index for idx, entry in enumerate(self.entries))
 
 	def _normalize_type(self, entry_type: str | None) -> str:
 		if entry_type in ENTRY_TYPE_LABELS:
@@ -383,7 +436,6 @@ class TranslationTableDialog(wx.Dialog):
 		self._apply_initial_selection()
 
 	def get_selected_tables(self) -> dict[str, str]:
-		"""Return the currently selected table file names for each language key."""
 		results: dict[str, str] = {}
 		for key, _label, _lang_code in self._CHOICE_SPECS:
 			option = self._get_selected_option(key)

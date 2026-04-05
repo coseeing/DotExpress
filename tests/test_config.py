@@ -64,6 +64,22 @@ class ConfigSettingsTest(unittest.TestCase):
         self.assertEqual(config.get_output_mode(), "ascii")
         self.assertEqual(config.get_conversion_width(), 52)
 
+    def test_selected_dictionary_roundtrip_under_conversion_section(self) -> None:
+        config.set_selected_dictionary("math")
+
+        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.assertEqual(
+            data,
+            {
+                "conversion": {
+                    "selected_dictionary": "math",
+                }
+            },
+        )
+        self.assertEqual(config.get_selected_dictionary("default"), "math")
+
 
 if __name__ == "__main__":
     unittest.main()

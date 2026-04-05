@@ -981,24 +981,96 @@ msgstr "祖魯文二級"
 
 #: gui.py
 msgid "Conversion"
-msgstr "Conversion"
+msgstr "轉換"
 
 #: gui.py
 msgid "View"
-msgstr "View"
+msgstr "檢視"
 
 #: gui.py
 msgid "Font Size"
-msgstr "Font Size"
+msgstr "字型大小"
 
 #: gui.py
 msgid "Scheme"
-msgstr "Scheme"
+msgstr "配色"
 
 #: gui.py
 msgid "Light"
-msgstr "Light"
+msgstr "淺色"
 
 #: gui.py
 msgid "Dark"
-msgstr "Dark"
+msgstr "深色"
+
+#: gui.py
+msgid "Actions"
+msgstr "動作"
+
+#: dialog.py
+msgid "Add Dictionary"
+msgstr "新增字典"
+
+#: dialog.py
+msgid "Dictionary Name"
+msgstr "字典名稱"
+
+#: dialog.py
+msgid "Please enter the dictionary name."
+msgstr "請輸入字典名稱。"
+
+#: dialog.py
+msgid "Dictionary name must be 1 to 16 characters."
+msgstr "字典名稱長度需為 1 到 16 個字元。"
+
+#: dialog.py
+msgid "Dictionary name cannot contain \".\", \"/\", or \"\\\\\"."
+msgstr "字典名稱不能包含 \".\"、\"/\" 或 \"\\\\\"。"
+
+#: dialog.py
+#, python-brace-format
+msgid "Dictionary name \"{name}\" is reserved."
+msgstr "字典名稱「{name}」為保留名稱。"
+
+#: gui.py
+#, python-brace-format
+msgid "Dictionary \"{name}\" already exists."
+msgstr "字典「{name}」已存在。"
+
+#: gui.py
+msgid "The default dictionary cannot be deleted."
+msgstr "預設字典無法刪除。"
+
+#: gui.py
+msgid "Import"
+msgstr "匯入"
+
+#: gui.py
+msgid "Export"
+msgstr "匯出"
+
+#: gui.py
+msgid "Import Dictionary"
+msgstr "匯入字典"
+
+#: gui.py
+msgid "Export Dictionary"
+msgstr "匯出字典"
+
+#: gui.py
+msgid "CSV files (*.csv)|*.csv"
+msgstr "CSV 檔案 (*.csv)|*.csv"
+
+#: gui.py
+msgid "Imported file must contain text, braille, and type headers."
+msgstr "匯入的檔案必須包含 text、braille 與 type 表頭。"
+
+#: gui.py
+#, python-brace-format
+msgid "Failed to import dictionary: {error}"
+msgstr "匯入字典失敗：{error}"
+
+#: gui.py
+#, python-brace-format
+msgid "Failed to export dictionary: {error}"
+msgstr "匯出字典失敗：{error}"

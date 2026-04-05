@@ -168,6 +168,15 @@ class ConvertingDialog(wx.Dialog):
 			evt.Veto()
 
 
+class NamedControlAccessible(wx.Accessible):
+	def __init__(self, window: wx.Window, name: str):
+		super().__init__(window)
+		self._name = name
+
+	def GetName(self, childId):
+		return (wx.ACC_OK, self._name)
+
+
 class BrailleFrame(wx.Frame):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -184,7 +193,6 @@ class BrailleFrame(wx.Frame):
 		vbox = wx.BoxSizer(wx.VERTICAL)
 
 		controls_box = wx.BoxSizer(wx.VERTICAL)
-		label_min_width = 90
 		self._output_modes = [("unicode", _("Unicode")), ("ascii", _("ASCII"))]
 		self._view_schemes = [("light", _("Light")), ("dark", _("Dark"))]
 
@@ -193,21 +201,23 @@ class BrailleFrame(wx.Frame):
 		initial_font_size = self._clamp_view_font_size(get_view_font_size(DEFAULT_VIEW_FONT_SIZE))
 		initial_scheme = self._normalize_view_scheme(get_view_scheme(DEFAULT_VIEW_SCHEME))
 
-		conversion_row = wx.BoxSizer(wx.HORIZONTAL)
-		conversion_lbl = wx.StaticText(panel, label=_("Conversion"))
-		conversion_lbl.SetMinSize((label_min_width, -1))
-		self.table_btn = wx.Button(panel, label=_("Translation Tables..."))
-		output_lbl = wx.StaticText(panel, label=_("Output Format"))
-		self.output_choice = wx.Choice(panel, choices=[label for _, label in self._output_modes])
-		width_lbl = wx.StaticText(panel, label=_("Width"))
-		self.width_spin = wx.SpinCtrl(panel, min=CONVERSION_WIDTH_MIN, max=CONVERSION_WIDTH_MAX, initial=initial_width)
-		dictionary_lbl = wx.StaticText(panel, label=_("Dictionary"))
-		self.dictionary_choice = wx.Choice(panel)
+		conversion_group, conversion_box, conversion_row = self._create_labeled_group(panel, _("Conversion"))
+		self.table_btn = wx.Button(conversion_box, label=_("Translation Tables..."))
+		output_lbl = wx.StaticText(conversion_box, label=_("Output Format"))
+		self.output_choice = wx.Choice(conversion_box, choices=[label for _, label in self._output_modes])
+		width_lbl = wx.StaticText(conversion_box, label=_("Width"))
+		self.width_spin = wx.SpinCtrl(
+			conversion_box,
+			min=CONVERSION_WIDTH_MIN,
+			max=CONVERSION_WIDTH_MAX,
+			initial=initial_width,
+		)
+		dictionary_lbl = wx.StaticText(conversion_box, label=_("Dictionary"))
+		self.dictionary_choice = wx.Choice(conversion_box)
 		self.dictionary_choice.SetMinSize((160, -1))
-		self.actions_btn = wx.Button(panel, label=build_actions_button_label(_("Actions")))
-		self.convert_btn = wx.Button(panel, label=_("Convert"))
+		self.actions_btn = wx.Button(conversion_box, label=build_actions_button_label(_("Actions")))
+		self.convert_btn = wx.Button(conversion_box, label=_("Convert"))
 
-		conversion_row.Add(conversion_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
 		conversion_row.Add(self.table_btn, 0, wx.RIGHT, 8)
 		conversion_row.Add(output_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
 		conversion_row.Add(self.output_choice, 0, wx.RIGHT, 8)
@@ -218,34 +228,33 @@ class BrailleFrame(wx.Frame):
 		conversion_row.Add(self.actions_btn, 0, wx.RIGHT, 8)
 		conversion_row.Add(self.convert_btn, 0)
 
-		view_row = wx.BoxSizer(wx.HORIZONTAL)
-		view_lbl = wx.StaticText(panel, label=_("View"))
-		view_lbl.SetMinSize((label_min_width, -1))
-		font_size_lbl = wx.StaticText(panel, label=_("Font Size"))
+		view_group, view_box, view_row = self._create_labeled_group(panel, _("View"))
+		font_size_lbl = wx.StaticText(view_box, label=_("Font Size"))
 		self.font_size_spin = wx.SpinCtrl(
-			panel,
+			view_box,
 			min=VIEW_FONT_SIZE_MIN,
 			max=VIEW_FONT_SIZE_MAX,
 			initial=initial_font_size,
 		)
-		scheme_lbl = wx.StaticText(panel, label=_("Scheme"))
-		self.scheme_choice = wx.Choice(panel, choices=[label for _, label in self._view_schemes])
+		scheme_lbl = wx.StaticText(view_box, label=_("Scheme"))
+		self.scheme_choice = wx.Choice(view_box, choices=[label for _, label in self._view_schemes])
 
-		view_row.Add(view_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
 		view_row.Add(font_size_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
 		view_row.Add(self.font_size_spin, 0, wx.RIGHT, 12)
 		view_row.Add(scheme_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
 		view_row.Add(self.scheme_choice, 0)
 		view_row.AddStretchSpacer()
 
-		controls_box.Add(conversion_row, 0, wx.EXPAND)
-		controls_box.Add(view_row, 0, wx.EXPAND | wx.TOP, 8)
+		controls_box.Add(conversion_group, 0, wx.EXPAND)
+		controls_box.Add(view_group, 0, wx.EXPAND | wx.TOP, 8)
 		vbox.Add(controls_box, 0, wx.EXPAND | wx.ALL, 8)
 
 		self.input_txt = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
+		self._set_control_accessible_name(self.input_txt, _("Source Text"))
 		vbox.Add(self.input_txt, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
 
 		self.output_txt = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
+		self._set_control_accessible_name(self.output_txt, _("Braille"))
 		vbox.Add(self.output_txt, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
 
 		panel.SetSizer(vbox)
@@ -273,6 +282,17 @@ class BrailleFrame(wx.Frame):
 		self.font_size_spin.Bind(wx.EVT_TEXT, self.on_font_size_change)
 		self.scheme_choice.Bind(wx.EVT_CHOICE, self.on_scheme_change)
 		self.Bind(wx.EVT_CLOSE, self._on_close)
+
+	def _set_control_accessible_name(self, control: wx.Window, name: str) -> None:
+		control.SetName(name)
+		control.SetAccessible(NamedControlAccessible(control, name))
+
+	def _create_labeled_group(self, parent: wx.Window, label: str) -> tuple[wx.StaticBoxSizer, wx.StaticBox, wx.BoxSizer]:
+		group = wx.StaticBoxSizer(wx.VERTICAL, parent, label=label)
+		box = group.GetStaticBox()
+		row = wx.BoxSizer(wx.HORIZONTAL)
+		group.Add(row, 0, wx.EXPAND | wx.ALL, 8)
+		return group, box, row
 
 	def _clamp_conversion_width(self, width: int) -> int:
 		return max(CONVERSION_WIDTH_MIN, min(CONVERSION_WIDTH_MAX, width))

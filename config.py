@@ -15,6 +15,7 @@ WIDTH_KEY = "width"
 SELECTED_DICTIONARY_KEY = "selected_dictionary"
 FONT_SIZE_KEY = "font_size"
 SCHEME_KEY = "scheme"
+BRAILLE_FONT_KEY = "braille_font"
 
 DEFAULT_TRANSLATION_TABLES = {
     "default": "zh-tw.ctb",
@@ -26,6 +27,7 @@ DEFAULT_OUTPUT_MODE = "unicode"
 DEFAULT_CONVERSION_WIDTH = 40
 DEFAULT_VIEW_FONT_SIZE = 12
 DEFAULT_VIEW_SCHEME = "light"
+DEFAULT_BRAILLE_FONT = "default"
 
 _runtime_lang: Optional[str] = None
 
@@ -164,3 +166,13 @@ def get_view_scheme(default: str = DEFAULT_VIEW_SCHEME) -> str:
 
 def set_view_scheme(scheme: str) -> None:
     _set_section_value(VIEW_SECTION, SCHEME_KEY, scheme)
+
+
+def get_braille_font(default: str = DEFAULT_BRAILLE_FONT) -> str:
+    data = _load_from_file()
+    value = _get_section(data, VIEW_SECTION).get(BRAILLE_FONT_KEY)
+    return value if isinstance(value, str) else default
+
+
+def set_braille_font(braille_font: str) -> None:
+    _set_section_value(VIEW_SECTION, BRAILLE_FONT_KEY, braille_font)

@@ -4,6 +4,7 @@ from action_menu import (
     build_actions_button_label,
     get_actions_menu_position,
     get_dictionary_action_labels,
+    get_document_action_labels,
 )
 
 
@@ -18,6 +19,12 @@ class ActionMenuTest(unittest.TestCase):
         self.assertEqual(
             get_dictionary_action_labels(),
             ["Edit", "Delete", "Add", "Import", "Export"],
+        )
+
+    def test_get_document_action_labels_returns_requested_order(self) -> None:
+        self.assertEqual(
+            get_document_action_labels(),
+            ["Open", "Delete", "Add", "Import", "Rename", "Export"],
         )
 
 

@@ -1074,3 +1074,125 @@ msgstr "匯入字典失敗：{error}"
 #, python-brace-format
 msgid "Failed to export dictionary: {error}"
 msgstr "匯出字典失敗：{error}"
+
+#: gui.py
+msgid "At least one document is required."
+msgstr "至少需要一份文件。"
+
+#: gui.py
+msgid 'converting'
+msgstr '轉換中'
+
+#: gui.py
+msgid 'Documents'
+msgstr '文件'
+
+#: gui.py
+msgid 'Document Name'
+msgstr '文件名稱'
+
+#: gui.py
+msgid 'Document List'
+msgstr '文件列表'
+
+#: gui.py
+#, python-brace-format
+msgid 'Failed to save document: {error}'
+msgstr '儲存文件失敗：{error}'
+
+#: gui.py
+#, python-brace-format
+msgid 'Failed to delete invalid workspace file: {error}'
+msgstr '刪除無效工作區文件失敗：{error}'
+
+#: gui.py
+msgid 'Add Document'
+msgstr '新增文件'
+
+#: gui.py
+msgid 'Rename Document'
+msgstr '重新命名文件'
+
+#: gui.py
+#, python-brace-format
+msgid 'Failed to delete document: {error}'
+msgstr '刪除文件失敗：{error}'
+
+#: gui.py
+msgid 'Import Document'
+msgstr '匯入文件'
+
+#: gui.py
+msgid 'Imported file must be a valid DotExpress DEP package.'
+msgstr '匯入的檔案必須是有效的 DotExpress DEP 封裝檔。'
+
+#: gui.py
+#, python-brace-format
+msgid 'Failed to import document: {error}'
+msgstr '匯入文件失敗：{error}'
+
+#: gui.py
+msgid 'Export Document'
+msgstr '匯出文件'
+
+#: gui.py
+#, python-brace-format
+msgid 'Failed to export document: {error}'
+msgstr '匯出文件失敗：{error}'
+
+#: gui.py
+msgid 'Dictionary name cannot contain ".", "/", or "\\".'
+msgstr '字典名稱不能包含 "."、"/" 或 "\\"。'
+
+#: gui.py
+#, python-brace-format
+msgid 'Document "{name}" already exists.'
+msgstr '文件「{name}」已存在。'
+
+#: gui.py
+msgid 'Please enter the document name.'
+msgstr '請輸入文件名稱。'
+
+#: gui.py
+msgid 'Document name must be 1 to 16 characters.'
+msgstr '文件名稱長度需為 1 到 16 個字元。'
+
+#: gui.py
+msgid 'Document name cannot contain ".", "/", or "\\".'
+msgstr '文件名稱不能包含 "."、"/" 或 "\\"。'
+
+#: gui.py
+msgid 'Invalid Workspace Files'
+msgstr '無效的工作區文件'
+
+#: gui.py
+msgid 'The following workspace files are invalid. Do you want to delete them or keep them?'
+msgstr '下列工作區文件無效。請選擇要刪除或保留它們。'
+
+#: gui.py
+msgid 'Delete Invalid Files'
+msgstr '刪除無效文件'
+
+#: gui.py
+msgid 'Keep Invalid Files'
+msgstr '保留無效文件'
+
+#: gui.py
+msgid "Open"
+msgstr "開啟"
+
+#: gui.py
+msgid "Rename"
+msgstr "重新命名"
+
+#: gui.py
+msgid "Default"
+msgstr "預設"
+
+#: gui.py
+msgid "Braille Font"
+msgstr "點字字型"
+
+#: gui.py
+msgid "SimBraille"
+msgstr "SimBraille"

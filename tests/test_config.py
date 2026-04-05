@@ -80,6 +80,22 @@ class ConfigSettingsTest(unittest.TestCase):
         )
         self.assertEqual(config.get_selected_dictionary("default"), "math")
 
+    def test_braille_font_setting_is_persisted_under_view_section(self) -> None:
+        config.set_braille_font("simbraille")
+
+        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.assertEqual(
+            data,
+            {
+                "view": {
+                    "braille_font": "simbraille",
+                }
+            },
+        )
+        self.assertEqual(config.get_braille_font("default"), "simbraille")
+
 
 if __name__ == "__main__":
     unittest.main()

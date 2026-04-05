@@ -11,6 +11,7 @@ import wx
 from brailleTables import listTables
 from Bopomofo import normalize_zhuyin_sequence
 from dictionary_manager import DEFAULT_DICTIONARY_NAME, MAX_DICTIONARY_NAME_LENGTH, normalize_dictionary_name
+from document_workspace import normalize_document_name
 
 
 def resource_path(relative_path: str) -> Path:
@@ -220,6 +221,101 @@ class DictionaryNameDialog(wx.Dialog):
 		return None
 
 	def __enter__(self) -> "DictionaryNameDialog":
+		return self
+
+	def __exit__(self, exc_type, exc, _tb) -> None:
+		self.Destroy()
+
+
+class DocumentNameDialog(wx.Dialog):
+	"""Dialog for creating or renaming a document."""
+
+	def __init__(self, parent: wx.Window | None, title: str, initial_name: str = ""):
+		super().__init__(parent, title=title)
+
+		main_sizer = wx.BoxSizer(wx.VERTICAL)
+		grid = wx.FlexGridSizer(0, 2, 8, 8)
+		grid.AddGrowableCol(1, 1)
+
+		name_label = wx.StaticText(self, label=_("Document Name"))
+		self.name_ctrl = wx.TextCtrl(self)
+		self.name_ctrl.SetValue(initial_name)
+		grid.Add(name_label, 0, wx.ALIGN_CENTER_VERTICAL)
+		grid.Add(self.name_ctrl, 1, wx.EXPAND)
+		main_sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 12)
+
+		button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+		if button_sizer:
+			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
+
+		self.SetSizerAndFit(main_sizer)
+		self.name_ctrl.SetFocus()
+		self.name_ctrl.SelectAll()
+
+	def get_document_name(self) -> str:
+		return self.name_ctrl.GetValue().strip()
+
+	def _on_ok(self, event: wx.CommandEvent) -> None:
+		candidate = self.get_document_name()
+		message = self._validate_name(candidate)
+		if message:
+			wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+			self.name_ctrl.SetFocus()
+			return
+		self.name_ctrl.SetValue(normalize_document_name(candidate))
+		event.Skip()
+
+	def _validate_name(self, candidate: str) -> str | None:
+		if not candidate:
+			return _("Please enter the document name.")
+		if len(candidate) > MAX_DICTIONARY_NAME_LENGTH:
+			return _("Document name must be 1 to 16 characters.")
+		if any(char in candidate for char in (".", "/", "\\")):
+			return _('Document name cannot contain ".", "/", or "\\".')
+		return None
+
+	def __enter__(self) -> "DocumentNameDialog":
+		return self
+
+	def __exit__(self, exc_type, exc, _tb) -> None:
+		self.Destroy()
+
+
+class InvalidWorkspaceFilesDialog(wx.Dialog):
+	"""Dialog shown when startup finds invalid DEP files in the workspace."""
+
+	def __init__(self, parent: wx.Window | None, invalid_paths: list[Path]):
+		super().__init__(parent, title=_("Invalid Workspace Files"))
+		self._delete_invalid_files = False
+		main_sizer = wx.BoxSizer(wx.VERTICAL)
+		message = wx.StaticText(self, label=_("The following workspace files are invalid. Do you want to delete them or keep them?"))
+		main_sizer.Add(message, 0, wx.EXPAND | wx.ALL, 12)
+		self.list_box = wx.ListBox(self, choices=[path.name for path in invalid_paths])
+		main_sizer.Add(self.list_box, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+		button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		delete_btn = wx.Button(self, label=_("Delete Invalid Files"))
+		keep_btn = wx.Button(self, label=_("Keep Invalid Files"))
+		button_sizer.Add(delete_btn, 0, wx.RIGHT, 8)
+		button_sizer.Add(keep_btn, 0)
+		main_sizer.Add(button_sizer, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+		delete_btn.Bind(wx.EVT_BUTTON, self._on_delete)
+		keep_btn.Bind(wx.EVT_BUTTON, self._on_keep)
+		self.SetSizerAndFit(main_sizer)
+		self.SetMinSize((420, 280))
+
+	def should_delete_invalid_files(self) -> bool:
+		return self._delete_invalid_files
+
+	def _on_delete(self, _event: wx.CommandEvent) -> None:
+		self._delete_invalid_files = True
+		self.EndModal(wx.ID_OK)
+
+	def _on_keep(self, _event: wx.CommandEvent) -> None:
+		self._delete_invalid_files = False
+		self.EndModal(wx.ID_CANCEL)
+
+	def __enter__(self) -> "InvalidWorkspaceFilesDialog":
 		return self
 
 	def __exit__(self, exc_type, exc, _tb) -> None:

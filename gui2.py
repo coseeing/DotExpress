@@ -255,19 +255,6 @@ class BrailleFrame(wx.Frame):
 		conversion_row.Add(self.actions_btn, 0, wx.RIGHT, 8)
 		conversion_row.Add(self.convert_btn, 0)
 
-		controls_box.Add(conversion_group, 0, wx.EXPAND)
-		vbox.Add(controls_box, 0, wx.EXPAND | wx.ALL, 8)
-
-		content_box = wx.BoxSizer(wx.HORIZONTAL)
-		documents_box = wx.BoxSizer(wx.VERTICAL)
-		documents_label = wx.StaticText(panel, label=_("Documents"))
-		self.document_list = wx.ListCtrl(panel, style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL)
-		self.document_list.InsertColumn(0, _("Document Name"), width=220)
-		self.document_list.SetMinSize((240, -1))
-		self._set_control_accessible_name(self.document_list, _("Document List"))
-		documents_box.Add(documents_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
-		documents_box.Add(self.document_list, 1, wx.EXPAND | wx.ALL, 8)
-
 		view_group, view_box, view_row = self._create_labeled_group(panel, _("View"))
 		font_size_lbl = wx.StaticText(view_box, label=_("Font Size"))
 		self.font_size_spin = wx.SpinCtrl(
@@ -288,6 +275,19 @@ class BrailleFrame(wx.Frame):
 		view_row.Add(braille_font_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
 		view_row.Add(self.braille_font_choice, 0)
 		view_row.AddStretchSpacer()
+
+		controls_box.Add(conversion_group, 0, wx.EXPAND)
+		vbox.Add(controls_box, 0, wx.EXPAND | wx.ALL, 8)
+
+		content_box = wx.BoxSizer(wx.HORIZONTAL)
+		documents_box = wx.BoxSizer(wx.VERTICAL)
+		documents_label = wx.StaticText(panel, label=_("Documents"))
+		self.document_list = wx.ListCtrl(panel, style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL)
+		self.document_list.InsertColumn(0, _("Document Name"), width=220)
+		self.document_list.SetMinSize((240, -1))
+		self._set_control_accessible_name(self.document_list, _("Document List"))
+		documents_box.Add(documents_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
+		documents_box.Add(self.document_list, 1, wx.EXPAND | wx.ALL, 8)
 
 		editors_box = wx.BoxSizer(wx.VERTICAL)
 		editors_box.Add(view_group, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)

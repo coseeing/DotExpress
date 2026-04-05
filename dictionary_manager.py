@@ -5,10 +5,11 @@ from pathlib import Path
 import shutil
 import sys
 
+from name_validation import MAX_NAME_LENGTH, normalize_base_name
+
 DEFAULT_DICTIONARY_NAME = "default"
 DEFAULT_HEADER = ["text", "braille", "type"]
-MAX_DICTIONARY_NAME_LENGTH = 16
-_INVALID_NAME_CHARS = {".", "/", "\\"}
+MAX_DICTIONARY_NAME_LENGTH = MAX_NAME_LENGTH
 
 
 def get_application_directory() -> Path:
@@ -47,16 +48,7 @@ def list_dictionary_names(dictionary_dir: Path | None = None) -> list[str]:
 
 
 def normalize_dictionary_name(name: str) -> str:
-    normalized = name.strip()
-    if not normalized:
-        raise ValueError("Dictionary name cannot be empty.")
-    if len(normalized) > MAX_DICTIONARY_NAME_LENGTH:
-        raise ValueError("Dictionary name cannot exceed 16 characters.")
-    if any(char in normalized for char in _INVALID_NAME_CHARS):
-        raise ValueError("Dictionary name contains invalid characters.")
-    if normalized.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
-        raise ValueError("Default dictionary name is reserved.")
-    return normalized
+    return normalize_base_name(name, reserved_names={DEFAULT_DICTIONARY_NAME})
 
 
 def validate_dictionary_csv(path: Path | str) -> None:

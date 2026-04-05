@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-02-10 21:09+0800\n"
+"POT-Creation-Date: 2026-04-05 23:05+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,163 +17,350 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: gui.py:98
-msgid "DotExpress"
-msgstr ""
-
-#: gui.py:106
-msgid "Translation Tables..."
-msgstr ""
-
-#: gui.py:107
-msgid "Output Format"
-msgstr ""
-
-#: gui.py:108
-msgid "Unicode"
-msgstr ""
-
-#: gui.py:108
-msgid "ASCII"
-msgstr ""
-
-#: gui.py:110
-msgid "Width"
-msgstr ""
-
-#: gui.py:112
-msgid "Dictionary"
-msgstr ""
-
-#: gui.py:113
-msgid "Convert"
-msgstr ""
-
-#: gui.py:153
-msgid "Please select a translation table first."
-msgstr ""
-
-#: gui.py:154 gui.py:201 gui.py:227 dialog.py:136 dialog.py:149 dialog.py:158
+#: gui.py:172 gui.py:564 gui.py:845 gui.py:861 gui.py:939 gui.py:949
+#: gui.py:1073 dialog.py:137 dialog.py:150 dialog.py:159 dialog.py:206
+#: dialog.py:263
 msgid "Info"
 msgstr ""
 
-#: gui.py:179 gui.py:190
+#: gui.py:174
+msgid "converting"
+msgstr ""
+
+#: gui.py:199
+msgid "DotExpress"
+msgstr ""
+
+#: gui.py:216
+msgid "Unicode"
+msgstr ""
+
+#: gui.py:216
+msgid "ASCII"
+msgstr ""
+
+#: gui.py:217
+msgid "Light"
+msgstr ""
+
+#: gui.py:217
+msgid "Dark"
+msgstr ""
+
+#: gui.py:224
+msgid "Conversion"
+msgstr ""
+
+#: gui.py:225
+msgid "Translation Tables..."
+msgstr ""
+
+#: gui.py:226
+msgid "Output Format"
+msgstr ""
+
+#: gui.py:228
+msgid "Width"
+msgstr ""
+
+#: gui.py:235
+msgid "Dictionary"
+msgstr ""
+
+#: gui.py:238
+msgid "Actions"
+msgstr ""
+
+#: gui.py:239
+msgid "Convert"
+msgstr ""
+
+#: gui.py:251
+msgid "View"
+msgstr ""
+
+#: gui.py:252
+msgid "Font Size"
+msgstr ""
+
+#: gui.py:259
+msgid "Scheme"
+msgstr ""
+
+#: gui.py:274
+msgid "Documents"
+msgstr ""
+
+#: gui.py:276 dialog.py:240
+msgid "Document Name"
+msgstr ""
+
+#: gui.py:278
+msgid "Document List"
+msgstr ""
+
+#: gui.py:284 dialog.py:70 dialog.py:350
+msgid "Source Text"
+msgstr ""
+
+#: gui.py:288 dialog.py:72 dialog.py:351
+msgid "Braille"
+msgstr ""
+
+#: gui.py:429 gui.py:574 gui.py:740 gui.py:839 gui.py:892 gui.py:900
+#: gui.py:1065 dialog.py:441 dialog.py:464 dialog.py:502
+msgid "Error"
+msgstr ""
+
+#: gui.py:520 gui.py:543 gui.py:692
+#, python-brace-format
+msgid "Failed to save document: {error}"
+msgstr ""
+
+#: gui.py:536
+#, python-brace-format
+msgid "Failed to delete invalid workspace file: {error}"
+msgstr ""
+
+#: gui.py:563
+msgid "At least one document is required."
+msgstr ""
+
+#: gui.py:573
+#, python-brace-format
+msgid "Document \"{name}\" already exists."
+msgstr ""
+
+#: gui.py:587 gui.py:663
+msgid "Add Document"
+msgstr ""
+
+#: gui.py:679
+msgid "Rename Document"
+msgstr ""
+
+#: gui.py:715
+#, python-brace-format
+msgid "Failed to delete document: {error}"
+msgstr ""
+
+#: gui.py:731 gui.py:748
+msgid "Import Document"
+msgstr ""
+
+#: gui.py:739
+msgid "Imported file must be a valid DotExpress DEP package."
+msgstr ""
+
+#: gui.py:746
+#, python-brace-format
+msgid "Failed to import document: {error}"
+msgstr ""
+
+#: gui.py:762
+msgid "Export Document"
+msgstr ""
+
+#: gui.py:775
+#, python-brace-format
+msgid "Failed to export document: {error}"
+msgstr ""
+
+#: gui.py:838 gui.py:891
+#, python-brace-format
+msgid "Dictionary \"{name}\" already exists."
+msgstr ""
+
+#: gui.py:860
+msgid "The default dictionary cannot be deleted."
+msgstr ""
+
+#: gui.py:874
+msgid "Import Dictionary"
+msgstr ""
+
+#: gui.py:899
+msgid "Imported file must contain text, braille, and type headers."
+msgstr ""
+
+#: gui.py:906
+#, python-brace-format
+msgid "Failed to import dictionary: {error}"
+msgstr ""
+
+#: gui.py:917
+msgid "Export Dictionary"
+msgstr ""
+
+#: gui.py:929
+#, python-brace-format
+msgid "Failed to export dictionary: {error}"
+msgstr ""
+
+#: gui.py:938
+msgid "Please select a translation table first."
+msgstr ""
+
+#: gui.py:948
+msgid "Please select the output format first."
+msgstr ""
+
+#: gui.py:1010
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr ""
 
-#: gui.py:180 gui.py:191 gui.py:220 dialog.py:290 dialog.py:313 dialog.py:353
-msgid "Error"
-msgstr ""
-
-#: gui.py:200
-msgid "Please select the output format first."
-msgstr ""
-
-#: gui.py:219
+#: gui.py:1027
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr ""
 
-#: gui.py:227
+#: gui.py:1073
 msgid "Conversion completed."
 msgstr ""
 
-#: dialog.py:35
+#: dialog.py:37
 msgid "General"
 msgstr ""
 
-#: dialog.py:36
+#: dialog.py:38
 msgid "Bopomofo"
 msgstr ""
 
-#: dialog.py:37
+#: dialog.py:39
 msgid "Unicode Braille"
 msgstr ""
 
-#: dialog.py:61
+#: dialog.py:63
 msgid "Edit Dictionary Entry"
 msgstr ""
 
-#: dialog.py:61
+#: dialog.py:63
 msgid "Add Dictionary Entry"
 msgstr ""
 
-#: dialog.py:68 dialog.py:199
-msgid "Source Text"
-msgstr ""
-
-#: dialog.py:70 dialog.py:200
-msgid "Braille"
-msgstr ""
-
-#: dialog.py:72 dialog.py:201
+#: dialog.py:74 dialog.py:352
 msgid "Type"
 msgstr ""
 
-#: dialog.py:136
+#: dialog.py:137
 msgid "Please enter the source text."
 msgstr ""
 
-#: dialog.py:149
+#: dialog.py:150
 msgid "Please enter the a valid Bopomofo sequence."
 msgstr ""
 
-#: dialog.py:158
+#: dialog.py:159
 msgid "Please enter the a valid Unicode Braille sequence."
 msgstr ""
 
-#: dialog.py:178
+#: dialog.py:179
+msgid "Add Dictionary"
+msgstr ""
+
+#: dialog.py:185
+msgid "Dictionary Name"
+msgstr ""
+
+#: dialog.py:214
+msgid "Please enter the dictionary name."
+msgstr ""
+
+#: dialog.py:216
+msgid "Dictionary name must be 1 to 16 characters."
+msgstr ""
+
+#: dialog.py:218
+msgid "Dictionary name cannot contain \".\", \"/\", or \"\\\"."
+msgstr ""
+
+#: dialog.py:220
+#, python-brace-format
+msgid "Dictionary name \"{name}\" is reserved."
+msgstr ""
+
+#: dialog.py:271
+msgid "Please enter the document name."
+msgstr ""
+
+#: dialog.py:273
+msgid "Document name must be 1 to 16 characters."
+msgstr ""
+
+#: dialog.py:275
+msgid "Document name cannot contain \".\", \"/\", or \"\\\"."
+msgstr ""
+
+#: dialog.py:289
+msgid "Invalid Workspace Files"
+msgstr ""
+
+#: dialog.py:292
+msgid ""
+"The following workspace files are invalid. Do you want to delete them or "
+"keep them?"
+msgstr ""
+
+#: dialog.py:297
+msgid "Delete Invalid Files"
+msgstr ""
+
+#: dialog.py:298
+msgid "Keep Invalid Files"
+msgstr ""
+
+#: dialog.py:329
 msgid "Custom Dictionary Manager"
 msgstr ""
 
-#: dialog.py:195
+#: dialog.py:346
 msgid "Dictionary entries"
 msgstr ""
 
-#: dialog.py:208
+#: dialog.py:359
 msgid "Add"
 msgstr ""
 
-#: dialog.py:209
+#: dialog.py:360
 msgid "Edit"
 msgstr ""
 
-#: dialog.py:210
+#: dialog.py:361
 msgid "Delete"
 msgstr ""
 
-#: dialog.py:289 dialog.py:312
+#: dialog.py:440 dialog.py:463
 #, python-brace-format
 msgid "Source text \"{identifier}\" already exists."
 msgstr ""
 
-#: dialog.py:353
+#: dialog.py:502
 #, python-brace-format
 msgid "Failed to save: {error}"
 msgstr ""
 
-#: dialog.py:370
+#: dialog.py:519
 msgid "Default Translation Table"
 msgstr ""
 
-#: dialog.py:371
+#: dialog.py:520
 msgid "English Translation Table"
 msgstr ""
 
-#: dialog.py:372
+#: dialog.py:521
 msgid "Chinese Translation Table"
 msgstr ""
 
-#: dialog.py:373
+#: dialog.py:522
 msgid "Japanese Translation Table"
 msgstr ""
 
-#: dialog.py:377
+#: dialog.py:526
 msgid "Translation Tables Setting"
 msgstr ""
 
-#: dialog.py:402
+#: dialog.py:550
 msgid "None selected"
 msgstr ""
 
@@ -967,28 +1154,4 @@ msgstr ""
 
 #: brailleTables/__tables.py:695
 msgid "Zulu grade 2"
-msgstr ""
-
-#: gui.py
-msgid "Conversion"
-msgstr ""
-
-#: gui.py
-msgid "View"
-msgstr ""
-
-#: gui.py
-msgid "Font Size"
-msgstr ""
-
-#: gui.py
-msgid "Scheme"
-msgstr ""
-
-#: gui.py
-msgid "Light"
-msgstr ""
-
-#: gui.py
-msgid "Dark"
 msgstr ""

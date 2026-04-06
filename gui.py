@@ -2,10 +2,12 @@ from pathlib import Path
 import gettext
 import sys
 import threading
+import webbrowser
 import zipfile
 
 import wx
 
+import about
 import louisHelper
 from action_menu import (
 	build_actions_button_label,
@@ -48,6 +50,7 @@ from dictionary_manager import (
 	get_dictionary_directory,
 	import_dictionary,
 	list_dictionary_names,
+	rename_dictionary,
 	resolve_selected_dictionary,
 )
 from document_workspace import (
@@ -134,6 +137,12 @@ _MENU_TRANSLATION_MARKERS = (
 	_("TXT"),
 	_("BRL"),
 	_("Delete All"),
+	_("Confirm Delete Dictionary"),
+	_("Do you want to delete dictionary \"{name}\"?"),
+	_("Rename Dictionary"),
+	_("Help"),
+	_("Coseeing Website"),
+	_("About DotExpress"),
 )
 
 language_map_translate_table = get_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
@@ -231,6 +240,7 @@ class BrailleFrame(wx.Frame):
 
 		self.SetTitle(_("DotExpress"))
 		self.SetSize((900, 600))
+		self.SetMenuBar(self._create_menu_bar())
 
 		self.dictionary_dir = get_dictionary_directory()
 		ensure_default_dictionary(self.dictionary_dir)
@@ -371,6 +381,20 @@ class BrailleFrame(wx.Frame):
 
 		self._clear_document_editors()
 		self._load_workspace_documents_at_startup()
+		self.input_txt.SetFocus()
+
+	def _create_menu_bar(self) -> wx.MenuBar:
+		menu_bar = wx.MenuBar()
+		help_menu = wx.Menu()
+
+		website_item = help_menu.Append(wx.ID_ANY, _("Coseeing Website"))
+		self.Bind(wx.EVT_MENU, self.on_open_coseeing_website, website_item)
+
+		about_item = help_menu.Append(wx.ID_ABOUT, _("About"))
+		self.Bind(wx.EVT_MENU, self.on_about, about_item)
+
+		menu_bar.Append(help_menu, _("Help"))
+		return menu_bar
 
 	def _set_control_accessible_name(self, control: wx.Window, name: str) -> None:
 		control.SetName(name)
@@ -501,6 +525,21 @@ class BrailleFrame(wx.Frame):
 
 	def _get_document_names(self) -> list[str]:
 		return [document.name for document in self.documents]
+
+	def on_open_coseeing_website(self, _evt: wx.CommandEvent) -> None:
+		try:
+			webbrowser.open(about.url)
+		except Exception as exc:
+			self._show_file_error(_("Failed to open website: {error}"), exc)
+
+	def on_about(self, _evt: wx.CommandEvent) -> None:
+		with wx.MessageDialog(
+			self,
+			about.aboutMessage,
+			_("About DotExpress"),
+			wx.OK | wx.ICON_INFORMATION,
+		) as dialog:
+			dialog.ShowModal()
 
 	def _sort_documents(self) -> None:
 		self.documents.sort(key=lambda document: (document.name.casefold(), document.name))
@@ -1137,10 +1176,12 @@ class BrailleFrame(wx.Frame):
 		selected_name = self._get_selected_dictionary_name()
 		menu_items["Edit"].Enable(has_selection)
 		menu_items["Delete"].Enable(has_selection and selected_name.casefold() != DEFAULT_DICTIONARY_NAME.casefold())
+		menu_items["Rename"].Enable(has_selection and selected_name.casefold() != DEFAULT_DICTIONARY_NAME.casefold())
 		menu_items["Export"].Enable(has_selection)
 
 		menu.Bind(wx.EVT_MENU, self.on_edit_dictionary, menu_items["Edit"])
 		menu.Bind(wx.EVT_MENU, self.on_delete_dictionary, menu_items["Delete"])
+		menu.Bind(wx.EVT_MENU, self.on_rename_dictionary, menu_items["Rename"])
 		menu.Bind(wx.EVT_MENU, self.on_add_dictionary, menu_items["Add"])
 		menu.Bind(wx.EVT_MENU, self.on_import_dictionary, menu_items["Import"])
 		menu.Bind(wx.EVT_MENU, self.on_export_dictionary, menu_items["Export"])
@@ -1186,9 +1227,52 @@ class BrailleFrame(wx.Frame):
 			)
 			return
 
+		if (
+			wx.MessageBox(
+				_('Do you want to delete dictionary "{name}"?').format(name=selected_name),
+				_("Confirm Delete Dictionary"),
+				wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
+				parent=self,
+			)
+			!= wx.YES
+		):
+			return
+
 		preferred_name = choose_selection_after_delete(self._dictionary_names, selected_name)
 		delete_dictionary(self.dictionary_dir, selected_name)
 		self._refresh_dictionary_choice(preferred_name)
+
+	def on_rename_dictionary(self, _evt):
+		selected_name = self._get_selected_dictionary_name()
+		if selected_name.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
+			return
+		with DictionaryNameDialog(self) as dialog:
+			dialog.SetTitle(_("Rename Dictionary"))
+			dialog.name_ctrl.SetValue(selected_name)
+			dialog.name_ctrl.SetFocus()
+			dialog.name_ctrl.SelectAll()
+			if dialog.ShowModal() != wx.ID_OK:
+				return
+			dictionary_name = dialog.get_dictionary_name()
+
+		try:
+			path = rename_dictionary(self.dictionary_dir, selected_name, dictionary_name)
+		except FileExistsError:
+			wx.MessageBox(
+				_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
+			return
+		except ValueError as exc:
+			wx.MessageBox(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+			return
+		except OSError as exc:
+			self._show_file_error(_("Failed to save dictionary: {error}"), exc)
+			return
+
+		self._refresh_dictionary_choice(path.stem)
 
 	def on_import_dictionary(self, _evt):
 		with wx.FileDialog(

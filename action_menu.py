@@ -10,7 +10,7 @@ def get_actions_menu_position(button_size: tuple[int, int]) -> tuple[int, int]:
 
 
 def get_dictionary_action_labels() -> list[str]:
-    return ["Edit", "Delete", "Add", "Import", "Export"]
+    return ["Edit", "Delete", "Rename", "Add", "Import", "Export"]
 
 
 def get_document_action_labels() -> list[str]:

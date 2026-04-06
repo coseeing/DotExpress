@@ -8,11 +8,13 @@ from dictionary_manager import (
     DEFAULT_HEADER,
     choose_selection_after_delete,
     create_dictionary,
+    dictionary_path_for_name,
     ensure_default_dictionary,
     export_dictionary,
     import_dictionary,
     list_dictionary_names,
     normalize_dictionary_name,
+    rename_dictionary,
     resolve_selected_dictionary,
 )
 
@@ -109,6 +111,26 @@ class DictionaryManagerTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             import_dictionary(self.dictionary_dir, source_path, "science")
+
+    def test_rename_dictionary_renames_file_and_preserves_contents(self) -> None:
+        source_path = create_dictionary(self.dictionary_dir, "math")
+        with source_path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["term", "braille", "General"])
+
+        renamed_path = rename_dictionary(self.dictionary_dir, "math", "science")
+
+        self.assertEqual(renamed_path, dictionary_path_for_name("science", self.dictionary_dir))
+        self.assertFalse(source_path.exists())
+        self.assertTrue(renamed_path.exists())
+        self.assertIn("term,braille,General", renamed_path.read_text(encoding="utf-8"))
+
+    def test_rename_dictionary_rejects_existing_destination(self) -> None:
+        create_dictionary(self.dictionary_dir, "math")
+        create_dictionary(self.dictionary_dir, "science")
+
+        with self.assertRaises(FileExistsError):
+            rename_dictionary(self.dictionary_dir, "math", "science")
 
 
 if __name__ == "__main__":

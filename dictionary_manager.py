@@ -86,6 +86,19 @@ def import_dictionary(dictionary_dir: Path | None, source_path: Path | str, name
     return destination_path
 
 
+def rename_dictionary(dictionary_dir: Path | None, source_name: str, new_name: str) -> Path:
+    source_normalized = source_name.strip()
+    if source_normalized.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
+        raise ValueError("Default dictionary cannot be renamed.")
+    destination_normalized = normalize_dictionary_name(new_name)
+    source_path = dictionary_path_for_name(source_normalized, dictionary_dir)
+    destination_path = dictionary_path_for_name(destination_normalized, dictionary_dir)
+    if destination_path.exists():
+        raise FileExistsError(f"Dictionary '{destination_normalized}' already exists.")
+    source_path.rename(destination_path)
+    return destination_path
+
+
 def export_dictionary(dictionary_dir: Path | None, name: str, destination_path: Path | str) -> Path:
     source_path = dictionary_path_for_name(name.strip(), dictionary_dir)
     destination = Path(destination_path)

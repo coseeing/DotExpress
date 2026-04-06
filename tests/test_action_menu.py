@@ -20,7 +20,7 @@ class ActionMenuTest(unittest.TestCase):
     def test_get_dictionary_action_labels_returns_requested_order(self) -> None:
         self.assertEqual(
             get_dictionary_action_labels(),
-            ["Edit", "Delete", "Add", "Import", "Export"],
+            ["Edit", "Delete", "Rename", "Add", "Import", "Export"],
         )
 
     def test_get_document_action_labels_returns_requested_order(self) -> None:

@@ -4,10 +4,12 @@ from pathlib import Path
 
 from document_workspace import (
     BatchIssue,
+    DEFAULT_DOCUMENT_NAME,
     Document,
     batch_import_documents_from_folder,
     batch_export_documents_to_folder,
     choose_selection_after_delete,
+    create_default_document,
     ensure_workspace_directory,
     export_document_brl,
     load_document_package,
@@ -32,6 +34,12 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertEqual(workspace, self.workspace_dir)
         self.assertTrue(self.workspace_dir.exists())
         self.assertTrue(self.workspace_dir.is_dir())
+
+    def test_create_default_document_returns_pending_new_document(self) -> None:
+        self.assertEqual(
+            create_default_document(),
+            Document(name=DEFAULT_DOCUMENT_NAME, text="", braille=None),
+        )
 
     def test_normalize_document_name_accepts_unicode_trims_and_allows_default(self) -> None:
         self.assertEqual(normalize_document_name("  default中文12  "), "default中文12")

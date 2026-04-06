@@ -5,7 +5,7 @@ from typing import Optional
 
 DEFAULT_FALLBACK = "zh_TW"
 LANG_ENV = "TEXT2BRAILLE_LANG"
-CONFIG_PATH = os.path.expanduser("~/.text2braille/config.json")
+CONFIG_PATH = os.path.expanduser("~/.DotExpress/config.json")
 
 CONVERSION_SECTION = "conversion"
 VIEW_SECTION = "view"

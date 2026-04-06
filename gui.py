@@ -55,10 +55,12 @@ from dictionary_manager import (
 )
 from document_workspace import (
 	BatchIssue,
+	DEFAULT_DOCUMENT_NAME,
 	Document,
 	batch_export_documents_to_folder,
 	batch_import_documents_from_folder,
 	choose_selection_after_delete as choose_document_selection_after_delete,
+	create_default_document,
 	document_package_path_for_name,
 	ensure_workspace_directory,
 	export_document_brl,
@@ -76,6 +78,7 @@ from input_shortcuts import (
 	get_font_size_step_from_wheel,
 	is_brl_export_shortcut,
 	is_convert_shortcut,
+	is_document_delete_shortcut,
 	is_document_rename_shortcut,
 )
 
@@ -150,6 +153,8 @@ language_map_translate_table = get_translation_tables() or DEFAULT_TRANSLATION_T
 
 
 def translate_with_language(table_file: str, text: str, dictionary_path: Path) -> TranslationResult:
+	if text == "":
+		return TranslationResult([], [], [], [])
 	language = [k for k, v in language_map_translate_table.items() if k != "default" and v != ""]
 	language_detector = LanguageDetector(language)
 	sequence = list(language_detector.add_detected_language_commands([text]))
@@ -167,9 +172,13 @@ def translate_with_language(table_file: str, text: str, dictionary_path: Path) -
 			)
 			raw_segments = split_bracket_segments(result["raw"])
 			replacement_segments = split_bracket_segments(result["replacement"])
+			print(raw_segments)
+			print(replacement_segments)
 
 			for raw_segment, replacement_segment in zip(raw_segments, replacement_segments):
 				if raw_segment["atomic"] != replacement_segment["atomic"]:
+					print(raw_segment)
+					print(replacement_segment)
 					raise ValueError("atomic not match")
 				if replacement_segment["atomic"]:
 					translations.append(translate_as_single_token(translate_table, replacement_segment["text"], raw_segment["text"]))
@@ -599,6 +608,8 @@ class BrailleFrame(wx.Frame):
 		return _(BRL_WILDCARD)
 
 	def _convert_text_for_output(self, raw_text: str) -> str:
+		if raw_text == "":
+			return ""
 		table_file = language_map_translate_table.get("default")
 		if not table_file:
 			raise ValueError(_("Please select a translation table first."))
@@ -746,7 +757,14 @@ class BrailleFrame(wx.Frame):
 			except OSError as exc:
 				self._show_file_error(_("Failed to delete invalid workspace file: {error}"), exc)
 
-	def _create_document(self, document_name: str, text: str = "", braille: str | None = "") -> bool:
+	def _create_document(
+		self,
+		document_name: str,
+		text: str = "",
+		braille: str | None = "",
+		*,
+		focus_input: bool = False,
+	) -> bool:
 		document = Document(name=document_name, text=text, braille=braille)
 		try:
 			save_document_package(document_package_path_for_name(document.name, self.workspace_dir), document)
@@ -756,6 +774,8 @@ class BrailleFrame(wx.Frame):
 		self.documents.append(document)
 		self._refresh_document_list(document.name)
 		self._open_document_by_name(document.name)
+		if focus_input:
+			self.input_txt.SetFocus()
 		return True
 
 	def _prompt_for_document_name(
@@ -763,20 +783,11 @@ class BrailleFrame(wx.Frame):
 		title: str,
 		initial_name: str = "",
 		exclude_name: str | None = None,
-		required: bool = False,
 	) -> str | None:
 		prefill_name = initial_name
 		while True:
 			with DocumentNameDialog(self, title=title, initial_name=prefill_name) as dialog:
 				if dialog.ShowModal() != wx.ID_OK:
-					if required:
-						wx.MessageBox(
-							_("At least one document is required."),
-							_("Info"),
-							wx.OK | wx.ICON_INFORMATION,
-							parent=self,
-						)
-						continue
 					return None
 				document_name = normalize_document_name(dialog.get_document_name())
 			if self._document_name_exists(document_name, exclude_name=exclude_name):
@@ -790,14 +801,20 @@ class BrailleFrame(wx.Frame):
 				continue
 			return document_name
 
+	def _create_default_document(self) -> bool:
+		default_document = create_default_document()
+		return self._create_document(
+			DEFAULT_DOCUMENT_NAME,
+			default_document.text,
+			default_document.braille,
+			focus_input=True,
+		)
+
 	def _ensure_open_document_exists(self) -> None:
 		if self.documents:
 			self._open_document_by_name(self.documents[0].name)
 			return
-		while True:
-			document_name = self._prompt_for_document_name(_("Add Document"), required=True)
-			if document_name and self._create_document(document_name):
-				return
+		self._create_default_document()
 
 	def _persist_documents(self, documents: list[Document]) -> tuple[list[Document], list[BatchIssue]]:
 		saved_documents: list[Document] = []
@@ -1138,6 +1155,9 @@ class BrailleFrame(wx.Frame):
 		if is_document_rename_shortcut(event.GetKeyCode()):
 			self.on_rename_document(None)
 			return
+		if is_document_delete_shortcut(event.GetKeyCode()):
+			self.on_delete_document(None)
+			return
 		event.Skip()
 
 	def on_editor_mousewheel(self, event: wx.MouseEvent) -> None:
@@ -1401,6 +1421,9 @@ class BrailleFrame(wx.Frame):
 		self._convert_thread.start()
 
 	def _run_conversion(self, job_id: int, table_file: str, raw_text: str, width: int, output_mode: str, dictionary_path: Path):
+		if raw_text == "":
+			wx.CallAfter(self._finish_conversion, job_id, display_text="")
+			return
 		try:
 			text = translate__mapping_char(
 				raw_text,

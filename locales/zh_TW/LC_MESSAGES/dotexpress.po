@@ -8,7 +8,7 @@ msgstr ""
 "Project-Id-Version: dotexpress\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-02-10 21:09+0800\n"
-"PO-Revision-Date: 2026-04-06 14:23+0800\n"
+"PO-Revision-Date: 2026-02-10 21:09+0800\n"
 "Last-Translator: Codex <codex@example.com>\n"
 "Language-Team: Chinese (traditional)\n"
 "Language: zh_TW\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Poedit 3.9\n"
+"X-Generator: Poedit 3.5\n"
 
 #: gui.py:98
 msgid "DotExpress"
@@ -970,6 +970,15 @@ msgstr "祖魯文一級"
 msgid "Zulu grade 2"
 msgstr "祖魯文二級"
 
+#~ msgid "Text to Unicode Braille"
+#~ msgstr "文字轉 Unicode 點字"
+
+#~ msgid "Edit Selected Entry"
+#~ msgstr "編輯選取的條目"
+
+#~ msgid "Custom Braille"
+#~ msgstr "自訂點字"
+
 #: gui.py
 msgid "Conversion"
 msgstr "轉換"
@@ -1067,11 +1076,104 @@ msgid "Failed to export dictionary: {error}"
 msgstr "匯出字典失敗：{error}"
 
 #: gui.py
-msgid "At least one document is required."
-msgstr "至少需要一份文件。"
+msgid 'converting'
+msgstr '轉換中'
+
+#: gui.py
+msgid 'Documents'
+msgstr '文件'
+
+#: gui.py
+msgid 'Document Name'
+msgstr '文件名稱'
+
+#: gui.py
+msgid 'Document List'
+msgstr '文件列表'
 
 #: gui.py
 #, python-brace-format
+msgid 'Failed to save document: {error}'
+msgstr '儲存文件失敗：{error}'
+
+#: gui.py
+#, python-brace-format
+msgid 'Failed to delete invalid workspace file: {error}'
+msgstr '刪除無效工作區文件失敗：{error}'
+
+#: gui.py
+msgid 'Add Document'
+msgstr '新增文件'
+
+#: gui.py
+msgid 'Rename Document'
+msgstr '重新命名文件'
+
+#: gui.py
+#, python-brace-format
+msgid 'Failed to delete document: {error}'
+msgstr '刪除文件失敗：{error}'
+
+#: gui.py
+msgid 'Import Document'
+msgstr '匯入文件'
+
+#: gui.py
+msgid 'Imported file must be a valid DotExpress DEP package.'
+msgstr '匯入的檔案必須是有效的 DotExpress DEP 封裝檔。'
+
+#: gui.py
+#, python-brace-format
+msgid 'Failed to import document: {error}'
+msgstr '匯入文件失敗：{error}'
+
+#: gui.py
+msgid 'Export Document'
+msgstr '匯出文件'
+
+#: gui.py
+#, python-brace-format
+msgid 'Failed to export document: {error}'
+msgstr '匯出文件失敗：{error}'
+
+#: gui.py
+msgid 'Dictionary name cannot contain ".", "/", or "\\".'
+msgstr '字典名稱不能包含 "."、"/" 或 "\\"。'
+
+#: gui.py
+#, python-brace-format
+msgid 'Document "{name}" already exists.'
+msgstr '文件「{name}」已存在。'
+
+#: gui.py
+msgid 'Please enter the document name.'
+msgstr '請輸入文件名稱。'
+
+#: gui.py
+msgid 'Document name must be 1 to 16 characters.'
+msgstr '文件名稱長度需為 1 到 16 個字元。'
+
+#: gui.py
+msgid 'Document name cannot contain ".", "/", or "\\".'
+msgstr '文件名稱不能包含 "."、"/" 或 "\\"。'
+
+#: gui.py
+msgid 'Invalid Workspace Files'
+msgstr '無效的工作區文件'
+
+#: gui.py
+msgid 'The following workspace files are invalid. Do you want to delete them or keep them?'
+msgstr '下列工作區文件無效。請選擇要刪除或保留它們。'
+
+#: gui.py
+msgid 'Delete Invalid Files'
+msgstr '刪除無效文件'
+
+#: gui.py
+msgid 'Keep Invalid Files'
+msgstr '保留無效文件'
+
+#: gui.py
 msgid "Open"
 msgstr "開啟"
 
@@ -1116,7 +1218,8 @@ msgstr "要刪除字典「{name}」嗎？"
 msgid "Rename Dictionary"
 msgstr "重新命名字典"
 
-#: gui.py about.py
+#: gui.py
+#: about.py
 msgid "Help"
 msgstr "說明"
 
@@ -1177,9 +1280,9 @@ msgstr ""
 "如需進一步資訊，可線上查看授權條文：https://www.gnu.org/licenses/old-licenses/gpl-2.0.html 和 https://www.gnu.org/licenses/gpl-3.0.en.html。\n"
 "\n"
 "{name} 由 Coseeing 開發。Coseeing 是一個致力於推動數位無障礙的社群。\n"
-"我們透過開發工具，讓視障者看見更多資訊和可能。\n"
-"透過舉辦推廣活動，讓大眾看見障礙者面臨的實際挑戰和需求。\n"
-"希望以多元的形式與持續的行動，讓所有人都能共同看見這精采的世界以及獨特的彼此。\n"
+"我們透過開發輔助工具，協助視障者取得更多資訊並探索新的可能性。\n"
+"我們也舉辦推廣與倡議行動，讓更多人理解身心障礙者在真實生活中面臨的挑戰與需求。\n"
+"透過多元的方法與持續的行動，我們希望打造一個人人都能一起看見的世界，看見世界的豐富，也看見彼此的獨特。\n"
 "\n"
 "如果你覺得 DotExpress 對你有幫助，並希望它持續改進，歡迎造訪 {url} 支持 Coseeing。"
 
@@ -1226,14 +1329,8 @@ msgstr "目的資料夾中已有一個或多個檔案會被覆蓋。要全部覆
 
 #: gui.py
 #, python-brace-format
-msgid ""
-"Automatic conversion failed while saving. The document was saved with empty braille output.\n"
-"\n"
-"{error}"
-msgstr ""
-"儲存時自動轉換失敗。文件已以空白點字內容儲存。\n"
-"\n"
-"{error}"
+msgid "Automatic conversion failed while saving. The document was saved with empty braille output.\n\n{error}"
+msgstr "儲存時自動轉換失敗。文件已以空白點字內容儲存。\n\n{error}"
 
 #: gui.py
 msgid "Imported file must be a valid text document."
@@ -1257,14 +1354,8 @@ msgstr "批次匯出文件"
 
 #: gui.py
 #, python-brace-format
-msgid ""
-"Automatic conversion failed while exporting. The document was exported with empty braille output.\n"
-"\n"
-"{error}"
-msgstr ""
-"匯出時自動轉換失敗。文件已以空白點字內容匯出。\n"
-"\n"
-"{error}"
+msgid "Automatic conversion failed while exporting. The document was exported with empty braille output.\n\n{error}"
+msgstr "匯出時自動轉換失敗。文件已以空白點字內容匯出。\n\n{error}"
 
 #: gui.py
 msgid "Batch Export Issues"
@@ -1273,12 +1364,3 @@ msgstr "批次匯出問題"
 #: gui.py
 msgid "Some documents were exported with empty braille output because automatic conversion failed."
 msgstr "部分文件因自動轉換失敗而以空白點字內容匯出。"
-
-#~ msgid "Text to Unicode Braille"
-#~ msgstr "文字轉 Unicode 點字"
-
-#~ msgid "Edit Selected Entry"
-#~ msgstr "編輯選取的條目"
-
-#~ msgid "Custom Braille"
-#~ msgstr "自訂點字"

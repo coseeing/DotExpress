@@ -3,6 +3,7 @@ import unittest
 from input_shortcuts import (
     is_brl_export_shortcut,
     is_convert_shortcut,
+    is_document_delete_shortcut,
     is_document_rename_shortcut,
     get_font_size_step_from_wheel,
 )
@@ -32,6 +33,12 @@ class InputShortcutsTest(unittest.TestCase):
 
     def test_other_keys_do_not_trigger_document_rename_shortcut(self) -> None:
         self.assertFalse(is_document_rename_shortcut(key_code=13))
+
+    def test_delete_triggers_document_delete_shortcut(self) -> None:
+        self.assertTrue(is_document_delete_shortcut(key_code=127))
+
+    def test_other_keys_do_not_trigger_document_delete_shortcut(self) -> None:
+        self.assertFalse(is_document_delete_shortcut(key_code=13))
 
     def test_ctrl_wheel_up_increases_font_size(self) -> None:
         self.assertEqual(get_font_size_step_from_wheel(wheel_rotation=120, control_down=True), 1)

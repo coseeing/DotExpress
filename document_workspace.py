@@ -12,6 +12,7 @@ DEP_EXTENSION = ".dep"
 TXT_EXTENSION = ".txt"
 BRL_EXTENSION = ".brl"
 PENDING_METADATA_SUFFIX = ".meta.json"
+DEFAULT_DOCUMENT_NAME = "new"
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,10 @@ class Document:
 class BatchIssue:
     path: Path
     reason: str
+
+
+def create_default_document() -> Document:
+    return Document(name=DEFAULT_DOCUMENT_NAME, text="", braille=None)
 
 
 def get_application_directory() -> Path:

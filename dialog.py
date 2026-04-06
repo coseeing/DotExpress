@@ -322,6 +322,28 @@ class InvalidWorkspaceFilesDialog(wx.Dialog):
 		self.Destroy()
 
 
+class FileIssuesDialog(wx.Dialog):
+	"""Dialog shown when a batch operation skips one or more files."""
+
+	def __init__(self, parent: wx.Window | None, title: str, message: str, issues: list[str]):
+		super().__init__(parent, title=title)
+		main_sizer = wx.BoxSizer(wx.VERTICAL)
+		main_sizer.Add(wx.StaticText(self, label=message), 0, wx.EXPAND | wx.ALL, 12)
+		self.list_box = wx.ListBox(self, choices=issues)
+		main_sizer.Add(self.list_box, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+		button_sizer = self.CreateButtonSizer(wx.OK)
+		if button_sizer:
+			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+		self.SetSizerAndFit(main_sizer)
+		self.SetMinSize((520, 320))
+
+	def __enter__(self) -> "FileIssuesDialog":
+		return self
+
+	def __exit__(self, exc_type, exc, _tb) -> None:
+		self.Destroy()
+
+
 class SpeechSymbolsDialog(wx.Dialog):
 	"""Dialog for editing custom dictionary mappings stored on disk."""
 

@@ -12,5 +12,6 @@ openspec/
 promp/
 storage/
 venv/
+workspace/
 DotExpress.spec
 AGENTS.md

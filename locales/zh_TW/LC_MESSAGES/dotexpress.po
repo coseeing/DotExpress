@@ -1196,3 +1196,89 @@ msgstr "點字字型"
 #: gui.py
 msgid "SimBraille"
 msgstr "SimBraille"
+
+#: gui.py
+msgid "Delete All"
+msgstr "刪除全部"
+
+#: gui.py
+msgid "Confirm Delete All"
+msgstr "確認刪除全部"
+
+#: gui.py
+msgid "Delete All will remove all documents. Do you want to continue?"
+msgstr "刪除全部會移除所有文件。要繼續嗎？"
+
+#: gui.py
+msgid "Batch Import"
+msgstr "批次匯入"
+
+#: gui.py
+msgid "Batch Export"
+msgstr "批次匯出"
+
+#: gui.py
+msgid "DEP"
+msgstr "DEP"
+
+#: gui.py
+msgid "TXT"
+msgstr "TXT"
+
+#: gui.py
+msgid "BRL"
+msgstr "BRL"
+
+#: gui.py
+msgid "Text files (*.txt)|*.txt"
+msgstr "文字檔 (*.txt)|*.txt"
+
+#: gui.py
+msgid "Braille files (*.brl)|*.brl"
+msgstr "點字檔 (*.brl)|*.brl"
+
+#: gui.py
+msgid "Confirm Overwrite"
+msgstr "確認覆蓋"
+
+#: gui.py
+msgid "The destination folder already contains one or more files that would be overwritten. Do you want to overwrite all of them?"
+msgstr "目的資料夾中已有一個或多個檔案會被覆蓋。要全部覆蓋嗎？"
+
+#: gui.py
+#, python-brace-format
+msgid "Automatic conversion failed while saving. The document was saved with empty braille output.\n\n{error}"
+msgstr "儲存時自動轉換失敗。文件已以空白點字內容儲存。\n\n{error}"
+
+#: gui.py
+msgid "Imported file must be a valid text document."
+msgstr "匯入的檔案必須是有效的文字檔。"
+
+#: gui.py
+msgid "Batch Import Documents"
+msgstr "批次匯入文件"
+
+#: gui.py
+msgid "Batch Import Issues"
+msgstr "批次匯入問題"
+
+#: gui.py
+msgid "Some files were skipped during batch import."
+msgstr "批次匯入時有部分檔案被略過。"
+
+#: gui.py
+msgid "Batch Export Documents"
+msgstr "批次匯出文件"
+
+#: gui.py
+#, python-brace-format
+msgid "Automatic conversion failed while exporting. The document was exported with empty braille output.\n\n{error}"
+msgstr "匯出時自動轉換失敗。文件已以空白點字內容匯出。\n\n{error}"
+
+#: gui.py
+msgid "Batch Export Issues"
+msgstr "批次匯出問題"
+
+#: gui.py
+msgid "Some documents were exported with empty braille output because automatic conversion failed."
+msgstr "部分文件因自動轉換失敗而以空白點字內容匯出。"

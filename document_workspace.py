@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import sys
 import zipfile
@@ -8,13 +9,22 @@ import zipfile
 from name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEP_EXTENSION = ".dep"
+TXT_EXTENSION = ".txt"
+BRL_EXTENSION = ".brl"
+PENDING_METADATA_SUFFIX = ".meta.json"
 
 
 @dataclass(frozen=True)
 class Document:
     name: str
     text: str
-    braille: str
+    braille: str | None
+
+
+@dataclass(frozen=True)
+class BatchIssue:
+    path: Path
+    reason: str
 
 
 def get_application_directory() -> Path:
@@ -43,14 +53,22 @@ def document_package_path_for_name(name: str, workspace_dir: Path | None = None)
     return get_workspace_directory(workspace_dir) / f"{name}{DEP_EXTENSION}"
 
 
-def save_document_package(path: Path | str, document: Document) -> Path:
+def save_document_package(
+    path: Path | str,
+    document: Document,
+    *,
+    include_pending_metadata: bool = True,
+) -> Path:
     package_path = Path(path)
     normalized_name = normalize_document_name(document.name)
     document = Document(name=normalized_name, text=document.text, braille=document.braille)
     package_path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(f"{document.name}.txt", document.text)
-        archive.writestr(f"{document.name}.brl", document.braille)
+        archive.writestr(f"{document.name}{TXT_EXTENSION}", document.text)
+        archive.writestr(f"{document.name}{BRL_EXTENSION}", document.braille or "")
+        if document.braille is None and include_pending_metadata:
+            metadata_name = f"{document.name}{PENDING_METADATA_SUFFIX}"
+            archive.writestr(metadata_name, json.dumps({"braille_pending": True}, ensure_ascii=False))
     return package_path
 
 
@@ -73,7 +91,46 @@ def load_document_package(path: Path | str) -> Document:
             raise ValueError("Document package names do not match.")
         text = archive.read(txt_name).decode("utf-8")
         braille = archive.read(brl_name).decode("utf-8")
-    return Document(name=package_name, text=text, braille=braille)
+        metadata_name = f"{package_name}{PENDING_METADATA_SUFFIX}"
+        braille_pending = False
+        if metadata_name in names:
+            metadata = json.loads(archive.read(metadata_name).decode("utf-8"))
+            braille_pending = bool(metadata.get("braille_pending"))
+    return Document(name=package_name, text=text, braille=None if braille_pending else braille)
+
+
+def load_text_document(path: Path | str) -> Document:
+    source_path = Path(path)
+    if source_path.suffix.casefold() != TXT_EXTENSION:
+        raise ValueError("Text document must use the .txt extension.")
+    return Document(
+        name=normalize_document_name(source_path.stem),
+        text=source_path.read_text(encoding="utf-8"),
+        braille=None,
+    )
+
+
+def export_document_brl(path: Path | str, document: Document) -> Path:
+    destination_path = Path(path)
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    destination_path.write_text(document.braille or "", encoding="utf-8")
+    return destination_path
+
+
+def prepare_document_for_save(
+    document: Document,
+    *,
+    text: str,
+    braille: str,
+    auto_convert,
+) -> tuple[Document, Exception | None]:
+    if document.braille is None:
+        try:
+            braille = auto_convert(text)
+            return Document(name=document.name, text=text, braille=braille), None
+        except Exception as exc:
+            return Document(name=document.name, text=text, braille=""), exc
+    return Document(name=document.name, text=text, braille=braille), None
 
 
 def list_document_names(workspace_dir: Path | None = None) -> list[str]:
@@ -95,6 +152,54 @@ def load_workspace_documents(workspace_dir: Path | None = None) -> tuple[list[Do
             invalid_paths.append(path)
     documents.sort(key=lambda document: (document.name.casefold(), document.name))
     return documents, invalid_paths
+
+
+def batch_import_documents_from_folder(
+    directory: Path | str,
+    *,
+    format_key: str,
+    existing_names: set[str],
+) -> tuple[list[Document], list[BatchIssue]]:
+    folder = Path(directory)
+    documents: list[Document] = []
+    issues: list[BatchIssue] = []
+    seen_names = {name.casefold() for name in existing_names}
+    loader = load_document_package if format_key == "dep" else load_text_document
+    extension = DEP_EXTENSION if format_key == "dep" else TXT_EXTENSION
+    for path in sorted(folder.glob(f"*{extension}"), key=lambda item: (item.stem.casefold(), item.stem)):
+        try:
+            document = loader(path)
+        except Exception as exc:
+            issues.append(BatchIssue(path=path, reason=str(exc)))
+            continue
+        if document.name.casefold() in seen_names:
+            issues.append(BatchIssue(path=path, reason=f'Document "{document.name}" already exists.'))
+            continue
+        seen_names.add(document.name.casefold())
+        documents.append(document)
+    return documents, issues
+
+
+def batch_export_documents_to_folder(
+    directory: Path | str,
+    documents: list[Document],
+    *,
+    format_key: str,
+    overwrite: bool,
+) -> list[Path]:
+    folder = Path(directory)
+    folder.mkdir(parents=True, exist_ok=True)
+    suffix = DEP_EXTENSION if format_key == "dep" else BRL_EXTENSION
+    conflicts = [folder / f"{document.name}{suffix}" for document in documents if (folder / f"{document.name}{suffix}").exists()]
+    if conflicts and not overwrite:
+        return conflicts
+    for document in documents:
+        destination_path = folder / f"{document.name}{suffix}"
+        if format_key == "dep":
+            save_document_package(destination_path, document, include_pending_metadata=False)
+        else:
+            export_document_brl(destination_path, document)
+    return []
 
 
 def choose_selection_after_delete(names: list[str], deleted_name: str) -> str | None:

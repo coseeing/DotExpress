@@ -14,4 +14,12 @@ def get_dictionary_action_labels() -> list[str]:
 
 
 def get_document_action_labels() -> list[str]:
-    return ["Open", "Delete", "Add", "Import", "Rename", "Export"]
+    return ["Open", "Delete", "Delete All", "Add", "Rename", "Import", "Export", "Batch Import", "Batch Export"]
+
+
+def get_document_import_format_labels() -> list[str]:
+    return ["DEP", "TXT"]
+
+
+def get_document_export_format_labels() -> list[str]:
+    return ["DEP", "BRL"]

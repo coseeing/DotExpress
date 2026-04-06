@@ -187,9 +187,7 @@ def apply_dictionary(
 				continue
 
 			target = (
-				DICTIONARY_MARKER_OPEN
-				+ DICTIONARY_MARKER_JOIN.join([i for i in source])
-				+ DICTIONARY_MARKER_CLOSE
+				DICTIONARY_MARKER_OPEN + source + DICTIONARY_MARKER_CLOSE
 			)
 			raws.append((source, target))
 

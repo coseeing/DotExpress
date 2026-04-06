@@ -12,6 +12,8 @@ from action_menu import (
 	get_actions_menu_position,
 	get_dictionary_action_labels,
 	get_document_action_labels,
+	get_document_export_format_labels,
+	get_document_import_format_labels,
 )
 from config import (
 	DEFAULT_CONVERSION_WIDTH,
@@ -49,20 +51,33 @@ from dictionary_manager import (
 	resolve_selected_dictionary,
 )
 from document_workspace import (
+	BatchIssue,
 	Document,
+	batch_export_documents_to_folder,
+	batch_import_documents_from_folder,
 	choose_selection_after_delete as choose_document_selection_after_delete,
 	document_package_path_for_name,
 	ensure_workspace_directory,
+	export_document_brl,
 	get_workspace_directory,
 	load_document_package,
+	load_text_document,
 	load_workspace_documents,
 	normalize_document_name,
+	prepare_document_for_save,
 	save_document_package,
 )
 from font_support import SIMBRAILLE_FACE_NAME, get_simbraille_font_path, register_private_font_for_windows
+from input_shortcuts import is_convert_shortcut
+from input_shortcuts import (
+	get_font_size_step_from_wheel,
+	is_brl_export_shortcut,
+	is_convert_shortcut,
+	is_document_rename_shortcut,
+)
 
 from Bopomofo import normalize_zhuyin_sequence
-from dialog import DictionaryNameDialog, DocumentNameDialog, InvalidWorkspaceFilesDialog, SpeechSymbolsDialog, TranslationTableDialog
+from dialog import DictionaryNameDialog, DocumentNameDialog, FileIssuesDialog, InvalidWorkspaceFilesDialog, SpeechSymbolsDialog, TranslationTableDialog
 from languageDetection import LangChangeCommand, LanguageDetector
 from translate import translate, translate_as_single_token, TranslationResult
 from utils import apply_dictionary, split_bracket_segments, translate__mapping_char
@@ -84,6 +99,8 @@ VIEW_SCHEMES = {
 }
 CSV_WILDCARD = "CSV files (*.csv)|*.csv"
 DEP_WILDCARD = "DotExpress files (*.dep)|*.dep"
+TXT_WILDCARD = "Text files (*.txt)|*.txt"
+BRL_WILDCARD = "Braille files (*.brl)|*.brl"
 
 
 def resource_path(relative_path: str) -> Path:
@@ -105,7 +122,19 @@ _translation = gettext.translation(
 _ = _translation.gettext
 
 # Keep dynamic context-menu labels discoverable to gettext extraction.
-_MENU_TRANSLATION_MARKERS = (_("Open"), _("Rename"), _("Default"), _("Braille Font"), _("SimBraille"))
+_MENU_TRANSLATION_MARKERS = (
+	_("Open"),
+	_("Rename"),
+	_("Default"),
+	_("Braille Font"),
+	_("SimBraille"),
+	_("Batch Import"),
+	_("Batch Export"),
+	_("DEP"),
+	_("TXT"),
+	_("BRL"),
+	_("Delete All"),
+)
 
 language_map_translate_table = get_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
 
@@ -127,7 +156,6 @@ def translate_with_language(table_file: str, text: str, dictionary_path: Path) -
 				bopomofo_path=bopomofo_path,
 				processing=normalize_zhuyin_sequence,
 			)
-
 			raw_segments = split_bracket_segments(result["raw"])
 			replacement_segments = split_bracket_segments(result["replacement"])
 
@@ -330,9 +358,14 @@ class BrailleFrame(wx.Frame):
 		self.font_size_spin.Bind(wx.EVT_TEXT, self.on_font_size_change)
 		self.scheme_choice.Bind(wx.EVT_CHOICE, self.on_scheme_change)
 		self.braille_font_choice.Bind(wx.EVT_CHOICE, self.on_braille_font_change)
+		self.input_txt.Bind(wx.EVT_KEY_DOWN, self.on_input_text_key_down)
+		self.input_txt.Bind(wx.EVT_MOUSEWHEEL, self.on_editor_mousewheel)
+		self.output_txt.Bind(wx.EVT_KEY_DOWN, self.on_output_text_key_down)
+		self.output_txt.Bind(wx.EVT_MOUSEWHEEL, self.on_editor_mousewheel)
 		self.document_list.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_document_selection_changed)
 		self.document_list.Bind(wx.EVT_LIST_ITEM_DESELECTED, self.on_document_selection_changed)
 		self.document_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_document_activated)
+		self.document_list.Bind(wx.EVT_KEY_DOWN, self.on_document_list_key_down)
 		self.document_list.Bind(wx.EVT_CONTEXT_MENU, self.on_document_context_menu)
 		self.Bind(wx.EVT_CLOSE, self._on_close)
 
@@ -518,7 +551,103 @@ class BrailleFrame(wx.Frame):
 
 	def _load_document_into_editors(self, document: Document) -> None:
 		self.input_txt.SetValue(document.text)
-		self.output_txt.SetValue(document.braille)
+		self.output_txt.SetValue(document.braille or "")
+
+	def _get_txt_wildcard(self) -> str:
+		return _(TXT_WILDCARD)
+
+	def _get_brl_wildcard(self) -> str:
+		return _(BRL_WILDCARD)
+
+	def _convert_text_for_output(self, raw_text: str) -> str:
+		table_file = language_map_translate_table.get("default")
+		if not table_file:
+			raise ValueError(_("Please select a translation table first."))
+		output_mode = self._get_selected_output_mode()
+		width = self._clamp_conversion_width(self.width_spin.GetValue())
+		dictionary_path = self._get_selected_dictionary_path()
+		text = translate__mapping_char(
+			raw_text,
+			dictionary_path=resource_path("data/BopomofoChar2Braille.csv"),
+			from_field="Bopomofo",
+			to_field="Braille",
+		)
+		braille_wrapped, _text_wrapped = translate_and_wrap_both(table_file, text, width, dictionary_path)
+		if output_mode == "ascii":
+			return translate__mapping_char(
+				braille_wrapped,
+				dictionary_path=resource_path("data/Braille2Ascii.csv"),
+				from_field="Braille",
+				to_field="Ascii",
+			)
+		return braille_wrapped
+
+	def _format_batch_issue_lines(self, issues: list[BatchIssue]) -> list[str]:
+		return [f"{issue.path.name}: {issue.reason}" for issue in issues]
+
+	def _show_file_issues_dialog(self, title: str, message: str, issues: list[BatchIssue]) -> None:
+		if not issues:
+			return
+		with FileIssuesDialog(self, title=title, message=message, issues=self._format_batch_issue_lines(issues)) as dialog:
+			dialog.ShowModal()
+
+	def _confirm_overwrite_all(self, conflicts: list[Path]) -> bool:
+		if not conflicts:
+			return True
+		message = _(
+			"The destination folder already contains one or more files that would be overwritten. Do you want to overwrite all of them?"
+		)
+		return (
+			wx.MessageBox(message, _("Confirm Overwrite"), wx.YES_NO | wx.ICON_WARNING, parent=self) == wx.YES
+		)
+
+	def _prepare_document_for_export(self, document: Document) -> tuple[Document, Exception | None]:
+		return prepare_document_for_save(
+			document,
+			text=document.text,
+			braille=document.braille or "",
+			auto_convert=self._convert_text_for_output,
+		)
+
+	def _export_document_with_dialog(self, document: Document, format_key: str) -> None:
+		export_document, auto_error = self._prepare_document_for_export(document)
+		default_file = f"{document.name}.dep" if format_key == "dep" else f"{document.name}.brl"
+		wildcard = self._get_dep_wildcard() if format_key == "dep" else self._get_brl_wildcard()
+		with wx.FileDialog(
+			self,
+			_("Export Document"),
+			defaultFile=default_file,
+			wildcard=wildcard,
+			style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+		) as file_dialog:
+			if file_dialog.ShowModal() != wx.ID_OK:
+				return
+			destination_path = Path(file_dialog.GetPath())
+		target_suffix = ".dep" if format_key == "dep" else ".brl"
+		if destination_path.suffix.casefold() != target_suffix:
+			destination_path = destination_path.with_suffix(target_suffix)
+		try:
+			if format_key == "dep":
+				save_document_package(destination_path, export_document, include_pending_metadata=False)
+			else:
+				export_document_brl(destination_path, export_document)
+		except OSError as exc:
+			self._show_file_error(_("Failed to export document: {error}"), exc)
+			return
+		if auto_error is not None:
+			wx.MessageBox(
+				_("Automatic conversion failed while exporting. The document was exported with empty braille output.\n\n{error}").format(error=auto_error),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
+
+	def _set_view_font_size(self, font_size: int) -> None:
+		font_size = self._clamp_view_font_size(font_size)
+		if self.font_size_spin.GetValue() != font_size:
+			self.font_size_spin.SetValue(font_size)
+		self._apply_editor_view_settings(font_size, self._get_selected_scheme())
+		set_view_font_size(font_size)
 
 	def _open_document_by_name(self, name: str | None) -> None:
 		document = self._get_document_by_name(name)
@@ -531,26 +660,37 @@ class BrailleFrame(wx.Frame):
 		self._load_document_into_editors(document)
 		self._refresh_document_list(document.name)
 
-	def _save_open_document(self) -> None:
+	def _save_open_document(self) -> Exception | None:
 		if not self._open_document_name:
-			return
+			return None
 		document = self._get_document_by_name(self._open_document_name)
 		if document is None:
-			return
-		updated_document = Document(
-			name=document.name,
+			return None
+		updated_document, auto_error = prepare_document_for_save(
+			document,
 			text=self.input_txt.GetValue(),
 			braille=self.output_txt.GetValue(),
+			auto_convert=self._convert_text_for_output,
 		)
+		if document.braille is None:
+			self.output_txt.SetValue(updated_document.braille or "")
 		self._replace_document(updated_document)
 		save_document_package(document_package_path_for_name(updated_document.name, self.workspace_dir), updated_document)
+		return auto_error
 
 	def _save_open_document_with_feedback(self) -> bool:
 		try:
-			self._save_open_document()
+			auto_error = self._save_open_document()
 		except OSError as exc:
 			self._show_file_error(_("Failed to save document: {error}"), exc)
 			return False
+		if auto_error is not None:
+			wx.MessageBox(
+				_("Automatic conversion failed while saving. The document was saved with empty braille output.\n\n{error}").format(error=auto_error),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
 		return True
 
 	def _review_invalid_workspace_files(self, invalid_paths: list[Path]) -> None:
@@ -567,7 +707,7 @@ class BrailleFrame(wx.Frame):
 			except OSError as exc:
 				self._show_file_error(_("Failed to delete invalid workspace file: {error}"), exc)
 
-	def _create_document(self, document_name: str, text: str = "", braille: str = "") -> bool:
+	def _create_document(self, document_name: str, text: str = "", braille: str | None = "") -> bool:
 		document = Document(name=document_name, text=text, braille=braille)
 		try:
 			save_document_package(document_package_path_for_name(document.name, self.workspace_dir), document)
@@ -620,6 +760,18 @@ class BrailleFrame(wx.Frame):
 			if document_name and self._create_document(document_name):
 				return
 
+	def _persist_documents(self, documents: list[Document]) -> tuple[list[Document], list[BatchIssue]]:
+		saved_documents: list[Document] = []
+		issues: list[BatchIssue] = []
+		for document in documents:
+			try:
+				save_document_package(document_package_path_for_name(document.name, self.workspace_dir), document)
+			except OSError as exc:
+				issues.append(BatchIssue(path=document_package_path_for_name(document.name, self.workspace_dir), reason=str(exc)))
+				continue
+			saved_documents.append(document)
+		return saved_documents, issues
+
 	def _load_workspace_documents_at_startup(self) -> None:
 		self.workspace_dir = ensure_workspace_directory(self.workspace_dir)
 		self.documents, invalid_paths = load_workspace_documents(self.workspace_dir)
@@ -663,19 +815,53 @@ class BrailleFrame(wx.Frame):
 		rect = self.document_list.GetItemRect(item_index) if item_index != wx.NOT_FOUND and item_index < self.document_list.GetItemCount() else None
 		menu = wx.Menu()
 		menu_items: dict[str, wx.MenuItem] = {}
+		import_submenu = wx.Menu()
+		batch_import_submenu = wx.Menu()
+		export_submenu = wx.Menu()
+		batch_export_submenu = wx.Menu()
+		format_items: dict[str, wx.MenuItem] = {}
 		for label in get_document_action_labels():
-			menu_items[label] = menu.Append(wx.ID_ANY, _(label))
+			if label == "Import":
+				menu_items[label] = menu.AppendSubMenu(import_submenu, _(label))
+				for format_label in get_document_import_format_labels():
+					format_items[f"import:{format_label.lower()}"] = import_submenu.Append(wx.ID_ANY, _(format_label))
+			elif label == "Batch Import":
+				menu_items[label] = menu.AppendSubMenu(batch_import_submenu, _(label))
+				for format_label in get_document_import_format_labels():
+					format_items[f"batch-import:{format_label.lower()}"] = batch_import_submenu.Append(wx.ID_ANY, _(format_label))
+			elif label == "Export":
+				menu_items[label] = menu.AppendSubMenu(export_submenu, _(label))
+				for format_label in get_document_export_format_labels():
+					format_items[f"export:{format_label.lower()}"] = export_submenu.Append(wx.ID_ANY, _(format_label))
+			elif label == "Batch Export":
+				menu_items[label] = menu.AppendSubMenu(batch_export_submenu, _(label))
+				for format_label in get_document_export_format_labels():
+					format_items[f"batch-export:{format_label.lower()}"] = batch_export_submenu.Append(wx.ID_ANY, _(format_label))
+			else:
+				menu_items[label] = menu.Append(wx.ID_ANY, _(label))
 		has_selection = self._get_selected_document() is not None
+		has_documents = bool(self.documents)
 		menu_items["Open"].Enable(has_selection)
 		menu_items["Delete"].Enable(has_selection)
+		menu_items["Delete All"].Enable(has_documents)
 		menu_items["Rename"].Enable(has_selection)
 		menu_items["Export"].Enable(has_selection)
+		menu_items["Batch Export"].Enable(has_documents)
 		menu.Bind(wx.EVT_MENU, self.on_open_document, menu_items["Open"])
 		menu.Bind(wx.EVT_MENU, self.on_delete_document, menu_items["Delete"])
+		menu.Bind(wx.EVT_MENU, self.on_delete_all_documents, menu_items["Delete All"])
 		menu.Bind(wx.EVT_MENU, self.on_add_document, menu_items["Add"])
-		menu.Bind(wx.EVT_MENU, self.on_import_document, menu_items["Import"])
 		menu.Bind(wx.EVT_MENU, self.on_rename_document, menu_items["Rename"])
-		menu.Bind(wx.EVT_MENU, self.on_export_document, menu_items["Export"])
+		for key, item in format_items.items():
+			action, format_key = key.split(":")
+			if action == "import":
+				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_import_document(fmt), item)
+			elif action == "batch-import":
+				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_batch_import_documents(fmt), item)
+			elif action == "export":
+				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_export_document(fmt), item)
+			elif action == "batch-export":
+				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_batch_export_documents(fmt), item)
 		popup_position = (rect.x, rect.y + rect.height) if rect is not None else client_position
 		self.document_list.PopupMenu(menu, popup_position)
 		menu.Destroy()
@@ -757,18 +943,56 @@ class BrailleFrame(wx.Frame):
 			self._clear_document_editors()
 			self._ensure_open_document_exists()
 
-	def on_import_document(self, _evt) -> None:
+	def on_delete_all_documents(self, _evt) -> None:
+		if not self.documents:
+			return
 		if not self._save_open_document_with_feedback():
 			return
-		with wx.FileDialog(self, _("Import Document"), wildcard=self._get_dep_wildcard(), style=wx.FD_OPEN) as file_dialog:
+		confirmation = wx.MessageBox(
+			_("Delete All will remove all documents. Do you want to continue?"),
+			_("Confirm Delete All"),
+			wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
+			parent=self,
+		)
+		if confirmation != wx.YES:
+			return
+		for document in list(self.documents):
+			try:
+				package_path = document_package_path_for_name(document.name, self.workspace_dir)
+				if package_path.exists():
+					package_path.unlink()
+			except OSError as exc:
+				self._show_file_error(_("Failed to delete document: {error}"), exc)
+				remaining_documents, invalid_paths = load_workspace_documents(self.workspace_dir)
+				self.documents = remaining_documents
+				self._refresh_document_list()
+				self._review_invalid_workspace_files(invalid_paths)
+				if self.documents:
+					self._open_document_by_name(self.documents[0].name)
+				else:
+					self._clear_document_editors()
+				return
+		self.documents = []
+		self._selected_document_name = None
+		self._open_document_name = None
+		self._refresh_document_list()
+		self._clear_document_editors()
+		self._ensure_open_document_exists()
+
+	def on_import_document(self, format_key: str) -> None:
+		if not self._save_open_document_with_feedback():
+			return
+		title = _("Import Document")
+		wildcard = self._get_dep_wildcard() if format_key == "dep" else self._get_txt_wildcard()
+		with wx.FileDialog(self, title, wildcard=wildcard, style=wx.FD_OPEN) as file_dialog:
 			if file_dialog.ShowModal() != wx.ID_OK:
 				return
 			source_path = Path(file_dialog.GetPath())
 		try:
-			loaded_document = load_document_package(source_path)
+			loaded_document = load_document_package(source_path) if format_key == "dep" else load_text_document(source_path)
 		except (ValueError, zipfile.BadZipFile):
 			wx.MessageBox(
-				_("Imported file must be a valid DotExpress DEP package."),
+				_("Imported file must be a valid DotExpress DEP package.") if format_key == "dep" else _("Imported file must be a valid text document."),
 				_("Error"),
 				wx.OK | wx.ICON_ERROR,
 				parent=self,
@@ -777,41 +1001,73 @@ class BrailleFrame(wx.Frame):
 		except OSError as exc:
 			self._show_file_error(_("Failed to import document: {error}"), exc)
 			return
-		document_name = self._prompt_for_document_name(_("Import Document"), initial_name=loaded_document.name)
+		document_name = self._prompt_for_document_name(title, initial_name=loaded_document.name)
 		if document_name is None:
 			return
 		self._create_document(document_name, loaded_document.text, loaded_document.braille)
 
-	def on_export_document(self, _evt) -> None:
+	def on_batch_import_documents(self, format_key: str) -> None:
+		if not self._save_open_document_with_feedback():
+			return
+		with wx.DirDialog(self, _("Batch Import Documents")) as dir_dialog:
+			if dir_dialog.ShowModal() != wx.ID_OK:
+				return
+			source_dir = Path(dir_dialog.GetPath())
+		documents, issues = batch_import_documents_from_folder(
+			source_dir,
+			format_key=format_key,
+			existing_names=set(self._get_document_names()),
+		)
+		saved_documents, save_issues = self._persist_documents(documents)
+		self.documents.extend(saved_documents)
+		self._refresh_document_list(self._open_document_name or self._selected_document_name)
+		self._show_file_issues_dialog(
+			_("Batch Import Issues"),
+			_("Some files were skipped during batch import."),
+			issues + save_issues,
+		)
+
+	def on_export_document(self, format_key: str) -> None:
 		selected_document = self._get_selected_document()
 		if selected_document is None:
 			return
 		if not self._save_open_document_with_feedback():
 			return
 		selected_document = self._get_selected_document() or selected_document
-		with wx.FileDialog(
-			self,
-			_("Export Document"),
-			defaultFile=f"{selected_document.name}.dep",
-			wildcard=self._get_dep_wildcard(),
-			style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
-		) as file_dialog:
-			if file_dialog.ShowModal() != wx.ID_OK:
+		self._export_document_with_dialog(selected_document, format_key)
+
+	def on_batch_export_documents(self, format_key: str) -> None:
+		if not self.documents:
+			return
+		if not self._save_open_document_with_feedback():
+			return
+		with wx.DirDialog(self, _("Batch Export Documents")) as dir_dialog:
+			if dir_dialog.ShowModal() != wx.ID_OK:
 				return
-			destination_path = Path(file_dialog.GetPath())
-		if destination_path.suffix.casefold() != ".dep":
-			destination_path = destination_path.with_suffix(".dep")
+			destination_dir = Path(dir_dialog.GetPath())
+		conflicts = batch_export_documents_to_folder(destination_dir, self.documents, format_key=format_key, overwrite=False)
+		if conflicts and not self._confirm_overwrite_all(conflicts):
+			return
+		export_documents: list[Document] = []
+		issues: list[BatchIssue] = []
+		for document in self.documents:
+			export_document, auto_error = self._prepare_document_for_export(document)
+			export_documents.append(export_document)
+			if auto_error is not None:
+				issues.append(BatchIssue(path=Path(f"{document.name}.{format_key}"), reason=str(auto_error)))
 		try:
-			save_document_package(destination_path, selected_document)
+			batch_export_documents_to_folder(destination_dir, export_documents, format_key=format_key, overwrite=True)
 		except OSError as exc:
 			self._show_file_error(_("Failed to export document: {error}"), exc)
+			return
+		self._show_file_issues_dialog(
+			_("Batch Export Issues"),
+			_("Some documents were exported with empty braille output because automatic conversion failed."),
+			issues,
+		)
 
 	def on_font_size_change(self, _evt):
-		font_size = self._clamp_view_font_size(self.font_size_spin.GetValue())
-		if self.font_size_spin.GetValue() != font_size:
-			self.font_size_spin.SetValue(font_size)
-		self._apply_editor_view_settings(font_size, self._get_selected_scheme())
-		set_view_font_size(font_size)
+		self._set_view_font_size(self.font_size_spin.GetValue())
 
 	def on_scheme_change(self, _evt):
 		scheme = self._normalize_view_scheme(self._get_selected_scheme())
@@ -822,6 +1078,35 @@ class BrailleFrame(wx.Frame):
 		braille_font = self._normalize_braille_font(self._get_selected_braille_font())
 		self._apply_editor_view_settings(self._clamp_view_font_size(self.font_size_spin.GetValue()), self._get_selected_scheme())
 		set_braille_font(braille_font)
+
+	def on_input_text_key_down(self, event: wx.KeyEvent) -> None:
+		if is_convert_shortcut(event.GetKeyCode(), event.ControlDown()):
+			self.on_convert(None)
+			return
+		event.Skip()
+
+	def on_output_text_key_down(self, event: wx.KeyEvent) -> None:
+		if is_brl_export_shortcut(event.GetKeyCode(), event.ControlDown()):
+			if self._save_open_document_with_feedback():
+				document = self._get_document_by_name(self._open_document_name)
+				if document is not None:
+					self._export_document_with_dialog(document, "brl")
+			self.output_txt.SetFocus()
+			return
+		event.Skip()
+
+	def on_document_list_key_down(self, event: wx.KeyEvent) -> None:
+		if is_document_rename_shortcut(event.GetKeyCode()):
+			self.on_rename_document(None)
+			return
+		event.Skip()
+
+	def on_editor_mousewheel(self, event: wx.MouseEvent) -> None:
+		step = get_font_size_step_from_wheel(event.GetWheelRotation(), event.ControlDown())
+		if step == 0:
+			event.Skip()
+			return
+		self._set_view_font_size(self.font_size_spin.GetValue() + step)
 
 	def on_output_mode_change(self, _evt):
 		set_output_mode(self._get_selected_output_mode())

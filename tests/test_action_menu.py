@@ -5,6 +5,8 @@ from action_menu import (
     get_actions_menu_position,
     get_dictionary_action_labels,
     get_document_action_labels,
+    get_document_import_format_labels,
+    get_document_export_format_labels,
 )
 
 
@@ -24,8 +26,14 @@ class ActionMenuTest(unittest.TestCase):
     def test_get_document_action_labels_returns_requested_order(self) -> None:
         self.assertEqual(
             get_document_action_labels(),
-            ["Open", "Delete", "Add", "Import", "Rename", "Export"],
+            ["Open", "Delete", "Delete All", "Add", "Rename", "Import", "Export", "Batch Import", "Batch Export"],
         )
+
+    def test_get_document_import_format_labels_returns_requested_order(self) -> None:
+        self.assertEqual(get_document_import_format_labels(), ["DEP", "TXT"])
+
+    def test_get_document_export_format_labels_returns_requested_order(self) -> None:
+        self.assertEqual(get_document_export_format_labels(), ["DEP", "BRL"])
 
 
 if __name__ == "__main__":

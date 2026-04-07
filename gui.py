@@ -77,6 +77,15 @@ from input_shortcuts import (
 	is_convert_shortcut,
 	is_document_delete_shortcut,
 	is_document_rename_shortcut,
+	is_section_navigation_shortcut,
+)
+from section_navigation import (
+	BRAILLE_RESULT_SECTION,
+	CONVERSION_SECTION,
+	DOCUMENT_LIST_SECTION,
+	SOURCE_TEXT_SECTION,
+	VIEW_SECTION,
+	get_adjacent_section,
 )
 
 from Bopomofo import normalize_zhuyin_sequence
@@ -391,6 +400,7 @@ class BrailleFrame(wx.Frame):
 		self.document_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_document_activated)
 		self.document_list.Bind(wx.EVT_KEY_DOWN, self.on_document_list_key_down)
 		self.document_list.Bind(wx.EVT_CONTEXT_MENU, self.on_document_context_menu)
+		self.Bind(wx.EVT_CHAR_HOOK, self.on_char_hook)
 		self.Bind(wx.EVT_CLOSE, self._on_close)
 
 		self._clear_document_editors()
@@ -425,6 +435,40 @@ class BrailleFrame(wx.Frame):
 		row = wx.BoxSizer(wx.HORIZONTAL)
 		group.Add(row, 0, wx.EXPAND | wx.ALL, 8)
 		return group, box, row
+
+	def _get_section_controls(self) -> dict[str, tuple[wx.Window, ...]]:
+		return {
+			CONVERSION_SECTION: (
+				self.table_btn,
+				self.output_choice,
+				self.width_spin,
+				self.dictionary_choice,
+				self.actions_btn,
+				self.convert_btn,
+			),
+			DOCUMENT_LIST_SECTION: (self.document_list,),
+			VIEW_SECTION: (
+				self.font_size_spin,
+				self.scheme_choice,
+				self.braille_font_choice,
+			),
+			SOURCE_TEXT_SECTION: (self.input_txt,),
+			BRAILLE_RESULT_SECTION: (self.output_txt,),
+		}
+
+	def _get_current_section_name(self) -> str | None:
+		focus = wx.Window.FindFocus()
+		if focus is None:
+			return None
+		for section_name, controls in self._get_section_controls().items():
+			for control in controls:
+				if focus == control or control.IsDescendant(focus):
+					return section_name
+		return None
+
+	def _focus_section(self, section_name: str) -> None:
+		target = self._get_section_controls()[section_name][0]
+		target.SetFocus()
 
 	def _clamp_conversion_width(self, width: int) -> int:
 		return max(CONVERSION_WIDTH_MIN, min(CONVERSION_WIDTH_MAX, width))
@@ -1140,6 +1184,18 @@ class BrailleFrame(wx.Frame):
 			self.on_delete_document(None)
 			return
 		event.Skip()
+
+	def on_char_hook(self, event: wx.KeyEvent) -> None:
+		step = is_section_navigation_shortcut(event.GetKeyCode(), event.ShiftDown())
+		if step == 0:
+			event.Skip()
+			return
+		current_section = self._get_current_section_name()
+		if current_section is None:
+			target_section = CONVERSION_SECTION if step > 0 else BRAILLE_RESULT_SECTION
+		else:
+			target_section = get_adjacent_section(current_section, step)
+		self._focus_section(target_section)
 
 	def on_editor_mousewheel(self, event: wx.MouseEvent) -> None:
 		step = get_font_size_step_from_wheel(event.GetWheelRotation(), event.ControlDown())

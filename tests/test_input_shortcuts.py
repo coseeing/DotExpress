@@ -5,6 +5,7 @@ from input_shortcuts import (
     is_convert_shortcut,
     is_document_delete_shortcut,
     is_document_rename_shortcut,
+    is_section_navigation_shortcut,
     get_font_size_step_from_wheel,
 )
 
@@ -39,6 +40,15 @@ class InputShortcutsTest(unittest.TestCase):
 
     def test_other_keys_do_not_trigger_document_delete_shortcut(self) -> None:
         self.assertFalse(is_document_delete_shortcut(key_code=13))
+
+    def test_f6_triggers_forward_section_navigation(self) -> None:
+        self.assertEqual(is_section_navigation_shortcut(key_code=345, shift_down=False), 1)
+
+    def test_shift_f6_triggers_backward_section_navigation(self) -> None:
+        self.assertEqual(is_section_navigation_shortcut(key_code=345, shift_down=True), -1)
+
+    def test_other_keys_do_not_trigger_section_navigation(self) -> None:
+        self.assertEqual(is_section_navigation_shortcut(key_code=13, shift_down=False), 0)
 
     def test_ctrl_wheel_up_increases_font_size(self) -> None:
         self.assertEqual(get_font_size_step_from_wheel(wheel_rotation=120, control_down=True), 1)

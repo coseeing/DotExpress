@@ -113,14 +113,8 @@ pip install -r requirements.txt
 
 請於 Windows CMD 中執行以下指令，透過 PyInstaller 建立執行檔：
 
-```bash
-pyinstaller --onefile --name=DotExpress ^
---noconsole ^
---add-data "liblouis.dll;." ^
---add-data "louis/tables;louis/tables" ^
---add-data "data;data" ^
---add-data "locales;locales" ^
-gui.py
+```bat
+scripts\build_dotexpress.bat
 ```
 
 ---
@@ -129,8 +123,8 @@ gui.py
 
 如需更新翻譯模板檔（`.pot`），請執行：
 
-```bash
-xgettext --language=Python --keyword=_ --output=locales/DotExpress.pot gui.py dialog.py brailleTables/__tables.py
+```bat
+scripts\generate_pot.bat
 ```
 
 ---

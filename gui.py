@@ -129,6 +129,11 @@ _ = _translation.gettext
 
 # Keep dynamic context-menu labels discoverable to gettext extraction.
 _MENU_TRANSLATION_MARKERS = (
+	_("Add"),
+	_("Edit"),
+	_("Delete"),
+	_("Import"),
+	_("Export"),
 	_("Open"),
 	_("Rename"),
 	_("Default"),
@@ -172,13 +177,9 @@ def translate_with_language(table_file: str, text: str, dictionary_path: Path) -
 			)
 			raw_segments = split_bracket_segments(result["raw"])
 			replacement_segments = split_bracket_segments(result["replacement"])
-			print(raw_segments)
-			print(replacement_segments)
 
 			for raw_segment, replacement_segment in zip(raw_segments, replacement_segments):
 				if raw_segment["atomic"] != replacement_segment["atomic"]:
-					print(raw_segment)
-					print(replacement_segment)
 					raise ValueError("atomic not match")
 				if replacement_segment["atomic"]:
 					translations.append(translate_as_single_token(translate_table, replacement_segment["text"], raw_segment["text"]))
@@ -277,7 +278,7 @@ class BrailleFrame(wx.Frame):
 
 		conversion_group, conversion_box, conversion_row = self._create_labeled_group(panel, _("Conversion"))
 		self.table_btn = wx.Button(conversion_box, label=_("Translation Tables..."))
-		output_lbl = wx.StaticText(conversion_box, label=_("Output Format"))
+		output_lbl = wx.StaticText(conversion_box, label=_("Braille Type"))
 		self.output_choice = wx.Choice(conversion_box, choices=[label for _, label in self._output_modes])
 		width_lbl = wx.StaticText(conversion_box, label=_("Width"))
 		self.width_spin = wx.SpinCtrl(
@@ -344,7 +345,7 @@ class BrailleFrame(wx.Frame):
 
 		self.output_txt = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
 		self._default_output_font = self.output_txt.GetFont()
-		self._set_control_accessible_name(self.output_txt, _("Braille"))
+		self._set_control_accessible_name(self.output_txt, _("Braille Result"))
 		editors_box.Add(self.output_txt, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
 
 		content_box.Add(documents_box, 0, wx.EXPAND | wx.LEFT | wx.BOTTOM, 8)

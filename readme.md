@@ -111,14 +111,8 @@ pip install -r requirements.txt
 
 Run the following command in Windows CMD to generate the executable using PyInstaller:
 
-```bash
-pyinstaller --onefile --name=DotExpress ^
---noconsole ^
---add-data "liblouis.dll;." ^
---add-data "louis/tables;louis/tables" ^
---add-data "data;data" ^
---add-data "locales;locales" ^
-gui.py
+```bat
+scripts\build_dotexpress.bat
 ```
 
 ---
@@ -127,8 +121,8 @@ gui.py
 
 To update the translation template file (`.pot`), run:
 
-```bash
-xgettext --language=Python --keyword=_ --output=locales/DotExpress.pot gui.py dialog.py brailleTables/__tables.py
+```bat
+scripts\generate_pot.bat
 ```
 
 ---

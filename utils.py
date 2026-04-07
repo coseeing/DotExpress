@@ -16,6 +16,20 @@ class BracketSegment(TypedDict):
 	atomic: bool
 
 
+def _wrap_atomic_parts(parts: list[str]) -> str:
+	return (
+		DICTIONARY_MARKER_OPEN
+		+ DICTIONARY_MARKER_JOIN.join(parts)
+		+ DICTIONARY_MARKER_CLOSE
+	)
+
+
+def _align_source_and_replacement_parts(source: str, replacement_parts: list[str]) -> tuple[list[str], list[str]]:
+	if len(source) == len(replacement_parts):
+		return list(source), replacement_parts
+	return [source], ["".join(replacement_parts)]
+
+
 def translate__mapping_char(
 	text: str,
 	dictionary_path: Path | str,
@@ -181,23 +195,6 @@ def apply_dictionary(
 			raise ValueError(f"CSV must contain columns: text, braille, type")
 
 		raws: list[tuple[str, str]] = []
-		for row in reader:
-			source = (row.get("text") or "")
-			if not source:
-				continue
-
-			target = (
-				DICTIONARY_MARKER_OPEN + source + DICTIONARY_MARKER_CLOSE
-			)
-			raws.append((source, target))
-
-	with dictionary_path.open("r", newline="", encoding="utf-8") as f_d:
-		reader = csv.DictReader(f_d)
-		if reader.fieldnames is None:
-			raise ValueError("CSV must contain header row.")
-		if not {"text", "braille", "type"}.issubset(reader.fieldnames):
-			raise ValueError(f"CSV must contain columns: text, braille, type")
-
 		replacements: list[tuple[str, str]] = []
 		for row in reader:
 			source = (row.get("text") or "")
@@ -209,21 +206,19 @@ def apply_dictionary(
 			if type_ == "Bopomofo":
 				try:
 					target = processing(target)
-				except Exception as e:
+				except Exception:
 					pass
-				target = (
-					DICTIONARY_MARKER_OPEN
-					+ DICTIONARY_MARKER_JOIN.join(target)
-					+ DICTIONARY_MARKER_CLOSE
-				)
-				target = mapping(target, replacements_bopomofo)
+				if isinstance(target, str):
+					target_parts = [target]
+				else:
+					target_parts = list(target)
+				replacement_parts = [mapping(part, replacements_bopomofo) for part in target_parts]
 			else:
-				target = (
-					DICTIONARY_MARKER_OPEN
-					+ DICTIONARY_MARKER_JOIN.join(target.split("@"))
-					+ DICTIONARY_MARKER_CLOSE
-				)
-			replacements.append((source, target))
+				replacement_parts = target.split("@")
+
+			raw_parts, replacement_parts = _align_source_and_replacement_parts(source, replacement_parts)
+			raws.append((source, _wrap_atomic_parts(raw_parts)))
+			replacements.append((source, _wrap_atomic_parts(replacement_parts)))
 
 	raw = mapping(text, raws, marker=True)
 	replacement = mapping(text, replacements, marker=True)

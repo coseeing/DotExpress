@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dotexpress\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-06 22:54+0800\n"
-"PO-Revision-Date: 2026-04-06 22:55+0800\n"
+"POT-Creation-Date: 2026-04-07 08:54+0800\n"
+"PO-Revision-Date: 2026-04-07 08:55+0800\n"
 "Last-Translator: Codex <codex@example.com>\n"
 "Language-Team: Chinese (traditional)\n"
 "Language: zh_TW\n"
@@ -901,7 +901,7 @@ msgstr "編輯字典項目"
 msgid "Add Dictionary Entry"
 msgstr "新增字典項目"
 
-#: dialog.py:70 dialog.py:372 gui.py:343 gui2.py:295
+#: dialog.py:70 dialog.py:372 gui.py:347 gui2.py:295
 msgid "Source Text"
 msgstr "來源文字"
 
@@ -918,8 +918,8 @@ msgid "Please enter the source text."
 msgstr "請輸入來源文字。"
 
 #: dialog.py:137 dialog.py:150 dialog.py:159 dialog.py:206 dialog.py:263
-#: gui.py:224 gui.py:1229 gui.py:1245 gui.py:1290 gui.py:1366 gui.py:1376
-#: gui.py:1503 gui2.py:177 gui2.py:596 gui2.py:882 gui2.py:898 gui2.py:976
+#: gui.py:220 gui.py:1209 gui.py:1225 gui.py:1270 gui.py:1346 gui.py:1356
+#: gui.py:1483 gui2.py:177 gui2.py:596 gui2.py:882 gui2.py:898 gui2.py:976
 #: gui2.py:986 gui2.py:1110
 msgid "Info"
 msgstr "資訊"
@@ -999,15 +999,15 @@ msgstr "自訂字典管理器"
 msgid "Dictionary entries"
 msgstr "字典項目"
 
-#: dialog.py:381 gui.py:132
+#: dialog.py:381 gui.py:129
 msgid "Add"
 msgstr "新增"
 
-#: dialog.py:382 gui.py:133
+#: dialog.py:382 gui.py:130
 msgid "Edit"
 msgstr "編輯"
 
-#: dialog.py:383 gui.py:134
+#: dialog.py:383 gui.py:131
 msgid "Delete"
 msgstr "刪除"
 
@@ -1016,10 +1016,10 @@ msgstr "刪除"
 msgid "Source text \"{identifier}\" already exists."
 msgstr "來源文字「{identifier}」已存在。"
 
-#: dialog.py:463 dialog.py:486 dialog.py:524 gui.py:528 gui.py:691 gui.py:741
-#: gui.py:797 gui.py:1053 gui.py:1223 gui.py:1284 gui.py:1319 gui.py:1327
-#: gui.py:1495 gui2.py:461 gui2.py:606 gui2.py:772 gui2.py:876 gui2.py:929
-#: gui2.py:937 gui2.py:1102
+#: dialog.py:463 dialog.py:486 dialog.py:524 gui.py:537 gui.py:700 gui.py:750
+#: gui.py:806 gui.py:1203 gui.py:1264 gui.py:1299 gui.py:1307 gui.py:1475
+#: gui2.py:461 gui2.py:606 gui2.py:772 gui2.py:876 gui2.py:929 gui2.py:937
+#: gui2.py:1102
 msgid "Error"
 msgstr "錯誤"
 
@@ -1052,84 +1052,80 @@ msgstr "轉譯表設定"
 msgid "None selected"
 msgstr "未選擇"
 
-#: gui.py:135
+#: gui.py:132
 msgid "Import"
 msgstr "匯入"
 
-#: gui.py:136
+#: gui.py:133
 msgid "Export"
 msgstr "匯出"
 
-#: gui.py:137 gui2.py:108
+#: gui.py:134 gui2.py:108
 msgid "Open"
 msgstr "開啟"
 
-#: gui.py:138 gui2.py:108
+#: gui.py:135 gui2.py:108
 msgid "Rename"
 msgstr "重新命名"
 
-#: gui.py:139 gui.py:271 gui2.py:108 gui2.py:223
+#: gui.py:136 gui.py:271 gui2.py:108 gui2.py:223
 msgid "Default"
 msgstr "預設"
 
-#: gui.py:140 gui.py:329 gui2.py:108 gui2.py:268
+#: gui.py:137 gui.py:333 gui2.py:108 gui2.py:268
 msgid "Braille Font"
 msgstr "點字字型"
 
-#: gui.py:141 gui.py:271 gui2.py:108 gui2.py:223
+#: gui.py:138 gui.py:271 gui2.py:108 gui2.py:223
 msgid "SimBraille"
 msgstr "SimBraille"
 
-#: gui.py:142
-msgid "Batch Import"
-msgstr "批次匯入"
+#: gui.py:139
+msgid "Export All"
+msgstr "匯出全部"
 
-#: gui.py:143
-msgid "Batch Export"
-msgstr "批次匯出"
-
-#: gui.py:144
+#: gui.py:140
 msgid "DEP"
 msgstr "DEP"
 
-#: gui.py:145
+#: gui.py:141
 msgid "TXT"
 msgstr "TXT"
 
-#: gui.py:146
+#: gui.py:142
 msgid "BRL"
 msgstr "BRL"
 
-#: gui.py:147
+#: gui.py:143
 msgid "Delete All"
 msgstr "刪除全部"
 
-#: gui.py:148 gui.py:1254
+#: gui.py:144 gui.py:1234
 msgid "Confirm Delete Dictionary"
 msgstr "確認刪除字典"
 
-#: gui.py:149 gui.py:1253
+#: gui.py:145 gui.py:1233
 #, python-brace-format
 msgid "Do you want to delete dictionary \"{name}\"?"
 msgstr "要刪除字典「{name}」嗎？"
 
-#: gui.py:150 gui.py:1271
+#: gui.py:146 gui.py:1251
 msgid "Rename Dictionary"
 msgstr "重新命名字典"
 
-#: gui.py:151 gui.py:406
+#: gui.py:147 gui.py:410
 msgid "Help"
 msgstr "說明"
 
-#: gui.py:152 gui.py:400
+#: gui.py:148 gui.py:404
 msgid "Coseeing Website"
 msgstr "Coseeing 網站"
 
-#: gui.py:153 gui.py:549
+#: gui.py:149 gui.py:558
 msgid "About DotExpress"
 msgstr "關於 DotExpress"
 
-#: gui.py:226 gui2.py:179
+#: gui.py:222 gui2.py:179
 msgid "converting"
 msgstr "轉換中"
 
@@ -1181,59 +1177,63 @@ msgstr "轉換"
 msgid "Documents"
 msgstr "文件"
 
-#: gui.py:315 gui2.py:288
+#: gui.py:317 gui2.py:288
 msgid "Document List"
 msgstr "文件列表"
 
-#: gui.py:319 gui2.py:258
+#: gui.py:318
+msgid "Press the Applications key to open the menu."
+msgstr "可按快顯鍵開啟選單。"
+
+#: gui.py:323 gui2.py:258
 msgid "View"
 msgstr "檢視"
 
-#: gui.py:320 gui2.py:259
+#: gui.py:324 gui2.py:259
 msgid "Font Size"
 msgstr "字型大小"
 
-#: gui.py:327 gui2.py:266
+#: gui.py:331 gui2.py:266
 msgid "Scheme"
 msgstr "配色"
 
-#: gui.py:348
+#: gui.py:352
 msgid "Braille Result"
 msgstr "點字結果"
 
-#: gui.py:403
+#: gui.py:407
 msgid "About"
 msgstr "關於"
 
-#: gui.py:543
+#: gui.py:552
 #, python-brace-format
 msgid "Failed to open website: {error}"
 msgstr "開啟網站失敗：{error}"
 
-#: gui.py:616 gui.py:1365 gui2.py:975
+#: gui.py:625 gui.py:1345 gui2.py:975
 msgid "Please select a translation table first."
 msgstr "請先選擇轉譯表。"
 
-#: gui.py:649
+#: gui.py:658
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr "目的資料夾中已有一個或多個檔案會被覆蓋。要全部覆蓋嗎？"
 
-#: gui.py:652
+#: gui.py:661
 msgid "Confirm Overwrite"
 msgstr "確認覆蓋"
 
-#: gui.py:669 gui2.py:794
+#: gui.py:678 gui2.py:794
 msgid "Export Document"
 msgstr "匯出文件"
 
-#: gui.py:686 gui.py:1118 gui2.py:807
+#: gui.py:695 gui.py:1098 gui2.py:807
 #, python-brace-format
 msgid "Failed to export document: {error}"
 msgstr "匯出文件失敗：{error}"
 
-#: gui.py:690
+#: gui.py:699
 #, python-brace-format
 msgid ""
 "Automatic conversion failed while exporting. The document was exported with "
@@ -1245,12 +1245,12 @@ msgstr ""
 "\n"
 "{error}"
 
-#: gui.py:736 gui.py:773 gui.py:967 gui2.py:552 gui2.py:575 gui2.py:724
+#: gui.py:745 gui.py:782 gui.py:969 gui2.py:552 gui2.py:575 gui2.py:724
 #, python-brace-format
 msgid "Failed to save document: {error}"
 msgstr "儲存文件失敗：{error}"
 
-#: gui.py:740
+#: gui.py:749
 #, python-brace-format
 msgid ""
 "Automatic conversion failed while saving. The document was saved with empty "
@@ -1262,131 +1262,114 @@ msgstr ""
 "\n"
 "{error}"
 
-#: gui.py:759 gui2.py:568
+#: gui.py:768 gui2.py:568
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr "刪除無效工作區文件失敗：{error}"
 
-#: gui.py:796 gui2.py:605
+#: gui.py:805 gui2.py:605
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr "文件「{name}」已存在。"
 
-#: gui.py:938 gui2.py:619 gui2.py:695
+#: gui.py:940 gui2.py:619 gui2.py:695
 msgid "Add Document"
 msgstr "新增文件"
 
-#: gui.py:954 gui2.py:711
+#: gui.py:956 gui2.py:711
 msgid "Rename Document"
 msgstr "重新命名文件"
 
-#: gui.py:990 gui.py:1022 gui2.py:747
+#: gui.py:992 gui.py:1024 gui2.py:747
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr "刪除文件失敗：{error}"
 
-#: gui.py:1009
+#: gui.py:1011
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr "刪除全部會移除所有文件。要繼續嗎？"
 
-#: gui.py:1010
+#: gui.py:1012
 msgid "Confirm Delete All"
 msgstr "確認刪除全部"
 
-#: gui.py:1042 gui2.py:763 gui2.py:780
+#: gui.py:1044 gui2.py:763 gui2.py:780
 msgid "Import Document"
 msgstr "匯入文件"
 
-#: gui.py:1052 gui2.py:771
-msgid "Imported file must be a valid DotExpress DEP package."
-msgstr "匯入的檔案必須是有效的 DotExpress DEP 封裝檔。"
+#: gui.py:1062
+msgid "Import Issues"
+msgstr "匯入問題"
 
-#: gui.py:1052
-msgid "Imported file must be a valid text document."
-msgstr "匯入的檔案必須是有效的文字檔。"
+#: gui.py:1063
+msgid "Some files were skipped during import."
+msgstr "匯入時有部分檔案被略過。"
 
-#: gui.py:1059 gui2.py:778
-#, python-brace-format
-msgid "Failed to import document: {error}"
-msgstr "匯入文件失敗：{error}"
-
-#: gui.py:1069
-msgid "Batch Import Documents"
-msgstr "批次匯入文件"
-
-#: gui.py:1082
-msgid "Batch Import Issues"
-msgstr "批次匯入問題"
-
-#: gui.py:1083
-msgid "Some files were skipped during batch import."
-msgstr "批次匯入時有部分檔案被略過。"
+#: gui.py:1081
+msgid "Export All Documents"
+msgstr "匯出全部文件"
 
 #: gui.py:1101
-msgid "Batch Export Documents"
-msgstr "批次匯出文件"
+msgid "Export All Issues"
+msgstr "匯出全部問題"
 
-#: gui.py:1121
-msgid "Batch Export Issues"
-msgstr "批次匯出問題"
-
-#: gui.py:1122
+#: gui.py:1102
 msgid ""
 "Some documents were exported with empty braille output because automatic "
 "conversion failed."
 msgstr "部分文件因自動轉換失敗而以空白點字內容匯出。"
 
-#: gui.py:1222 gui.py:1283 gui.py:1318 gui2.py:875 gui2.py:928
+#: gui.py:1202 gui.py:1263 gui.py:1298 gui2.py:875 gui2.py:928
 #, python-brace-format
 msgid "Dictionary \"{name}\" already exists."
 msgstr "字典「{name}」已存在。"
 
-#: gui.py:1244 gui2.py:897
+#: gui.py:1224 gui2.py:897
 msgid "The default dictionary cannot be deleted."
 msgstr "預設字典無法刪除。"
 
-#: gui.py:1293
+#: gui.py:1273
 #, python-brace-format
 msgid "Failed to save dictionary: {error}"
 msgstr "儲存字典失敗：{error}"
 
-#: gui.py:1301 gui2.py:911
+#: gui.py:1281 gui2.py:911
 msgid "Import Dictionary"
 msgstr "匯入字典"
 
-#: gui.py:1326 gui2.py:936
+#: gui.py:1306 gui2.py:936
 msgid "Imported file must contain text, braille, and type headers."
 msgstr "匯入的檔案必須包含 text、braille 與 type 表頭。"
 
-#: gui.py:1333 gui2.py:943
+#: gui.py:1313 gui2.py:943
 #, python-brace-format
 msgid "Failed to import dictionary: {error}"
 msgstr "匯入字典失敗：{error}"
 
-#: gui.py:1344 gui2.py:954
+#: gui.py:1324 gui2.py:954
 msgid "Export Dictionary"
 msgstr "匯出字典"
 
-#: gui.py:1356 gui2.py:966
+#: gui.py:1336 gui2.py:966
 #, python-brace-format
 msgid "Failed to export dictionary: {error}"
 msgstr "匯出字典失敗：{error}"
 
-#: gui.py:1375 gui2.py:985
+#: gui.py:1355 gui2.py:985
 msgid "Please select the output format first."
 msgstr "請先選擇點字類型。"
 
-#: gui.py:1440 gui2.py:1047
+#: gui.py:1420 gui2.py:1047
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr "轉譯失敗：{error}"
 
-#: gui.py:1457 gui2.py:1064
+#: gui.py:1437 gui2.py:1064
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr "ASCII 轉換失敗：{error}"
 
-#: gui.py:1503 gui2.py:1110
+#: gui.py:1483 gui2.py:1110
 msgid "Conversion completed."
 msgstr "轉換完成。"
 
@@ -1397,6 +1380,30 @@ msgstr "輸出格式"
 #: gui2.py:595
 msgid "At least one document is required."
 msgstr "至少需要一份文件。"
+
+#: gui2.py:771
+msgid "Imported file must be a valid DotExpress DEP package."
+msgstr "匯入的檔案必須是有效的 DotExpress DEP 封裝檔。"
+
+#: gui2.py:778
+#, python-brace-format
+msgid "Failed to import document: {error}"
+msgstr "匯入文件失敗：{error}"
+
+#~ msgid "Batch Import"
+#~ msgstr "批次匯入"
+
+#~ msgid "Batch Export"
+#~ msgstr "批次匯出"
+
+#~ msgid "Imported file must be a valid text document."
+#~ msgstr "匯入的檔案必須是有效的文字檔。"
+
+#~ msgid "Batch Import Documents"
+#~ msgstr "批次匯入文件"
+
+#~ msgid "Batch Export Documents"
+#~ msgstr "批次匯出文件"
 
 #~ msgid "CSV files (*.csv)|*.csv"
 #~ msgstr "CSV 檔案 (*.csv)|*.csv"

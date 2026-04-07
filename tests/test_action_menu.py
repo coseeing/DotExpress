@@ -26,7 +26,7 @@ class ActionMenuTest(unittest.TestCase):
     def test_get_document_action_labels_returns_requested_order(self) -> None:
         self.assertEqual(
             get_document_action_labels(),
-            ["Open", "Delete", "Delete All", "Add", "Rename", "Import", "Export", "Batch Import", "Batch Export"],
+            ["Open", "Delete", "Delete All", "Add", "Rename", "Import", "Export", "Export All"],
         )
 
     def test_get_document_import_format_labels_returns_requested_order(self) -> None:

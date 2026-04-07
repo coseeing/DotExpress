@@ -159,19 +159,17 @@ def load_workspace_documents(workspace_dir: Path | None = None) -> tuple[list[Do
     return documents, invalid_paths
 
 
-def batch_import_documents_from_folder(
-    directory: Path | str,
+def batch_import_documents(
+    paths: list[Path | str],
     *,
     format_key: str,
     existing_names: set[str],
 ) -> tuple[list[Document], list[BatchIssue]]:
-    folder = Path(directory)
     documents: list[Document] = []
     issues: list[BatchIssue] = []
     seen_names = {name.casefold() for name in existing_names}
     loader = load_document_package if format_key == "dep" else load_text_document
-    extension = DEP_EXTENSION if format_key == "dep" else TXT_EXTENSION
-    for path in sorted(folder.glob(f"*{extension}"), key=lambda item: (item.stem.casefold(), item.stem)):
+    for path in sorted((Path(path) for path in paths), key=lambda item: (item.stem.casefold(), item.stem)):
         try:
             document = loader(path)
         except Exception as exc:

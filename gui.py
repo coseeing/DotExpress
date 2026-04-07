@@ -3,7 +3,6 @@ import gettext
 import sys
 import threading
 import webbrowser
-import zipfile
 
 import wx
 
@@ -58,15 +57,13 @@ from document_workspace import (
 	DEFAULT_DOCUMENT_NAME,
 	Document,
 	batch_export_documents_to_folder,
-	batch_import_documents_from_folder,
+	batch_import_documents,
 	choose_selection_after_delete as choose_document_selection_after_delete,
 	create_default_document,
 	document_package_path_for_name,
 	ensure_workspace_directory,
 	export_document_brl,
 	get_workspace_directory,
-	load_document_package,
-	load_text_document,
 	load_workspace_documents,
 	normalize_document_name,
 	prepare_document_for_save,
@@ -139,8 +136,7 @@ _MENU_TRANSLATION_MARKERS = (
 	_("Default"),
 	_("Braille Font"),
 	_("SimBraille"),
-	_("Batch Import"),
-	_("Batch Export"),
+	_("Export All"),
 	_("DEP"),
 	_("TXT"),
 	_("BRL"),
@@ -236,12 +232,16 @@ class ConvertingDialog(wx.Dialog):
 
 
 class NamedControlAccessible(wx.Accessible):
-	def __init__(self, window: wx.Window, name: str):
+	def __init__(self, window: wx.Window, name: str, description: str = ""):
 		super().__init__(window)
 		self._name = name
+		self._description = description
 
 	def GetName(self, childId):
 		return (wx.ACC_OK, self._name)
+
+	def GetDescription(self, childId):
+		return (wx.ACC_OK, self._description)
 
 
 class BrailleFrame(wx.Frame):
@@ -312,7 +312,11 @@ class BrailleFrame(wx.Frame):
 		self.document_list = wx.ListCtrl(panel, style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL)
 		self.document_list.InsertColumn(0, _("Document Name"), width=220)
 		self.document_list.SetMinSize((240, -1))
-		self._set_control_accessible_name(self.document_list, _("Document List"))
+		self._set_control_accessible_name(
+			self.document_list,
+			_("Document List"),
+			_("Press the Applications key to open the menu."),
+		)
 		documents_box.Add(documents_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
 		documents_box.Add(self.document_list, 1, wx.EXPAND | wx.ALL, 8)
 
@@ -406,9 +410,14 @@ class BrailleFrame(wx.Frame):
 		menu_bar.Append(help_menu, _("Help"))
 		return menu_bar
 
-	def _set_control_accessible_name(self, control: wx.Window, name: str) -> None:
+	def _set_control_accessible_name(
+		self,
+		control: wx.Window,
+		name: str,
+		description: str = "",
+	) -> None:
 		control.SetName(name)
-		control.SetAccessible(NamedControlAccessible(control, name))
+		control.SetAccessible(NamedControlAccessible(control, name, description))
 
 	def _create_labeled_group(self, parent: wx.Window, label: str) -> tuple[wx.StaticBoxSizer, wx.StaticBox, wx.BoxSizer]:
 		group = wx.StaticBoxSizer(wx.VERTICAL, parent, label=label)
@@ -873,27 +882,22 @@ class BrailleFrame(wx.Frame):
 		menu = wx.Menu()
 		menu_items: dict[str, wx.MenuItem] = {}
 		import_submenu = wx.Menu()
-		batch_import_submenu = wx.Menu()
 		export_submenu = wx.Menu()
-		batch_export_submenu = wx.Menu()
+		export_all_submenu = wx.Menu()
 		format_items: dict[str, wx.MenuItem] = {}
 		for label in get_document_action_labels():
 			if label == "Import":
 				menu_items[label] = menu.AppendSubMenu(import_submenu, _(label))
 				for format_label in get_document_import_format_labels():
 					format_items[f"import:{format_label.lower()}"] = import_submenu.Append(wx.ID_ANY, _(format_label))
-			elif label == "Batch Import":
-				menu_items[label] = menu.AppendSubMenu(batch_import_submenu, _(label))
-				for format_label in get_document_import_format_labels():
-					format_items[f"batch-import:{format_label.lower()}"] = batch_import_submenu.Append(wx.ID_ANY, _(format_label))
 			elif label == "Export":
 				menu_items[label] = menu.AppendSubMenu(export_submenu, _(label))
 				for format_label in get_document_export_format_labels():
 					format_items[f"export:{format_label.lower()}"] = export_submenu.Append(wx.ID_ANY, _(format_label))
-			elif label == "Batch Export":
-				menu_items[label] = menu.AppendSubMenu(batch_export_submenu, _(label))
+			elif label == "Export All":
+				menu_items[label] = menu.AppendSubMenu(export_all_submenu, _(label))
 				for format_label in get_document_export_format_labels():
-					format_items[f"batch-export:{format_label.lower()}"] = batch_export_submenu.Append(wx.ID_ANY, _(format_label))
+					format_items[f"export-all:{format_label.lower()}"] = export_all_submenu.Append(wx.ID_ANY, _(format_label))
 			else:
 				menu_items[label] = menu.Append(wx.ID_ANY, _(label))
 		has_selection = self._get_selected_document() is not None
@@ -903,7 +907,7 @@ class BrailleFrame(wx.Frame):
 		menu_items["Delete All"].Enable(has_documents)
 		menu_items["Rename"].Enable(has_selection)
 		menu_items["Export"].Enable(has_selection)
-		menu_items["Batch Export"].Enable(has_documents)
+		menu_items["Export All"].Enable(has_documents)
 		menu.Bind(wx.EVT_MENU, self.on_open_document, menu_items["Open"])
 		menu.Bind(wx.EVT_MENU, self.on_delete_document, menu_items["Delete"])
 		menu.Bind(wx.EVT_MENU, self.on_delete_all_documents, menu_items["Delete All"])
@@ -913,12 +917,10 @@ class BrailleFrame(wx.Frame):
 			action, format_key = key.split(":")
 			if action == "import":
 				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_import_document(fmt), item)
-			elif action == "batch-import":
-				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_batch_import_documents(fmt), item)
 			elif action == "export":
 				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_export_document(fmt), item)
-			elif action == "batch-export":
-				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_batch_export_documents(fmt), item)
+			elif action == "export-all":
+				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_export_all_documents(fmt), item)
 		popup_position = (rect.x, rect.y + rect.height) if rect is not None else client_position
 		self.document_list.PopupMenu(menu, popup_position)
 		menu.Destroy()
@@ -1041,46 +1043,24 @@ class BrailleFrame(wx.Frame):
 			return
 		title = _("Import Document")
 		wildcard = self._get_dep_wildcard() if format_key == "dep" else self._get_txt_wildcard()
-		with wx.FileDialog(self, title, wildcard=wildcard, style=wx.FD_OPEN) as file_dialog:
+		with wx.FileDialog(self, title, wildcard=wildcard, style=wx.FD_OPEN | wx.FD_MULTIPLE) as file_dialog:
 			if file_dialog.ShowModal() != wx.ID_OK:
 				return
-			source_path = Path(file_dialog.GetPath())
-		try:
-			loaded_document = load_document_package(source_path) if format_key == "dep" else load_text_document(source_path)
-		except (ValueError, zipfile.BadZipFile):
-			wx.MessageBox(
-				_("Imported file must be a valid DotExpress DEP package.") if format_key == "dep" else _("Imported file must be a valid text document."),
-				_("Error"),
-				wx.OK | wx.ICON_ERROR,
-				parent=self,
-			)
-			return
-		except OSError as exc:
-			self._show_file_error(_("Failed to import document: {error}"), exc)
-			return
-		document_name = self._prompt_for_document_name(title, initial_name=loaded_document.name)
-		if document_name is None:
-			return
-		self._create_document(document_name, loaded_document.text, loaded_document.braille)
-
-	def on_batch_import_documents(self, format_key: str) -> None:
-		if not self._save_open_document_with_feedback():
-			return
-		with wx.DirDialog(self, _("Batch Import Documents")) as dir_dialog:
-			if dir_dialog.ShowModal() != wx.ID_OK:
-				return
-			source_dir = Path(dir_dialog.GetPath())
-		documents, issues = batch_import_documents_from_folder(
-			source_dir,
+			source_paths = [Path(path) for path in file_dialog.GetPaths()]
+		documents, issues = batch_import_documents(
+			source_paths,
 			format_key=format_key,
 			existing_names=set(self._get_document_names()),
 		)
 		saved_documents, save_issues = self._persist_documents(documents)
 		self.documents.extend(saved_documents)
-		self._refresh_document_list(self._open_document_name or self._selected_document_name)
+		if len(saved_documents) == 1:
+			self._open_document_by_name(saved_documents[0].name)
+		else:
+			self._refresh_document_list(self._open_document_name or self._selected_document_name)
 		self._show_file_issues_dialog(
-			_("Batch Import Issues"),
-			_("Some files were skipped during batch import."),
+			_("Import Issues"),
+			_("Some files were skipped during import."),
 			issues + save_issues,
 		)
 
@@ -1093,12 +1073,12 @@ class BrailleFrame(wx.Frame):
 		selected_document = self._get_selected_document() or selected_document
 		self._export_document_with_dialog(selected_document, format_key)
 
-	def on_batch_export_documents(self, format_key: str) -> None:
+	def on_export_all_documents(self, format_key: str) -> None:
 		if not self.documents:
 			return
 		if not self._save_open_document_with_feedback():
 			return
-		with wx.DirDialog(self, _("Batch Export Documents")) as dir_dialog:
+		with wx.DirDialog(self, _("Export All Documents")) as dir_dialog:
 			if dir_dialog.ShowModal() != wx.ID_OK:
 				return
 			destination_dir = Path(dir_dialog.GetPath())
@@ -1118,7 +1098,7 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to export document: {error}"), exc)
 			return
 		self._show_file_issues_dialog(
-			_("Batch Export Issues"),
+			_("Export All Issues"),
 			_("Some documents were exported with empty braille output because automatic conversion failed."),
 			issues,
 		)

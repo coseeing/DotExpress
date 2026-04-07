@@ -6,7 +6,7 @@ from document_workspace import (
     BatchIssue,
     DEFAULT_DOCUMENT_NAME,
     Document,
-    batch_import_documents_from_folder,
+    batch_import_documents,
     batch_export_documents_to_folder,
     choose_selection_after_delete,
     create_default_document,
@@ -100,15 +100,15 @@ class DocumentWorkspaceTest(unittest.TestCase):
         export_document_brl(output_path, document)
         self.assertEqual(output_path.read_text(encoding="utf-8"), "⠇⠑⠎⠎")
 
-    def test_batch_import_documents_from_folder_imports_txt_only_and_reports_duplicates(self) -> None:
+    def test_batch_import_documents_imports_txt_only_and_reports_duplicates(self) -> None:
         source_dir = Path(self._tmpdir.name) / "incoming"
         source_dir.mkdir(parents=True, exist_ok=True)
         (source_dir / "alpha.txt").write_text("A", encoding="utf-8")
         (source_dir / "beta.txt").write_text("B", encoding="utf-8")
         (source_dir / "alpha.dep").write_text("ignored", encoding="utf-8")
 
-        documents, issues = batch_import_documents_from_folder(
-            source_dir,
+        documents, issues = batch_import_documents(
+            [source_dir / "alpha.txt", source_dir / "beta.txt", source_dir / "alpha.dep"],
             format_key="txt",
             existing_names={"beta"},
         )
@@ -116,15 +116,18 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertEqual(documents, [Document(name="alpha", text="A", braille=None)])
         self.assertEqual(
             issues,
-            [BatchIssue(path=source_dir / "beta.txt", reason='Document "beta" already exists.')],
+            [
+                BatchIssue(path=source_dir / "alpha.dep", reason="Text document must use the .txt extension."),
+                BatchIssue(path=source_dir / "beta.txt", reason='Document "beta" already exists.'),
+            ],
         )
 
-    def test_batch_import_documents_from_folder_reports_invalid_dep(self) -> None:
+    def test_batch_import_documents_reports_invalid_dep(self) -> None:
         source_dir = Path(self._tmpdir.name) / "incoming"
         source_dir.mkdir(parents=True, exist_ok=True)
         (source_dir / "bad.dep").write_text("not-a-zip", encoding="utf-8")
 
-        documents, issues = batch_import_documents_from_folder(source_dir, format_key="dep", existing_names=set())
+        documents, issues = batch_import_documents([source_dir / "bad.dep"], format_key="dep", existing_names=set())
 
         self.assertEqual(documents, [])
         self.assertEqual(len(issues), 1)

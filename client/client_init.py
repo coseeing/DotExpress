@@ -11,6 +11,7 @@ from config import get_lang, get_or_create_client_id
 
 
 CLIENT_INIT_URL = "https://dotexpress.coseeing.org/client/init"
+CLIENT_INIT_URL = "http://localhost:8000/client/init"
 DEFAULT_TIMEOUT = 3.0
 _REQUIRED_RESPONSE_FIELDS = {
     "version",

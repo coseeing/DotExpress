@@ -6,11 +6,11 @@ __pycache__/
 client/build/
 client/dist/
 client/dictionary/
-client/include/
 client/louis/tables/
 client/.venv/
 client/workspace/
 client/DotExpress.spec
+include/
 openspec/
 promp/
 storage/

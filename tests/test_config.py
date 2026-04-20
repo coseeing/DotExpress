@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from uuid import UUID
 
 import config
 
@@ -95,6 +96,35 @@ class ConfigSettingsTest(unittest.TestCase):
             },
         )
         self.assertEqual(config.get_braille_font("default"), "simbraille")
+
+    def test_client_id_is_generated_and_persisted_under_client_section(self) -> None:
+        client_id = config.get_or_create_client_id()
+
+        UUID(client_id)
+        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.assertEqual(data, {"client": {"id": client_id}})
+        self.assertEqual(config.get_or_create_client_id(), client_id)
+
+    def test_existing_client_id_is_reused(self) -> None:
+        expected_client_id = "existing-client-id"
+        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump({"client": {"id": expected_client_id}}, f)
+
+        self.assertEqual(config.get_or_create_client_id(), expected_client_id)
+
+    def test_client_id_generation_preserves_unrelated_config_values(self) -> None:
+        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump({"view": {"font_size": 18}}, f)
+
+        client_id = config.get_or_create_client_id()
+
+        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.assertEqual(data["view"], {"font_size": 18})
+        self.assertEqual(data["client"], {"id": client_id})
 
 
 if __name__ == "__main__":

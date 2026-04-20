@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-07 08:54+0800\n"
+"POT-Creation-Date: 2026-04-07 11:42+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -809,7 +809,7 @@ msgstr ""
 msgid "Zulu grade 2"
 msgstr ""
 
-#: about.py:22 gui.py:251 gui2.py:204
+#: about.py:22 gui.py:260 gui2.py:204
 msgid "DotExpress"
 msgstr ""
 
@@ -878,7 +878,7 @@ msgstr ""
 msgid "Add Dictionary Entry"
 msgstr ""
 
-#: dialog.py:70 dialog.py:372 gui.py:347 gui2.py:295
+#: dialog.py:70 dialog.py:372 gui.py:356 gui2.py:295
 msgid "Source Text"
 msgstr ""
 
@@ -895,8 +895,8 @@ msgid "Please enter the source text."
 msgstr ""
 
 #: dialog.py:137 dialog.py:150 dialog.py:159 dialog.py:206 dialog.py:263
-#: gui.py:220 gui.py:1209 gui.py:1225 gui.py:1270 gui.py:1346 gui.py:1356
-#: gui.py:1483 gui2.py:177 gui2.py:596 gui2.py:882 gui2.py:898 gui2.py:976
+#: gui.py:229 gui.py:1273 gui.py:1289 gui.py:1334 gui.py:1410 gui.py:1420
+#: gui.py:1547 gui2.py:177 gui2.py:596 gui2.py:882 gui2.py:898 gui2.py:976
 #: gui2.py:986 gui2.py:1110
 msgid "Info"
 msgstr ""
@@ -934,7 +934,7 @@ msgstr ""
 msgid "Dictionary name \"{name}\" is reserved."
 msgstr ""
 
-#: dialog.py:240 gui.py:313 gui2.py:286
+#: dialog.py:240 gui.py:322 gui2.py:286
 msgid "Document Name"
 msgstr ""
 
@@ -976,15 +976,15 @@ msgstr ""
 msgid "Dictionary entries"
 msgstr ""
 
-#: dialog.py:381 gui.py:129
+#: dialog.py:381 gui.py:138
 msgid "Add"
 msgstr ""
 
-#: dialog.py:382 gui.py:130
+#: dialog.py:382 gui.py:139
 msgid "Edit"
 msgstr ""
 
-#: dialog.py:383 gui.py:131
+#: dialog.py:383 gui.py:140
 msgid "Delete"
 msgstr ""
 
@@ -993,8 +993,8 @@ msgstr ""
 msgid "Source text \"{identifier}\" already exists."
 msgstr ""
 
-#: dialog.py:463 dialog.py:486 dialog.py:524 gui.py:537 gui.py:700 gui.py:750
-#: gui.py:806 gui.py:1203 gui.py:1264 gui.py:1299 gui.py:1307 gui.py:1475
+#: dialog.py:463 dialog.py:486 dialog.py:524 gui.py:581 gui.py:744 gui.py:794
+#: gui.py:850 gui.py:1267 gui.py:1328 gui.py:1363 gui.py:1371 gui.py:1539
 #: gui2.py:461 gui2.py:606 gui2.py:772 gui2.py:876 gui2.py:929 gui2.py:937
 #: gui2.py:1102
 msgid "Error"
@@ -1029,188 +1029,188 @@ msgstr ""
 msgid "None selected"
 msgstr ""
 
-#: gui.py:132
+#: gui.py:141
 msgid "Import"
 msgstr ""
 
-#: gui.py:133
+#: gui.py:142
 msgid "Export"
 msgstr ""
 
-#: gui.py:134 gui2.py:108
+#: gui.py:143 gui2.py:108
 msgid "Open"
 msgstr ""
 
-#: gui.py:135 gui2.py:108
+#: gui.py:144 gui2.py:108
 msgid "Rename"
 msgstr ""
 
-#: gui.py:136 gui.py:271 gui2.py:108 gui2.py:223
+#: gui.py:145 gui.py:280 gui2.py:108 gui2.py:223
 msgid "Default"
 msgstr ""
 
-#: gui.py:137 gui.py:333 gui2.py:108 gui2.py:268
+#: gui.py:146 gui.py:342 gui2.py:108 gui2.py:268
 msgid "Braille Font"
 msgstr ""
 
-#: gui.py:138 gui.py:271 gui2.py:108 gui2.py:223
+#: gui.py:147 gui.py:280 gui2.py:108 gui2.py:223
 msgid "SimBraille"
 msgstr ""
 
-#: gui.py:139
+#: gui.py:148
 msgid "Export All"
 msgstr ""
 
-#: gui.py:140
+#: gui.py:149
 msgid "DEP"
 msgstr ""
 
-#: gui.py:141
+#: gui.py:150
 msgid "TXT"
 msgstr ""
 
-#: gui.py:142
+#: gui.py:151
 msgid "BRL"
 msgstr ""
 
-#: gui.py:143
+#: gui.py:152
 msgid "Delete All"
 msgstr ""
 
-#: gui.py:144 gui.py:1234
+#: gui.py:153 gui.py:1298
 msgid "Confirm Delete Dictionary"
 msgstr ""
 
-#: gui.py:145 gui.py:1233
+#: gui.py:154 gui.py:1297
 #, python-brace-format
 msgid "Do you want to delete dictionary \"{name}\"?"
 msgstr ""
 
-#: gui.py:146 gui.py:1251
+#: gui.py:155 gui.py:1315
 msgid "Rename Dictionary"
 msgstr ""
 
-#: gui.py:147 gui.py:410
+#: gui.py:156 gui.py:420
 msgid "Help"
 msgstr ""
 
-#: gui.py:148 gui.py:404
+#: gui.py:157 gui.py:414
 msgid "Coseeing Website"
 msgstr ""
 
-#: gui.py:149 gui.py:558
+#: gui.py:158 gui.py:602
 msgid "About DotExpress"
 msgstr ""
 
-#: gui.py:222 gui2.py:179
+#: gui.py:231 gui2.py:179
 msgid "converting"
 msgstr ""
 
-#: gui.py:269 gui2.py:221
+#: gui.py:278 gui2.py:221
 msgid "Unicode"
 msgstr ""
 
-#: gui.py:269 gui2.py:221
+#: gui.py:278 gui2.py:221
 msgid "ASCII"
 msgstr ""
 
-#: gui.py:270 gui2.py:222
+#: gui.py:279 gui2.py:222
 msgid "Light"
 msgstr ""
 
-#: gui.py:270 gui2.py:222
+#: gui.py:279 gui2.py:222
 msgid "Dark"
 msgstr ""
 
-#: gui.py:279 gui2.py:231
+#: gui.py:288 gui2.py:231
 msgid "Conversion"
 msgstr ""
 
-#: gui.py:280 gui2.py:232
+#: gui.py:289 gui2.py:232
 msgid "Translation Tables..."
 msgstr ""
 
-#: gui.py:281
+#: gui.py:290
 msgid "Braille Type"
 msgstr ""
 
-#: gui.py:283 gui2.py:235
+#: gui.py:292 gui2.py:235
 msgid "Width"
 msgstr ""
 
-#: gui.py:290 gui2.py:242
+#: gui.py:299 gui2.py:242
 msgid "Dictionary"
 msgstr ""
 
-#: gui.py:293 gui2.py:245
+#: gui.py:302 gui2.py:245
 msgid "Actions"
 msgstr ""
 
-#: gui.py:294 gui2.py:246
+#: gui.py:303 gui2.py:246
 msgid "Convert"
 msgstr ""
 
-#: gui.py:311 gui2.py:284
+#: gui.py:320 gui2.py:284
 msgid "Documents"
 msgstr ""
 
-#: gui.py:317 gui2.py:288
+#: gui.py:326 gui2.py:288
 msgid "Document List"
 msgstr ""
 
-#: gui.py:318
+#: gui.py:327
 msgid "Press the Applications key to open the menu."
 msgstr ""
 
-#: gui.py:323 gui2.py:258
+#: gui.py:332 gui2.py:258
 msgid "View"
 msgstr ""
 
-#: gui.py:324 gui2.py:259
+#: gui.py:333 gui2.py:259
 msgid "Font Size"
 msgstr ""
 
-#: gui.py:331 gui2.py:266
+#: gui.py:340 gui2.py:266
 msgid "Scheme"
 msgstr ""
 
-#: gui.py:352
+#: gui.py:361
 msgid "Braille Result"
 msgstr ""
 
-#: gui.py:407
+#: gui.py:417
 msgid "About"
 msgstr ""
 
-#: gui.py:552
+#: gui.py:596
 #, python-brace-format
 msgid "Failed to open website: {error}"
 msgstr ""
 
-#: gui.py:625 gui.py:1345 gui2.py:975
+#: gui.py:669 gui.py:1409 gui2.py:975
 msgid "Please select a translation table first."
 msgstr ""
 
-#: gui.py:658
+#: gui.py:702
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr ""
 
-#: gui.py:661
+#: gui.py:705
 msgid "Confirm Overwrite"
 msgstr ""
 
-#: gui.py:678 gui2.py:794
+#: gui.py:722 gui2.py:794
 msgid "Export Document"
 msgstr ""
 
-#: gui.py:695 gui.py:1098 gui2.py:807
+#: gui.py:739 gui.py:1150 gui2.py:807
 #, python-brace-format
 msgid "Failed to export document: {error}"
 msgstr ""
 
-#: gui.py:699
+#: gui.py:743
 #, python-brace-format
 msgid ""
 "Automatic conversion failed while exporting. The document was exported with "
@@ -1219,12 +1219,12 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: gui.py:745 gui.py:782 gui.py:969 gui2.py:552 gui2.py:575 gui2.py:724
+#: gui.py:789 gui.py:826 gui.py:1013 gui2.py:552 gui2.py:575 gui2.py:724
 #, python-brace-format
 msgid "Failed to save document: {error}"
 msgstr ""
 
-#: gui.py:749
+#: gui.py:793
 #, python-brace-format
 msgid ""
 "Automatic conversion failed while saving. The document was saved with empty "
@@ -1233,114 +1233,123 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: gui.py:768 gui2.py:568
+#: gui.py:812 gui2.py:568
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr ""
 
-#: gui.py:805 gui2.py:605
+#: gui.py:849 gui2.py:605
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr ""
 
-#: gui.py:940 gui2.py:619 gui2.py:695
+#: gui.py:984 gui2.py:619 gui2.py:695
 msgid "Add Document"
 msgstr ""
 
-#: gui.py:956 gui2.py:711
+#: gui.py:1000 gui2.py:711
 msgid "Rename Document"
 msgstr ""
 
-#: gui.py:992 gui.py:1024 gui2.py:747
+#: gui.py:1030
+#, python-brace-format
+msgid "Do you want to delete document \"{name}\"?"
+msgstr ""
+
+#: gui.py:1031
+msgid "Confirm Delete Document"
+msgstr ""
+
+#: gui.py:1044 gui.py:1076 gui2.py:747
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr ""
 
-#: gui.py:1011
+#: gui.py:1063
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr ""
 
-#: gui.py:1012
+#: gui.py:1064
 msgid "Confirm Delete All"
 msgstr ""
 
-#: gui.py:1044 gui2.py:763 gui2.py:780
+#: gui.py:1096 gui2.py:763 gui2.py:780
 msgid "Import Document"
 msgstr ""
 
-#: gui.py:1062
+#: gui.py:1114
 msgid "Import Issues"
 msgstr ""
 
-#: gui.py:1063
+#: gui.py:1115
 msgid "Some files were skipped during import."
 msgstr ""
 
-#: gui.py:1081
+#: gui.py:1133
 msgid "Export All Documents"
 msgstr ""
 
-#: gui.py:1101
+#: gui.py:1153
 msgid "Export All Issues"
 msgstr ""
 
-#: gui.py:1102
+#: gui.py:1154
 msgid ""
 "Some documents were exported with empty braille output because automatic "
 "conversion failed."
 msgstr ""
 
-#: gui.py:1202 gui.py:1263 gui.py:1298 gui2.py:875 gui2.py:928
+#: gui.py:1266 gui.py:1327 gui.py:1362 gui2.py:875 gui2.py:928
 #, python-brace-format
 msgid "Dictionary \"{name}\" already exists."
 msgstr ""
 
-#: gui.py:1224 gui2.py:897
+#: gui.py:1288 gui2.py:897
 msgid "The default dictionary cannot be deleted."
 msgstr ""
 
-#: gui.py:1273
+#: gui.py:1337
 #, python-brace-format
 msgid "Failed to save dictionary: {error}"
 msgstr ""
 
-#: gui.py:1281 gui2.py:911
+#: gui.py:1345 gui2.py:911
 msgid "Import Dictionary"
 msgstr ""
 
-#: gui.py:1306 gui2.py:936
+#: gui.py:1370 gui2.py:936
 msgid "Imported file must contain text, braille, and type headers."
 msgstr ""
 
-#: gui.py:1313 gui2.py:943
+#: gui.py:1377 gui2.py:943
 #, python-brace-format
 msgid "Failed to import dictionary: {error}"
 msgstr ""
 
-#: gui.py:1324 gui2.py:954
+#: gui.py:1388 gui2.py:954
 msgid "Export Dictionary"
 msgstr ""
 
-#: gui.py:1336 gui2.py:966
+#: gui.py:1400 gui2.py:966
 #, python-brace-format
 msgid "Failed to export dictionary: {error}"
 msgstr ""
 
-#: gui.py:1355 gui2.py:985
+#: gui.py:1419 gui2.py:985
 msgid "Please select the output format first."
 msgstr ""
 
-#: gui.py:1420 gui2.py:1047
+#: gui.py:1484 gui2.py:1047
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr ""
 
-#: gui.py:1437 gui2.py:1064
+#: gui.py:1501 gui2.py:1064
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr ""
 
-#: gui.py:1483 gui2.py:1110
+#: gui.py:1547 gui2.py:1110
 msgid "Conversion completed."
 msgstr ""
 

@@ -87,6 +87,7 @@ from section_navigation import (
 	VIEW_SECTION,
 	get_adjacent_section,
 )
+from startup_client_init import start_client_init_background
 
 from Bopomofo import normalize_zhuyin_sequence
 from dialog import DictionaryNameDialog, DocumentNameDialog, FileIssuesDialog, InvalidWorkspaceFilesDialog, SpeechSymbolsDialog, TranslationTableDialog
@@ -1026,6 +1027,14 @@ class BrailleFrame(wx.Frame):
 			return
 		if not self._save_open_document_with_feedback():
 			return
+		confirmation = wx.MessageBox(
+			_('Do you want to delete document "{name}"?').format(name=selected_document.name),
+			_("Confirm Delete Document"),
+			wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
+			parent=self,
+		)
+		if confirmation != wx.YES:
+			return
 		preferred_name = choose_document_selection_after_delete(self._get_document_names(), selected_document.name)
 		was_open = self._open_document_name == selected_document.name
 		try:
@@ -1544,6 +1553,7 @@ class BrailleApp(wx.App):
 		louisHelper.initialize()
 		self.frame = BrailleFrame(None)
 		self.frame.Show()
+		start_client_init_background()
 		return True
 
 	def OnExit(self):

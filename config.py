@@ -1,6 +1,7 @@
 import json
 import os
 from typing import Optional
+from uuid import uuid4
 
 
 DEFAULT_FALLBACK = "zh_TW"
@@ -9,6 +10,7 @@ CONFIG_PATH = os.path.expanduser("~/.DotExpress/config.json")
 
 CONVERSION_SECTION = "conversion"
 VIEW_SECTION = "view"
+CLIENT_SECTION = "client"
 TRANSLATION_TABLES_KEY = "translation_tables"
 OUTPUT_MODE_KEY = "output_mode"
 WIDTH_KEY = "width"
@@ -16,6 +18,7 @@ SELECTED_DICTIONARY_KEY = "selected_dictionary"
 FONT_SIZE_KEY = "font_size"
 SCHEME_KEY = "scheme"
 BRAILLE_FONT_KEY = "braille_font"
+CLIENT_ID_KEY = "id"
 
 DEFAULT_TRANSLATION_TABLES = {
     "default": "zh-tw.ctb",
@@ -176,3 +179,16 @@ def get_braille_font(default: str = DEFAULT_BRAILLE_FONT) -> str:
 
 def set_braille_font(braille_font: str) -> None:
     _set_section_value(VIEW_SECTION, BRAILLE_FONT_KEY, braille_font)
+
+
+def get_or_create_client_id() -> str:
+    data = _load_from_file()
+    value = _get_section(data, CLIENT_SECTION).get(CLIENT_ID_KEY)
+    if isinstance(value, str) and value:
+        return value
+    client_id = str(uuid4())
+    section_data = _get_section(data, CLIENT_SECTION).copy()
+    section_data[CLIENT_ID_KEY] = client_id
+    data[CLIENT_SECTION] = section_data
+    _save_to_file(data)
+    return client_id

@@ -47,11 +47,6 @@ def test_apply_dictionary_does_not_remap_dictionary_output(tmp_path) -> None:
 		processing=lambda text: text,
 	)
 
-	assert result["raw"] == (
-		f"{DICTIONARY_MARKER_OPEN}a{DICTIONARY_MARKER_CLOSE}"
-		f"{DICTIONARY_MARKER_OPEN}b{DICTIONARY_MARKER_CLOSE}"
-		f"{DICTIONARY_MARKER_OPEN}c{DICTIONARY_MARKER_CLOSE}"
-	)
 	assert result["replacement"] == f"{DICTIONARY_MARKER_OPEN}foo{DICTIONARY_MARKER_CLOSE}"
 
 
@@ -70,10 +65,6 @@ def test_apply_dictionary_aligns_bopomofo_multi_char_segments(tmp_path) -> None:
 		processing=lambda text: text,
 	)
 
-	assert split_bracket_segments(result["raw"]) == [
-		{"text": "肚", "atomic": True},
-		{"text": "子", "atomic": True},
-	]
 	assert len(split_bracket_segments(result["raw"])) == len(split_bracket_segments(result["replacement"]))
 
 

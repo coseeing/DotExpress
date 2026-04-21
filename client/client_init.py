@@ -2,16 +2,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 import platform
+import threading
+import traceback
+import urllib.error
 import urllib.request
 from urllib.error import URLError
 
 import about
 from config import get_lang, get_or_create_client_id
+from log import get_logger
 
+logger = get_logger("dotexpress.client_init", "log/init.log")
 
 CLIENT_INIT_URL = "https://dotexpress.coseeing.org/client/init"
-CLIENT_INIT_URL = "http://localhost:8000/client/init"
+
 DEFAULT_TIMEOUT = 3.0
 _REQUIRED_RESPONSE_FIELDS = {
     "version",
@@ -91,19 +97,46 @@ def post_client_init(
     opener=urllib.request.urlopen,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> ClientInitResult:
-    body = json.dumps(payload).encode("utf-8")
+    request_body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         CLIENT_INIT_URL,
-        data=body,
-        headers={"Content-Type": "application/json"},
+        data=request_body,
+        headers={
+        "Content-Type": "application/json",
+        "Accept": "*/*",
+        "User-Agent": "curl/8.0.0",
+        },
         method="POST",
     )
+
     try:
         with opener(request, timeout=timeout) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except (OSError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError):
+            response_text = response.read().decode("utf-8")
+            data = json.loads(response_text)
+            return parse_init_response(data)
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+
+        logger.exception(
+            "HTTPError occurred | code=%s url=%s body=%r",
+            e.code,
+            e.url,
+            error_body,
+        )
+
+        return ClientInitResult(
+            ok=False,
+            error=f"http_error_{e.code}",
+        )
+
+    except (OSError, URLError, TimeoutError):
+        logger.exception("Network error during client init")
         return ClientInitResult(ok=False, error="request_failed")
-    return parse_init_response(data)
+
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        logger.exception("Invalid response format during client init")
+        return ClientInitResult(ok=False, error="invalid_response")
 
 
 def run_client_init(
@@ -126,3 +159,19 @@ def run_client_init(
         locale=locale_provider(),
     )
     return post_client_init(payload, opener=opener, timeout=timeout)
+
+
+def start_client_init_background(
+    *,
+    run_client_init=run_client_init,
+    thread_factory=threading.Thread,
+):
+    def worker():
+        try:
+            run_client_init()
+        except Exception:
+            pass
+
+    thread = thread_factory(target=worker, daemon=True)
+    thread.start()
+    return thread

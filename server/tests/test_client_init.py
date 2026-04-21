@@ -3,9 +3,10 @@ import unittest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import inspect
 
 from server.app.main import create_app
-from server.app.models import Client, ClientStartupEvent
+from server.app.models import Client, ClientEvent
 
 
 def _payload(**overrides):
@@ -36,6 +37,12 @@ class ClientInitServerTest(unittest.TestCase):
     def _session(self):
         return self.app.state.SessionLocal()
 
+    def test_database_uses_general_events_table(self) -> None:
+        table_names = set(inspect(self.app.state.engine).get_table_names())
+
+        self.assertIn("events", table_names)
+        self.assertNotIn("client_startup_events", table_names)
+
     def test_valid_request_persists_new_client_and_event(self) -> None:
         response = self.client.post("/client/init", json=_payload())
 
@@ -55,7 +62,7 @@ class ClientInitServerTest(unittest.TestCase):
 
         with self._session() as session:
             clients = session.query(Client).all()
-            events = session.query(ClientStartupEvent).all()
+            events = session.query(ClientEvent).all()
 
         self.assertEqual(len(clients), 1)
         self.assertEqual(clients[0].client_id, "client-123")
@@ -74,7 +81,7 @@ class ClientInitServerTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         with self._session() as session:
             clients = session.query(Client).all()
-            events = session.query(ClientStartupEvent).order_by(ClientStartupEvent.id).all()
+            events = session.query(ClientEvent).order_by(ClientEvent.id).all()
 
         self.assertEqual(len(clients), 1)
         self.assertEqual(clients[0].last_app_version, "1.3")

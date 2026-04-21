@@ -8,10 +8,10 @@ import sys
 from typing import List
 
 import wx
-from brailleTables import listTables
+from braille.tables import listTables
 from Bopomofo import normalize_zhuyin_sequence
-from dictionary_manager import DEFAULT_DICTIONARY_NAME, MAX_DICTIONARY_NAME_LENGTH, normalize_dictionary_name
-from document_workspace import normalize_document_name
+from dictionaries.manager import DEFAULT_DICTIONARY_NAME, MAX_DICTIONARY_NAME_LENGTH, normalize_dictionary_name
+from documents.workspace import normalize_document_name
 
 
 def resource_path(relative_path: str) -> Path:
@@ -629,7 +629,7 @@ class TranslationTableDialog(wx.Dialog):
 		options = [
 			TableOption(
 				file_name=table.fileName,
-				display_name=table.displayName,
+				display_name=_(table.displayName),
 			)
 			for table in tables
 		]

@@ -2,13 +2,12 @@ import os
 import string
 from typing import Sequence, Tuple, TypeVar
 
-import louisHelper
+from braille import louis_helper
+from braille.tables import TABLES_DIR
 from char import build_language_blocks, language_has_char, language_has_all
 
 
 TranslationResult = Tuple[str, str, Sequence[int], Sequence[int]]
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TABLES_DIR = os.path.join(BASE_DIR, "louis", "tables")
 BRAILLE_UNICODE_PATTERNS_START = 0x2800
 
 
@@ -491,12 +490,9 @@ class TranslationResult:
 def translate(table_file: str, text: str, raw: str) -> TranslationResult:
 	# Use absolute path for the first table so includes resolve relative to it.
 	table_path = os.path.join(TABLES_DIR, table_file)
-	braille_cells, braille_to_raw_pos, raw_to_braille_pos, _ = louisHelper.translate(
+	braille_cells, braille_to_raw_pos, raw_to_braille_pos, _ = louis_helper.translate(
 		[table_path], text, mode=4
 	)
-	if not raw == text:
-		print(f"text: {repr(text)}")
-		print(f"raw: {repr(raw)}")
 	raw = [s for s in text]
 	braille = [chr(b + BRAILLE_UNICODE_PATTERNS_START) for b in braille_cells]
 
@@ -508,7 +504,7 @@ def translate_as_single_token(table_file: str, text: str, raw: str) -> Translati
 	Translate with liblouis but force the entire input text to be one token.
 	"""
 	table_path = os.path.join(TABLES_DIR, table_file)
-	braille_cells, _braille_to_raw_pos, _raw_to_braille_pos, _ = louisHelper.translate(
+	braille_cells, _braille_to_raw_pos, _raw_to_braille_pos, _ = louis_helper.translate(
 		[table_path], text, mode=4
 	)
 

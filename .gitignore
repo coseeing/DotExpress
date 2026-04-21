@@ -6,7 +6,8 @@ __pycache__/
 client/build/
 client/dist/
 client/dictionary/
-client/louis/tables/
+client/log/
+client/braille/liblouis/tables/
 client/.venv/
 client/workspace/
 client/DotExpress.spec

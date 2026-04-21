@@ -13,7 +13,7 @@ pip install -r server/requirements.txt
 ## Run
 
 ```bash
-uvicorn server.app.main:app --reload
+uvicorn app.main:app --reload
 ```
 
 The default SQLite database path is:

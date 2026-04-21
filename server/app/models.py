@@ -24,8 +24,8 @@ class Client(Base):
     last_locale: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
-class ClientStartupEvent(Base):
-    __tablename__ = "client_startup_events"
+class ClientEvent(Base):
+    __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     client_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)

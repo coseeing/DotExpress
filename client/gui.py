@@ -7,8 +7,52 @@ import webbrowser
 import wx
 
 import about
-import louisHelper
-from action_menu import (
+from braille import louis_helper
+from conversion.service import ConversionRequest, ConversionStageError, convert_text_for_output, get_public_error_message
+from dictionaries.actions import (
+	get_action_availability,
+	is_default_dictionary,
+	plan_dictionary_delete,
+	resolve_dictionary_selection,
+)
+from dictionaries.manager import (
+	DEFAULT_DICTIONARY_NAME,
+	create_dictionary,
+	delete_dictionary,
+	dictionary_path_for_name,
+	ensure_default_dictionary,
+	export_dictionary,
+	get_dictionary_directory,
+	import_dictionary,
+	list_dictionary_names,
+	rename_dictionary,
+)
+from documents.session import (
+	document_name_exists,
+	find_document,
+	get_document_names,
+	plan_delete_document,
+	plan_open_document,
+	rename_document_in_list,
+	replace_document,
+)
+from documents.workspace import (
+	BatchIssue,
+	DEFAULT_DOCUMENT_NAME,
+	Document,
+	batch_export_documents_to_folder,
+	batch_import_documents,
+	create_default_document,
+	document_package_path_for_name,
+	ensure_workspace_directory,
+	export_document_brl,
+	get_workspace_directory,
+	load_workspace_documents,
+	normalize_document_name,
+	prepare_document_for_save,
+	save_document_package,
+)
+from ui.action_menu import (
 	build_actions_button_label,
 	get_actions_menu_position,
 	get_dictionary_action_labels,
@@ -38,40 +82,8 @@ from config import (
 	set_view_scheme,
 	set_braille_font,
 )
-from dictionary_manager import (
-	DEFAULT_DICTIONARY_NAME,
-	choose_selection_after_delete,
-	create_dictionary,
-	delete_dictionary,
-	dictionary_path_for_name,
-	ensure_default_dictionary,
-	export_dictionary,
-	get_dictionary_directory,
-	import_dictionary,
-	list_dictionary_names,
-	rename_dictionary,
-	resolve_selected_dictionary,
-)
-from document_workspace import (
-	BatchIssue,
-	DEFAULT_DOCUMENT_NAME,
-	Document,
-	batch_export_documents_to_folder,
-	batch_import_documents,
-	choose_selection_after_delete as choose_document_selection_after_delete,
-	create_default_document,
-	document_package_path_for_name,
-	ensure_workspace_directory,
-	export_document_brl,
-	get_workspace_directory,
-	load_workspace_documents,
-	normalize_document_name,
-	prepare_document_for_save,
-	save_document_package,
-)
-from font_support import SIMBRAILLE_FACE_NAME, get_simbraille_font_path, register_private_font_for_windows
-from input_shortcuts import is_convert_shortcut
-from input_shortcuts import (
+from ui.font_support import SIMBRAILLE_FACE_NAME, get_simbraille_font_path, register_private_font_for_windows
+from ui.shortcuts import (
 	get_font_size_step_from_wheel,
 	is_brl_export_shortcut,
 	is_convert_shortcut,
@@ -79,7 +91,7 @@ from input_shortcuts import (
 	is_document_rename_shortcut,
 	is_section_navigation_shortcut,
 )
-from section_navigation import (
+from ui.section_navigation import (
 	BRAILLE_RESULT_SECTION,
 	CONVERSION_SECTION,
 	DOCUMENT_LIST_SECTION,
@@ -87,13 +99,9 @@ from section_navigation import (
 	VIEW_SECTION,
 	get_adjacent_section,
 )
-from startup_client_init import start_client_init_background
+from client_init import start_client_init_background
 
-from Bopomofo import normalize_zhuyin_sequence
 from dialog import DictionaryNameDialog, DocumentNameDialog, FileIssuesDialog, InvalidWorkspaceFilesDialog, SpeechSymbolsDialog, TranslationTableDialog
-from languageDetection import LangChangeCommand, LanguageDetector
-from translate import translate, translate_as_single_token, TranslationResult
-from utils import apply_dictionary, split_bracket_segments, translate__mapping_char
 
 
 CONVERSION_WIDTH_MIN = 10
@@ -162,68 +170,6 @@ _MENU_TRANSLATION_MARKERS = (
 language_map_translate_table = get_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
 
 
-
-def translate_with_language(table_file: str, text: str, dictionary_path: Path) -> TranslationResult:
-	if text == "":
-		return TranslationResult([], [], [], [])
-	language = [k for k, v in language_map_translate_table.items() if k != "default" and v != ""]
-	language_detector = LanguageDetector(language)
-	sequence = list(language_detector.add_detected_language_commands([text]))
-	bopomofo_path = Path(resource_path("data/Bopomofo2Braille.csv"))
-
-	translate_table = language_map_translate_table["default"]
-	translations = []
-	for item in sequence:
-		if isinstance(item, str):
-			result = apply_dictionary(
-				item,
-				dictionary_path=dictionary_path,
-				bopomofo_path=bopomofo_path,
-				processing=normalize_zhuyin_sequence,
-			)
-			raw_segments = split_bracket_segments(result["raw"])
-			replacement_segments = split_bracket_segments(result["replacement"])
-
-			for raw_segment, replacement_segment in zip(raw_segments, replacement_segments):
-				if raw_segment["atomic"] != replacement_segment["atomic"]:
-					raise ValueError("atomic not match")
-				if replacement_segment["atomic"]:
-					translations.append(translate_as_single_token(translate_table, replacement_segment["text"], raw_segment["text"]))
-				else:
-					translations.append(translate(translate_table, replacement_segment["text"], raw_segment["text"]))
-		elif isinstance(item, LangChangeCommand):
-			previous_translate_table = translate_table
-			lang = item.lang.split("_")[0]
-			try:
-				translate_table = language_map_translate_table[lang]
-				if translate_table == "":
-					translate_table = language_map_translate_table["default"]
-			except KeyError:
-				translate_table = language_map_translate_table["default"]
-			if translate_table != previous_translate_table:
-				raw = translations[-1].raw if translations else None
-				if raw and not raw[-1].isspace():
-					translations.append(translate(previous_translate_table, " ", " "))
-
-	assert translations, "No translatable text segments were found."
-	merged = translations[0]
-	for segment in translations[1:]:
-		merged = merged + segment
-
-	return merged
-
-
-
-def translate_and_wrap_both(table_file: str, text: str, width: int, dictionary_path: Path) -> tuple[str, str]:
-	"""Translate and wrap, returning both braille and original text lines."""
-	translation_result = translate_with_language(table_file, text, dictionary_path)
-	translation_result.reclean_braille_endspace()
-	translation_result.bind_word_tokens()
-	translation_result.reclean_token()
-	text, braille = translation_result.wrap(width)
-	return text, braille
-
-
 class ConvertingDialog(wx.Dialog):
 	def __init__(self, parent: wx.Window):
 		style = (wx.DEFAULT_DIALOG_STYLE & ~wx.CLOSE_BOX) | wx.STAY_ON_TOP
@@ -258,10 +204,20 @@ class BrailleFrame(wx.Frame):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
+		self._initialize_frame()
+		initial_settings = self._initialize_state()
+		self._create_main_layout(initial_settings)
+		self._initialize_conversion_state()
+		self._apply_initial_settings(initial_settings)
+		self._bind_events()
+		self._load_startup_documents()
+
+	def _initialize_frame(self) -> None:
 		self.SetTitle(_("DotExpress"))
 		self.SetSize((900, 600))
 		self.SetMenuBar(self._create_menu_bar())
 
+	def _initialize_state(self) -> dict[str, str | int]:
 		self.dictionary_dir = get_dictionary_directory()
 		ensure_default_dictionary(self.dictionary_dir)
 		self._dictionary_names: list[str] = []
@@ -272,20 +228,35 @@ class BrailleFrame(wx.Frame):
 		self._selected_document_name: str | None = None
 		self._open_document_name: str | None = None
 
-		panel = wx.Panel(self)
-		vbox = wx.BoxSizer(wx.VERTICAL)
-
-		controls_box = wx.BoxSizer(wx.VERTICAL)
 		self._output_modes = [("unicode", _("Unicode")), ("ascii", _("ASCII"))]
 		self._view_schemes = [("light", _("Light")), ("dark", _("Dark"))]
 		self._braille_font_options = [("default", _("Default")), ("simbraille", _("SimBraille"))]
 
-		initial_output_mode = self._normalize_output_mode(get_output_mode(DEFAULT_OUTPUT_MODE))
-		initial_width = self._clamp_conversion_width(get_conversion_width(DEFAULT_CONVERSION_WIDTH))
-		initial_font_size = self._clamp_view_font_size(get_view_font_size(DEFAULT_VIEW_FONT_SIZE))
-		initial_scheme = self._normalize_view_scheme(get_view_scheme(DEFAULT_VIEW_SCHEME))
-		initial_braille_font = self._normalize_braille_font(get_braille_font(DEFAULT_BRAILLE_FONT))
+		return {
+			"output_mode": self._normalize_output_mode(get_output_mode(DEFAULT_OUTPUT_MODE)),
+			"width": self._clamp_conversion_width(get_conversion_width(DEFAULT_CONVERSION_WIDTH)),
+			"font_size": self._clamp_view_font_size(get_view_font_size(DEFAULT_VIEW_FONT_SIZE)),
+			"scheme": self._normalize_view_scheme(get_view_scheme(DEFAULT_VIEW_SCHEME)),
+			"braille_font": self._normalize_braille_font(get_braille_font(DEFAULT_BRAILLE_FONT)),
+		}
 
+	def _create_main_layout(self, initial_settings: dict[str, str | int]) -> None:
+		panel = wx.Panel(self)
+		vbox = wx.BoxSizer(wx.VERTICAL)
+
+		controls_box = wx.BoxSizer(wx.VERTICAL)
+		conversion_group = self._create_conversion_controls(panel, int(initial_settings["width"]))
+		controls_box.Add(conversion_group, 0, wx.EXPAND)
+		vbox.Add(controls_box, 0, wx.EXPAND | wx.ALL, 8)
+
+		content_box = wx.BoxSizer(wx.HORIZONTAL)
+		content_box.Add(self._create_document_list(panel), 0, wx.EXPAND | wx.LEFT | wx.BOTTOM, 8)
+		content_box.Add(self._create_editor_area(panel, int(initial_settings["font_size"])), 1, wx.EXPAND | wx.RIGHT | wx.BOTTOM, 8)
+		vbox.Add(content_box, 1, wx.EXPAND)
+
+		panel.SetSizer(vbox)
+
+	def _create_conversion_controls(self, panel: wx.Window, initial_width: int) -> wx.StaticBoxSizer:
 		conversion_group, conversion_box, conversion_row = self._create_labeled_group(panel, _("Conversion"))
 		self.table_btn = wx.Button(conversion_box, label=_("Translation Tables..."))
 		output_lbl = wx.StaticText(conversion_box, label=_("Braille Type"))
@@ -312,11 +283,9 @@ class BrailleFrame(wx.Frame):
 		conversion_row.Add(self.dictionary_choice, 0, wx.RIGHT, 8)
 		conversion_row.Add(self.actions_btn, 0, wx.RIGHT, 8)
 		conversion_row.Add(self.convert_btn, 0)
+		return conversion_group
 
-		controls_box.Add(conversion_group, 0, wx.EXPAND)
-		vbox.Add(controls_box, 0, wx.EXPAND | wx.ALL, 8)
-
-		content_box = wx.BoxSizer(wx.HORIZONTAL)
+	def _create_document_list(self, panel: wx.Window) -> wx.BoxSizer:
 		documents_box = wx.BoxSizer(wx.VERTICAL)
 		documents_label = wx.StaticText(panel, label=_("Documents"))
 		self.document_list = wx.ListCtrl(panel, style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL)
@@ -329,7 +298,9 @@ class BrailleFrame(wx.Frame):
 		)
 		documents_box.Add(documents_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
 		documents_box.Add(self.document_list, 1, wx.EXPAND | wx.ALL, 8)
+		return documents_box
 
+	def _create_editor_area(self, panel: wx.Window, initial_font_size: int) -> wx.BoxSizer:
 		view_group, view_box, view_row = self._create_labeled_group(panel, _("View"))
 		font_size_lbl = wx.StaticText(view_box, label=_("Font Size"))
 		self.font_size_spin = wx.SpinCtrl(
@@ -361,26 +332,30 @@ class BrailleFrame(wx.Frame):
 		self._default_output_font = self.output_txt.GetFont()
 		self._set_control_accessible_name(self.output_txt, _("Braille Result"))
 		editors_box.Add(self.output_txt, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+		return editors_box
 
-		content_box.Add(documents_box, 0, wx.EXPAND | wx.LEFT | wx.BOTTOM, 8)
-		content_box.Add(editors_box, 1, wx.EXPAND | wx.RIGHT | wx.BOTTOM, 8)
-		vbox.Add(content_box, 1, wx.EXPAND)
+	def _initialize_conversion_state(self) -> None:
+		self._convert_thread = None
+		self._convert_dialog = None
+		self._convert_dialog_timer = None
+		self._convert_job_id = 0
 
-		panel.SetSizer(vbox)
+	def _apply_initial_settings(self, initial_settings: dict[str, str | int]) -> None:
+		initial_output_mode = str(initial_settings["output_mode"])
+		initial_width = int(initial_settings["width"])
+		initial_font_size = int(initial_settings["font_size"])
+		initial_scheme = str(initial_settings["scheme"])
+		initial_braille_font = str(initial_settings["braille_font"])
 
 		self._set_output_mode_selection(initial_output_mode)
 		self._set_scheme_selection(initial_scheme)
 		self._set_braille_font_selection(initial_braille_font)
 		self.width_spin.SetValue(initial_width)
 		self.font_size_spin.SetValue(initial_font_size)
-		self._convert_thread = None
-		self._convert_dialog = None
-		self._convert_dialog_timer = None
-		self._convert_job_id = 0
-
 		self._refresh_dictionary_choice(self._saved_dictionary_name)
 		self._apply_editor_view_settings(initial_font_size, initial_scheme)
 
+	def _bind_events(self) -> None:
 		self.table_btn.Bind(wx.EVT_BUTTON, self.on_open_table_dialog)
 		self.output_choice.Bind(wx.EVT_CHOICE, self.on_output_mode_change)
 		self.width_spin.Bind(wx.EVT_SPINCTRL, self.on_width_change)
@@ -404,6 +379,7 @@ class BrailleFrame(wx.Frame):
 		self.Bind(wx.EVT_CHAR_HOOK, self.on_char_hook)
 		self.Bind(wx.EVT_CLOSE, self._on_close)
 
+	def _load_startup_documents(self) -> None:
 		self._clear_document_editors()
 		self._load_workspace_documents_at_startup()
 		self.input_txt.SetFocus()
@@ -557,7 +533,7 @@ class BrailleFrame(wx.Frame):
 	def _refresh_dictionary_choice(self, preferred_name: str | None = None) -> None:
 		ensure_default_dictionary(self.dictionary_dir)
 		self._dictionary_names = list_dictionary_names(self.dictionary_dir)
-		selected_name = resolve_selected_dictionary(self._dictionary_names, preferred_name)
+		selected_name = resolve_dictionary_selection(self._dictionary_names, preferred_name)
 		self.dictionary_choice.Clear()
 		if self._dictionary_names:
 			self.dictionary_choice.AppendItems(self._dictionary_names)
@@ -588,7 +564,7 @@ class BrailleFrame(wx.Frame):
 		return _(DEP_WILDCARD)
 
 	def _get_document_names(self) -> list[str]:
-		return [document.name for document in self.documents]
+		return get_document_names(self.documents)
 
 	def on_open_coseeing_website(self, _evt: wx.CommandEvent) -> None:
 		try:
@@ -609,21 +585,13 @@ class BrailleFrame(wx.Frame):
 		self.documents.sort(key=lambda document: (document.name.casefold(), document.name))
 
 	def _get_document_by_name(self, name: str | None) -> Document | None:
-		if not name:
-			return None
-		for document in self.documents:
-			if document.name == name:
-				return document
-		return None
+		return find_document(self.documents, name)
 
 	def _replace_document(self, updated_document: Document) -> None:
-		for index, document in enumerate(self.documents):
-			if document.name == updated_document.name:
-				self.documents[index] = updated_document
-				return
+		replace_document(self.documents, updated_document)
 
 	def _document_name_exists(self, name: str, exclude_name: str | None = None) -> bool:
-		return any(document.name == name and document.name != exclude_name for document in self.documents)
+		return document_name_exists(self.documents, name, exclude_name=exclude_name)
 
 	def _clear_document_selection(self) -> None:
 		selection = self.document_list.GetFirstSelected()
@@ -662,6 +630,17 @@ class BrailleFrame(wx.Frame):
 	def _get_brl_wildcard(self) -> str:
 		return _(BRL_WILDCARD)
 
+	def _build_conversion_request(self, raw_text: str, table_file: str, output_mode: str, width: int, dictionary_path: Path) -> ConversionRequest:
+		return ConversionRequest(
+			raw_text=raw_text,
+			table_file=table_file,
+			output_mode=output_mode,
+			width=width,
+			dictionary_path=dictionary_path,
+			data_dir=resource_path("data"),
+			translation_tables=language_map_translate_table.copy(),
+		)
+
 	def _convert_text_for_output(self, raw_text: str) -> str:
 		if raw_text == "":
 			return ""
@@ -671,21 +650,9 @@ class BrailleFrame(wx.Frame):
 		output_mode = self._get_selected_output_mode()
 		width = self._clamp_conversion_width(self.width_spin.GetValue())
 		dictionary_path = self._get_selected_dictionary_path()
-		text = translate__mapping_char(
-			raw_text,
-			dictionary_path=resource_path("data/BopomofoChar2Braille.csv"),
-			from_field="Bopomofo",
-			to_field="Braille",
+		return convert_text_for_output(
+			self._build_conversion_request(raw_text, table_file, output_mode, width, dictionary_path)
 		)
-		braille_wrapped, _text_wrapped = translate_and_wrap_both(table_file, text, width, dictionary_path)
-		if output_mode == "ascii":
-			return translate__mapping_char(
-				braille_wrapped,
-				dictionary_path=resource_path("data/Braille2Ascii.csv"),
-				from_field="Braille",
-				to_field="Ascii",
-			)
-		return braille_wrapped
 
 	def _format_batch_issue_lines(self, issues: list[BatchIssue]) -> list[str]:
 		return [f"{issue.path.name}: {issue.reason}" for issue in issues]
@@ -755,15 +722,16 @@ class BrailleFrame(wx.Frame):
 		set_view_font_size(font_size)
 
 	def _open_document_by_name(self, name: str | None) -> None:
-		document = self._get_document_by_name(name)
-		if document is None:
-			self._open_document_name = None
+		decision = plan_open_document(self.documents, name)
+		if decision.document is None:
+			self._open_document_name = decision.open_name
+			self._selected_document_name = decision.selected_name
 			self._clear_document_editors()
 			return
-		self._open_document_name = document.name
-		self._selected_document_name = document.name
-		self._load_document_into_editors(document)
-		self._refresh_document_list(document.name)
+		self._open_document_name = decision.open_name
+		self._selected_document_name = decision.selected_name
+		self._load_document_into_editors(decision.document)
+		self._refresh_document_list(decision.selected_name)
 
 	def _save_open_document(self) -> Exception | None:
 		if not self._open_document_name:
@@ -1004,8 +972,8 @@ class BrailleFrame(wx.Frame):
 		)
 		if new_name is None or new_name == selected_document.name:
 			return
-		renamed_document = Document(name=new_name, text=selected_document.text, braille=selected_document.braille)
 		try:
+			renamed_document = Document(name=new_name, text=selected_document.text, braille=selected_document.braille)
 			save_document_package(document_package_path_for_name(renamed_document.name, self.workspace_dir), renamed_document)
 			old_path = document_package_path_for_name(selected_document.name, self.workspace_dir)
 			if old_path.exists():
@@ -1013,10 +981,9 @@ class BrailleFrame(wx.Frame):
 		except OSError as exc:
 			self._show_file_error(_("Failed to save document: {error}"), exc)
 			return
-		for index, document in enumerate(self.documents):
-			if document.name == selected_document.name:
-				self.documents[index] = renamed_document
-				break
+		renamed_document = rename_document_in_list(self.documents, selected_document.name, new_name)
+		if renamed_document is None:
+			return
 		if self._open_document_name == selected_document.name:
 			self._open_document_name = renamed_document.name
 		self._refresh_document_list(renamed_document.name)
@@ -1035,8 +1002,7 @@ class BrailleFrame(wx.Frame):
 		)
 		if confirmation != wx.YES:
 			return
-		preferred_name = choose_document_selection_after_delete(self._get_document_names(), selected_document.name)
-		was_open = self._open_document_name == selected_document.name
+		delete_decision = plan_delete_document(self.documents, selected_document.name, self._open_document_name)
 		try:
 			package_path = document_package_path_for_name(selected_document.name, self.workspace_dir)
 			if package_path.exists():
@@ -1045,12 +1011,12 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to delete document: {error}"), exc)
 			return
 		self.documents = [document for document in self.documents if document.name != selected_document.name]
-		if was_open:
+		if delete_decision.was_open:
 			self._open_document_name = None
-		self._refresh_document_list(preferred_name)
+		self._refresh_document_list(delete_decision.preferred_name)
 		if self.documents:
-			if was_open and preferred_name:
-				self._open_document_by_name(preferred_name)
+			if delete_decision.was_open and delete_decision.preferred_name:
+				self._open_document_by_name(delete_decision.preferred_name)
 		else:
 			self._clear_document_editors()
 			self._ensure_open_document_exists()
@@ -1238,12 +1204,12 @@ class BrailleFrame(wx.Frame):
 		for label in get_dictionary_action_labels():
 			menu_items[label] = menu.Append(wx.ID_ANY, _(label))
 
-		has_selection = bool(self._dictionary_names)
 		selected_name = self._get_selected_dictionary_name()
-		menu_items["Edit"].Enable(has_selection)
-		menu_items["Delete"].Enable(has_selection and selected_name.casefold() != DEFAULT_DICTIONARY_NAME.casefold())
-		menu_items["Rename"].Enable(has_selection and selected_name.casefold() != DEFAULT_DICTIONARY_NAME.casefold())
-		menu_items["Export"].Enable(has_selection)
+		availability = get_action_availability(self._dictionary_names, selected_name)
+		menu_items["Edit"].Enable(availability.edit)
+		menu_items["Delete"].Enable(availability.delete)
+		menu_items["Rename"].Enable(availability.rename)
+		menu_items["Export"].Enable(availability.export)
 
 		menu.Bind(wx.EVT_MENU, self.on_edit_dictionary, menu_items["Edit"])
 		menu.Bind(wx.EVT_MENU, self.on_delete_dictionary, menu_items["Delete"])
@@ -1284,7 +1250,7 @@ class BrailleFrame(wx.Frame):
 
 	def on_delete_dictionary(self, _evt):
 		selected_name = self._get_selected_dictionary_name()
-		if selected_name.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
+		if is_default_dictionary(selected_name):
 			wx.MessageBox(
 				_("The default dictionary cannot be deleted."),
 				_("Info"),
@@ -1304,13 +1270,13 @@ class BrailleFrame(wx.Frame):
 		):
 			return
 
-		preferred_name = choose_selection_after_delete(self._dictionary_names, selected_name)
+		preferred_name = plan_dictionary_delete(self._dictionary_names, selected_name)
 		delete_dictionary(self.dictionary_dir, selected_name)
 		self._refresh_dictionary_choice(preferred_name)
 
 	def on_rename_dictionary(self, _evt):
 		selected_name = self._get_selected_dictionary_name()
-		if selected_name.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
+		if is_default_dictionary(selected_name):
 			return
 		with DictionaryNameDialog(self) as dialog:
 			dialog.SetTitle(_("Rename Dictionary"))
@@ -1467,41 +1433,18 @@ class BrailleFrame(wx.Frame):
 		self._convert_thread.start()
 
 	def _run_conversion(self, job_id: int, table_file: str, raw_text: str, width: int, output_mode: str, dictionary_path: Path):
-		if raw_text == "":
-			wx.CallAfter(self._finish_conversion, job_id, display_text="")
-			return
 		try:
-			text = translate__mapping_char(
-				raw_text,
-				dictionary_path=resource_path("data/BopomofoChar2Braille.csv"),
-				from_field="Bopomofo",
-				to_field="Braille",
+			display_text = convert_text_for_output(
+				self._build_conversion_request(raw_text, table_file, output_mode, width, dictionary_path)
 			)
-			braille_wrapped, _text_wrapped = translate_and_wrap_both(table_file, text, width, dictionary_path)
-		except Exception as e:
+		except ConversionStageError as e:
+			message_template = _("ASCII conversion failed: {error}") if e.stage == "ascii" else _("Translation failed: {error}")
 			wx.CallAfter(
 				self._finish_conversion,
 				job_id,
-				error_message=_("Translation failed: {error}").format(error=e),
+				error_message=message_template.format(error=_(get_public_error_message(e.error))),
 			)
 			return
-
-		display_text = braille_wrapped
-		if output_mode == "ascii":
-			try:
-				display_text = translate__mapping_char(
-					braille_wrapped,
-					dictionary_path=resource_path("data/Braille2Ascii.csv"),
-					from_field="Braille",
-					to_field="Ascii",
-				)
-			except Exception as e:
-				wx.CallAfter(
-					self._finish_conversion,
-					job_id,
-					error_message=_("ASCII conversion failed: {error}").format(error=e),
-				)
-				return
 
 		wx.CallAfter(self._finish_conversion, job_id, display_text=display_text)
 
@@ -1550,14 +1493,14 @@ class BrailleFrame(wx.Frame):
 
 class BrailleApp(wx.App):
 	def OnInit(self):
-		louisHelper.initialize()
+		louis_helper.initialize()
 		self.frame = BrailleFrame(None)
 		self.frame.Show()
 		start_client_init_background()
 		return True
 
 	def OnExit(self):
-		louisHelper.terminate()
+		louis_helper.terminate()
 		return 0
 
 

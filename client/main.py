@@ -1,20 +1,16 @@
 import os
 
-import louisHelper
-from brailleTables import listTables
+from braille import louis_helper
+from braille.tables import TABLES_DIR, listTables
 from languageDetection import LanguageDetector
 from translate import translate
 from gui import translate_with_language, translate_and_wrap_both
 
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TABLES_DIR = os.path.join(BASE_DIR, "louis", "tables")
-
-
 ## text translate braille
 def text2braille(string):
 	BRAILLE_UNICODE_PATTERNS_START = 0x2800
-	braille_cells, braille_to_raw_pos, raw_to_braille_pos, braille_cursor_pos = louisHelper.translate([os.path.join(TABLES_DIR, "zh-tw.ctb"), "braille-patterns.cti"], string, mode=4)
+	braille_cells, braille_to_raw_pos, raw_to_braille_pos, braille_cursor_pos = louis_helper.translate([os.path.join(TABLES_DIR, "zh-tw.ctb"), "braille-patterns.cti"], string, mode=4)
 	braille_cells = [chr(b + BRAILLE_UNICODE_PATTERNS_START) for b in braille_cells]
 
 	print(f"braille_cells: {len(braille_cells)} {braille_cells}")

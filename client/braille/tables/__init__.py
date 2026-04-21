@@ -32,7 +32,7 @@ log.basicConfig(
 )
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TABLES_DIR = os.path.join(BASE_DIR, "louis", "tables")
+TABLES_DIR = os.path.join(BASE_DIR, "liblouis", "tables")
 
 # TABLES_DIR = os.path.join(globalVars.appDir, "louis", "tables")
 """The directory in which liblouis braille tables are located."""

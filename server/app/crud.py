@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from .models import Client, ClientStartupEvent, utcnow
+from .models import Client, ClientEvent, utcnow
 from .schemas import ClientInitRequest
 
 
@@ -28,7 +28,7 @@ def record_client_init(db: Session, payload: ClientInitRequest) -> None:
         client.last_locale = payload.locale
 
     db.add(
-        ClientStartupEvent(
+        ClientEvent(
             client_id=payload.client_id,
             app=payload.app,
             version=payload.version,

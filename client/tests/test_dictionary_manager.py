@@ -3,10 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dictionary_manager import (
+from dictionaries.manager import (
     DEFAULT_DICTIONARY_NAME,
     DEFAULT_HEADER,
-    choose_selection_after_delete,
     create_dictionary,
     dictionary_path_for_name,
     ensure_default_dictionary,
@@ -15,7 +14,6 @@ from dictionary_manager import (
     list_dictionary_names,
     normalize_dictionary_name,
     rename_dictionary,
-    resolve_selected_dictionary,
 )
 
 
@@ -61,22 +59,6 @@ class DictionaryManagerTest(unittest.TestCase):
         for value in invalid_values:
             with self.assertRaises(ValueError):
                 normalize_dictionary_name(value)
-
-    def test_choose_selection_after_delete_prefers_previous_item(self) -> None:
-        names = ["alpha", "math", "zoo"]
-
-        self.assertEqual(choose_selection_after_delete(names, "math"), "alpha")
-
-    def test_choose_selection_after_delete_uses_next_when_first_removed(self) -> None:
-        names = ["alpha", "math", "zoo"]
-
-        self.assertEqual(choose_selection_after_delete(names, "alpha"), "math")
-
-    def test_resolve_selected_dictionary_falls_back_to_default_for_missing_saved_value(self) -> None:
-        names = ["default", "math"]
-
-        self.assertEqual(resolve_selected_dictionary(names, "missing"), DEFAULT_DICTIONARY_NAME)
-        self.assertEqual(resolve_selected_dictionary(names, "math"), "math")
 
     def test_export_dictionary_copies_selected_dictionary_to_destination(self) -> None:
         source_path = create_dictionary(self.dictionary_dir, "math")

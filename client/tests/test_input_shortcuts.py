@@ -1,6 +1,6 @@
 import unittest
 
-from input_shortcuts import (
+from ui.shortcuts import (
     is_brl_export_shortcut,
     is_convert_shortcut,
     is_document_delete_shortcut,
@@ -11,56 +11,45 @@ from input_shortcuts import (
 
 
 class InputShortcutsTest(unittest.TestCase):
-    def test_ctrl_enter_uses_main_enter(self) -> None:
-        self.assertTrue(is_convert_shortcut(key_code=13, control_down=True))
+    def test_keyboard_shortcuts_match_expected_keys(self) -> None:
+        cases = [
+            ("convert main enter", is_convert_shortcut, {"key_code": 13, "control_down": True}, True),
+            ("convert numpad enter", is_convert_shortcut, {"key_code": 370, "control_down": True}, True),
+            ("convert plain enter", is_convert_shortcut, {"key_code": 13, "control_down": False}, False),
+            ("brl export ctrl s", is_brl_export_shortcut, {"key_code": 83, "control_down": True}, True),
+            ("brl export plain s", is_brl_export_shortcut, {"key_code": 83, "control_down": False}, False),
+            ("rename f2", is_document_rename_shortcut, {"key_code": 341}, True),
+            ("rename other key", is_document_rename_shortcut, {"key_code": 13}, False),
+            ("delete", is_document_delete_shortcut, {"key_code": 127}, True),
+            ("delete other key", is_document_delete_shortcut, {"key_code": 13}, False),
+        ]
 
-    def test_ctrl_enter_uses_numpad_enter(self) -> None:
-        self.assertTrue(is_convert_shortcut(key_code=370, control_down=True))
+        for label, shortcut, kwargs, expected in cases:
+            with self.subTest(label=label):
+                self.assertEqual(shortcut(**kwargs), expected)
 
-    def test_plain_enter_is_not_convert_shortcut(self) -> None:
-        self.assertFalse(is_convert_shortcut(key_code=13, control_down=False))
+    def test_section_navigation_shortcut_direction(self) -> None:
+        cases = [
+            ("forward", {"key_code": 345, "shift_down": False}, 1),
+            ("backward", {"key_code": 345, "shift_down": True}, -1),
+            ("other key", {"key_code": 13, "shift_down": False}, 0),
+        ]
 
-    def test_other_keys_do_not_trigger_convert(self) -> None:
-        self.assertFalse(is_convert_shortcut(key_code=65, control_down=True))
+        for label, kwargs, expected in cases:
+            with self.subTest(label=label):
+                self.assertEqual(is_section_navigation_shortcut(**kwargs), expected)
 
-    def test_ctrl_s_triggers_brl_export_shortcut(self) -> None:
-        self.assertTrue(is_brl_export_shortcut(key_code=83, control_down=True))
+    def test_font_size_wheel_shortcut_step(self) -> None:
+        cases = [
+            ("ctrl wheel up", {"wheel_rotation": 120, "control_down": True}, 1),
+            ("ctrl wheel down", {"wheel_rotation": -120, "control_down": True}, -1),
+            ("wheel without ctrl", {"wheel_rotation": 120, "control_down": False}, 0),
+            ("zero rotation", {"wheel_rotation": 0, "control_down": True}, 0),
+        ]
 
-    def test_plain_s_does_not_trigger_brl_export_shortcut(self) -> None:
-        self.assertFalse(is_brl_export_shortcut(key_code=83, control_down=False))
-
-    def test_f2_triggers_document_rename_shortcut(self) -> None:
-        self.assertTrue(is_document_rename_shortcut(key_code=341))
-
-    def test_other_keys_do_not_trigger_document_rename_shortcut(self) -> None:
-        self.assertFalse(is_document_rename_shortcut(key_code=13))
-
-    def test_delete_triggers_document_delete_shortcut(self) -> None:
-        self.assertTrue(is_document_delete_shortcut(key_code=127))
-
-    def test_other_keys_do_not_trigger_document_delete_shortcut(self) -> None:
-        self.assertFalse(is_document_delete_shortcut(key_code=13))
-
-    def test_f6_triggers_forward_section_navigation(self) -> None:
-        self.assertEqual(is_section_navigation_shortcut(key_code=345, shift_down=False), 1)
-
-    def test_shift_f6_triggers_backward_section_navigation(self) -> None:
-        self.assertEqual(is_section_navigation_shortcut(key_code=345, shift_down=True), -1)
-
-    def test_other_keys_do_not_trigger_section_navigation(self) -> None:
-        self.assertEqual(is_section_navigation_shortcut(key_code=13, shift_down=False), 0)
-
-    def test_ctrl_wheel_up_increases_font_size(self) -> None:
-        self.assertEqual(get_font_size_step_from_wheel(wheel_rotation=120, control_down=True), 1)
-
-    def test_ctrl_wheel_down_decreases_font_size(self) -> None:
-        self.assertEqual(get_font_size_step_from_wheel(wheel_rotation=-120, control_down=True), -1)
-
-    def test_wheel_without_ctrl_does_not_change_font_size(self) -> None:
-        self.assertEqual(get_font_size_step_from_wheel(wheel_rotation=120, control_down=False), 0)
-
-    def test_zero_wheel_rotation_does_not_change_font_size(self) -> None:
-        self.assertEqual(get_font_size_step_from_wheel(wheel_rotation=0, control_down=True), 0)
+        for label, kwargs, expected in cases:
+            with self.subTest(label=label):
+                self.assertEqual(get_font_size_step_from_wheel(**kwargs), expected)
 
 
 if __name__ == "__main__":

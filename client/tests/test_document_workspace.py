@@ -2,15 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from document_workspace import (
+from documents.workspace import (
     BatchIssue,
-    DEFAULT_DOCUMENT_NAME,
     Document,
     batch_import_documents,
     batch_export_documents_to_folder,
-    choose_selection_after_delete,
-    create_default_document,
-    ensure_workspace_directory,
     export_document_brl,
     load_document_package,
     load_text_document,
@@ -29,18 +25,6 @@ class DocumentWorkspaceTest(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
 
-    def test_ensure_workspace_directory_creates_folder(self) -> None:
-        workspace = ensure_workspace_directory(self.workspace_dir)
-        self.assertEqual(workspace, self.workspace_dir)
-        self.assertTrue(self.workspace_dir.exists())
-        self.assertTrue(self.workspace_dir.is_dir())
-
-    def test_create_default_document_returns_pending_new_document(self) -> None:
-        self.assertEqual(
-            create_default_document(),
-            Document(name=DEFAULT_DOCUMENT_NAME, text="", braille=None),
-        )
-
     def test_normalize_document_name_accepts_unicode_trims_and_allows_default(self) -> None:
         self.assertEqual(normalize_document_name("  default中文12  "), "default中文12")
         self.assertEqual(normalize_document_name(" default "), "default")
@@ -54,7 +38,7 @@ class DocumentWorkspaceTest(unittest.TestCase):
     def test_save_and_load_document_package_roundtrip(self) -> None:
         document = Document(name="lesson1", text="source", braille="⠇⠑⠎⠎")
         package_path = self.workspace_dir / "lesson1.dep"
-        ensure_workspace_directory(self.workspace_dir)
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
         save_document_package(package_path, document)
         loaded = load_document_package(package_path)
         self.assertEqual(loaded, document)
@@ -62,7 +46,7 @@ class DocumentWorkspaceTest(unittest.TestCase):
     def test_save_and_load_document_package_preserves_pending_braille_state(self) -> None:
         document = Document(name="lesson1", text="source", braille=None)
         package_path = self.workspace_dir / "lesson1.dep"
-        ensure_workspace_directory(self.workspace_dir)
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
         save_document_package(package_path, document)
         loaded = load_document_package(package_path)
         self.assertEqual(loaded, document)
@@ -70,7 +54,7 @@ class DocumentWorkspaceTest(unittest.TestCase):
     def test_save_document_package_can_skip_pending_metadata_for_exports(self) -> None:
         document = Document(name="lesson1", text="source", braille=None)
         package_path = self.workspace_dir / "lesson1.dep"
-        ensure_workspace_directory(self.workspace_dir)
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
         save_document_package(package_path, document, include_pending_metadata=False)
 
         import zipfile
@@ -79,7 +63,7 @@ class DocumentWorkspaceTest(unittest.TestCase):
             self.assertEqual(sorted(archive.namelist()), ["lesson1.brl", "lesson1.txt"])
 
     def test_load_document_package_rejects_mismatched_internal_names(self) -> None:
-        ensure_workspace_directory(self.workspace_dir)
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
         package_path = self.workspace_dir / "lesson1.dep"
         save_document_package(package_path, Document(name="math", text="source", braille="braille"))
         with self.assertRaises(ValueError):
@@ -197,22 +181,13 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertIsInstance(auto_error, ValueError)
 
     def test_load_workspace_documents_sorts_valid_documents_and_collects_invalid_paths(self) -> None:
-        ensure_workspace_directory(self.workspace_dir)
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
         save_document_package(self.workspace_dir / "Beta.dep", Document(name="Beta", text="b", braille="1"))
         save_document_package(self.workspace_dir / "alpha.dep", Document(name="alpha", text="a", braille="2"))
         save_document_package(self.workspace_dir / "bad.dep", Document(name="other", text="x", braille="3"))
         documents, invalid_paths = load_workspace_documents(self.workspace_dir)
         self.assertEqual([document.name for document in documents], ["alpha", "Beta"])
         self.assertEqual(invalid_paths, [self.workspace_dir / "bad.dep"])
-
-    def test_choose_selection_after_delete_prefers_previous_item(self) -> None:
-        names = ["alpha", "math", "zoo"]
-        self.assertEqual(choose_selection_after_delete(names, "math"), "alpha")
-
-    def test_choose_selection_after_delete_uses_next_when_first_removed(self) -> None:
-        names = ["alpha", "math", "zoo"]
-        self.assertEqual(choose_selection_after_delete(names, "alpha"), "math")
-
 
 if __name__ == "__main__":
     unittest.main()

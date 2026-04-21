@@ -6,15 +6,16 @@
 """Helper module to ease communication to and from liblouis."""
 
 import os
+from contextlib import nullcontext
 from ctypes import (
-	WINFUNCTYPE,
 	addressof,
 	c_char_p,
 	c_void_p,
+	CFUNCTYPE,
 )
 from typing import Generator
 
-import brailleTables
+from braille import tables as braille_tables
 # import config
 # import globalVars
 # from logHandler import log
@@ -28,10 +29,11 @@ log.basicConfig(
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# TABLES_DIR = os.path.join(BASE_DIR, "louis", "tables")
+WINFUNCTYPE = getattr(__import__("ctypes"), "WINFUNCTYPE", CFUNCTYPE)
 
-with os.add_dll_directory(BASE_DIR):
-	import louis
+dll_directory = os.add_dll_directory(BASE_DIR) if hasattr(os, "add_dll_directory") else nullcontext()
+with dll_directory:
+	from braille import liblouis as louis
 
 
 LOUIS_TO_NVDA_LOG_LEVELS = {
@@ -55,13 +57,13 @@ def _resolveTableInner(tables: list[str], base: str | None = None) -> Generator[
 	for table in tables:
 		if _isDebug():
 			log.debug(f"Resolving {table!r}")
-		directoriesToSearch = [brailleTables.TABLES_DIR]
+		directoriesToSearch = [braille_tables.TABLES_DIR]
 		# directoriesToSearch = [TABLES_DIR]
 		path = None
 		if base is None:
 			try:
-				registeredTable = brailleTables.getTable(table)
-				path = brailleTables._tablesDirs.get(registeredTable.source)
+				registeredTable = braille_tables.getTable(table)
+				path = braille_tables._tablesDirs.get(registeredTable.source)
 			except LookupError:
 				if _isDebug():
 					log.debug(f"Table {table!r} not registered, falling back to built-in table lookup")
@@ -90,7 +92,7 @@ def _resolveTable(tablesList: bytes, base: bytes | None) -> int | None:
 	not confer any special role to the directory of the first table of the list
 	and completely ignores the liblouis data path and the
 	C{LOUIS_TABLEPATH} environment variable.
-	Instead, when base is None, it fetches the tables as registered in the brailleTables module,
+	Instead, when base is None, it fetches the tables as registered in the braille tables module,
 	If they point to an existing file, the value of the absolutePath property is returned.
 	When base is not None, the imported table is either looked up in the same directory as the base table,
 	or in the directory with the built-in tables.

@@ -9,7 +9,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
-set ROOT=%~dp0
+set SCRIPT_DIR=%~dp0
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT=%%~fI\"
+set CLIENT_DIR=%ROOT%client
+set BRAILLE_DIR=%CLIENT_DIR%\braille
 set SRC=%ROOT%include\liblouis
 set WINDIR=%SRC%\windows
 set STATIC_MAKEFILE=%ROOT%build\liblouis-static.nmake
@@ -39,10 +42,10 @@ if errorlevel 1 (
 
 popd
 
-rem Copy artifacts back to the repository root for consumption
-copy /Y "%WINDIR%\liblouis.dll" "%ROOT%liblouis.dll" >nul
-copy /Y "%WINDIR%\liblouis.lib" "%ROOT%liblouis.lib" >nul
+rem Copy artifacts for packaging/runtime consumption
+copy /Y "%WINDIR%\liblouis.dll" "%BRAILLE_DIR%\liblouis.dll" >nul
+copy /Y "%WINDIR%\liblouis.lib" "%CLIENT_DIR%\liblouis.lib" >nul
 
-echo liblouis.dll build complete. Output copied to %ROOT%
+echo liblouis.dll build complete. Output copied to %BRAILLE_DIR%
 endlocal
  

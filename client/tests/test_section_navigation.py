@@ -1,29 +1,15 @@
 import unittest
 
-from section_navigation import (
+from ui.section_navigation import (
     DOCUMENT_LIST_SECTION,
-    SECTION_ORDER,
     BRAILLE_RESULT_SECTION,
     CONVERSION_SECTION,
     SOURCE_TEXT_SECTION,
-    VIEW_SECTION,
     get_adjacent_section,
 )
 
 
 class SectionNavigationTest(unittest.TestCase):
-    def test_section_order_matches_expected_cycle(self) -> None:
-        self.assertEqual(
-            SECTION_ORDER,
-            [
-                CONVERSION_SECTION,
-                DOCUMENT_LIST_SECTION,
-                VIEW_SECTION,
-                SOURCE_TEXT_SECTION,
-                BRAILLE_RESULT_SECTION,
-            ],
-        )
-
     def test_get_adjacent_section_moves_forward(self) -> None:
         self.assertEqual(get_adjacent_section(CONVERSION_SECTION, step=1), DOCUMENT_LIST_SECTION)
 

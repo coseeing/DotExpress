@@ -1,7 +1,6 @@
 import os
-from typing import Iterable, Sequence, Tuple
+from typing import Iterable
 
-import louisHelper
 from languageDetection import LangChangeCommand, LanguageDetector
 
 from translate import translate, TranslationResult

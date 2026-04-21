@@ -15,7 +15,7 @@ MAX_DICTIONARY_NAME_LENGTH = MAX_NAME_LENGTH
 def get_application_directory() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
+    return Path(__file__).resolve().parents[1]
 
 
 def get_dictionary_directory(base_dir: Path | None = None) -> Path:

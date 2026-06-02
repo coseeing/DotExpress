@@ -25,7 +25,10 @@ DEFAULT_TRANSLATION_TABLES = {
     "en": "en-ueb-g1.ctb",
     "zh": "zh-tw.ctb",
     "ja": "ja-rokutenkanji.utb",
+    "math": "UEB",
 }
+MATH_BRAILLE_TABLES = ("UEB", "Nemeth")
+DEFAULT_MATH_BRAILLE_TABLE = "UEB"
 DEFAULT_OUTPUT_MODE = "unicode"
 DEFAULT_CONVERSION_WIDTH = 40
 DEFAULT_VIEW_FONT_SIZE = 12

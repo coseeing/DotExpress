@@ -542,6 +542,7 @@ class TranslationTableDialog(wx.Dialog):
 		("en", _("English Translation Table"), "en"),
 		("zh", _("Chinese Translation Table"), "zh"),
 		("ja", _("Japanese Translation Table"), "ja"),
+		("math", _("Math Translation Table"), None),
 	]
 
 	def __init__(self, parent: wx.Window | None, language_map: dict[str, str]):
@@ -567,8 +568,8 @@ class TranslationTableDialog(wx.Dialog):
 
 		for key, label, lang_code in self._CHOICE_SPECS:
 			static_lbl = wx.StaticText(self, label=label)
-			options = self._options_for_lang(lang_code)
-			if key != "default":
+			options = self._options_for_key(key, lang_code)
+			if key not in {"default", "math"}:
 				options = [TableOption(file_name="", display_name=_("None selected"))] + options
 			choice = wx.Choice(self)
 			choice.AppendItems([option.display_name for option in options])
@@ -623,6 +624,14 @@ class TranslationTableDialog(wx.Dialog):
 			return self.table_options
 		prefix = lang_code.lower()
 		return [option for option in self.table_options if option.file_name.lower().startswith(prefix)]
+
+	def _options_for_key(self, key: str, lang_code: str | None) -> List[TableOption]:
+		if key == "math":
+			return [
+				TableOption(file_name="UEB", display_name="UEB"),
+				TableOption(file_name="Nemeth", display_name="Nemeth"),
+			]
+		return self._options_for_lang(lang_code)
 
 	def _load_table_options(self) -> List[TableOption]:
 		tables = [table for table in listTables() if getattr(table, "output", False)]

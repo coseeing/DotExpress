@@ -1041,7 +1041,11 @@ msgstr "中文轉譯表"
 msgid "Japanese Translation Table"
 msgstr "日文轉譯表"
 
-#: dialog.py:548
+#: dialog.py:545
+msgid "Math Translation Table"
+msgstr "數學轉譯表"
+
+#: dialog.py:549
 msgid "Translation Tables Setting"
 msgstr "轉譯表設定"
 

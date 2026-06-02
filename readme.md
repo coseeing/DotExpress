@@ -103,6 +103,7 @@ To build the executable or generate translation files locally, ensure your Pytho
 
 ```bash
 pip install -r requirements.txt
+git submodule update --init --recursive
 ```
 
 ---
@@ -114,6 +115,72 @@ Run the following command in Windows CMD to generate the executable using PyInst
 ```bat
 scripts\build_dotexpress.bat
 ```
+
+### liblouis Version Policy
+
+DotExpress uses liblouis from one tracked source plus generated runtime assets:
+
+- `include/liblouis/`: upstream liblouis source submodule
+- `client/braille/liblouis.dll`: generated runtime DLL
+- `client/braille/liblouis/tables/`: generated runtime table set
+
+The source of truth is the `include/liblouis` submodule. The DLL and tables under `client/braille/` are generated from that source and are not version-controlled.
+
+Use a released liblouis tag for this submodule. Do not point DotExpress at `master` or other development snapshots unless you are explicitly working on liblouis compatibility fixes.
+
+Rules:
+
+1. Do not manually edit or version-control `client/braille/liblouis.dll`.
+2. Do not manually edit or version-control `client/braille/liblouis/tables/`.
+3. Do not update `client/braille/liblouis/tables/` by copying individual table files from another liblouis release.
+4. When upgrading liblouis, update the `include/liblouis` submodule to a released tag first, then rerun `scripts\build-liblouis.bat` to regenerate both the DLL and tables from the same upstream revision.
+5. `scripts\build_dotexpress.bat` depends on `scripts\build-liblouis.bat` and will call it first.
+6. Do not keep alternate runtime table directories such as `tables(error)` in the shipping tree. They make it easy to mix incompatible table syntax with the generated DLL.
+
+Recommended upgrade workflow:
+
+1. Update `include/liblouis` to the target upstream release tag.
+2. Run `scripts\\build-liblouis.bat` to rebuild the DLL and refresh the runtime tables from the same source checkout. The script expects the tracked `build/liblouis-static.nmake` file to be present.
+4. Verify the runtime bundle as a matched set by testing at least:
+   - Chinese default table translation
+   - English UEB grade 1 translation
+   - English UEB grade 2 translation
+   - Mixed-language text that switches between Chinese and English
+5. Commit the submodule update together with any script or documentation changes. Do not commit the generated DLL or tables.
+
+If English grade 1 works but grade 2 fails after a liblouis upgrade, assume the local runtime artifacts were generated from the wrong source revision or are stale until proven otherwise.
+
+The current recommended stable target is `v3.31.0`.
+
+Why `v3.31.0`:
+
+- `v3.31.0` and earlier are the last confirmed releases in this repo's workflow that stay close to the upstream Windows `nmake` path without extra compatibility shims.
+- `v3.32.0` through `v3.35.0` introduce a Windows build compatibility gap around `strings.h`.
+- Current development snapshots beyond those releases introduce additional Windows build compatibility issues, including newer C constructs in the Windows `nmake` path.
+
+If you choose a version newer than `v3.31.0`, expect extra Windows compatibility work before `scripts\build-liblouis.bat` will succeed.
+
+To move the liblouis submodule to a new upstream version:
+
+```bash
+cd include/liblouis
+git fetch --tags origin
+git checkout <tag-or-commit>
+cd ../..
+git add include/liblouis
+```
+
+Example:
+
+```bash
+cd include/liblouis
+git fetch --tags origin
+git checkout v3.31.0
+cd ../..
+git add include/liblouis
+```
+
+The submodule URL is stored in `.gitmodules`. The exact liblouis version used by DotExpress is recorded by the main repository's tracked submodule pointer at `include/liblouis`.
 
 ---
 

@@ -7,14 +7,20 @@ client/build/
 client/dist/
 client/dictionary/
 client/log/
-client/braille/liblouis/tables/
 client/.venv/
 client/workspace/
 client/DotExpress.spec
-include/
+docs
 openspec/
-promp/
 storage/
 server/.venv/
 server/data/
 AGENTS.md
+
+# Version-controlled build inputs
+/build/*
+!/build/liblouis-static.nmake
+
+# Version-controlled upstream source checkout
+/include/*
+!/include/liblouis/

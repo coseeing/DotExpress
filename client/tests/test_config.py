@@ -42,6 +42,7 @@ class ConfigSettingsTest(unittest.TestCase):
             "en": "en-ueb-g1.ctb",
             "zh": "zh-tw.ctb",
             "ja": "ja-rokutenkanji.utb",
+            "math": "UEB",
         }
 
         config.set_translation_tables(tables)
@@ -64,6 +65,11 @@ class ConfigSettingsTest(unittest.TestCase):
         self.assertEqual(config.get_translation_tables(), tables)
         self.assertEqual(config.get_output_mode(), "ascii")
         self.assertEqual(config.get_conversion_width(), 52)
+
+    def test_translation_tables_default_includes_math_table(self) -> None:
+        tables = config.get_translation_tables()
+
+        self.assertEqual(tables["math"], "UEB")
 
     def test_selected_dictionary_roundtrip_under_conversion_section(self) -> None:
         config.set_selected_dictionary("math")

@@ -1,11 +1,15 @@
 import unittest
 from pathlib import Path
+from types import ModuleType
+from unittest.mock import patch
 
 from conversion.service import (
     ConversionRequest,
     ConversionStageError,
+    build_math_translation_result,
     convert_text_for_output,
     get_public_error_message,
+    parse_inline_math_segments,
 )
 
 
@@ -33,6 +37,31 @@ class ConversionServiceTest(unittest.TestCase):
     def _wrap(self, *, table_file, text, width, dictionary_path, translation_tables, bopomofo_path):
         self.calls.append(("wrap", table_file, text, width, dictionary_path, translation_tables, bopomofo_path))
         return "braille-output", "source-output"
+
+    def _fake_translate_module(self) -> ModuleType:
+        fake_module = ModuleType("translate")
+
+        class FakeTranslationResult:
+            def __init__(self, raw, braille, braille_to_raw_pos, raw_to_braille_pos):
+                self.raw = raw
+                self.braille = braille
+                self.braille_to_raw_pos = braille_to_raw_pos
+                self.raw_to_braille_pos = raw_to_braille_pos
+
+            def __add__(self, other):
+                raw_offset = len(self.raw)
+                braille_offset = len(self.braille)
+                return FakeTranslationResult(
+                    self.raw + other.raw,
+                    self.braille + other.braille,
+                    list(self.braille_to_raw_pos) + [pos + raw_offset for pos in other.braille_to_raw_pos],
+                    list(self.raw_to_braille_pos) + [pos + braille_offset for pos in other.raw_to_braille_pos],
+                )
+
+        fake_module.TranslationResult = FakeTranslationResult
+        fake_module.translate = lambda *_args, **_kwargs: None
+        fake_module.translate_as_single_token = lambda *_args, **_kwargs: None
+        return fake_module
 
     def test_convert_text_for_output_returns_empty_string_for_empty_input(self) -> None:
         request = ConversionRequest(
@@ -109,6 +138,177 @@ class ConversionServiceTest(unittest.TestCase):
 
     def test_get_public_error_message_preserves_regular_errors(self) -> None:
         self.assertEqual(get_public_error_message(ValueError("missing dictionary")), "missing dictionary")
+
+    def test_parse_inline_math_segments_splits_multiple_math_ranges(self) -> None:
+        self.assertEqual(
+            parse_inline_math_segments("計算$1+2$和$3+4$"),
+            [
+                {"type": "text", "text": "計算"},
+                {"type": "math", "text": "1+2"},
+                {"type": "text", "text": "和"},
+                {"type": "math", "text": "3+4"},
+            ],
+        )
+
+    def test_parse_inline_math_segments_keeps_escaped_dollar_inside_math(self) -> None:
+        self.assertEqual(
+            parse_inline_math_segments("$1+\\$2$"),
+            [{"type": "math", "text": "1+\\$2"}],
+        )
+
+    def test_parse_inline_math_segments_treats_unmatched_opening_dollar_as_text(self) -> None:
+        self.assertEqual(
+            parse_inline_math_segments("計算$1+2"),
+            [{"type": "text", "text": "計算$1+2"}],
+        )
+
+    def test_parse_inline_math_segments_keeps_escaped_dollar_outside_math(self) -> None:
+        self.assertEqual(
+            parse_inline_math_segments("價格\\$100"),
+            [{"type": "text", "text": "價格\\$100"}],
+        )
+
+    def test_build_math_translation_result_creates_single_token_mapping(self) -> None:
+        with patch.dict("sys.modules", {"translate": self._fake_translate_module()}):
+            result = build_math_translation_result("1+2", "⠼⠁⠬⠃")
+
+        self.assertEqual(result.raw, ["1+2"])
+        self.assertEqual(result.braille, list("⠼⠁⠬⠃"))
+        self.assertEqual(result.raw_to_braille_pos, [0])
+        self.assertEqual(result.braille_to_raw_pos, [0, 0, 0, 0])
+
+    def test_translate_with_language_merges_text_and_math_segments_in_order(self) -> None:
+        from conversion import service
+        fake_translate_module = self._fake_translate_module()
+        fake_translation_result = fake_translate_module.TranslationResult
+
+        def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path):
+            braille = list(f"T[{text}]")
+            return fake_translation_result([text], braille, [0] * len(braille), [0])
+
+        def fake_math_translate(text, braille_code="Nemeth"):
+            return f"M[{text}]"
+
+        with patch.dict("sys.modules", {"translate": fake_translate_module}):
+                with patch.object(service, "_translate_plain_text_segment", side_effect=fake_text_translate):
+                    with patch.object(service, "translate_math_segment", side_effect=fake_math_translate):
+                        result = service.translate_with_language(
+                            "zh-tw.ctb",
+                            "計算$1+2$的值",
+                            Path("dictionary/default.csv"),
+                            {"default": "zh-tw.ctb", "math": "Nemeth"},
+                            Path("data/Bopomofo2Braille.csv"),
+                        )
+
+        self.assertEqual(result.raw, ["計算", " ", "1+2", " ", "的值"])
+        self.assertEqual("".join(result.braille), "T[計算]⠀M[1+2]⠀T[的值]")
+        self.assertEqual(result.raw_to_braille_pos, [0, 5, 6, 12, 13])
+        self.assertEqual(result.braille_to_raw_pos, [0] * 5 + [1] + [2] * 6 + [3] + [4] * 5)
+
+    def test_translate_with_language_does_not_duplicate_existing_spaces_around_math(self) -> None:
+        from conversion import service
+        fake_translate_module = self._fake_translate_module()
+        fake_translation_result = fake_translate_module.TranslationResult
+
+        def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path):
+            braille = list(text)
+            return fake_translation_result([text], braille, [0] * len(braille), [0])
+
+        with patch.dict("sys.modules", {"translate": fake_translate_module}):
+            with patch.object(service, "_translate_plain_text_segment", side_effect=fake_text_translate):
+                with patch.object(service, "translate_math_segment", return_value="⠼⠁⠬⠃"):
+                    result = service.translate_with_language(
+                        "zh-tw.ctb",
+                        "計算 $1+2$ 的值",
+                        Path("dictionary/default.csv"),
+                        {"default": "zh-tw.ctb", "math": "Nemeth"},
+                        Path("data/Bopomofo2Braille.csv"),
+                    )
+
+        self.assertEqual(result.raw, ["計算 ", "1+2", " 的值"])
+        self.assertEqual("".join(result.braille), "計算 ⠼⠁⠬⠃ 的值")
+
+    def test_build_braille_space_translation_result_uses_braille_blank(self) -> None:
+        from conversion import service
+        fake_translate_module = self._fake_translate_module()
+
+        with patch.dict("sys.modules", {"translate": fake_translate_module}):
+            result = service.build_braille_space_translation_result()
+
+        self.assertEqual(result.raw, [" "])
+        self.assertEqual(result.braille, ["⠀"])
+        self.assertEqual(result.braille_to_raw_pos, [0])
+        self.assertEqual(result.raw_to_braille_pos, [0])
+
+    def test_math_translation_table_options_list_ueb_before_nemeth(self) -> None:
+        source = Path("/workspace/DotExpress/client/dialog.py").read_text(encoding="utf-8")
+
+        self.assertLess(source.index('TableOption(file_name="UEB"'), source.index('TableOption(file_name="Nemeth"'))
+
+    def test_translate_with_language_propagates_math_conversion_failures(self) -> None:
+        from conversion import service
+        fake_translate_module = self._fake_translate_module()
+        fake_translation_result = fake_translate_module.TranslationResult
+
+        def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path):
+            braille = list(text)
+            return fake_translation_result([text], braille, [0] * len(braille), [0])
+
+        with patch.dict("sys.modules", {"translate": fake_translate_module}):
+            with patch.object(service, "_translate_plain_text_segment", side_effect=fake_text_translate):
+                with patch.object(service, "translate_math_segment", side_effect=ValueError("math failed")):
+                    with self.assertRaisesRegex(ValueError, "math failed"):
+                        service.translate_with_language(
+                            "zh-tw.ctb",
+                            "計算$1+2$的值",
+                            Path("dictionary/default.csv"),
+                            {"default": "zh-tw.ctb", "math": "Nemeth"},
+                            Path("data/Bopomofo2Braille.csv"),
+                        )
+
+    def test_translate_with_language_passes_selected_math_braille_code(self) -> None:
+        from conversion import service
+        fake_translate_module = self._fake_translate_module()
+        fake_translation_result = fake_translate_module.TranslationResult
+
+        def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path):
+            braille = list(text)
+            return fake_translation_result([text], braille, [0] * len(braille), [0])
+
+        with patch.dict("sys.modules", {"translate": fake_translate_module}):
+            with patch.object(service, "_translate_plain_text_segment", side_effect=fake_text_translate):
+                with patch.object(service, "translate_math_segment", return_value="⠼⠁") as math_mock:
+                    service.translate_with_language(
+                        "zh-tw.ctb",
+                        "計算$1$",
+                        Path("dictionary/default.csv"),
+                        {"default": "zh-tw.ctb", "math": "UEB"},
+                        Path("data/Bopomofo2Braille.csv"),
+                    )
+
+        math_mock.assert_called_once_with("1", braille_code="UEB")
+
+    def test_translate_with_language_keeps_escaped_dollar_in_plain_text_segment(self) -> None:
+        from conversion import service
+        fake_translate_module = self._fake_translate_module()
+        fake_translation_result = fake_translate_module.TranslationResult
+
+        def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path):
+            braille = list(text)
+            return fake_translation_result([text], braille, [0] * len(braille), [0])
+
+        with patch.dict("sys.modules", {"translate": fake_translate_module}):
+            with patch.object(service, "_translate_plain_text_segment", side_effect=fake_text_translate):
+                result = service.translate_with_language(
+                    "zh-tw.ctb",
+                    "價格\\$100",
+                    Path("dictionary/default.csv"),
+                    {"default": "zh-tw.ctb"},
+                    Path("data/Bopomofo2Braille.csv"),
+                )
+
+        self.assertEqual(result.raw, ["價格\\$100"])
+        self.assertEqual("".join(result.braille), "價格\\$100")
 
 if __name__ == "__main__":
     unittest.main()

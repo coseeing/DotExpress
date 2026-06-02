@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from config import DEFAULT_MATH_BRAILLE_TABLE
+from conversion.math_service import translate_math_segment
 from utils import translate__mapping_char
 
 
@@ -27,6 +29,75 @@ MapChar = Callable[..., str]
 WrapBoth = Callable[..., tuple[str, str]]
 
 
+def _append_text_segment(segments: list[dict[str, str]], text: str) -> None:
+	if not text:
+		return
+	if segments and segments[-1]["type"] == "text":
+		segments[-1]["text"] += text
+	else:
+		segments.append({"type": "text", "text": text})
+
+
+def parse_inline_math_segments(text: str) -> list[dict[str, str]]:
+	segments: list[dict[str, str]] = []
+	current: list[str] = []
+	in_math = False
+
+	for index, char in enumerate(text):
+		is_escaped_dollar = char == "$" and index > 0 and text[index - 1] == "\\"
+		if char == "$" and not is_escaped_dollar:
+			if in_math:
+				segments.append({"type": "math", "text": "".join(current)})
+				current = []
+				in_math = False
+			else:
+				_append_text_segment(segments, "".join(current))
+				current = []
+				in_math = True
+			continue
+		current.append(char)
+
+	if in_math:
+		_append_text_segment(segments, "$" + "".join(current))
+	else:
+		_append_text_segment(segments, "".join(current))
+
+	return segments
+
+
+def build_math_translation_result(math_text: str, braille_text: str):
+	from translate import TranslationResult
+
+	braille = list(braille_text)
+	return TranslationResult([math_text], braille, [0] * len(braille), [0])
+
+
+def build_literal_translation_result(text: str):
+	from translate import TranslationResult
+
+	braille = list(text)
+	return TranslationResult([text], braille, [0] * len(braille), [0])
+
+
+def build_braille_space_translation_result():
+	from translate import TranslationResult
+
+	return TranslationResult([" "], ["⠀"], [0], [0])
+
+
+def _segment_needs_boundary_space(left_segment: dict[str, str], right_segment: dict[str, str]) -> bool:
+	if left_segment["type"] != "math" and right_segment["type"] != "math":
+		return False
+	left_text = left_segment["text"]
+	right_text = right_segment["text"]
+	return bool(
+		left_text
+		and right_text
+		and not left_text[-1].isspace()
+		and not right_text[0].isspace()
+	)
+
+
 def get_public_error_message(error: Exception) -> str:
 	message = str(error)
 	if "Can't translate: tables" in message and "inbuf" in message:
@@ -34,7 +105,7 @@ def get_public_error_message(error: Exception) -> str:
 	return message
 
 
-def translate_with_language(
+def _translate_plain_text_segment(
 	table_file: str,
 	text: str,
 	dictionary_path: Path,
@@ -46,9 +117,7 @@ def translate_with_language(
 	from translate import TranslationResult, translate, translate_as_single_token
 	from utils import apply_dictionary, split_bracket_segments
 
-	if text == "":
-		return TranslationResult([], [], [], [])
-	language = [key for key, value in translation_tables.items() if key != "default" and value != ""]
+	language = [key for key, value in translation_tables.items() if key not in {"default", "math"} and value != ""]
 	language_detector = LanguageDetector(language)
 	sequence = list(language_detector.add_detected_language_commands([text]))
 
@@ -85,6 +154,48 @@ def translate_with_language(
 				raw = translations[-1].raw if translations else None
 				if raw and not raw[-1].isspace():
 					translations.append(translate(previous_translate_table, " ", " "))
+
+	assert translations, "No translatable text segments were found."
+	merged = translations[0]
+	for segment in translations[1:]:
+		merged = merged + segment
+
+	return merged
+
+
+def translate_with_language(
+	table_file: str,
+	text: str,
+	dictionary_path: Path,
+	translation_tables: dict[str, str],
+	bopomofo_path: Path,
+):
+	from translate import TranslationResult
+
+	if text == "":
+		return TranslationResult([], [], [], [])
+
+	translations = []
+	segments = parse_inline_math_segments(text)
+	math_braille_code = translation_tables.get("math", DEFAULT_MATH_BRAILLE_TABLE)
+	for index, segment in enumerate(segments):
+		if index > 0 and _segment_needs_boundary_space(segments[index - 1], segment):
+			translations.append(build_braille_space_translation_result())
+
+		if segment["type"] == "text":
+			translations.append(
+				_translate_plain_text_segment(
+					table_file,
+					segment["text"],
+					dictionary_path,
+					translation_tables,
+					bopomofo_path,
+				)
+			)
+			continue
+
+		braille_output = translate_math_segment(segment["text"], braille_code=math_braille_code)
+		translations.append(build_math_translation_result(segment["text"], braille_output))
 
 	assert translations, "No translatable text segments were found."
 	merged = translations[0]

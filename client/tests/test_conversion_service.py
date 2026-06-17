@@ -139,6 +139,9 @@ class ConversionServiceTest(unittest.TestCase):
     def test_get_public_error_message_preserves_regular_errors(self) -> None:
         self.assertEqual(get_public_error_message(ValueError("missing dictionary")), "missing dictionary")
 
+    def test_get_public_error_message_replaces_empty_error_text(self) -> None:
+        self.assertEqual(get_public_error_message(ValueError("")), "An unknown error occurred.")
+
     def test_parse_inline_math_segments_splits_multiple_math_ranges(self) -> None:
         self.assertEqual(
             parse_inline_math_segments("計算$1+2$和$3+4$"),

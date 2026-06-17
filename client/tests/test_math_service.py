@@ -16,6 +16,22 @@ class MathServiceTest(unittest.TestCase):
                 "<math><mo>⇀</mo></math>",
             )
 
+    def test_latex_to_mathml_normalizes_embedded_newlines_before_conversion(self) -> None:
+        with patch("conversion.math_service._convert_latex_to_mathml", return_value="<math/>") as convert_mock:
+            latex_to_mathml("\\left\\{\n\\begin{aligned}\na&=b\\\\\nc&=d\n\\end{aligned}\n\\right.")
+
+        convert_mock.assert_called_once_with("\\left\\{ \\begin{aligned} a&=b\\\\ c&=d \\end{aligned} \\right.")
+
+    def test_latex_to_mathml_escapes_bare_ampersands(self) -> None:
+        with patch(
+            "conversion.math_service._convert_latex_to_mathml",
+            return_value="<math><mrow><mi>a</mi><mi>&</mi><mi>b</mi></mrow></math>",
+        ):
+            self.assertEqual(
+                latex_to_mathml("a&b"),
+                "<math><mrow><mi>a</mi><mi>&amp;</mi><mi>b</mi></mrow></math>",
+            )
+
     def test_translate_math_segment_calls_mathml_and_mathcat_in_order(self) -> None:
         with patch("conversion.math_service.latex_to_mathml", return_value="<math><mi>x</mi></math>") as latex_mock:
             with patch("conversion.math_service.mathml_to_nemeth_braille", return_value="⠭") as braille_mock:

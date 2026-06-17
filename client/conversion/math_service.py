@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import html
+import re
 
 from config import DEFAULT_MATH_BRAILLE_TABLE
 from log import get_logger
 
 
 logger = get_logger("dotexpress.math", "log/math.log")
+_INVALID_AMPERSAND_RE = re.compile(r'&(?!#\d+;|#x[0-9A-Fa-f]+;|[A-Za-z_:][A-Za-z0-9_.:-]*;)')
 
 
 class MathConversionError(Exception):
@@ -19,9 +21,19 @@ def _convert_latex_to_mathml(latex_text: str) -> str:
 	return converter.convert(latex_text)
 
 
+def _escape_invalid_mathml_entities(mathml_text: str) -> str:
+	return _INVALID_AMPERSAND_RE.sub("&amp;", mathml_text)
+
+
+def _normalize_latex_math_whitespace(latex_text: str) -> str:
+	return re.sub(r"\s*[\r\n]+\s*", " ", latex_text)
+
+
 def latex_to_mathml(latex_text: str) -> str:
 	normalized = latex_text.replace(r"\vec{", r"\overset{⇀}{")
+	normalized = _normalize_latex_math_whitespace(normalized)
 	mathml = html.unescape(_convert_latex_to_mathml(normalized))
+	mathml = _escape_invalid_mathml_entities(mathml)
 	return mathml.replace("<mi>⇀</mi>", "<mo>⇀</mo>")
 
 

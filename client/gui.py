@@ -1442,7 +1442,7 @@ class BrailleFrame(wx.Frame):
 			wx.CallAfter(
 				self._finish_conversion,
 				job_id,
-				error_message=message_template.format(error=_(get_public_error_message(e.error))),
+				error_message=message_template.format(error=get_public_error_message(e.error)),
 			)
 			return
 

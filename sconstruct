@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from SCons.Script import ARGUMENTS, Default, Environment, Export, SConscript
+from SCons.Script import ARGUMENTS, Default, Delete, Environment, Export, SConscript
 
 
 if os.name != "nt":
@@ -45,8 +45,11 @@ thirdPartyEnv.Append(CCFLAGS=["/O2", "/GL", "/MT"])
 thirdPartyEnv.Append(LINKFLAGS=["/incremental:no", "/WX", "/subsystem:windows,10.00", "/release", "/LTCG", "/OPT:REF", "/CETCOMPAT"])
 thirdPartyEnv.Append(ARFLAGS=["/WX", "/subsystem:windows,10.00", "/LTCG"])
 sourceDir = thirdPartyEnv.Dir("#client/braille")
+runtime_tables_dir = "#client/braille/liblouis/tables"
 
 Export("thirdPartyEnv", "sourceDir")
 outputs = SConscript("vendor/nvda/liblouis/build/sconscript")
 helper = thirdPartyEnv.InstallAs("#client/braille/louis_helper.py", "#vendor/nvda/liblouis/runtime/louis_helper.py")
-Default(*outputs, helper)
+cleanup_runtime_tables = thirdPartyEnv.Command("clean-liblouis-runtime-tables", [], Delete(runtime_tables_dir))
+thirdPartyEnv.Requires(outputs, cleanup_runtime_tables)
+Default(*outputs, helper, cleanup_runtime_tables)

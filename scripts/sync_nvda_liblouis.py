@@ -42,6 +42,13 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
+def _replace_once(source: str, old: str, new: str, label: str) -> str:
+    matches = source.count(old)
+    if matches != 1:
+        raise SyncError(f"Expected exactly one match for {label}, found {matches}")
+    return source.replace(old, new, 1)
+
+
 def _adapt_sconscript(source: str) -> str:
     for marker in (
         'outDir = sourceDir.Dir("louis")',
@@ -52,13 +59,26 @@ def _adapt_sconscript(source: str) -> str:
         if marker not in source:
             raise SyncError(f"NVDA sconscript adaptation marker missing: {marker}")
 
-    source = source.replace('outDir = sourceDir.Dir("louis")', 'outDir = sourceDir.Dir("liblouis")')
-    source = source.replace('unitTestTablesDir = env.Dir("#tests/unit/brailleTables")\n', "")
-    source = source.replace(
+    source = _replace_once(
+        source,
+        'outDir = sourceDir.Dir("louis")',
+        'outDir = sourceDir.Dir("liblouis")',
+        "liblouis output directory",
+    )
+    source = _replace_once(
+        source,
+        'unitTestTablesDir = env.Dir("#tests/unit/brailleTables")\n',
+        "",
+        "unit test tables directory",
+    )
+    source = _replace_once(
+        source,
         'env["M4"] = f\'"{env.File("#miscdeps/tools/m4.exe")}"\'',
         'env["M4"] = f\'"{env["M4_EXE"]}"\'',
+        "M4 executable override",
     )
-    source = source.replace(
+    source = _replace_once(
+        source,
         'louisLib = env.SharedLibrary("liblouis", objs)\n'
         'if signExec:\n'
         '\tenv.AddPostAction(louisLib[0], [signExec])\n'
@@ -67,8 +87,10 @@ def _adapt_sconscript(source: str) -> str:
         'if signExec:\n'
         '\tenv.AddPostAction(louisLib[0], [signExec])\n'
         'louisLibInstall = env.Install(sourceDir, louisLib)\n',
+        "liblouis install block",
     )
-    source = source.replace(
+    source = _replace_once(
+        source,
         'env.Install(\n'
         '\toutDir.Dir("tables"),\n'
         '\t[\n'
@@ -97,14 +119,20 @@ def _adapt_sconscript(source: str) -> str:
         '\t\tand not f.name.endswith(".in")\n'
         '\t],\n'
         ')\n',
+        "runtime tables install block",
     )
-    source = source.replace(
+    source = _replace_once(
+        source,
         'for f in env.Glob(f"{louisTableDir}/*.in"):\n\tenv.M4(source=f, target=outDir.Dir("tables").File(os.path.splitext(f.name)[0]))\n',
         'for f in env.Glob(f"{louisTableDir}/*.in"):\n\tlouisTables.append(env.M4(source=f, target=outDir.Dir("tables").File(os.path.splitext(f.name)[0])))\n',
+        "runtime table generation loop",
     )
 
     test_block_marker = "\n# Custom tables unit test\n"
-    source = source.partition(test_block_marker)[0]
+    prefix, marker, _ = source.partition(test_block_marker)
+    if not marker:
+        raise SyncError("Expected exactly one match for custom tables unit test block, found 0")
+    source = prefix
     return source.rstrip() + '\n\nReturn("louisLibInstall", "louisPython", "louisTables")\n'
 
 

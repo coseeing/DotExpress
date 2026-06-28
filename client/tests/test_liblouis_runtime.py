@@ -1,10 +1,19 @@
 import sys
 import unittest
 from pathlib import Path
+import re
 
 
 @unittest.skipUnless(sys.platform == "win32", "requires the Windows liblouis runtime")
 class LiblouisRuntimeTests(unittest.TestCase):
+    @classmethod
+    def _expected_liblouis_version(cls) -> str:
+        configure_ac = Path(__file__).parents[2] / "include" / "liblouis" / "configure.ac"
+        match = re.search(r'AC_INIT\(\[liblouis\],\s*\[([^\]]+)\]', configure_ac.read_text(encoding="utf-8"))
+        if not match:
+            raise AssertionError("Could not determine expected liblouis version from include/liblouis/configure.ac")
+        return match.group(1)
+
     @classmethod
     def setUpClass(cls):
         from braille import liblouis
@@ -22,7 +31,7 @@ class LiblouisRuntimeTests(unittest.TestCase):
         dll = Path(__file__).parents[1] / "braille" / "liblouis.dll"
         self.assertTrue(dll.is_file())
         self.assertGreater(self.louis.charSize(), 0)
-        self.assertTrue(self.louis.version())
+        self.assertEqual(self._expected_liblouis_version(), self.louis.version())
 
     def test_table_resolver_finds_bundled_table(self):
         resolved = list(self.helper._resolveTableInner(["en-ueb-g2.ctb"]))

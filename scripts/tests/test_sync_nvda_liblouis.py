@@ -193,3 +193,18 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
 
         adapted_helper = (self.vendor / "runtime" / "louis_helper.py").read_text(encoding="utf-8")
         self.assertIn("temp-root-only marker", adapted_helper)
+
+    def test_sconscript_adaptation_fails_when_install_block_shape_changes(self):
+        sconscript = (self.nvda / "nvdaHelper" / "liblouis" / "sconscript").read_text(encoding="utf-8")
+        sconscript = sconscript.replace(
+            'env.Install(sourceDir, louisLib)\n',
+            'env.Install(\n\t sourceDir,\n\t louisLib,\n)\n',
+        )
+        (self.nvda / "nvdaHelper" / "liblouis" / "sconscript").write_text(sconscript, encoding="utf-8")
+
+        with self.assertRaisesRegex(SyncError, "Expected exactly one match"):
+            synchronize(
+                root=self.root,
+                expected_liblouis_commit=self.liblouis_commit,
+                nvda_commit_override=self.nvda_commit,
+            )

@@ -36,3 +36,8 @@ class LiblouisBuildContractTests(unittest.TestCase):
 
     def test_retired_makefile_is_absent(self):
         self.assertFalse((ROOT / "build" / "liblouis-static.nmake").exists())
+
+    def test_sconstruct_cleans_runtime_tables_before_install(self):
+        text = (ROOT / "sconstruct").read_text(encoding="utf-8")
+        self.assertIn("liblouis/tables", text)
+        self.assertIn("Delete", text)

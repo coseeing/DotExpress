@@ -47,9 +47,10 @@ from documents.workspace import (
 	save_document_package,
 )
 from ui.action_menu import (
-	get_document_action_labels,
 	get_document_export_format_labels,
 	get_document_import_format_labels,
+	get_document_menu_enabled_state,
+	get_document_menu_items,
 )
 from config import (
 	DEFAULT_TRANSLATION_TABLES,
@@ -84,6 +85,7 @@ from ui.shortcuts import (
 	is_brl_export_shortcut,
 	is_convert_shortcut,
 	is_document_delete_shortcut,
+	is_document_import_txt_shortcut,
 	is_document_rename_shortcut,
 	is_section_navigation_shortcut,
 )
@@ -346,6 +348,9 @@ class BrailleFrame(wx.Frame):
 
 	def _create_menu_bar(self) -> wx.MenuBar:
 		menu_bar = wx.MenuBar()
+		file_menu, self._document_menu_items = self._create_document_menu()
+		menu_bar.Append(file_menu, _("File"))
+
 		translation_menu = wx.Menu()
 		translation_handlers = {
 			"convert": self.on_convert,
@@ -368,6 +373,68 @@ class BrailleFrame(wx.Frame):
 
 		menu_bar.Append(help_menu, _("Help"))
 		return menu_bar
+
+	def _create_document_menu(self) -> tuple[wx.Menu, dict[str, wx.MenuItem]]:
+		menu = wx.Menu()
+		menu_items: dict[str, wx.MenuItem] = {}
+		for item in get_document_menu_items():
+			item_type = item[0]
+			label = item[1]
+			if item_type == "command":
+				menu_items[label] = menu.Append(wx.ID_ANY, _(label))
+			elif label == "Import":
+				submenu = wx.Menu()
+				menu_items[label] = menu.AppendSubMenu(submenu, _(label))
+				for format_label in get_document_import_format_labels():
+					submenu_item = submenu.Append(wx.ID_ANY, _(format_label))
+					submenu.Bind(
+						wx.EVT_MENU,
+						lambda _evt, fmt=format_label.lower(): self.on_import_document(fmt),
+						submenu_item,
+					)
+			elif label == "Export":
+				submenu = wx.Menu()
+				menu_items[label] = menu.AppendSubMenu(submenu, _(label))
+				for format_label in get_document_export_format_labels():
+					submenu_item = submenu.Append(wx.ID_ANY, _(format_label))
+					submenu.Bind(
+						wx.EVT_MENU,
+						lambda _evt, fmt=format_label.lower(): self.on_export_document(fmt),
+						submenu_item,
+					)
+			elif label == "Export All":
+				submenu = wx.Menu()
+				menu_items[label] = menu.AppendSubMenu(submenu, _(label))
+				for format_label in get_document_export_format_labels():
+					submenu_item = submenu.Append(wx.ID_ANY, _(format_label))
+					submenu.Bind(
+						wx.EVT_MENU,
+						lambda _evt, fmt=format_label.lower(): self.on_export_all_documents(fmt),
+						submenu_item,
+					)
+		self._bind_document_menu_handlers(menu, menu_items)
+		self._sync_document_menu_state(menu_items)
+		return menu, menu_items
+
+	def _bind_document_menu_handlers(self, menu: wx.Menu, menu_items: dict[str, wx.MenuItem]) -> None:
+		menu.Bind(wx.EVT_MENU, self.on_open_document, menu_items["Open"])
+		menu.Bind(wx.EVT_MENU, self.on_delete_document, menu_items["Delete"])
+		menu.Bind(wx.EVT_MENU, self.on_delete_all_documents, menu_items["Delete All"])
+		menu.Bind(wx.EVT_MENU, self.on_add_document, menu_items["Add"])
+		menu.Bind(wx.EVT_MENU, self.on_rename_document, menu_items["Rename"])
+
+	def _sync_document_menu_state(self, menu_items: dict[str, wx.MenuItem] | None = None) -> None:
+		target_items = menu_items if menu_items is not None else getattr(self, "_document_menu_items", None)
+		if not target_items or not hasattr(self, "documents") or not hasattr(self, "_selected_document_name"):
+			return
+		menu_state = get_document_menu_enabled_state(
+			has_selection=self._get_selected_document() is not None,
+			has_documents=bool(self.documents),
+		)
+		for label, enabled in menu_state.items():
+			menu_item = target_items.get(label)
+			if menu_item is not None:
+				menu_item.Enable(enabled)
 
 	def _set_control_accessible_name(
 		self,
@@ -545,6 +612,7 @@ class BrailleFrame(wx.Frame):
 			self.document_list.Select(selection, on=0)
 			selection = self.document_list.GetFirstSelected()
 		self._selected_document_name = None
+		self._sync_document_menu_state()
 
 	def _refresh_document_list(self, preferred_name: str | None = None) -> None:
 		self._sort_documents()
@@ -553,6 +621,7 @@ class BrailleFrame(wx.Frame):
 			self.document_list.InsertItem(self.document_list.GetItemCount(), document.name)
 		if not self.documents:
 			self._selected_document_name = None
+			self._sync_document_menu_state()
 			return
 		selected_name = preferred_name if preferred_name in self._get_document_names() else self.documents[0].name
 		self._selected_document_name = selected_name
@@ -561,6 +630,7 @@ class BrailleFrame(wx.Frame):
 				self.document_list.Select(index)
 				self.document_list.Focus(index)
 				break
+		self._sync_document_menu_state()
 
 	def _clear_document_editors(self) -> None:
 		self.input_txt.SetValue("")
@@ -824,6 +894,7 @@ class BrailleFrame(wx.Frame):
 			self._selected_document_name = None
 		else:
 			self._selected_document_name = self.documents[selection].name
+		self._sync_document_menu_state()
 		event.Skip()
 
 	def on_document_activated(self, _event: wx.ListEvent) -> None:
@@ -848,43 +919,40 @@ class BrailleFrame(wx.Frame):
 		import_submenu = wx.Menu()
 		export_submenu = wx.Menu()
 		export_all_submenu = wx.Menu()
-		format_items: dict[str, wx.MenuItem] = {}
-		for label in get_document_action_labels():
-			if label == "Import":
+		for item in get_document_menu_items():
+			item_type = item[0]
+			label = item[1]
+			if item_type == "command":
+				menu_items[label] = menu.Append(wx.ID_ANY, _(label))
+			elif label == "Import":
 				menu_items[label] = menu.AppendSubMenu(import_submenu, _(label))
 				for format_label in get_document_import_format_labels():
-					format_items[f"import:{format_label.lower()}"] = import_submenu.Append(wx.ID_ANY, _(format_label))
+					submenu_item = import_submenu.Append(wx.ID_ANY, _(format_label))
+					import_submenu.Bind(
+						wx.EVT_MENU,
+						lambda _evt, fmt=format_label.lower(): self.on_import_document(fmt),
+						submenu_item,
+					)
 			elif label == "Export":
 				menu_items[label] = menu.AppendSubMenu(export_submenu, _(label))
 				for format_label in get_document_export_format_labels():
-					format_items[f"export:{format_label.lower()}"] = export_submenu.Append(wx.ID_ANY, _(format_label))
+					submenu_item = export_submenu.Append(wx.ID_ANY, _(format_label))
+					export_submenu.Bind(
+						wx.EVT_MENU,
+						lambda _evt, fmt=format_label.lower(): self.on_export_document(fmt),
+						submenu_item,
+					)
 			elif label == "Export All":
 				menu_items[label] = menu.AppendSubMenu(export_all_submenu, _(label))
 				for format_label in get_document_export_format_labels():
-					format_items[f"export-all:{format_label.lower()}"] = export_all_submenu.Append(wx.ID_ANY, _(format_label))
-			else:
-				menu_items[label] = menu.Append(wx.ID_ANY, _(label))
-		has_selection = self._get_selected_document() is not None
-		has_documents = bool(self.documents)
-		menu_items["Open"].Enable(has_selection)
-		menu_items["Delete"].Enable(has_selection)
-		menu_items["Delete All"].Enable(has_documents)
-		menu_items["Rename"].Enable(has_selection)
-		menu_items["Export"].Enable(has_selection)
-		menu_items["Export All"].Enable(has_documents)
-		menu.Bind(wx.EVT_MENU, self.on_open_document, menu_items["Open"])
-		menu.Bind(wx.EVT_MENU, self.on_delete_document, menu_items["Delete"])
-		menu.Bind(wx.EVT_MENU, self.on_delete_all_documents, menu_items["Delete All"])
-		menu.Bind(wx.EVT_MENU, self.on_add_document, menu_items["Add"])
-		menu.Bind(wx.EVT_MENU, self.on_rename_document, menu_items["Rename"])
-		for key, item in format_items.items():
-			action, format_key = key.split(":")
-			if action == "import":
-				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_import_document(fmt), item)
-			elif action == "export":
-				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_export_document(fmt), item)
-			elif action == "export-all":
-				menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_export_all_documents(fmt), item)
+					submenu_item = export_all_submenu.Append(wx.ID_ANY, _(format_label))
+					export_all_submenu.Bind(
+						wx.EVT_MENU,
+						lambda _evt, fmt=format_label.lower(): self.on_export_all_documents(fmt),
+						submenu_item,
+					)
+		self._bind_document_menu_handlers(menu, menu_items)
+		self._sync_document_menu_state(menu_items)
 		popup_position = (rect.x, rect.y + rect.height) if rect is not None else client_position
 		self.document_list.PopupMenu(menu, popup_position)
 		menu.Destroy()
@@ -1112,6 +1180,9 @@ class BrailleFrame(wx.Frame):
 		event.Skip()
 
 	def on_char_hook(self, event: wx.KeyEvent) -> None:
+		if is_document_import_txt_shortcut(event.GetKeyCode(), event.AltDown()):
+			self.on_import_document("txt")
+			return
 		step = is_section_navigation_shortcut(event.GetKeyCode(), event.ShiftDown())
 		if step == 0:
 			event.Skip()
@@ -1380,7 +1451,10 @@ class BrailleFrame(wx.Frame):
 	def _set_conversion_busy(self, busy: bool):
 		menu_bar = self.GetMenuBar()
 		if menu_bar is not None:
-			menu_bar.EnableTop(0, not busy)
+			for menu_label in (_("File"), _("Translation")):
+				menu_index = menu_bar.FindMenu(menu_label)
+				if menu_index != wx.NOT_FOUND:
+					menu_bar.EnableTop(menu_index, not busy)
 		self.document_list.Enable(not busy)
 		self.input_txt.Enable(not busy)
 

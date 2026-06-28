@@ -37,12 +37,12 @@ with dll_directory:
 
 
 LOUIS_TO_NVDA_LOG_LEVELS = {
-	louis.LOG_ALL: log.DEBUG,
-	louis.LOG_DEBUG: log.DEBUG,
-	louis.LOG_INFO: log.INFO,
-	louis.LOG_WARN: log.WARNING,
-	louis.LOG_ERROR: log.ERROR,
-	louis.LOG_FATAL: log.ERROR,
+	louis.LOG_ALL: logging.DEBUG,
+	louis.LOG_DEBUG: logging.DEBUG,
+	louis.LOG_INFO: logging.INFO,
+	louis.LOG_WARN: logging.WARNING,
+	louis.LOG_ERROR: logging.ERROR,
+	louis.LOG_FATAL: logging.ERROR,
 }
 
 
@@ -128,7 +128,7 @@ def _resolveTable(tablesList: bytes, base: bytes | None) -> int | None:
 def louis_log(level, message):
 	if not _isDebug():
 		return
-	NVDALevel = LOUIS_TO_NVDA_LOG_LEVELS.get(level, log.DEBUG)
+	NVDALevel = LOUIS_TO_NVDA_LOG_LEVELS.get(level, logging.DEBUG)
 	if not log.isEnabledFor(NVDALevel):
 		return
 	message = message.decode("ASCII")

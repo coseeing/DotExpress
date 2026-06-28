@@ -164,7 +164,22 @@ def _adapt_helper(source: str) -> str:
         ("path = brailleTables._tablesDirs.get(registeredTable.source)\n", "path = braille_tables._tablesDirs.get(registeredTable.source)\n"),
         ("brailleTables module", "braille tables module"),
         ("\tlog._log(NVDALevel, message, [], codepath=codepath)\n", '\tlog.log(NVDALevel, "%s: %s", codepath, message)\n'),
+        (
+            "louis.LOG_ALL: log.DEBUG,\n"
+            "\tlouis.LOG_DEBUG: log.DEBUG,\n"
+            "\tlouis.LOG_INFO: log.INFO,\n"
+            "\tlouis.LOG_WARN: log.WARNING,\n"
+            "\tlouis.LOG_ERROR: log.ERROR,\n"
+            "\tlouis.LOG_FATAL: log.ERROR,\n",
+            "louis.LOG_ALL: logging.DEBUG,\n"
+            "\tlouis.LOG_DEBUG: logging.DEBUG,\n"
+            "\tlouis.LOG_INFO: logging.INFO,\n"
+            "\tlouis.LOG_WARN: logging.WARNING,\n"
+            "\tlouis.LOG_ERROR: logging.ERROR,\n"
+            "\tlouis.LOG_FATAL: logging.ERROR,\n",
+        ),
         ('\treturn config.conf["debugLog"]["louis"]\n', "\treturn log.isEnabledFor(logging.DEBUG)\n"),
+        ("\tNVDALevel = LOUIS_TO_NVDA_LOG_LEVELS.get(level, log.DEBUG)\n", "\tNVDALevel = LOUIS_TO_NVDA_LOG_LEVELS.get(level, logging.DEBUG)\n"),
         ("\treturn languageHandler.normalizeLanguage(lang) if lang else None\n", '\treturn lang.replace("_", "-") if lang else None\n'),
     )
     for old, new in replacements:

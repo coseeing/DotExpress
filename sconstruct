@@ -30,9 +30,20 @@ thirdPartyEnv.Append(
         "NDEBUG",
     ]
 )
-thirdPartyEnv.Append(CCFLAGS=["/O2", "/GL", "/MT"])
-thirdPartyEnv.Append(LINKFLAGS=["/incremental:no", "/WX", "/subsystem:windows,10.00", "/release", "/LTCG", "/OPT:REF", "/CETCOMPAT"])
-thirdPartyEnv.Append(ARFLAGS=["/WX", "/subsystem:windows,10.00", "/LTCG"])
+thirdPartyEnv.Append(CCFLAGS=["/O2", "/MT"])
+thirdPartyEnv.Append(
+    LINKFLAGS=[
+        "/incremental:no",
+        "/WX",
+        "/subsystem:windows,10.00",
+        "/release",
+        "/OPT:REF",
+        "/OPT:NOICF",
+        "/EXPORT:lou_freeTableInfo",
+        "/CETCOMPAT",
+    ]
+)
+thirdPartyEnv.Append(ARFLAGS=["/WX", "/subsystem:windows,10.00"])
 thirdPartyEnv.Append(M4FLAGS="-G")
 sourceDir = thirdPartyEnv.Dir("#client/braille")
 runtime_tables_dir = "#client/braille/liblouis/tables"

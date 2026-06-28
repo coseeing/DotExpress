@@ -2,17 +2,18 @@
 
 ## 修正內容
 
-- 已將字典管理流程與 active translation dictionary 狀態拆開。
-- `Dictionary Management...` 的 Add / Delete / Rename / Import 只會更新管理清單，不會直接改寫目前轉譯設定。
-- 只有在刪除或重新命名的字典原本就是 active dictionary 時，才會同步更新 `Translation Settings` 的字典選擇。
-- 已移除 `gui.py` 內部獨立的 section order，改為直接使用共用的 `ui.section_navigation.get_adjacent_section()`。
-- 已新增純函式回歸測試，覆蓋字典管理對 active dictionary 的影響規則。
+- 已把共用名稱上限從 `16` 修正為 `32`，並補上 dictionary 的 32/33 邊界測試。
+- 已將 braille font 的 no-config fallback 維持為 `SimBraille`。
+- 已把 `File` / document menu 的建構與事件綁定集中到單一 helper，讓 top-level `File` 與 context menu 共用同一份 descriptor。
+- 已把 `gui.py` 的 `Alt+O` shortcut 保持為直接導向 `on_import_document("txt")`。
+- 已更新 `dotexpress.pot`，補上 `File` 與 32 字元驗證文案。
 
 ## 驗證
 
-- `python3 -m py_compile client/gui.py client/dialog.py client/translation/settings.py client/translation/dictionary_state.py client/ui/translation_menu.py client/ui/section_navigation.py client/tests/test_translation_dictionary_state.py client/tests/test_section_navigation.py`
-- `cd client && python3 -m unittest tests.test_translation_dictionary_state tests.test_translation_settings tests.test_translation_menu tests.test_section_navigation tests.test_config tests.test_dictionary_actions tests.test_dictionary_manager tests.test_input_shortcuts -v`
+- `python3 -m py_compile client/gui.py client/config.py client/name_validation.py client/ui/action_menu.py client/ui/shortcuts.py client/dialog.py client/tests/test_config.py client/tests/test_document_workspace.py client/tests/test_dictionary_manager.py client/tests/test_action_menu.py client/tests/test_input_shortcuts.py client/tests/test_dialog_validation.py`
+- `cd client && python3 -m unittest tests.test_config tests.test_document_workspace tests.test_dictionary_manager tests.test_action_menu tests.test_input_shortcuts tests.test_dialog_validation -v`
+- `cd client && python3 -m unittest discover -s tests -v`
 
 ## Commit List
 
-- `f040b7f` `fix: separate dictionary state updates`
+- `0a6736d` `fix: align file menu and name validation with review`

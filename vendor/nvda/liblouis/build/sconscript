@@ -99,7 +99,7 @@ objs = [env.Object("%s.obj" % f, louisSourceDir.File(f)) for f in sourceFiles]
 louisLib = env.SharedLibrary("liblouis", objs)
 if signExec:
 	env.AddPostAction(louisLib[0], [signExec])
-env.Install(sourceDir, louisLib)
+louisLibInstall = env.Install(sourceDir, louisLib)
 
 louisPython = env.Substfile(
 	outDir.File("__init__.py"),
@@ -107,7 +107,7 @@ louisPython = env.Substfile(
 	SUBST_DICT={"###LIBLOUIS_SONAME###": louisLib[0].name},
 )
 
-env.Install(
+louisTables = env.Install(
 	outDir.Dir("tables"),
 	[
 		f
@@ -123,15 +123,6 @@ env.Install(
 )
 # Tables containing macros
 for f in env.Glob(f"{louisTableDir}/*.in"):
-	env.M4(source=f, target=outDir.Dir("tables").File(os.path.splitext(f.name)[0]))
-# Custom tables unit test
-testTable = env.InstallAs(unitTestTablesDir.File("test.utb"), louisTableDir.File("en-us-comp8-ext.utb"))
-env.Depends(
-	testTable,
-	env.Install(
-		unitTestTablesDir,
-		[louisTableDir.File("latinLetterDef8Dots.uti"), louisTableDir.File("en-us-comp8-ext.utb")],
-	),
-)
-# Ensure the braille tables for tests are installed when copying the louis wrapper
-env.Depends(louisPython, testTable)
+	louisTables.append(env.M4(source=f, target=outDir.Dir("tables").File(os.path.splitext(f.name)[0])))
+
+Return("louisLibInstall", "louisPython", "louisTables")

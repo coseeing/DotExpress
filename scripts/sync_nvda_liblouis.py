@@ -47,16 +47,65 @@ def _adapt_sconscript(source: str) -> str:
         'outDir = sourceDir.Dir("louis")',
         'unitTestTablesDir = env.Dir("#tests/unit/brailleTables")',
         'env["M4"] = f\'"{env.File("#miscdeps/tools/m4.exe")}"\'',
+        '# Custom tables unit test',
     ):
         if marker not in source:
             raise SyncError(f"NVDA sconscript adaptation marker missing: {marker}")
+
     source = source.replace('outDir = sourceDir.Dir("louis")', 'outDir = sourceDir.Dir("liblouis")')
     source = source.replace('unitTestTablesDir = env.Dir("#tests/unit/brailleTables")\n', "")
     source = source.replace(
         'env["M4"] = f\'"{env.File("#miscdeps/tools/m4.exe")}"\'',
         'env["M4"] = f\'"{env["M4_EXE"]}"\'',
     )
-    return source.rstrip() + "\n"
+    source = source.replace(
+        'louisLib = env.SharedLibrary("liblouis", objs)\n'
+        'if signExec:\n'
+        '\tenv.AddPostAction(louisLib[0], [signExec])\n'
+        'env.Install(sourceDir, louisLib)\n',
+        'louisLib = env.SharedLibrary("liblouis", objs)\n'
+        'if signExec:\n'
+        '\tenv.AddPostAction(louisLib[0], [signExec])\n'
+        'louisLibInstall = env.Install(sourceDir, louisLib)\n',
+    )
+    source = source.replace(
+        'env.Install(\n'
+        '\toutDir.Dir("tables"),\n'
+        '\t[\n'
+        '\t\tf\n'
+        '\t\tfor f in env.Glob(f"{louisTableDir}/*")\n'
+        '\t\tif f.name\n'
+        '\t\tnot in (\n'
+        '\t\t\t"Makefile.am",\n'
+        '\t\t\t"README",\n'
+        '\t\t\t"maketablelist.sh",\n'
+        '\t\t)\n'
+        '\t\tand not f.name.endswith(".in")\n'
+        '\t],\n'
+        ')\n',
+        'louisTables = env.Install(\n'
+        '\toutDir.Dir("tables"),\n'
+        '\t[\n'
+        '\t\tf\n'
+        '\t\tfor f in env.Glob(f"{louisTableDir}/*")\n'
+        '\t\tif f.name\n'
+        '\t\tnot in (\n'
+        '\t\t\t"Makefile.am",\n'
+        '\t\t\t"README",\n'
+        '\t\t\t"maketablelist.sh",\n'
+        '\t\t)\n'
+        '\t\tand not f.name.endswith(".in")\n'
+        '\t],\n'
+        ')\n',
+    )
+    source = source.replace(
+        'for f in env.Glob(f"{louisTableDir}/*.in"):\n\tenv.M4(source=f, target=outDir.Dir("tables").File(os.path.splitext(f.name)[0]))\n',
+        'for f in env.Glob(f"{louisTableDir}/*.in"):\n\tlouisTables.append(env.M4(source=f, target=outDir.Dir("tables").File(os.path.splitext(f.name)[0])))\n',
+    )
+
+    test_block_marker = "\n# Custom tables unit test\n"
+    source = source.partition(test_block_marker)[0]
+    return source.rstrip() + '\n\nReturn("louisLibInstall", "louisPython", "louisTables")\n'
 
 
 def _adapt_helper(source: str) -> str:
@@ -71,11 +120,36 @@ def _adapt_helper(source: str) -> str:
         if marker not in source:
             raise SyncError(f"NVDA helper adaptation marker missing: {marker.strip()}")
 
-    template = subprocess.check_output(
-        ["git", "show", "HEAD:client/braille/louis_helper.py"],
-        text=True,
+    replacements = (
+        (
+            "from ctypes import (\n\tWINFUNCTYPE,\n\taddressof,\n\tc_char_p,\n\tc_void_p,\n)\n",
+            "from contextlib import nullcontext\nfrom ctypes import (\n\tCFUNCTYPE,\n\taddressof,\n\tc_char_p,\n\tc_void_p,\n)\n",
+        ),
+        ("import brailleTables\n", "from braille import tables as braille_tables\n"),
+        ("import config\n", ""),
+        ("import globalVars\n", ""),
+        ("import languageHandler\n", ""),
+        (
+            "from logHandler import log\n",
+            'import logging\n\nlog = logging.getLogger(__name__)\nlogging.basicConfig(\n\tlevel=logging.INFO,\n\tformat="%(asctime)s [%(levelname)s] %(message)s",\n\tdatefmt="%Y-%m-%d %H:%M:%S",\n)\nBASE_DIR = os.path.dirname(os.path.abspath(__file__))\nWINFUNCTYPE = getattr(__import__("ctypes"), "WINFUNCTYPE", CFUNCTYPE)\n',
+        ),
+        (
+            "with os.add_dll_directory(globalVars.appDir):\n\timport louis\n",
+            'dll_directory = (\n\tos.add_dll_directory(BASE_DIR)\n\tif hasattr(os, "add_dll_directory")\n\telse nullcontext()\n)\nwith dll_directory:\n\tfrom braille import liblouis as louis\n',
+        ),
+        ("directoriesToSearch = [brailleTables.TABLES_DIR]\n", "directoriesToSearch = [braille_tables.TABLES_DIR]\n"),
+        ("registeredTable = brailleTables.getTable(table)\n", "registeredTable = braille_tables.getTable(table)\n"),
+        ("path = brailleTables._tablesDirs.get(registeredTable.source)\n", "path = braille_tables._tablesDirs.get(registeredTable.source)\n"),
+        ("brailleTables module", "braille tables module"),
+        ("\tlog._log(NVDALevel, message, [], codepath=codepath)\n", '\tlog.log(NVDALevel, "%s: %s", codepath, message)\n'),
+        ('\treturn config.conf["debugLog"]["louis"]\n', "\treturn log.isEnabledFor(logging.DEBUG)\n"),
+        ("\treturn languageHandler.normalizeLanguage(lang) if lang else None\n", '\treturn lang.replace("_", "-") if lang else None\n'),
     )
-    return template
+    for old, new in replacements:
+        if old not in source:
+            raise SyncError(f"NVDA helper adaptation marker missing: {old.strip()}")
+        source = source.replace(old, new, 1)
+    return source
 
 
 def synchronize(

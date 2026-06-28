@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -140,3 +141,55 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
         adapted_sconscript = (self.vendor / "build" / "sconscript").read_text(encoding="utf-8")
         compile(adapted_helper, "louis_helper.py", "exec")
         compile(adapted_sconscript, "sconscript", "exec")
+
+    def test_sconscript_adaptation_removes_nvda_test_block_and_returns_outputs(self):
+        synchronize(
+            root=self.root,
+            expected_liblouis_commit=self.liblouis_commit,
+            nvda_commit_override=self.nvda_commit,
+        )
+        adapted_sconscript = (self.vendor / "build" / "sconscript").read_text(encoding="utf-8")
+        self.assertNotIn("unitTestTablesDir", adapted_sconscript)
+        self.assertNotIn("testTable =", adapted_sconscript)
+        self.assertIn('Return("louisLibInstall", "louisPython", "louisTables")', adapted_sconscript)
+
+    def test_helper_adaptation_uses_nvda_source_not_repository_head(self):
+        helper_source = (self.nvda / "source" / "louisHelper.py").read_text(encoding="utf-8")
+        helper_source = helper_source.replace(
+            "def _isDebug():\n\treturn config.conf[\"debugLog\"][\"louis\"]\n",
+            "def _isDebug():\n\treturn config.conf[\"debugLog\"][\"louis\"]\n\n\ndef dotexpressFixtureMarker():\n\treturn True\n",
+        )
+        (self.nvda / "source" / "louisHelper.py").write_text(helper_source, encoding="utf-8")
+
+        synchronize(
+            root=self.root,
+            expected_liblouis_commit=self.liblouis_commit,
+            nvda_commit_override=self.nvda_commit,
+        )
+
+        adapted_helper = (self.vendor / "runtime" / "louis_helper.py").read_text(encoding="utf-8")
+        self.assertIn("dotexpressFixtureMarker", adapted_helper)
+        self.assertNotIn("git show", adapted_helper)
+
+    def test_synchronize_isolated_from_current_working_directory(self):
+        helper_source = (self.nvda / "source" / "louisHelper.py").read_text(encoding="utf-8")
+        helper_source = helper_source.replace(
+            "return languageHandler.normalizeLanguage(lang) if lang else None\n",
+            "return languageHandler.normalizeLanguage(lang) if lang else None\n# temp-root-only marker\n",
+        )
+        (self.nvda / "source" / "louisHelper.py").write_text(helper_source, encoding="utf-8")
+
+        previous_cwd = Path.cwd()
+        other = Path(tempfile.mkdtemp())
+        try:
+            os.chdir(other)
+            synchronize(
+                root=self.root,
+                expected_liblouis_commit=self.liblouis_commit,
+                nvda_commit_override=self.nvda_commit,
+            )
+        finally:
+            os.chdir(previous_cwd)
+
+        adapted_helper = (self.vendor / "runtime" / "louis_helper.py").read_text(encoding="utf-8")
+        self.assertIn("temp-root-only marker", adapted_helper)

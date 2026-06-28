@@ -18,6 +18,12 @@ class LiblouisBuildContractTests(unittest.TestCase):
             "vendor/nvda/liblouis/build/sconscript",
             "client/braille",
             "M4_EXE",
+            '"UNICODE"',
+            '"/MT"',
+            '"_WIN32_WINNT"',
+            "LINKFLAGS",
+            "release",
+            "signExec",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, text)

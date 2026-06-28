@@ -1,37 +1,37 @@
 # A part of NonVisual Desktop Access (NVDA)
 # This file is covered by the GNU General Public License.
 # See the file COPYING for more details.
-# Copyright (C) 2018-2024 NV Access Limited, Babbage B.V., Julien Cochuyt, Leonard de Ruijter
+# Copyright (C) 2018-2026 NV Access Limited, Babbage B.V., Julien Cochuyt, Leonard de Ruijter
 
 """Helper module to ease communication to and from liblouis."""
 
 import os
 from contextlib import nullcontext
 from ctypes import (
+	CFUNCTYPE,
 	addressof,
 	c_char_p,
 	c_void_p,
-	CFUNCTYPE,
 )
 from typing import Generator
 
 from braille import tables as braille_tables
-# import config
-# import globalVars
-# from logHandler import log
 import logging
 
-log = logging
-log.basicConfig(
+log = logging.getLogger(__name__)
+logging.basicConfig(
 	level=logging.INFO,
 	format="%(asctime)s [%(levelname)s] %(message)s",
-	datefmt="%Y-%m-%d %H:%M:%S"
+	datefmt="%Y-%m-%d %H:%M:%S",
 )
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WINFUNCTYPE = getattr(__import__("ctypes"), "WINFUNCTYPE", CFUNCTYPE)
 
-dll_directory = os.add_dll_directory(BASE_DIR) if hasattr(os, "add_dll_directory") else nullcontext()
+dll_directory = (
+	os.add_dll_directory(BASE_DIR)
+	if hasattr(os, "add_dll_directory")
+	else nullcontext()
+)
 with dll_directory:
 	from braille import liblouis as louis
 
@@ -58,7 +58,6 @@ def _resolveTableInner(tables: list[str], base: str | None = None) -> Generator[
 		if _isDebug():
 			log.debug(f"Resolving {table!r}")
 		directoriesToSearch = [braille_tables.TABLES_DIR]
-		# directoriesToSearch = [TABLES_DIR]
 		path = None
 		if base is None:
 			try:
@@ -105,11 +104,15 @@ def _resolveTable(tablesList: bytes, base: bytes | None) -> int | None:
 	baseTable: str | None = base.decode(louis.fileSystemEncoding) if base is not None else None
 	try:
 		paths = [p.encode(louis.fileSystemEncoding) for p in _resolveTableInner(tables, baseTable)]
-	except LookupError as e:
-		log.exception(e)
+	except LookupError:
+		log.exception()
 		return None
+	# Terminate the list of paths
+	paths.append(None)
 	if _isDebug():
-		log.debug(f"Storing paths in an array of {len(paths)} null terminated strings")
+		log.debug(
+			f"Storing paths in a null terminated array of length {len(paths)} with null terminated strings",
+		)
 	# Keeping a reference to the last returned value to ensure the returned
 	# value is not GC'ed before it is copied on liblouis' side.
 	_resolveTable._lastRes = arr = (c_char_p * len(paths))(*paths)
@@ -126,16 +129,15 @@ def louis_log(level, message):
 	if not _isDebug():
 		return
 	NVDALevel = LOUIS_TO_NVDA_LOG_LEVELS.get(level, log.DEBUG)
-	# if not log.isEnabledFor(NVDALevel):
-	# 	return
+	if not log.isEnabledFor(NVDALevel):
+		return
 	message = message.decode("ASCII")
 	codepath = "liblouis at internal log level %d" % level
-	# log._log(NVDALevel, message, [], codepath=codepath)
+	log.log(NVDALevel, "%s: %s", codepath, message)
 
 
 def _isDebug():
-	return True
-	# return config.conf["debugLog"]["louis"]
+	return log.isEnabledFor(logging.DEBUG)
 
 
 def initialize():
@@ -160,7 +162,13 @@ def terminate():
 	louis.liblouis.lou_free()
 
 
-def translate(tableList, inbuf, typeform=None, cursorPos=None, mode=0):
+def translate(
+	tableList: list[str],
+	inbuf: str,
+	typeform: list[int] | None = None,
+	cursorPos: int | None = None,
+	mode: int = 0,
+) -> tuple[list[int], list[int], list[int], int | None]:
 	"""
 	Convenience wrapper for louis.translate that:
 	* returns a list of integers instead of a string with cells, and
@@ -181,3 +189,9 @@ def translate(tableList, inbuf, typeform=None, cursorPos=None, mode=0):
 	if cursorPos is None:
 		brailleCursorPos = None
 	return braille, brailleToRawPos, rawToBraillePos, brailleCursorPos
+
+
+def getTableLanguage(table: str) -> str | None:
+	"""Get the language of a braille table, if specified in the table file."""
+	lang = louis.getTableInfo(table, "language")
+	return lang.replace("_", "-") if lang else None

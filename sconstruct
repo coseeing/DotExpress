@@ -31,6 +31,19 @@ thirdPartyEnv["nvdaHelperDebugFlags"] = []
 thirdPartyEnv["certFile"] = ""
 thirdPartyEnv["apiSigningToken"] = ""
 thirdPartyEnv["signExec"] = None
+thirdPartyEnv["release"] = True
+thirdPartyEnv.Append(
+    CPPDEFINES=[
+        "UNICODE",
+        "_CRT_SECURE_NO_DEPRECATE",
+        ("_WIN32_WINNT", "_WIN32_WINNT_WIN10"),
+        "NOMINMAX",
+        "NDEBUG",
+    ]
+)
+thirdPartyEnv.Append(CCFLAGS=["/O2", "/GL", "/MT"])
+thirdPartyEnv.Append(LINKFLAGS=["/incremental:no", "/WX", "/subsystem:windows,10.00", "/release", "/LTCG", "/OPT:REF", "/CETCOMPAT"])
+thirdPartyEnv.Append(ARFLAGS=["/WX", "/subsystem:windows,10.00", "/LTCG"])
 sourceDir = thirdPartyEnv.Dir("#client/braille")
 
 Export("thirdPartyEnv", "sourceDir")

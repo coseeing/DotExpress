@@ -30,13 +30,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not defined M4_EXE (
-    echo M4_EXE must point to m4.exe.
-    exit /b 1
-)
-
 pushd "%ROOT%"
-scons M4_EXE="%M4_EXE%" %*
+scons %*
 set "RESULT=%ERRORLEVEL%"
 popd
 exit /b %RESULT%

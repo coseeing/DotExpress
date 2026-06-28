@@ -17,7 +17,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
             '"apiSigningToken"',
             "vendor/nvda/liblouis/build/sconscript",
             "client/braille",
-            "M4_EXE",
+            'miscdeps/tools/m4.exe',
             '"UNICODE"',
             '"/MT"',
             '"_WIN32_WINNT"',
@@ -33,6 +33,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
         self.assertIn("scons", text.lower())
         self.assertNotIn("nmake", text.lower())
         self.assertNotIn("liblouis-static.nmake", text)
+        self.assertNotIn("M4_EXE", text)
 
     def test_retired_makefile_is_absent(self):
         self.assertFalse((ROOT / "build" / "liblouis-static.nmake").exists())
@@ -41,3 +42,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
         text = (ROOT / "sconstruct").read_text(encoding="utf-8")
         self.assertIn("liblouis/tables", text)
         self.assertIn("Delete", text)
+
+    def test_repo_contains_m4_toolchain_files(self):
+        self.assertTrue((ROOT / "miscdeps" / "tools" / "m4.exe").is_file())
+        self.assertTrue((ROOT / "miscdeps" / "tools" / "regex2.dll").is_file())

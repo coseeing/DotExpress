@@ -1,21 +1,10 @@
 import os
-from pathlib import Path
 
-from SCons.Script import ARGUMENTS, Default, Delete, Environment, Export, SConscript
+from SCons.Script import Default, Delete, Environment, Export, SConscript
 
 
 if os.name != "nt":
     raise RuntimeError("The aligned liblouis build currently supports Windows x64 only")
-
-
-def _resolve_m4_exe() -> str:
-    m4_exe = ARGUMENTS.get("M4_EXE") or os.environ.get("M4_EXE")
-    if not m4_exe:
-        raise RuntimeError("M4_EXE is required and must point to m4.exe")
-    path = Path(m4_exe)
-    if not path.is_file():
-        raise RuntimeError(f"M4_EXE does not exist: {m4_exe}")
-    return str(path.resolve())
 
 
 thirdPartyEnv = Environment(ENV=os.environ, TARGET_ARCH="x86_64", tools=["default"])
@@ -26,12 +15,12 @@ if not thirdPartyEnv.WhereIs("clang-cl"):
 if not thirdPartyEnv.WhereIs("link"):
     raise RuntimeError("MSVC linker was not found; run from a VS 2022 x64 environment")
 
-thirdPartyEnv["M4_EXE"] = _resolve_m4_exe()
 thirdPartyEnv["nvdaHelperDebugFlags"] = []
 thirdPartyEnv["certFile"] = ""
 thirdPartyEnv["apiSigningToken"] = ""
 thirdPartyEnv["signExec"] = None
 thirdPartyEnv["release"] = True
+thirdPartyEnv["M4"] = f'"{thirdPartyEnv.File("#miscdeps/tools/m4.exe")}"'
 thirdPartyEnv.Append(
     CPPDEFINES=[
         "UNICODE",
@@ -44,6 +33,7 @@ thirdPartyEnv.Append(
 thirdPartyEnv.Append(CCFLAGS=["/O2", "/GL", "/MT"])
 thirdPartyEnv.Append(LINKFLAGS=["/incremental:no", "/WX", "/subsystem:windows,10.00", "/release", "/LTCG", "/OPT:REF", "/CETCOMPAT"])
 thirdPartyEnv.Append(ARFLAGS=["/WX", "/subsystem:windows,10.00", "/LTCG"])
+thirdPartyEnv.Append(M4FLAGS="-G")
 sourceDir = thirdPartyEnv.Dir("#client/braille")
 runtime_tables_dir = "#client/braille/liblouis/tables"
 

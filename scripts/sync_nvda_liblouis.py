@@ -73,12 +73,6 @@ def _adapt_sconscript(source: str) -> str:
     )
     source = _replace_once(
         source,
-        'env["M4"] = f\'"{env.File("#miscdeps/tools/m4.exe")}"\'',
-        'env["M4"] = f\'"{env["M4_EXE"]}"\'',
-        "M4 executable override",
-    )
-    source = _replace_once(
-        source,
         'louisLib = env.SharedLibrary("liblouis", objs)\n'
         'if signExec:\n'
         '\tenv.AddPostAction(louisLib[0], [signExec])\n'

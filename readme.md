@@ -122,6 +122,7 @@ DotExpress builds liblouis from two tracked source checkouts:
 
 - `include/liblouis/`: upstream liblouis source submodule
 - `include/nvda/`: pinned NVDA source submodule used for the liblouis integration layer
+- `vendor/nvda/liblouis/`: synced NVDA-derived vendor snapshot
 
 The generated runtime outputs are:
 
@@ -130,21 +131,20 @@ The generated runtime outputs are:
 - `client/braille/louis_helper.py`
 - `client/braille/liblouis/__init__.py`
 
-The source of truth is the pair of submodule pointers. The runtime DLL, helper, wrapper, and tables are generated from those sources and should not be hand-edited.
+The source of truth is the pair of submodule pointers, with `vendor/nvda/liblouis/` acting as the frozen sync snapshot between `include/nvda/` and the tracked runtime Python files. The runtime DLL, helper, wrapper, and tables are generated from those sources and should not be hand-edited.
 
 ### Prerequisites
 
 - Visual Studio 2022 C++ tools
 - Clang tools for Windows
 - Python 3 with SCons (`py -m pip install scons`)
-- GNU `m4.exe`, exposed through `M4_EXE`
+- GNU `m4.exe` and `regex2.dll` in `miscdeps/tools/`
 
 ### Initial checkout and build
 
 ```bat
 git submodule update --init --recursive
 py scripts\sync_nvda_liblouis.py
-set M4_EXE=C:\Tools\m4\m4.exe
 scripts\build-liblouis.bat
 ```
 
@@ -153,7 +153,7 @@ scripts\build-liblouis.bat
 1. Check out the approved commit in `include/nvda`.
 2. Set `include/liblouis` to the gitlink printed by `git -C include/nvda rev-parse HEAD:include/liblouis`.
 3. Run `py scripts\sync_nvda_liblouis.py`.
-4. Review `vendor/nvda/liblouis/` and `SOURCE.json`.
+4. Review `vendor/nvda/liblouis/`, `SOURCE.json`, and the regenerated runtime Python files.
 5. Clean-build and run the liblouis runtime tests.
 6. Commit both submodule pointers, synchronized vendor files, and generated runtime files together.
 

@@ -1,0 +1,13 @@
+{
+  "files": [
+    "build/config.h",
+    "build/sconscript",
+    "build/strings.h",
+    "python/__init__.py.in",
+    "python/louisHelper.py",
+    "runtime/louis_helper.py"
+  ],
+  "source_commit": "b493fe7e1f361a8d549f17a3353d826f6fe32334",
+  "source_path": "include/nvda",
+  "source_repo": "https://github.com/nvaccess/nvda.git"
+}

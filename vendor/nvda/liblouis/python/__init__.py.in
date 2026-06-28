@@ -77,7 +77,7 @@ try:  # Native win32
     _loader, _functype = windll, WINFUNCTYPE
 except ImportError:  # Unix/Cygwin
     _loader, _functype = cdll, CFUNCTYPE
-liblouis = _loader["liblouis.dll"]
+liblouis = _loader["###LIBLOUIS_SONAME###"]
 _is_windows = platform == "win32"
 _endianness = "be" if byteorder == "big" else "le"
 

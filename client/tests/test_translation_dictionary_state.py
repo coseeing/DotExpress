@@ -1,9 +1,10 @@
 import unittest
 
 from translation.dictionary_state import (
-	resolve_active_dictionary_after_add,
-	resolve_active_dictionary_after_delete,
-	resolve_active_dictionary_after_rename,
+	DictionaryStateUpdate,
+	plan_dictionary_state_after_add,
+	plan_dictionary_state_after_delete,
+	plan_dictionary_state_after_rename,
 	resolve_management_selection,
 )
 
@@ -21,32 +22,47 @@ class TranslationDictionaryStateTest(unittest.TestCase):
 			"default",
 		)
 
-	def test_add_keeps_active_dictionary_unchanged(self) -> None:
+	def test_add_keeps_active_dictionary_unchanged_and_selects_added_dictionary_in_management(self) -> None:
 		self.assertEqual(
-			resolve_active_dictionary_after_add("default", ["default", "math"]),
-			"default",
+			plan_dictionary_state_after_add("default", ["default", "math"], "math"),
+			DictionaryStateUpdate(
+				management_selected_name="math",
+				active_selected_name="default",
+			),
 		)
 
 	def test_rename_updates_active_dictionary_only_when_renamed_dictionary_was_active(self) -> None:
 		self.assertEqual(
-			resolve_active_dictionary_after_rename("math", "math", "science", ["default", "science"]),
-			"science",
+			plan_dictionary_state_after_rename("math", "math", "science", ["default", "science"]),
+			DictionaryStateUpdate(
+				management_selected_name="science",
+				active_selected_name="science",
+			),
 		)
 		self.assertEqual(
-			resolve_active_dictionary_after_rename("default", "math", "science", ["default", "science"]),
-			"default",
+			plan_dictionary_state_after_rename("default", "math", "science", ["default", "science"]),
+			DictionaryStateUpdate(
+				management_selected_name="science",
+				active_selected_name="default",
+			),
 		)
 
 	def test_delete_keeps_active_dictionary_when_other_dictionary_is_removed(self) -> None:
 		self.assertEqual(
-			resolve_active_dictionary_after_delete("default", "math", ["default", "math", "science"]),
-			"default",
+			plan_dictionary_state_after_delete("default", "math", ["default", "math", "science"]),
+			DictionaryStateUpdate(
+				management_selected_name="default",
+				active_selected_name="default",
+			),
 		)
 
 	def test_delete_falls_back_when_active_dictionary_is_removed(self) -> None:
 		self.assertEqual(
-			resolve_active_dictionary_after_delete("math", "math", ["default", "math", "science"]),
-			"default",
+			plan_dictionary_state_after_delete("math", "math", ["default", "math", "science"]),
+			DictionaryStateUpdate(
+				management_selected_name="default",
+				active_selected_name="default",
+			),
 		)
 
 

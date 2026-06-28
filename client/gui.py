@@ -73,8 +73,9 @@ from translation.settings import (
 	save_translation_settings,
 )
 from translation.dictionary_state import (
-	resolve_active_dictionary_after_delete,
-	resolve_active_dictionary_after_rename,
+	plan_dictionary_state_after_add,
+	plan_dictionary_state_after_delete,
+	plan_dictionary_state_after_rename,
 	resolve_management_selection,
 )
 from ui.font_support import SIMBRAILLE_FACE_NAME, get_simbraille_font_path, register_private_font_for_windows
@@ -1188,7 +1189,12 @@ class BrailleFrame(wx.Frame):
 			wx.MessageBox(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=dialog_parent)
 			return None
 
-		return self._refresh_dictionary_names(path.stem)
+		update = plan_dictionary_state_after_add(
+			self.translation_settings.selected_dictionary,
+			self.get_dictionary_names_for_dialog(),
+			path.stem,
+		)
+		return update.management_selected_name
 
 	def delete_dictionary_from_dialog(self, parent: wx.Window | None, selected_name: str) -> str | None:
 		dialog_parent = parent or self
@@ -1219,15 +1225,15 @@ class BrailleFrame(wx.Frame):
 		except OSError as exc:
 			self._show_file_error(_("Failed to delete dictionary: {error}"), exc, parent=dialog_parent)
 			return None
-		preferred_name = self._refresh_dictionary_names(selected_name)
-		if current_active_name == selected_name:
-			active_name = resolve_active_dictionary_after_delete(
-				current_active_name,
-				selected_name,
-				previous_names,
-			)
-			self._set_active_dictionary(active_name)
-		return preferred_name
+		self._refresh_dictionary_names(selected_name)
+		update = plan_dictionary_state_after_delete(
+			current_active_name,
+			selected_name,
+			previous_names,
+		)
+		if update.active_selected_name != current_active_name:
+			self._set_active_dictionary(update.active_selected_name)
+		return update.management_selected_name
 
 	def rename_dictionary_from_dialog(self, parent: wx.Window | None, selected_name: str) -> str | None:
 		dialog_parent = parent or self
@@ -1259,16 +1265,17 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to save dictionary: {error}"), exc, parent=dialog_parent)
 			return None
 
-		preferred_name = self._refresh_dictionary_names(path.stem)
-		if self.translation_settings.selected_dictionary == selected_name:
-			active_name = resolve_active_dictionary_after_rename(
-				selected_name,
-				selected_name,
-				path.stem,
-				self._dictionary_names,
-			)
-			self._set_active_dictionary(active_name)
-		return preferred_name
+		current_active_name = self.translation_settings.selected_dictionary
+		self._refresh_dictionary_names(path.stem)
+		update = plan_dictionary_state_after_rename(
+			current_active_name,
+			selected_name,
+			path.stem,
+			self.get_dictionary_names_for_dialog(),
+		)
+		if update.active_selected_name != current_active_name:
+			self._set_active_dictionary(update.active_selected_name)
+		return update.management_selected_name
 
 	def import_dictionary_from_dialog(self, parent: wx.Window | None) -> str | None:
 		dialog_parent = parent or self
@@ -1309,7 +1316,12 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to import dictionary: {error}"), exc, parent=dialog_parent)
 			return None
 
-		return self._refresh_dictionary_names(path.stem)
+		update = plan_dictionary_state_after_add(
+			self.translation_settings.selected_dictionary,
+			self.get_dictionary_names_for_dialog(),
+			path.stem,
+		)
+		return update.management_selected_name
 
 	def export_dictionary_from_dialog(self, parent: wx.Window | None, selected_name: str) -> None:
 		dialog_parent = parent or self

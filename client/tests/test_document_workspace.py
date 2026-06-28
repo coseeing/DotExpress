@@ -30,10 +30,13 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertEqual(normalize_document_name(" default "), "default")
 
     def test_normalize_document_name_rejects_invalid_names(self) -> None:
-        for value in ["", " ", ".", "a/b", r"a\\b", "this-name-is-way-too-long"]:
+        for value in ["", " ", ".", "a/b", r"a\\b", "a" * 33]:
             with self.subTest(value=value):
                 with self.assertRaises(ValueError):
                     normalize_document_name(value)
+
+    def test_normalize_document_name_accepts_32_characters(self) -> None:
+        self.assertEqual(normalize_document_name("a" * 32), "a" * 32)
 
     def test_save_and_load_document_package_roundtrip(self) -> None:
         document = Document(name="lesson1", text="source", braille="⠇⠑⠎⠎")
@@ -77,6 +80,15 @@ class DocumentWorkspaceTest(unittest.TestCase):
         loaded = load_text_document(source_path)
 
         self.assertEqual(loaded, Document(name="lesson1", text="hello", braille=None))
+
+    def test_load_text_document_accepts_32_character_stem(self) -> None:
+        source_path = self.workspace_dir / f"{'a' * 32}.txt"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_text("hello", encoding="utf-8")
+
+        loaded = load_text_document(source_path)
+
+        self.assertEqual(loaded, Document(name="a" * 32, text="hello", braille=None))
 
     def test_export_document_brl_writes_plain_braille_text(self) -> None:
         document = Document(name="lesson1", text="source", braille="⠇⠑⠎⠎")

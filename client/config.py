@@ -33,7 +33,7 @@ DEFAULT_OUTPUT_MODE = "unicode"
 DEFAULT_CONVERSION_WIDTH = 40
 DEFAULT_VIEW_FONT_SIZE = 12
 DEFAULT_VIEW_SCHEME = "light"
-DEFAULT_BRAILLE_FONT = "default"
+DEFAULT_BRAILLE_FONT = "simbraille"
 
 _runtime_lang: Optional[str] = None
 

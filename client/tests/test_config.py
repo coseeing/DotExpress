@@ -103,6 +103,9 @@ class ConfigSettingsTest(unittest.TestCase):
         )
         self.assertEqual(config.get_braille_font("default"), "simbraille")
 
+    def test_braille_font_defaults_to_simbraille_when_config_is_missing(self) -> None:
+        self.assertEqual(config.get_braille_font(), "simbraille")
+
     def test_client_id_is_generated_and_persisted_under_client_section(self) -> None:
         client_id = config.get_or_create_client_id()
 

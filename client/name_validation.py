@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-MAX_NAME_LENGTH = 16
+MAX_NAME_LENGTH = 32
 INVALID_NAME_CHARS = {".", "/", "\\"}
 
 

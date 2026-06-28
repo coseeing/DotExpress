@@ -9,11 +9,7 @@ import wx
 import about
 from braille import louis_helper
 from conversion.service import ConversionRequest, ConversionStageError, convert_text_for_output, get_public_error_message
-from dictionaries.actions import (
-	is_default_dictionary,
-	plan_dictionary_delete,
-	resolve_dictionary_selection,
-)
+from dictionaries.actions import is_default_dictionary
 from dictionaries.manager import (
 	create_dictionary,
 	delete_dictionary,
@@ -76,6 +72,11 @@ from translation.settings import (
 	normalize_translation_settings,
 	save_translation_settings,
 )
+from translation.dictionary_state import (
+	resolve_active_dictionary_after_delete,
+	resolve_active_dictionary_after_rename,
+	resolve_management_selection,
+)
 from ui.font_support import SIMBRAILLE_FACE_NAME, get_simbraille_font_path, register_private_font_for_windows
 from ui.shortcuts import (
 	get_font_size_step_from_wheel,
@@ -90,6 +91,7 @@ from ui.section_navigation import (
 	DOCUMENT_LIST_SECTION,
 	SOURCE_TEXT_SECTION,
 	VIEW_SECTION,
+	get_adjacent_section,
 )
 from ui.translation_menu import get_translation_menu_items
 from client_init import start_client_init_background
@@ -108,12 +110,6 @@ from dialog import (
 
 VIEW_FONT_SIZE_MIN = 8
 VIEW_FONT_SIZE_MAX = 48
-VISIBLE_SECTION_ORDER = [
-	DOCUMENT_LIST_SECTION,
-	VIEW_SECTION,
-	SOURCE_TEXT_SECTION,
-	BRAILLE_RESULT_SECTION,
-]
 VIEW_SCHEMES = {
 	"light": {
 		"background": wx.Colour(255, 255, 255),
@@ -414,10 +410,6 @@ class BrailleFrame(wx.Frame):
 		target = self._get_section_controls()[section_name][0]
 		target.SetFocus()
 
-	def _get_adjacent_visible_section(self, current_section: str, step: int) -> str:
-		index = VISIBLE_SECTION_ORDER.index(current_section)
-		return VISIBLE_SECTION_ORDER[(index + step) % len(VISIBLE_SECTION_ORDER)]
-
 	def _clamp_view_font_size(self, font_size: int) -> int:
 		return max(VIEW_FONT_SIZE_MIN, min(VIEW_FONT_SIZE_MAX, font_size))
 
@@ -483,19 +475,21 @@ class BrailleFrame(wx.Frame):
 
 	def _refresh_dictionary_names(self, preferred_name: str | None = None) -> str:
 		ensure_default_dictionary(self.dictionary_dir)
-		self._dictionary_names = list_dictionary_names(self.dictionary_dir)
-		selected_name = resolve_dictionary_selection(self._dictionary_names, preferred_name)
+		self._dictionary_names[:] = list_dictionary_names(self.dictionary_dir)
+		selected_name = resolve_management_selection(self._dictionary_names, preferred_name)
+		return selected_name
+
+	def get_dictionary_names_for_dialog(self) -> list[str]:
+		self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
+		return list(self._dictionary_names)
+
+	def _set_active_dictionary(self, selected_name: str) -> None:
 		self.translation_settings = TranslationSettings(
 			output_mode=self.translation_settings.output_mode,
 			width=self.translation_settings.width,
 			selected_dictionary=selected_name,
 		)
 		set_selected_dictionary(selected_name)
-		return selected_name
-
-	def get_dictionary_names_for_dialog(self) -> list[str]:
-		self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
-		return list(self._dictionary_names)
 
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
@@ -1123,9 +1117,9 @@ class BrailleFrame(wx.Frame):
 			return
 		current_section = self._get_current_section_name()
 		if current_section is None:
-			target_section = VISIBLE_SECTION_ORDER[0] if step > 0 else VISIBLE_SECTION_ORDER[-1]
+			target_section = DOCUMENT_LIST_SECTION if step > 0 else BRAILLE_RESULT_SECTION
 		else:
-			target_section = self._get_adjacent_visible_section(current_section, step)
+			target_section = get_adjacent_section(current_section, step)
 		self._focus_section(target_section)
 
 	def on_editor_mousewheel(self, event: wx.MouseEvent) -> None:
@@ -1137,17 +1131,19 @@ class BrailleFrame(wx.Frame):
 
 	def on_open_translation_settings(self, _evt) -> None:
 		dictionary_names = self.get_dictionary_names_for_dialog()
-		with TranslationSettingsDialog(self, self.translation_settings, dictionary_names) as dialog:
+		staged_settings = normalize_translation_settings(self.translation_settings, dictionary_names)
+		with TranslationSettingsDialog(self, staged_settings, dictionary_names) as dialog:
 			if dialog.ShowModal() != wx.ID_OK:
 				return
 			self.translation_settings = normalize_translation_settings(dialog.get_settings(), dictionary_names)
+			self._set_active_dictionary(self.translation_settings.selected_dictionary)
 			save_translation_settings(self.translation_settings)
 
 	def on_open_dictionary_management(self, _evt) -> None:
 		selected_name = self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
 		with DictionaryManagementDialog(
 			self,
-			list(self._dictionary_names),
+			self._dictionary_names,
 			selected_name,
 			self.add_dictionary,
 			self.delete_dictionary_from_dialog,
@@ -1192,10 +1188,7 @@ class BrailleFrame(wx.Frame):
 			wx.MessageBox(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=dialog_parent)
 			return None
 
-		selected_name = self._refresh_dictionary_names(path.stem)
-		if hasattr(parent, "refresh_dictionaries"):
-			parent.refresh_dictionaries(list(self._dictionary_names), selected_name)
-		return selected_name
+		return self._refresh_dictionary_names(path.stem)
 
 	def delete_dictionary_from_dialog(self, parent: wx.Window | None, selected_name: str) -> str | None:
 		dialog_parent = parent or self
@@ -1219,16 +1212,22 @@ class BrailleFrame(wx.Frame):
 		):
 			return None
 
+		previous_names = list(self._dictionary_names)
+		current_active_name = self.translation_settings.selected_dictionary
 		try:
-			preferred_name = plan_dictionary_delete(self._dictionary_names, selected_name)
 			delete_dictionary(self.dictionary_dir, selected_name)
 		except OSError as exc:
 			self._show_file_error(_("Failed to delete dictionary: {error}"), exc, parent=dialog_parent)
 			return None
-		selected_name = self._refresh_dictionary_names(preferred_name)
-		if hasattr(parent, "refresh_dictionaries"):
-			parent.refresh_dictionaries(list(self._dictionary_names), selected_name)
-		return selected_name
+		preferred_name = self._refresh_dictionary_names(selected_name)
+		if current_active_name == selected_name:
+			active_name = resolve_active_dictionary_after_delete(
+				current_active_name,
+				selected_name,
+				previous_names,
+			)
+			self._set_active_dictionary(active_name)
+		return preferred_name
 
 	def rename_dictionary_from_dialog(self, parent: wx.Window | None, selected_name: str) -> str | None:
 		dialog_parent = parent or self
@@ -1260,10 +1259,16 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to save dictionary: {error}"), exc, parent=dialog_parent)
 			return None
 
-		selected_name = self._refresh_dictionary_names(path.stem)
-		if hasattr(parent, "refresh_dictionaries"):
-			parent.refresh_dictionaries(list(self._dictionary_names), selected_name)
-		return selected_name
+		preferred_name = self._refresh_dictionary_names(path.stem)
+		if self.translation_settings.selected_dictionary == selected_name:
+			active_name = resolve_active_dictionary_after_rename(
+				selected_name,
+				selected_name,
+				path.stem,
+				self._dictionary_names,
+			)
+			self._set_active_dictionary(active_name)
+		return preferred_name
 
 	def import_dictionary_from_dialog(self, parent: wx.Window | None) -> str | None:
 		dialog_parent = parent or self
@@ -1304,10 +1309,7 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to import dictionary: {error}"), exc, parent=dialog_parent)
 			return None
 
-		selected_name = self._refresh_dictionary_names(path.stem)
-		if hasattr(parent, "refresh_dictionaries"):
-			parent.refresh_dictionaries(list(self._dictionary_names), selected_name)
-		return selected_name
+		return self._refresh_dictionary_names(path.stem)
 
 	def export_dictionary_from_dialog(self, parent: wx.Window | None, selected_name: str) -> None:
 		dialog_parent = parent or self

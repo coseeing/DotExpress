@@ -921,7 +921,7 @@ msgid "Please enter the dictionary name."
 msgstr ""
 
 #: dialog.py:216
-msgid "Dictionary name must be 1 to 16 characters."
+msgid "Dictionary name must be 1 to 32 characters."
 msgstr ""
 
 #: dialog.py:218
@@ -942,7 +942,7 @@ msgid "Please enter the document name."
 msgstr ""
 
 #: dialog.py:273
-msgid "Document name must be 1 to 16 characters."
+msgid "Document name must be 1 to 32 characters."
 msgstr ""
 
 #: dialog.py:275
@@ -1173,6 +1173,10 @@ msgstr ""
 
 #: gui.py:333
 msgid "Braille Result"
+msgstr ""
+
+#: gui.py:394
+msgid "File"
 msgstr ""
 
 #: gui.py:394

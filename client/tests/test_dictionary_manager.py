@@ -52,13 +52,16 @@ class DictionaryManagerTest(unittest.TestCase):
             ".",
             "a/b",
             r"a\\b",
-            "this-name-is-way-too-long",
+            "a" * 33,
             DEFAULT_DICTIONARY_NAME,
         ]
 
         for value in invalid_values:
             with self.assertRaises(ValueError):
                 normalize_dictionary_name(value)
+
+    def test_normalize_dictionary_name_accepts_32_characters(self) -> None:
+        self.assertEqual(normalize_dictionary_name("a" * 32), "a" * 32)
 
     def test_export_dictionary_copies_selected_dictionary_to_destination(self) -> None:
         source_path = create_dictionary(self.dictionary_dir, "math")

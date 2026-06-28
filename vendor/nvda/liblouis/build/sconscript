@@ -96,6 +96,7 @@ sourceFiles = [
 	"utils.c",
 ]
 objs = [env.Object("%s.obj" % f, louisSourceDir.File(f)) for f in sourceFiles]
+env.Requires(objs, liblouisH)
 louisLib = env.SharedLibrary("liblouis", objs)
 if signExec:
 	env.AddPostAction(louisLib[0], [signExec])
@@ -125,4 +126,4 @@ louisTables = env.Install(
 for f in env.Glob(f"{louisTableDir}/*.in"):
 	louisTables.append(env.M4(source=f, target=outDir.Dir("tables").File(os.path.splitext(f.name)[0])))
 
-Return("louisLibInstall", "louisPython", "louisTables")
+Return("louisLibInstall", "louisPython", "louisTables", "liblouisH")

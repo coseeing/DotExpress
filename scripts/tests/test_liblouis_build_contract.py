@@ -17,6 +17,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
             '"apiSigningToken"',
             "vendor/nvda/liblouis/build/sconscript",
             "client/braille",
+            'tools=["default", "m4"]',
             'miscdeps/tools/m4.exe',
             '"UNICODE"',
             '"/MT"',
@@ -27,6 +28,10 @@ class LiblouisBuildContractTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, text)
+
+    def test_vendor_sconscript_requires_generated_liblouis_header(self):
+        text = (ROOT / "vendor" / "nvda" / "liblouis" / "build" / "sconscript").read_text(encoding="utf-8")
+        self.assertIn("env.Requires(objs, liblouisH)", text)
 
     def test_batch_bootstrap_invokes_scons_without_nmake(self):
         text = (ROOT / "scripts" / "build-liblouis.bat").read_text(encoding="utf-8")

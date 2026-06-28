@@ -16,12 +16,18 @@
 - `python3 -m py_compile client/gui.py client/translation/dictionary_state.py client/tests/test_translation_dictionary_state.py`
 - `cd client && python3 -m unittest discover -s tests -v`
 
-`unittest discover` 仍有既有環境限制，沒有新增新的失敗：
+`unittest discover` 現在可正常完成，三個環境限制案例會被 `unittest` 視為 skip，而不是 import error：
 
-- `test_language_detection_translation`：缺少 `liblouis.dll`
-- `test_translation_language_result`：module-level `pytest.skip` 被 `unittest` 視為 import error
-- `test_translation_result`：module-level `pytest.skip` 被 `unittest` 視為 import error
+- `test_language_detection_translation`：缺少 `liblouis.dll` 時先跳過匯入 `translate`
+- `test_translation_language_result`：module-level skip 改為 `unittest.SkipTest`
+- `test_translation_result`：module-level skip 改為 `unittest.SkipTest`
+
+最新驗證結果：
+
+- `cd client && python3 -m unittest discover -s tests -v`
+- `OK (skipped=3)`
 
 ## Commit List
 
 - `8f12bb2` `test: cover dictionary state orchestration`
+- `e25c610` `fix: make translation tests unittest-safe`

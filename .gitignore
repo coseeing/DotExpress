@@ -23,4 +23,5 @@ AGENTS.md
 
 # Version-controlled upstream source checkout
 /include/*
+!/include/nvda/
 !/include/liblouis/

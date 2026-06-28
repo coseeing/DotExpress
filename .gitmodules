@@ -1,3 +1,6 @@
 [submodule "include/liblouis"]
 	path = include/liblouis
 	url = https://github.com/liblouis/liblouis.git
+[submodule "include/nvda"]
+	path = include/nvda
+	url = https://github.com/nvaccess/nvda.git

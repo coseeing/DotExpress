@@ -4,7 +4,7 @@
 
 DotExpress currently builds `liblouis` through an upstream Windows `nmake` path plus repository-local adjustments. That path has diverged from NVDA, even though DotExpress already reuses NVDA-derived Python `liblouis` integration code. The result is a fragile integration boundary: build settings, compatibility shims, Python ctypes bindings, and runtime table handling are no longer managed as one unit.
 
-This design changes DotExpress to align its `liblouis` integration with NVDA. The build entrypoint will move to SCons, matching NVDA's `liblouis` build model. NVDA integration files and Python wrapper files will be synchronized from a pinned NVDA source submodule at `include/nvda`, then frozen into `vendor/nvda/liblouis/` for product use. DotExpress will keep `include/liblouis/` as the upstream `liblouis` source submodule and will continue to ship runtime artifacts under `client/braille/`.
+This design changes DotExpress to align its `liblouis` integration with NVDA. The build entrypoint will move to SCons, matching NVDA's `liblouis` build model. NVDA integration files and Python wrapper files will be synchronized from a pinned NVDA source submodule at `include/nvda`, then frozen into `vendor/nvda/liblouis/` for product use. DotExpress will keep `include/liblouis/` as the upstream `liblouis` source submodule and will continue to ship runtime artifacts under `client/braille/`, with the Python glue regenerated from the vendor snapshot rather than hand-edited.
 
 The first version is intentionally narrow: Windows x64 only, no signing, no multi-architecture matrix, and no MathCAT work.
 
@@ -19,6 +19,7 @@ The first version is intentionally narrow: Windows x64 only, no signing, no mult
   - NVDA integration source,
   - DotExpress runtime output.
 - Keep DotExpress runtime import paths stable by copying synchronized Python wrapper files into existing `client/braille/` locations.
+- Keep `client/braille/louis_helper.py` and `client/braille/liblouis/__init__.py` generated from the synchronized vendor snapshot.
 
 ## Non-Goals
 
@@ -51,7 +52,7 @@ The new architecture has three layers:
 
 2. NVDA integration layer
    - `include/nvda/`
-   - Tracks a pinned NVDA commit/tag as a Git submodule.
+   - Tracks a pinned NVDA commit as a Git submodule.
    - Serves only as the synchronization source, never as a direct runtime or direct build dependency.
    - `vendor/nvda/liblouis/`
    - Stores the synchronized, frozen NVDA-derived integration files used by DotExpress.
@@ -83,6 +84,11 @@ The build will read upstream `liblouis` from `include/liblouis/` and NVDA-derive
 
 - `vendor/nvda/liblouis/python/`
   - NVDA `liblouis` Python wrapper/helper files copied from `include/nvda/`.
+  - `python/__init__.py.in` is the template source used to generate `client/braille/liblouis/__init__.py`.
+
+- `vendor/nvda/liblouis/runtime/`
+  - NVDA `louisHelper.py` copied from `include/nvda/`.
+  - This is the source used to generate `client/braille/louis_helper.py`.
 
 - `vendor/nvda/liblouis/SOURCE.json`
   - Metadata recording the NVDA source reference and synchronized file list.
@@ -100,7 +106,7 @@ These runtime files are outputs of the sync/build flow and should no longer be t
 
 ### Sync source
 
-Synchronization will read from `include/nvda/`, which is pinned to a fixed commit/tag by Git submodule state.
+Synchronization will read from `include/nvda/`, which is pinned to a fixed commit by Git submodule state.
 
 ### Sync target
 
@@ -135,29 +141,27 @@ This requirement is semantic, not merely path-based: if NVDA renames or reorgani
 
 ### Sync metadata
 
-`vendor/nvda/liblouis/SOURCE.json` will record:
+`vendor/nvda/liblouis/SOURCE.json` records:
 
 - source repository,
 - source submodule path,
-- source ref or tag if known,
 - exact source commit,
-- synchronized file list,
-- sync timestamp.
+- synchronized file list.
 
 Example structure:
 
 ```json
 {
-  "source_repo": "nvaccess/nvda",
+  "source_repo": "https://github.com/nvaccess/nvda.git",
   "source_path": "include/nvda",
-  "source_ref": "2025.2.0",
-  "source_commit": "abc123...",
+  "source_commit": "b493fe7e1f361a8d549f17a3353d826f6fe32334",
   "files": [
-    "nvdaHelper/liblouis/sconscript",
-    "nvdaHelper/liblouis/config.h",
-    "nvdaHelper/liblouis/strings.h",
-    "source/louisHelper.py",
-    "source/louis.py"
+    "build/config.h",
+    "build/sconscript",
+    "build/strings.h",
+    "python/__init__.py.in",
+    "python/louisHelper.py",
+    "runtime/louis_helper.py"
   ]
 }
 ```
@@ -285,7 +289,7 @@ The first-version build flow is:
 
 Because NVDA synchronization is intentionally pinned and manual, the upgrade flow is:
 
-1. Update `include/nvda` submodule to the target commit/tag.
+1. Update `include/nvda` submodule to the target commit.
 2. Run `scripts/sync_nvda_liblouis.py`.
 3. Review changes under `vendor/nvda/liblouis/`.
 4. Run `scripts/build-liblouis.bat`.

@@ -116,71 +116,46 @@ Run the following command in Windows CMD to generate the executable using PyInst
 scripts\build_dotexpress.bat
 ```
 
-### liblouis Version Policy
+### Building liblouis on Windows
 
-DotExpress uses liblouis from one tracked source plus generated runtime assets:
+DotExpress builds liblouis from two tracked source checkouts:
 
 - `include/liblouis/`: upstream liblouis source submodule
-- `client/braille/liblouis.dll`: generated runtime DLL
-- `client/braille/liblouis/tables/`: generated runtime table set
+- `include/nvda/`: pinned NVDA source submodule used for the liblouis integration layer
 
-The source of truth is the `include/liblouis` submodule. The DLL and tables under `client/braille/` are generated from that source and are not version-controlled.
+The generated runtime outputs are:
 
-Use a released liblouis tag for this submodule. Do not point DotExpress at `master` or other development snapshots unless you are explicitly working on liblouis compatibility fixes.
+- `client/braille/liblouis.dll`
+- `client/braille/liblouis/tables/`
+- `client/braille/louis_helper.py`
+- `client/braille/liblouis/__init__.py`
 
-Rules:
+The source of truth is the pair of submodule pointers. The runtime DLL, helper, wrapper, and tables are generated from those sources and should not be hand-edited.
 
-1. Do not manually edit or version-control `client/braille/liblouis.dll`.
-2. Do not manually edit or version-control `client/braille/liblouis/tables/`.
-3. Do not update `client/braille/liblouis/tables/` by copying individual table files from another liblouis release.
-4. When upgrading liblouis, update the `include/liblouis` submodule to a released tag first, then rerun `scripts\build-liblouis.bat` to regenerate both the DLL and tables from the same upstream revision.
-5. `scripts\build_dotexpress.bat` depends on `scripts\build-liblouis.bat` and will call it first.
-6. Do not keep alternate runtime table directories such as `tables(error)` in the shipping tree. They make it easy to mix incompatible table syntax with the generated DLL.
+### Prerequisites
 
-Recommended upgrade workflow:
+- Visual Studio 2022 C++ tools
+- Clang tools for Windows
+- Python 3 with SCons (`py -m pip install scons`)
+- GNU `m4.exe`, exposed through `M4_EXE`
 
-1. Update `include/liblouis` to the target upstream release tag.
-2. Run `scripts\\build-liblouis.bat` to rebuild the DLL and refresh the runtime tables from the same source checkout. The script expects the tracked `build/liblouis-static.nmake` file to be present.
-4. Verify the runtime bundle as a matched set by testing at least:
-   - Chinese default table translation
-   - English UEB grade 1 translation
-   - English UEB grade 2 translation
-   - Mixed-language text that switches between Chinese and English
-5. Commit the submodule update together with any script or documentation changes. Do not commit the generated DLL or tables.
+### Initial checkout and build
 
-If English grade 1 works but grade 2 fails after a liblouis upgrade, assume the local runtime artifacts were generated from the wrong source revision or are stale until proven otherwise.
-
-The current recommended stable target is `v3.31.0`.
-
-Why `v3.31.0`:
-
-- `v3.31.0` and earlier are the last confirmed releases in this repo's workflow that stay close to the upstream Windows `nmake` path without extra compatibility shims.
-- `v3.32.0` through `v3.35.0` introduce a Windows build compatibility gap around `strings.h`.
-- Current development snapshots beyond those releases introduce additional Windows build compatibility issues, including newer C constructs in the Windows `nmake` path.
-
-If you choose a version newer than `v3.31.0`, expect extra Windows compatibility work before `scripts\build-liblouis.bat` will succeed.
-
-To move the liblouis submodule to a new upstream version:
-
-```bash
-cd include/liblouis
-git fetch --tags origin
-git checkout <tag-or-commit>
-cd ../..
-git add include/liblouis
+```bat
+git submodule update --init --recursive
+py scripts\sync_nvda_liblouis.py
+set M4_EXE=C:\Tools\m4\m4.exe
+scripts\build-liblouis.bat
 ```
 
-Example:
+### Manual NVDA upgrade
 
-```bash
-cd include/liblouis
-git fetch --tags origin
-git checkout v3.31.0
-cd ../..
-git add include/liblouis
-```
-
-The submodule URL is stored in `.gitmodules`. The exact liblouis version used by DotExpress is recorded by the main repository's tracked submodule pointer at `include/liblouis`.
+1. Check out the approved commit in `include/nvda`.
+2. Set `include/liblouis` to the gitlink printed by `git -C include/nvda rev-parse HEAD:include/liblouis`.
+3. Run `py scripts\sync_nvda_liblouis.py`.
+4. Review `vendor/nvda/liblouis/` and `SOURCE.json`.
+5. Clean-build and run the liblouis runtime tests.
+6. Commit both submodule pointers, synchronized vendor files, and generated runtime files together.
 
 ---
 

@@ -1,10 +1,9 @@
 import ctypes
-
-import pytest
+import unittest
 
 
 if not hasattr(ctypes, "WINFUNCTYPE"):
-	pytest.skip("liblouis bindings require WINFUNCTYPE on this platform", allow_module_level=True)
+	raise unittest.SkipTest("liblouis bindings require WINFUNCTYPE on this platform")
 
 from gui import translate_with_language, translate_and_wrap_both
 
@@ -27,4 +26,3 @@ def test_blank_on_start_line() -> None:
 	# result.bind_word_tokens()
 	# result.reclean_token()
 	assert result[1] == "I am a student. I want to school every\nday"
-

@@ -1,7 +1,12 @@
 import os
+import ctypes
+import unittest
 from typing import Iterable
 
 from languageDetection import LangChangeCommand, LanguageDetector
+
+if not hasattr(ctypes, "WINFUNCTYPE"):
+	raise unittest.SkipTest("liblouis bindings require WINFUNCTYPE on this platform")
 
 from translate import translate, TranslationResult
 

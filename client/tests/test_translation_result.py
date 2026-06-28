@@ -1,10 +1,9 @@
 import ctypes
-
-import pytest
+import unittest
 
 
 if not hasattr(ctypes, "WINFUNCTYPE"):
-	pytest.skip("liblouis bindings require WINFUNCTYPE on this platform", allow_module_level=True)
+	raise unittest.SkipTest("liblouis bindings require WINFUNCTYPE on this platform")
 
 from translate import translate
 

@@ -216,7 +216,7 @@ class DictionaryNameDialog(wx.Dialog):
 		if not candidate:
 			return _("Please enter the dictionary name.")
 		if len(candidate) > MAX_DICTIONARY_NAME_LENGTH:
-			return _("Dictionary name must be 1 to 16 characters.")
+			return _("Dictionary name must be 1 to 32 characters.")
 		if any(char in candidate for char in (".", "/", "\\")):
 			return _('Dictionary name cannot contain ".", "/", or "\\".')
 		if candidate.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
@@ -273,7 +273,7 @@ class DocumentNameDialog(wx.Dialog):
 		if not candidate:
 			return _("Please enter the document name.")
 		if len(candidate) > MAX_DICTIONARY_NAME_LENGTH:
-			return _("Document name must be 1 to 16 characters.")
+			return _("Document name must be 1 to 32 characters.")
 		if any(char in candidate for char in (".", "/", "\\")):
 			return _('Document name cannot contain ".", "/", or "\\".')
 		return None

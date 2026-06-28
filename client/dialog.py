@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 import gettext
@@ -10,8 +11,10 @@ from typing import List
 import wx
 from braille.tables import listTables
 from Bopomofo import normalize_zhuyin_sequence
+from dictionaries.actions import get_action_availability, resolve_dictionary_selection
 from dictionaries.manager import DEFAULT_DICTIONARY_NAME, MAX_DICTIONARY_NAME_LENGTH, normalize_dictionary_name
 from documents.workspace import normalize_document_name
+from translation.settings import MAX_CONVERSION_WIDTH, MIN_CONVERSION_WIDTH, TranslationSettings
 
 
 def resource_path(relative_path: str) -> Path:
@@ -532,6 +535,258 @@ class SpeechSymbolsDialog(wx.Dialog):
 			writer.writeheader()
 			for entry in self.entries:
 				writer.writerow({"text": entry.text, "braille": entry.braille, "type": entry.entry_type})
+
+
+class TranslationSettingsDialog(wx.Dialog):
+	"""Dialog that stages translation settings changes."""
+
+	_OUTPUT_MODES: list[tuple[str, str]] = [
+		("unicode", _("Unicode")),
+		("ascii", _("ASCII")),
+	]
+
+	def __init__(
+		self,
+		parent: wx.Window | None,
+		settings: TranslationSettings,
+		dictionary_names: list[str],
+	):
+		super().__init__(parent, title=_("Translation Settings"))
+		self._initial_settings = settings
+		self._dictionary_names = list(dictionary_names)
+
+		main_sizer = wx.BoxSizer(wx.VERTICAL)
+		grid = wx.FlexGridSizer(3, 2, 8, 8)
+
+		output_label = wx.StaticText(self, label=_("Braille Type"))
+		self.output_choice = wx.Choice(self, choices=[label for _key, label in self._OUTPUT_MODES])
+		grid.Add(output_label, 0, wx.ALIGN_CENTER_VERTICAL)
+		grid.Add(self.output_choice, 1, wx.EXPAND)
+
+		width_label = wx.StaticText(self, label=_("Width"))
+		self.width_spin = wx.SpinCtrl(
+			self,
+			min=MIN_CONVERSION_WIDTH,
+			max=MAX_CONVERSION_WIDTH,
+			initial=max(MIN_CONVERSION_WIDTH, min(MAX_CONVERSION_WIDTH, settings.width)),
+		)
+		grid.Add(width_label, 0, wx.ALIGN_CENTER_VERTICAL)
+		grid.Add(self.width_spin, 1, wx.EXPAND)
+
+		dictionary_label = wx.StaticText(self, label=_("Dictionary"))
+		self.dictionary_choice = wx.Choice(self, choices=self._dictionary_names)
+		grid.Add(dictionary_label, 0, wx.ALIGN_CENTER_VERTICAL)
+		grid.Add(self.dictionary_choice, 1, wx.EXPAND)
+		grid.AddGrowableCol(1, 1)
+
+		main_sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 12)
+
+		button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+		if button_sizer:
+			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
+		self.SetSizerAndFit(main_sizer)
+		self._select_output_mode(settings.output_mode)
+		self._select_dictionary(settings.selected_dictionary)
+
+	def get_settings(self) -> TranslationSettings:
+		output_index = self.output_choice.GetSelection()
+		dictionary_index = self.dictionary_choice.GetSelection()
+		output_mode = (
+			self._OUTPUT_MODES[output_index][0]
+			if output_index != wx.NOT_FOUND
+			else self._initial_settings.output_mode
+		)
+		selected_dictionary = (
+			self._dictionary_names[dictionary_index]
+			if dictionary_index != wx.NOT_FOUND and self._dictionary_names
+			else self._initial_settings.selected_dictionary
+		)
+		return TranslationSettings(
+			output_mode=output_mode,
+			width=self.width_spin.GetValue(),
+			selected_dictionary=selected_dictionary,
+		)
+
+	def _select_output_mode(self, output_mode: str) -> None:
+		index = next((idx for idx, (key, _label) in enumerate(self._OUTPUT_MODES) if key == output_mode), 0)
+		self.output_choice.SetSelection(index)
+
+	def _select_dictionary(self, dictionary_name: str) -> None:
+		if not self._dictionary_names:
+			self.dictionary_choice.SetSelection(wx.NOT_FOUND)
+			self.dictionary_choice.Disable()
+			return
+
+		index = next((idx for idx, name in enumerate(self._dictionary_names) if name == dictionary_name), 0)
+		self.dictionary_choice.SetSelection(index)
+
+	def __enter__(self) -> "TranslationSettingsDialog":
+		return self
+
+	def __exit__(self, exc_type, exc, _tb) -> None:
+		self.Destroy()
+
+
+class DictionaryManagementDialog(wx.Dialog):
+	"""Dialog that stages dictionary lifecycle actions through callbacks."""
+
+	def __init__(
+		self,
+		parent: wx.Window | None,
+		dictionary_names: list[str],
+		selected_name: str,
+		on_add: Callable[[wx.Window | None], str | None],
+		on_delete: Callable[[wx.Window | None, str], str | None],
+		on_rename: Callable[[wx.Window | None, str], str | None],
+		on_import: Callable[[wx.Window | None], str | None],
+		on_export: Callable[[wx.Window | None, str], None],
+	):
+		super().__init__(
+			parent,
+			title=_("Dictionary Management"),
+			style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+		)
+		self._dictionary_names = dictionary_names
+		self._selected_name = selected_name
+		self._on_add = on_add
+		self._on_delete = on_delete
+		self._on_rename = on_rename
+		self._on_import = on_import
+		self._on_export = on_export
+		self.edit_dictionary_name: str | None = None
+		self._build_ui()
+		self.refresh_dictionaries(self._dictionary_names, selected_name)
+
+	def _build_ui(self) -> None:
+		main_sizer = wx.BoxSizer(wx.VERTICAL)
+		self.list_ctrl = wx.ListCtrl(
+			self,
+			style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL,
+		)
+		self.list_ctrl.InsertColumn(0, _("Dictionary"), width=360)
+		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_selection_changed)
+		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_DESELECTED, self._on_selection_changed)
+		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self._on_edit)
+		main_sizer.Add(self.list_ctrl, 1, wx.EXPAND | wx.ALL, 12)
+
+		button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		self.add_button = wx.Button(self, label=_("Add"))
+		self.delete_button = wx.Button(self, label=_("Delete"))
+		self.rename_button = wx.Button(self, label=_("Rename"))
+		self.edit_button = wx.Button(self, label=_("Edit"))
+		self.import_button = wx.Button(self, label=_("Import"))
+		self.export_button = wx.Button(self, label=_("Export"))
+		for button in (
+			self.add_button,
+			self.delete_button,
+			self.rename_button,
+			self.edit_button,
+			self.import_button,
+			self.export_button,
+		):
+			button_sizer.Add(button, 0, wx.RIGHT, 8)
+		main_sizer.Add(button_sizer, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
+		button_bar = self.CreateButtonSizer(wx.CLOSE)
+		if button_bar:
+			main_sizer.Add(button_bar, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+			self.Bind(wx.EVT_BUTTON, lambda _event: self.EndModal(wx.ID_CLOSE), id=wx.ID_CLOSE)
+
+		self.add_button.Bind(wx.EVT_BUTTON, self._on_add_clicked)
+		self.delete_button.Bind(wx.EVT_BUTTON, self._on_delete_clicked)
+		self.rename_button.Bind(wx.EVT_BUTTON, self._on_rename_clicked)
+		self.edit_button.Bind(wx.EVT_BUTTON, self._on_edit)
+		self.import_button.Bind(wx.EVT_BUTTON, self._on_import_clicked)
+		self.export_button.Bind(wx.EVT_BUTTON, self._on_export_clicked)
+
+		self.SetSizer(main_sizer)
+		self.SetMinSize((650, 400))
+		self.Layout()
+
+	def refresh_dictionaries(
+		self,
+		dictionary_names: list[str],
+		preferred_name: str | None,
+	) -> None:
+		self._dictionary_names = dictionary_names
+		self.list_ctrl.DeleteAllItems()
+		for name in self._dictionary_names:
+			self.list_ctrl.InsertItem(self.list_ctrl.GetItemCount(), name)
+		selected = resolve_dictionary_selection(self._dictionary_names, preferred_name)
+		self._selected_name = selected
+		if selected in self._dictionary_names:
+			index = self._dictionary_names.index(selected)
+			self.list_ctrl.Select(index)
+			self.list_ctrl.Focus(index)
+		self._update_button_states()
+
+	def _get_selected_name(self) -> str | None:
+		index = self.list_ctrl.GetFirstSelected()
+		if index == wx.NOT_FOUND:
+			return None
+		if index >= len(self._dictionary_names):
+			return None
+		return self._dictionary_names[index]
+
+	def _update_button_states(self) -> None:
+		selected_name = self._get_selected_name() or self._selected_name or ""
+		availability = get_action_availability(self._dictionary_names, selected_name)
+		self.add_button.Enable(True)
+		self.import_button.Enable(True)
+		self.delete_button.Enable(availability.delete)
+		self.rename_button.Enable(availability.rename)
+		self.edit_button.Enable(availability.edit)
+		self.export_button.Enable(availability.export)
+
+	def _on_selection_changed(self, event: wx.ListEvent) -> None:
+		selected_name = self._get_selected_name()
+		if selected_name is not None:
+			self._selected_name = selected_name
+		self._update_button_states()
+		event.Skip()
+
+	def _on_add_clicked(self, _event: wx.CommandEvent) -> None:
+		preferred_name = self._on_add(self)
+		if preferred_name is not None:
+			self.refresh_dictionaries(self._dictionary_names, preferred_name)
+
+	def _on_delete_clicked(self, _event: wx.CommandEvent) -> None:
+		selected = self._get_selected_name()
+		if selected is not None:
+			preferred_name = self._on_delete(self, selected)
+			if preferred_name is not None:
+				self.refresh_dictionaries(self._dictionary_names, preferred_name)
+
+	def _on_rename_clicked(self, _event: wx.CommandEvent) -> None:
+		selected = self._get_selected_name()
+		if selected is not None:
+			preferred_name = self._on_rename(self, selected)
+			if preferred_name is not None:
+				self.refresh_dictionaries(self._dictionary_names, preferred_name)
+
+	def _on_import_clicked(self, _event: wx.CommandEvent) -> None:
+		preferred_name = self._on_import(self)
+		if preferred_name is not None:
+			self.refresh_dictionaries(self._dictionary_names, preferred_name)
+
+	def _on_export_clicked(self, _event: wx.CommandEvent) -> None:
+		selected = self._get_selected_name()
+		if selected is not None:
+			self._on_export(self, selected)
+
+	def _on_edit(self, _event: wx.Event) -> None:
+		selected = self._get_selected_name()
+		if selected is None:
+			return
+		self.edit_dictionary_name = selected
+		self.EndModal(wx.ID_EDIT)
+
+	def __enter__(self) -> "DictionaryManagementDialog":
+		return self
+
+	def __exit__(self, exc_type, exc, _tb) -> None:
+		self.Destroy()
 
 
 class TranslationTableDialog(wx.Dialog):

@@ -1146,19 +1146,35 @@ msgstr "淺色"
 msgid "Dark"
 msgstr "深色"
 
-#: gui.py:260
-msgid "Conversion"
-msgstr "轉換"
+#: gui.py:388
+msgid "Translation"
+msgstr "轉譯"
+
+#: dialog.py:538 gui.py:393
+msgid "Translation Settings"
+msgstr "轉譯設定"
+
+#: gui.py:394
+msgid "Translation Settings..."
+msgstr "轉譯設定..."
+
+#: gui.py:396
+msgid "Translation Tables Setting..."
+msgstr "轉譯表設定..."
+
+#: gui.py:397
+msgid "Dictionary Management"
+msgstr "字典管理"
+
+#: gui.py:398
+msgid "Dictionary Management..."
+msgstr "字典管理..."
 
 #: gui.py:261
-msgid "Translation Tables..."
-msgstr "轉譯表..."
-
-#: gui.py:262
 msgid "Braille Type"
 msgstr "點字類型"
 
-#: gui.py:264
+#: gui.py:263
 msgid "Width"
 msgstr "寬度"
 
@@ -1166,13 +1182,17 @@ msgstr "寬度"
 msgid "Dictionary"
 msgstr "字典"
 
-#: gui.py:274
-msgid "Actions"
-msgstr "動作"
-
 #: gui.py:275
 msgid "Convert"
+msgstr "執行轉換"
+
+#: gui.py:260
+msgid "Conversion"
 msgstr "轉換"
+
+#: gui.py:261
+msgid "Translation Tables..."
+msgstr "轉譯表..."
 
 #: gui.py:290
 msgid "Documents"

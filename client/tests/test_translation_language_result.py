@@ -5,6 +5,11 @@ import unittest
 if not hasattr(ctypes, "WINFUNCTYPE"):
 	raise unittest.SkipTest("liblouis bindings require WINFUNCTYPE on this platform")
 
+try:
+	from braille import liblouis  # noqa: F401
+except Exception as exc:
+	raise unittest.SkipTest(f"liblouis bindings unavailable: {exc}") from exc
+
 from gui import translate_with_language, translate_and_wrap_both
 
 

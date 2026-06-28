@@ -1,93 +1,42 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 
-rem Set up the MSVC build environment (x64 Native Tools)
-call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
+set "ROOT=%~dp0.."
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 
+if not exist "%VSWHERE%" (
+    echo Missing vswhere.exe. Install Visual Studio 2022 C++ Build Tools.
+    exit /b 1
+)
+
+for /f "usebackq tokens=*" %%I in (`"%VSWHERE%" -latest -version [17.0^,18.0^) -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%I"
+if not defined VSROOT (
+    echo Visual Studio 2022 C++ tools were not found.
+    exit /b 1
+)
+
+call "%VSROOT%\VC\Auxiliary\Build\vcvarsall.bat" x64
+if errorlevel 1 exit /b 1
+
+where clang-cl >nul 2>&1
 if errorlevel 1 (
-    echo Failed to load the Visual Studio build environment. Make sure VS 2022 C++ tools are installed.
+    echo clang-cl was not found. Install Clang tools for Windows.
     exit /b 1
 )
 
-set SCRIPT_DIR=%~dp0
-for %%I in ("%SCRIPT_DIR%..") do set "ROOT=%%~fI\"
-set CLIENT_DIR=%ROOT%client
-set BRAILLE_DIR=%CLIENT_DIR%\braille
-set TABLES_DIR=%BRAILLE_DIR%\liblouis\tables
-set SRC=%ROOT%include\liblouis
-set WINDIR=%SRC%\windows
-set SRC_TABLES=%SRC%\tables
-set STATIC_MAKEFILE=%ROOT%build\liblouis-static.nmake
-
-if not exist "%SRC%" (
-    echo Missing %SRC%.
-    echo This repository expects liblouis to be checked out at include\liblouis as a git submodule.
-    echo Run: git submodule update --init --recursive
-    echo Use a released liblouis tag for the submodule, not master.
-    exit /b 1
-)
-
-if not exist "%WINDIR%\Makefile.nmake" (
-    echo Missing %WINDIR%\Makefile.nmake.
-    echo Confirm the liblouis sources were initialized correctly under include\liblouis.
-    exit /b 1
-)
-
-if not exist "%STATIC_MAKEFILE%" (
-    echo Missing %STATIC_MAKEFILE%.
-    echo The repository should include build\liblouis-static.nmake. Restore it from git before building.
-    exit /b 1
-)
-
-if not exist "%SRC_TABLES%" (
-    echo Missing %SRC_TABLES%.
-    echo Confirm the liblouis source checkout includes the upstream tables directory.
-    exit /b 1
-)
-
-pushd "%WINDIR%"
-
-rem Always start from a clean slate so stale /MD objects cannot be reused
-nmake /f "%STATIC_MAKEFILE%" clean >nul
-
-rem Build liblouis.dll using the custom static CRT makefile
-nmake /f "%STATIC_MAKEFILE%"
+where scons >nul 2>&1
 if errorlevel 1 (
-    popd
-    echo nmake build failed. Inspect the log for details.
+    echo scons was not found. Install it with: py -m pip install scons
     exit /b 1
 )
 
+if not defined M4_EXE (
+    echo M4_EXE must point to m4.exe.
+    exit /b 1
+)
+
+pushd "%ROOT%"
+scons M4_EXE="%M4_EXE%" %*
+set "RESULT=%ERRORLEVEL%"
 popd
-
-rem Copy artifacts for packaging/runtime consumption
-if exist "%TABLES_DIR%" (
-    rmdir /S /Q "%TABLES_DIR%"
-)
-mkdir "%TABLES_DIR%" >nul 2>&1
-if errorlevel 1 (
-    echo Failed to create %TABLES_DIR%.
-    exit /b 1
-)
-
-xcopy /E /I /Y "%SRC_TABLES%\*" "%TABLES_DIR%\" >nul
-if errorlevel 1 (
-    echo Failed to copy liblouis tables into %TABLES_DIR%.
-    exit /b 1
-)
-
-copy /Y "%WINDIR%\liblouis.dll" "%BRAILLE_DIR%\liblouis.dll" >nul
-if errorlevel 1 (
-    echo Failed to copy liblouis.dll into %BRAILLE_DIR%.
-    exit /b 1
-)
-
-copy /Y "%WINDIR%\liblouis.lib" "%CLIENT_DIR%\liblouis.lib" >nul
-if errorlevel 1 (
-    echo Failed to copy liblouis.lib into %CLIENT_DIR%.
-    exit /b 1
-)
-
-echo liblouis build complete. Runtime artifacts copied to %BRAILLE_DIR%
-endlocal
- 
+exit /b %RESULT%

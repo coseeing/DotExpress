@@ -23,9 +23,9 @@ class InputShortcutsTest(unittest.TestCase):
             ("rename other key", is_document_rename_shortcut, {"key_code": 13}, False),
             ("delete", is_document_delete_shortcut, {"key_code": 127}, True),
             ("delete other key", is_document_delete_shortcut, {"key_code": 13}, False),
-            ("alt o txt import", is_document_import_txt_shortcut, {"key_code": 79, "alt_down": True}, True),
-            ("plain o txt import", is_document_import_txt_shortcut, {"key_code": 79, "alt_down": False}, False),
-            ("alt other key txt import", is_document_import_txt_shortcut, {"key_code": 80, "alt_down": True}, False),
+            ("ctrl o txt import", is_document_import_txt_shortcut, {"key_code": 79, "control_down": True}, True),
+            ("plain o txt import", is_document_import_txt_shortcut, {"key_code": 79, "control_down": False}, False),
+            ("ctrl other key txt import", is_document_import_txt_shortcut, {"key_code": 80, "control_down": True}, False),
         ]
 
         for label, shortcut, kwargs, expected in cases:

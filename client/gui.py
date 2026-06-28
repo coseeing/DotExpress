@@ -1137,7 +1137,7 @@ class BrailleFrame(wx.Frame):
 		event.Skip()
 
 	def on_char_hook(self, event: wx.KeyEvent) -> None:
-		if is_document_import_txt_shortcut(event.GetKeyCode(), event.AltDown()):
+		if is_document_import_txt_shortcut(event.GetKeyCode(), event.ControlDown()):
 			self.on_import_document("txt")
 			return
 		step = is_section_navigation_shortcut(event.GetKeyCode(), event.ShiftDown())

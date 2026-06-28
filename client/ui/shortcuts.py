@@ -15,8 +15,8 @@ def is_brl_export_shortcut(key_code: int, control_down: bool) -> bool:
     return control_down and key_code == S_KEY_CODE
 
 
-def is_document_import_txt_shortcut(key_code: int, alt_down: bool) -> bool:
-    return alt_down and key_code == O_KEY_CODE
+def is_document_import_txt_shortcut(key_code: int, control_down: bool) -> bool:
+    return control_down and key_code == O_KEY_CODE
 
 
 def is_document_rename_shortcut(key_code: int) -> bool:

@@ -49,13 +49,15 @@ def _is_windows_legal_name(name: str) -> bool:
 
 
 def normalize_base_name(name: str, *, reserved_names: set[str] | None = None) -> str:
-    normalized = name.strip()
-    if not normalized:
+    if not name or not name.strip():
         raise ValueError("Name cannot be empty.")
+    if any(ord(char) < 32 for char in name):
+        raise ValueError("Name contains invalid characters.")
+    if name.endswith((" ", ".")):
+        raise ValueError("Name cannot end with a period or space.")
+    normalized = name.strip()
     if len(normalized) > MAX_NAME_LENGTH:
         raise ValueError(f"Name cannot exceed {MAX_NAME_LENGTH} characters.")
-    if name and name[-1].isspace() and not name[:1].isspace():
-        raise ValueError("Name cannot end with a period or space.")
     if not _is_windows_legal_name(normalized):
         raise ValueError("Name contains invalid characters.")
     if reserved_names and normalized.casefold() in {reserved.casefold() for reserved in reserved_names}:

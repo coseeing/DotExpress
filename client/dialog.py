@@ -54,18 +54,19 @@ def _normalize_dialog_name(
 	invalid_message: str,
 	reserved_message: str | None = None,
 ) -> tuple[str | None, str | None]:
-	raw_candidate = candidate
-	candidate = candidate.strip()
-	if not candidate:
+	if not candidate or not candidate.strip():
 		return None, empty_message
-	if len(candidate) > MAX_DICTIONARY_NAME_LENGTH:
-		return None, length_message
-	if raw_candidate and raw_candidate[-1].isspace() and not raw_candidate[:1].isspace():
+	if any(ord(char) < 32 for char in candidate):
 		return None, invalid_message
+	if candidate.endswith((" ", ".")):
+		return None, invalid_message
+	normalized_candidate = candidate.strip()
+	if len(normalized_candidate) > MAX_DICTIONARY_NAME_LENGTH:
+		return None, length_message
 	try:
-		return normalizer(candidate), None
+		return normalizer(normalized_candidate), None
 	except ValueError as exc:
-		if reserved_message and candidate.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
+		if reserved_message and normalized_candidate.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
 			return None, reserved_message
 		if "exceed" in str(exc):
 			return None, length_message
@@ -234,7 +235,7 @@ class DictionaryNameDialog(wx.Dialog):
 		self.name_ctrl.SelectAll()
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
-		candidate = self.get_dictionary_name()
+		candidate = self.name_ctrl.GetValue()
 		normalized_candidate, message = _normalize_dialog_name(
 			candidate,
 			normalize_dictionary_name,
@@ -298,7 +299,7 @@ class DocumentNameDialog(wx.Dialog):
 		return self.name_ctrl.GetValue().strip()
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
-		candidate = self.get_document_name()
+		candidate = self.name_ctrl.GetValue()
 		normalized_candidate, message = _normalize_dialog_name(
 			candidate,
 			normalize_document_name,

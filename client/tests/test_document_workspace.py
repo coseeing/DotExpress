@@ -26,9 +26,10 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_normalize_document_name_accepts_unicode_trims_and_allows_default(self) -> None:
-        self.assertEqual(normalize_document_name("  default中文12  "), "default中文12")
-        self.assertEqual(normalize_document_name(" default "), "default")
+        self.assertEqual(normalize_document_name("  default中文12"), "default中文12")
+        self.assertEqual(normalize_document_name(" default"), "default")
         self.assertEqual(normalize_document_name("1.1"), "1.1")
+        self.assertEqual(normalize_document_name("name\u3000"), "name")
 
     def test_normalize_document_name_rejects_windows_invalid_names(self) -> None:
         invalid_values = [
@@ -36,6 +37,7 @@ class DocumentWorkspaceTest(unittest.TestCase):
             " ",
             ".",
             "..",
+            " name ",
             "a.",
             "name ",
             "name\t",

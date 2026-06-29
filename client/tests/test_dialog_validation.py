@@ -63,11 +63,12 @@ class DialogValidationTextTest(unittest.TestCase):
         dialog = object.__new__(DictionaryNameDialog)
 
         self.assertIsNone(DictionaryNameDialog._validate_name(dialog, "1.1"))
+        self.assertIsNone(DictionaryNameDialog._validate_name(dialog, "name\u3000"))
 
     def test_dictionary_name_validation_rejects_windows_invalid_names(self) -> None:
         dialog = object.__new__(DictionaryNameDialog)
 
-        for name in ("name.", "name ", "name\t", "CON", "a?b"):
+        for name in ("name.", "name ", "name\t", " name ", "CON", "a?b"):
             with self.subTest(name=name):
                 self.assertEqual(
                     DictionaryNameDialog._validate_name(dialog, name),
@@ -86,11 +87,12 @@ class DialogValidationTextTest(unittest.TestCase):
         dialog = object.__new__(DocumentNameDialog)
 
         self.assertIsNone(DocumentNameDialog._validate_name(dialog, "1.1"))
+        self.assertIsNone(DocumentNameDialog._validate_name(dialog, "name\u3000"))
 
     def test_document_name_validation_rejects_windows_invalid_names(self) -> None:
         dialog = object.__new__(DocumentNameDialog)
 
-        for name in ("name.", "name ", "name\t", "CON", "a?b"):
+        for name in ("name.", "name ", "name\t", " name ", "CON", "a?b"):
             with self.subTest(name=name):
                 self.assertEqual(
                     DocumentNameDialog._validate_name(dialog, name),

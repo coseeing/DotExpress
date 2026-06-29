@@ -44,6 +44,29 @@ ENTRY_TYPE_OPTIONS: list[tuple[str, str]] = [
 ENTRY_TYPE_LABELS = {key: label for key, label in ENTRY_TYPE_OPTIONS}
 DEFAULT_ENTRY_TYPE = ENTRY_TYPE_OPTIONS[0][0]
 BRAILLE_UNICODE_PATTERNS_START = 0x2800
+WINDOWS_FILE_NAME_ERROR = "請輸入有效的 Windows 檔名。"
+
+
+def _normalize_dialog_name(
+	candidate: str,
+	normalizer: Callable[[str], str],
+	empty_message: str,
+	length_message: str,
+	reserved_message: str | None = None,
+) -> tuple[str | None, str | None]:
+	candidate = candidate.strip()
+	if not candidate:
+		return None, empty_message
+	if len(candidate) > MAX_DICTIONARY_NAME_LENGTH:
+		return None, length_message
+	try:
+		return normalizer(candidate), None
+	except ValueError as exc:
+		if reserved_message and candidate.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
+			return None, reserved_message
+		if "exceed" in str(exc):
+			return None, length_message
+		return None, WINDOWS_FILE_NAME_ERROR
 
 
 @dataclass
@@ -178,7 +201,7 @@ class AddSymbolDialog(wx.Dialog):
 class DictionaryNameDialog(wx.Dialog):
 	"""Dialog for creating a new dictionary file name."""
 
-	def __init__(self, parent: wx.Window | None):
+	def __init__(self, parent: wx.Window | None, initial_name: str = ""):
 		super().__init__(parent, title=_("Add Dictionary"))
 
 		main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -197,31 +220,41 @@ class DictionaryNameDialog(wx.Dialog):
 			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
 
 		self.SetSizerAndFit(main_sizer)
-		self.name_ctrl.SetFocus()
+		self._apply_initial_name(initial_name)
 
 	def get_dictionary_name(self) -> str:
 		return self.name_ctrl.GetValue().strip()
 
+	def _apply_initial_name(self, initial_name: str) -> None:
+		self.name_ctrl.SetValue(initial_name)
+		self.name_ctrl.SetFocus()
+		self.name_ctrl.SelectAll()
+
 	def _on_ok(self, event: wx.CommandEvent) -> None:
 		candidate = self.get_dictionary_name()
-		message = self._validate_name(candidate)
+		normalized_candidate, message = _normalize_dialog_name(
+			candidate,
+			normalize_dictionary_name,
+			_("Please enter the dictionary name."),
+			_("Dictionary name must be 1 to 32 characters."),
+			_('Dictionary name "{name}" is reserved.').format(name=DEFAULT_DICTIONARY_NAME),
+		)
 		if message:
 			wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 			self.name_ctrl.SetFocus()
 			return
-		self.name_ctrl.SetValue(normalize_dictionary_name(candidate))
+		self.name_ctrl.SetValue(normalized_candidate)
 		event.Skip()
 
 	def _validate_name(self, candidate: str) -> str | None:
-		if not candidate:
-			return _("Please enter the dictionary name.")
-		if len(candidate) > MAX_DICTIONARY_NAME_LENGTH:
-			return _("Dictionary name must be 1 to 32 characters.")
-		if any(char in candidate for char in (".", "/", "\\")):
-			return _('Dictionary name cannot contain ".", "/", or "\\".')
-		if candidate.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
-			return _('Dictionary name "{name}" is reserved.').format(name=DEFAULT_DICTIONARY_NAME)
-		return None
+		_normalized, message = _normalize_dialog_name(
+			candidate,
+			normalize_dictionary_name,
+			_("Please enter the dictionary name."),
+			_("Dictionary name must be 1 to 32 characters."),
+			_('Dictionary name "{name}" is reserved.').format(name=DEFAULT_DICTIONARY_NAME),
+		)
+		return message
 
 	def __enter__(self) -> "DictionaryNameDialog":
 		return self
@@ -261,22 +294,27 @@ class DocumentNameDialog(wx.Dialog):
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
 		candidate = self.get_document_name()
-		message = self._validate_name(candidate)
+		normalized_candidate, message = _normalize_dialog_name(
+			candidate,
+			normalize_document_name,
+			_("Please enter the document name."),
+			_("Document name must be 1 to 32 characters."),
+		)
 		if message:
 			wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 			self.name_ctrl.SetFocus()
 			return
-		self.name_ctrl.SetValue(normalize_document_name(candidate))
+		self.name_ctrl.SetValue(normalized_candidate)
 		event.Skip()
 
 	def _validate_name(self, candidate: str) -> str | None:
-		if not candidate:
-			return _("Please enter the document name.")
-		if len(candidate) > MAX_DICTIONARY_NAME_LENGTH:
-			return _("Document name must be 1 to 32 characters.")
-		if any(char in candidate for char in (".", "/", "\\")):
-			return _('Document name cannot contain ".", "/", or "\\".')
-		return None
+		_normalized, message = _normalize_dialog_name(
+			candidate,
+			normalize_document_name,
+			_("Please enter the document name."),
+			_("Document name must be 1 to 32 characters."),
+		)
+		return message
 
 	def __enter__(self) -> "DocumentNameDialog":
 		return self

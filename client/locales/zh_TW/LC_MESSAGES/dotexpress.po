@@ -948,8 +948,8 @@ msgid "Dictionary name must be 1 to 32 characters."
 msgstr "字典名稱長度需為 1 到 32 個字元。"
 
 #: dialog.py:218
-msgid "Dictionary name cannot contain \".\", \"/\", or \"\\\"."
-msgstr "字典名稱不能包含 \".\"、\"/\" 或 \"\\\\\"。"
+msgid "Dictionary name is not a valid Windows file name."
+msgstr "字典名稱不是有效的 Windows 檔名。"
 
 #: dialog.py:220
 #, python-brace-format
@@ -969,8 +969,8 @@ msgid "Document name must be 1 to 32 characters."
 msgstr "文件名稱長度需為 1 到 32 個字元。"
 
 #: dialog.py:275
-msgid "Document name cannot contain \".\", \"/\", or \"\\\"."
-msgstr "文件名稱不能包含 \".\"、\"/\" 或 \"\\\\\"。"
+msgid "Document name is not a valid Windows file name."
+msgstr "文件名稱不是有效的 Windows 檔名。"
 
 #: dialog.py:289
 msgid "Invalid Workspace Files"

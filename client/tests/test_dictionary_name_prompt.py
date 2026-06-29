@@ -1,5 +1,7 @@
 import unittest
+from pathlib import Path
 
+from dictionaries.manager import DEFAULT_HEADER, create_dictionary, ensure_default_dictionary
 from dictionaries.name_prompt import prompt_dictionary_name_until_success
 
 
@@ -58,6 +60,24 @@ class DictionaryNamePromptTest(unittest.TestCase):
 		self.assertIsNone(result)
 		self.assertEqual(prompts, ["prefill"])
 		self.assertEqual(submitted, [])
+
+	def test_same_name_rename_is_a_no_op(self) -> None:
+		from tempfile import TemporaryDirectory
+
+		from dictionaries.name_prompt import rename_dictionary_after_name_prompt
+
+		with TemporaryDirectory() as td:
+			directory = Path(td)
+			ensure_default_dictionary(directory)
+			source_path = create_dictionary(directory, "alpha")
+			source_path.write_text(",".join(DEFAULT_HEADER) + "\nterm,braille,General\n", encoding="utf-8")
+			original_content = source_path.read_text(encoding="utf-8")
+
+			result = rename_dictionary_after_name_prompt(directory, "alpha", "alpha")
+
+			self.assertEqual(result, directory / "alpha.csv")
+			self.assertTrue(result.exists())
+			self.assertEqual(result.read_text(encoding="utf-8"), original_content)
 
 
 if __name__ == "__main__":

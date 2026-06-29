@@ -21,7 +21,7 @@ from dictionaries.manager import (
 	list_dictionary_names,
 	rename_dictionary,
 )
-from dictionaries.name_prompt import prompt_dictionary_name_until_success
+from dictionaries.name_prompt import prompt_dictionary_name_until_success, rename_dictionary_after_name_prompt
 from documents.session import (
 	document_name_exists,
 	find_document,
@@ -1287,7 +1287,11 @@ class BrailleFrame(wx.Frame):
 					title=_("Rename Dictionary"),
 					initial_name=initial_name,
 				),
-				on_submit=lambda dictionary_name: rename_dictionary(self.dictionary_dir, selected_name, dictionary_name),
+				on_submit=lambda dictionary_name: rename_dictionary_after_name_prompt(
+					self.dictionary_dir,
+					selected_name,
+					dictionary_name,
+				),
 				on_duplicate=lambda dictionary_name: wx.MessageBox(
 					_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
 					_("Error"),

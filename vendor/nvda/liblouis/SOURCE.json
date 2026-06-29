@@ -7,7 +7,7 @@
     "python/louisHelper.py",
     "runtime/louis_helper.py"
   ],
-  "source_commit": "b493fe7e1f361a8d549f17a3353d826f6fe32334",
+  "source_commit": "c60ec1426279f92799e36055463b19b7091b12ea",
   "source_path": "include/nvda",
   "source_repo": "https://github.com/nvaccess/nvda.git"
 }

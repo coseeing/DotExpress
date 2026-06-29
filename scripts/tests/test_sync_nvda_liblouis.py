@@ -153,6 +153,20 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
         self.assertNotIn("testTable =", adapted_sconscript)
         self.assertIn('Return("louisLibInstall", "louisPython", "louisTables")', adapted_sconscript)
 
+    def test_sconscript_adaptation_accepts_legacy_miscdeps_marker(self):
+        sconscript = (self.nvda / "nvdaHelper" / "liblouis" / "sconscript").read_text(encoding="utf-8")
+        sconscript = sconscript.replace("#miscDeps/tools/m4.exe", "#miscdeps/tools/m4.exe")
+        (self.nvda / "nvdaHelper" / "liblouis" / "sconscript").write_text(sconscript, encoding="utf-8")
+
+        synchronize(
+            root=self.root,
+            expected_liblouis_commit=self.liblouis_commit,
+            nvda_commit_override=self.nvda_commit,
+        )
+
+        adapted_sconscript = (self.vendor / "build" / "sconscript").read_text(encoding="utf-8")
+        self.assertIn('#miscDeps/tools/m4.exe', adapted_sconscript)
+
     def test_helper_adaptation_uses_nvda_source_not_repository_head(self):
         helper_source = (self.nvda / "source" / "louisHelper.py").read_text(encoding="utf-8")
         helper_source = helper_source.replace(

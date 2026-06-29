@@ -50,6 +50,8 @@ def _replace_once(source: str, old: str, new: str, label: str) -> str:
 
 
 def _adapt_sconscript(source: str) -> str:
+    source = source.replace('#miscdeps/tools/m4.exe', '#miscDeps/tools/m4.exe')
+
     for marker in (
         'outDir = sourceDir.Dir("louis")',
         'unitTestTablesDir = env.Dir("#tests/unit/brailleTables")',
@@ -71,6 +73,14 @@ def _adapt_sconscript(source: str) -> str:
         "",
         "unit test tables directory",
     )
+    if "env.Requires(objs, liblouisH)\n" not in source:
+        source = _replace_once(
+            source,
+            'objs = [env.Object("%s.obj" % f, louisSourceDir.File(f)) for f in sourceFiles]\n',
+            'objs = [env.Object("%s.obj" % f, louisSourceDir.File(f)) for f in sourceFiles]\n'
+            'env.Requires(objs, liblouisH)\n',
+            "generated liblouis header dependency",
+        )
     source = _replace_once(
         source,
         'louisLib = env.SharedLibrary("liblouis", objs)\n'

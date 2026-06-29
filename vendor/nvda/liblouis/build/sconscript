@@ -126,4 +126,4 @@ louisTables = env.Install(
 for f in env.Glob(f"{louisTableDir}/*.in"):
 	louisTables.append(env.M4(source=f, target=outDir.Dir("tables").File(os.path.splitext(f.name)[0])))
 
-Return("louisLibInstall", "louisPython", "louisTables", "liblouisH")
+Return("louisLibInstall", "louisPython", "louisTables")

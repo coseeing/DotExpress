@@ -79,6 +79,22 @@ class DictionaryNamePromptTest(unittest.TestCase):
 			self.assertTrue(result.exists())
 			self.assertEqual(result.read_text(encoding="utf-8"), original_content)
 
+	def test_case_only_rename_still_renames(self) -> None:
+		from tempfile import TemporaryDirectory
+
+		from dictionaries.name_prompt import rename_dictionary_after_name_prompt
+
+		with TemporaryDirectory() as td:
+			directory = Path(td)
+			ensure_default_dictionary(directory)
+			create_dictionary(directory, "alpha")
+
+			result = rename_dictionary_after_name_prompt(directory, "alpha", "Alpha")
+
+			self.assertEqual(result, directory / "Alpha.csv")
+			self.assertTrue(result.exists())
+			self.assertFalse((directory / "alpha.csv").exists())
+
 
 if __name__ == "__main__":
 	unittest.main()

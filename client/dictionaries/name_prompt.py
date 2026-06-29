@@ -37,6 +37,6 @@ def rename_dictionary_after_name_prompt(
 ) -> Path:
 	source_normalized = source_name.strip()
 	new_normalized = new_name.strip()
-	if source_normalized.casefold() == new_normalized.casefold():
+	if source_normalized == new_normalized:
 		return dictionary_path_for_name(source_normalized, dictionary_dir)
 	return rename_dictionary(dictionary_dir, source_normalized, new_normalized)

@@ -19,7 +19,6 @@ from dictionaries.manager import (
 	get_dictionary_directory,
 	import_dictionary,
 	list_dictionary_names,
-	rename_dictionary,
 )
 from dictionaries.name_prompt import prompt_dictionary_name_until_success, rename_dictionary_after_name_prompt
 from documents.session import (

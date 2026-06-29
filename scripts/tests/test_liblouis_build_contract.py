@@ -114,17 +114,17 @@ class LiblouisBuildContractTests(unittest.TestCase):
         self.assertTrue((ROOT / "miscdeps" / "tools" / "m4.exe").is_file())
         self.assertTrue((ROOT / "miscdeps" / "tools" / "regex2.dll").is_file())
 
-    def test_windows_clean_script_removes_runtime_artifacts(self):
+    def test_windows_clean_script_stays_within_submodule_outputs(self):
         text = (ROOT / "include" / "liblouis" / "windows" / "clean.bat").read_text(encoding="utf-8")
-        for required in (
+        for required in ("erase *.obj", "erase liblouis*.dll", "erase liblouis*.exp", "erase liblouis*.lib"):
+            with self.subTest(required=required):
+                self.assertIn(required, text)
+        for forbidden in (
+            "client\\braille",
             "BRAILLE_RUNTIME",
             "BRAILLE_TABLES",
-            "liblouis.dll",
-            "liblouis.lib",
-            "liblouis.exp",
-            r"liblouis\__init__.py",
             "louis_helper.py",
             "__pycache__",
         ):
-            with self.subTest(required=required):
-                self.assertIn(required, text)
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text)

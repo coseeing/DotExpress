@@ -83,6 +83,20 @@ class DocumentWorkspaceTest(unittest.TestCase):
         loaded = load_document_package(package_path)
         self.assertEqual(loaded, document)
 
+    def test_save_and_load_document_package_roundtrip_with_dotted_name(self) -> None:
+        document = Document(name="1.1", text="source", braille="braille")
+        package_path = self.workspace_dir / "1.1.dep"
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
+        save_document_package(package_path, document)
+
+        import zipfile
+
+        with zipfile.ZipFile(package_path, "r") as archive:
+            self.assertEqual(sorted(archive.namelist()), ["1.1.brl", "1.1.txt"])
+
+        loaded = load_document_package(package_path)
+        self.assertEqual(loaded, document)
+
     def test_save_document_package_can_skip_pending_metadata_for_exports(self) -> None:
         document = Document(name="lesson1", text="source", braille=None)
         package_path = self.workspace_dir / "lesson1.dep"
@@ -109,6 +123,15 @@ class DocumentWorkspaceTest(unittest.TestCase):
         loaded = load_text_document(source_path)
 
         self.assertEqual(loaded, Document(name="lesson1", text="hello", braille=None))
+
+    def test_load_text_document_handles_dotted_document_name(self) -> None:
+        source_path = self.workspace_dir / "1.1.txt"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_text("hello", encoding="utf-8")
+
+        loaded = load_text_document(source_path)
+
+        self.assertEqual(loaded, Document(name="1.1", text="hello", braille=None))
 
     def test_load_text_document_accepts_32_character_stem(self) -> None:
         source_path = self.workspace_dir / f"{'a' * 32}.txt"

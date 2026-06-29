@@ -37,6 +37,8 @@ class DocumentWorkspaceTest(unittest.TestCase):
             ".",
             "..",
             "a.",
+            "name ",
+            "name\t",
             "a. ",
             "a<b",
             "a>b",

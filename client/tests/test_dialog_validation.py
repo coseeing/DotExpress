@@ -67,11 +67,11 @@ class DialogValidationTextTest(unittest.TestCase):
     def test_dictionary_name_validation_rejects_windows_invalid_names(self) -> None:
         dialog = object.__new__(DictionaryNameDialog)
 
-        for name in ("name.", "CON", "a?b"):
+        for name in ("name.", "name ", "name\t", "CON", "a?b"):
             with self.subTest(name=name):
                 self.assertEqual(
                     DictionaryNameDialog._validate_name(dialog, name),
-                    "請輸入有效的 Windows 檔名。",
+                    "字典名稱不是有效的 Windows 檔名。",
                 )
 
     def test_dictionary_name_validation_keeps_reserved_default_message(self) -> None:
@@ -90,11 +90,11 @@ class DialogValidationTextTest(unittest.TestCase):
     def test_document_name_validation_rejects_windows_invalid_names(self) -> None:
         dialog = object.__new__(DocumentNameDialog)
 
-        for name in ("name.", "CON", "a?b"):
+        for name in ("name.", "name ", "name\t", "CON", "a?b"):
             with self.subTest(name=name):
                 self.assertEqual(
                     DocumentNameDialog._validate_name(dialog, name),
-                    "請輸入有效的 Windows 檔名。",
+                    "文件名稱不是有效的 Windows 檔名。",
                 )
 
 

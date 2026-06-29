@@ -44,7 +44,6 @@ ENTRY_TYPE_OPTIONS: list[tuple[str, str]] = [
 ENTRY_TYPE_LABELS = {key: label for key, label in ENTRY_TYPE_OPTIONS}
 DEFAULT_ENTRY_TYPE = ENTRY_TYPE_OPTIONS[0][0]
 BRAILLE_UNICODE_PATTERNS_START = 0x2800
-WINDOWS_FILE_NAME_ERROR = "請輸入有效的 Windows 檔名。"
 
 
 def _normalize_dialog_name(
@@ -52,13 +51,17 @@ def _normalize_dialog_name(
 	normalizer: Callable[[str], str],
 	empty_message: str,
 	length_message: str,
+	invalid_message: str,
 	reserved_message: str | None = None,
 ) -> tuple[str | None, str | None]:
+	raw_candidate = candidate
 	candidate = candidate.strip()
 	if not candidate:
 		return None, empty_message
 	if len(candidate) > MAX_DICTIONARY_NAME_LENGTH:
 		return None, length_message
+	if raw_candidate and raw_candidate[-1].isspace() and not raw_candidate[:1].isspace():
+		return None, invalid_message
 	try:
 		return normalizer(candidate), None
 	except ValueError as exc:
@@ -66,7 +69,7 @@ def _normalize_dialog_name(
 			return None, reserved_message
 		if "exceed" in str(exc):
 			return None, length_message
-		return None, WINDOWS_FILE_NAME_ERROR
+		return None, invalid_message
 
 
 @dataclass
@@ -237,6 +240,7 @@ class DictionaryNameDialog(wx.Dialog):
 			normalize_dictionary_name,
 			_("Please enter the dictionary name."),
 			_("Dictionary name must be 1 to 32 characters."),
+			_("Dictionary name is not a valid Windows file name."),
 			_('Dictionary name "{name}" is reserved.').format(name=DEFAULT_DICTIONARY_NAME),
 		)
 		if message:
@@ -252,6 +256,7 @@ class DictionaryNameDialog(wx.Dialog):
 			normalize_dictionary_name,
 			_("Please enter the dictionary name."),
 			_("Dictionary name must be 1 to 32 characters."),
+			_("Dictionary name is not a valid Windows file name."),
 			_('Dictionary name "{name}" is reserved.').format(name=DEFAULT_DICTIONARY_NAME),
 		)
 		return message
@@ -299,6 +304,7 @@ class DocumentNameDialog(wx.Dialog):
 			normalize_document_name,
 			_("Please enter the document name."),
 			_("Document name must be 1 to 32 characters."),
+			_("Document name is not a valid Windows file name."),
 		)
 		if message:
 			wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
@@ -313,6 +319,7 @@ class DocumentNameDialog(wx.Dialog):
 			normalize_document_name,
 			_("Please enter the document name."),
 			_("Document name must be 1 to 32 characters."),
+			_("Document name is not a valid Windows file name."),
 		)
 		return message
 

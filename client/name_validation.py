@@ -54,6 +54,8 @@ def normalize_base_name(name: str, *, reserved_names: set[str] | None = None) ->
         raise ValueError("Name cannot be empty.")
     if len(normalized) > MAX_NAME_LENGTH:
         raise ValueError(f"Name cannot exceed {MAX_NAME_LENGTH} characters.")
+    if name and name[-1].isspace() and not name[:1].isspace():
+        raise ValueError("Name cannot end with a period or space.")
     if not _is_windows_legal_name(normalized):
         raise ValueError("Name contains invalid characters.")
     if reserved_names and normalized.casefold() in {reserved.casefold() for reserved in reserved_names}:

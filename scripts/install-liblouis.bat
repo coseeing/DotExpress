@@ -31,8 +31,7 @@ if errorlevel 1 (
 )
 
 pushd "%ROOT%"
-del /q "%ROOT%\include\liblouis\liblouis\liblouis.h" 2>nul
-scons build %*
+scons install %*
 set "RESULT=%ERRORLEVEL%"
 popd
 exit /b %RESULT%

@@ -1,0 +1,15 @@
+build/
+dist/
+dictionary/
+log/
+.venv/
+workspace/
+DotExpress.spec
+__pycache__/
+braille-old/
+braille/liblouis.dll
+braille/liblouis.lib
+braille/liblouis.exp
+braille/louis_helper.py
+braille/liblouis/__init__.py
+braille/liblouis/tables/

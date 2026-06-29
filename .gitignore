@@ -3,13 +3,9 @@
 .gemini
 .pytest_cache/
 __pycache__/
-client/build/
-client/dist/
-client/dictionary/
-client/log/
-client/.venv/
-client/workspace/
-client/DotExpress.spec
+*.pyc
+*.pyo
+*.pyd
 docs
 openspec/
 storage/

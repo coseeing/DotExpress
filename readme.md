@@ -113,7 +113,7 @@ git submodule update --init --recursive
 Run the following command in Windows CMD to generate the executable using PyInstaller:
 
 ```bat
-scripts\build_dotexpress.bat
+scripts\build-dotexpress.bat
 ```
 
 ### Building liblouis on Windows

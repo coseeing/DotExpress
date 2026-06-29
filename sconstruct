@@ -1,6 +1,8 @@
+import glob
 import os
+import shutil
 
-from SCons.Script import Default, Delete, Environment, Export, SConscript
+from SCons.Script import Alias, AlwaysBuild, Default, Delete, Environment, Export, SConscript
 
 
 if os.name != "nt":
@@ -45,12 +47,64 @@ thirdPartyEnv.Append(
 )
 thirdPartyEnv.Append(ARFLAGS=["/WX", "/subsystem:windows,10.00"])
 thirdPartyEnv.Append(M4FLAGS="-G")
-sourceDir = thirdPartyEnv.Dir("#client/braille")
-runtime_tables_dir = "#client/braille/liblouis/tables"
+dist_root_dir = thirdPartyEnv.Dir("#vendor/nvda/liblouis/dist")
+client_root_dir = thirdPartyEnv.Dir("#client/braille")
+dist_tables_dir = "#vendor/nvda/liblouis/dist/liblouis/tables"
+client_tables_dir = "#client/braille/liblouis/tables"
 
+
+def _remove_liblouis_artifacts(target, source, env):
+    root = env.Dir("#").abspath
+    patterns = (
+        "#vendor/nvda/liblouis/dist",
+        "#vendor/nvda/liblouis/build/liblouis.h",
+        "#vendor/nvda/liblouis/build/*.obj",
+        "#vendor/nvda/liblouis/build/*.lib",
+        "#vendor/nvda/liblouis/build/*.exp",
+        "#vendor/nvda/liblouis/build/*.pdb",
+        "#include/liblouis/liblouis/liblouis.h",
+        "#client/braille/liblouis.dll",
+        "#client/braille/liblouis.lib",
+        "#client/braille/liblouis.exp",
+        "#client/braille/louis_helper.py",
+        "#client/braille/liblouis/__init__.py",
+        "#client/braille/liblouis/tables",
+    )
+    for pattern in patterns:
+        abs_pattern = os.path.join(root, pattern[2:].replace("/", os.sep))
+        matches = glob.glob(abs_pattern)
+        if not matches and not glob.has_magic(abs_pattern):
+            matches = [abs_pattern]
+        for path in matches:
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            elif os.path.exists(path):
+                os.remove(path)
+    return None
+
+
+sourceDir = dist_root_dir
 Export("thirdPartyEnv", "sourceDir")
-outputs = SConscript("vendor/nvda/liblouis/build/sconscript")
-helper = thirdPartyEnv.InstallAs("#client/braille/louis_helper.py", "#vendor/nvda/liblouis/runtime/louis_helper.py")
-cleanup_runtime_tables = thirdPartyEnv.Command("clean-liblouis-runtime-tables", [], Delete(runtime_tables_dir))
-thirdPartyEnv.Requires(outputs, cleanup_runtime_tables)
-Default(*outputs, helper, cleanup_runtime_tables)
+build_outputs = SConscript("vendor/nvda/liblouis/build/sconscript")
+louis_lib_install, louis_python, louis_tables, *_ = build_outputs
+helper_build = thirdPartyEnv.InstallAs(
+    "#vendor/nvda/liblouis/dist/louis_helper.py", "#vendor/nvda/liblouis/runtime/louis_helper.py"
+)
+
+cleanup_dist_tables = thirdPartyEnv.Command("clean-liblouis-dist-tables", [], Delete(dist_tables_dir))
+thirdPartyEnv.Requires([louis_python, *louis_tables, helper_build], cleanup_dist_tables)
+
+build = Alias("build", [*louis_lib_install, louis_python, *louis_tables, helper_build, cleanup_dist_tables])
+
+cleanup_client_tables = thirdPartyEnv.Command("clean-liblouis-runtime-tables", [], Delete(client_tables_dir))
+client_lib = thirdPartyEnv.Install(client_root_dir, louis_lib_install)
+client_python = thirdPartyEnv.Install(client_root_dir.Dir("liblouis"), louis_python)
+client_tables = thirdPartyEnv.Install(client_root_dir.Dir("liblouis").Dir("tables"), louis_tables)
+client_helper = thirdPartyEnv.Install(client_root_dir, helper_build)
+thirdPartyEnv.Requires([*client_lib, *client_python, *client_tables, *client_helper], [build, cleanup_client_tables])
+install = Alias("install", [*client_lib, *client_python, *client_tables, *client_helper, cleanup_client_tables])
+
+clean_liblouis = Alias("clean-liblouis", thirdPartyEnv.Command("clean-liblouis-artifacts", [], _remove_liblouis_artifacts))
+AlwaysBuild(clean_liblouis)
+
+Default(build)

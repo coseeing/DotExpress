@@ -44,16 +44,36 @@ class DictionaryManagerTest(unittest.TestCase):
 
     def test_normalize_dictionary_name_accepts_unicode_and_trims_whitespace(self) -> None:
         self.assertEqual(normalize_dictionary_name("  中文12  "), "中文12")
+        self.assertEqual(normalize_dictionary_name("1.1"), "1.1")
 
-    def test_normalize_dictionary_name_rejects_reserved_or_invalid_names(self) -> None:
+    def test_normalize_dictionary_name_rejects_windows_invalid_names(self) -> None:
         invalid_values = [
             "",
             " ",
             ".",
+            "..",
+            "a.",
+            "a. ",
+            "a<b",
+            "a>b",
+            "a:b",
+            'a"b',
             "a/b",
             r"a\\b",
-            "a" * 33,
+            "a|b",
+            "a?b",
+            "a*b",
+            f"a{chr(1)}b",
+            "CON",
+            "prn",
+            "AUX",
+            "nul",
+            "COM1",
+            "com9",
+            "LPT1",
+            "lpt9",
             DEFAULT_DICTIONARY_NAME,
+            "a" * 33,
         ]
 
         for value in invalid_values:

@@ -28,9 +28,38 @@ class DocumentWorkspaceTest(unittest.TestCase):
     def test_normalize_document_name_accepts_unicode_trims_and_allows_default(self) -> None:
         self.assertEqual(normalize_document_name("  default中文12  "), "default中文12")
         self.assertEqual(normalize_document_name(" default "), "default")
+        self.assertEqual(normalize_document_name("1.1"), "1.1")
 
-    def test_normalize_document_name_rejects_invalid_names(self) -> None:
-        for value in ["", " ", ".", "a/b", r"a\\b", "a" * 33]:
+    def test_normalize_document_name_rejects_windows_invalid_names(self) -> None:
+        invalid_values = [
+            "",
+            " ",
+            ".",
+            "..",
+            "a.",
+            "a. ",
+            "a<b",
+            "a>b",
+            "a:b",
+            'a"b',
+            "a/b",
+            r"a\\b",
+            "a|b",
+            "a?b",
+            "a*b",
+            f"a{chr(1)}b",
+            "CON",
+            "prn",
+            "AUX",
+            "nul",
+            "COM1",
+            "com9",
+            "LPT1",
+            "lpt9",
+            "a" * 33,
+        ]
+
+        for value in invalid_values:
             with self.subTest(value=value):
                 with self.assertRaises(ValueError):
                     normalize_document_name(value)

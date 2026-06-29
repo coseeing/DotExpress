@@ -22,7 +22,7 @@ thirdPartyEnv["certFile"] = ""
 thirdPartyEnv["apiSigningToken"] = ""
 thirdPartyEnv["signExec"] = None
 thirdPartyEnv["release"] = True
-thirdPartyEnv["M4"] = f'"{thirdPartyEnv.File("#miscdeps/tools/m4.exe")}"'
+thirdPartyEnv["M4"] = f'"{thirdPartyEnv.File("#miscDeps/tools/m4.exe")}"'
 thirdPartyEnv.Append(
     CPPDEFINES=[
         "UNICODE",
@@ -58,6 +58,7 @@ def _remove_liblouis_artifacts(target, source, env):
     patterns = (
         "#vendor/nvda/liblouis/dist",
         "#vendor/nvda/liblouis/build/liblouis.h",
+        "#vendor/nvda/liblouis/build/liblouis.dll",
         "#vendor/nvda/liblouis/build/*.obj",
         "#vendor/nvda/liblouis/build/*.lib",
         "#vendor/nvda/liblouis/build/*.exp",

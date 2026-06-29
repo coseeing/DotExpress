@@ -44,7 +44,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
             "vendor/nvda/liblouis/build/sconscript",
             "vendor/nvda/liblouis/dist",
             'tools=["default", "m4"]',
-            'miscdeps/tools/m4.exe',
+            'miscDeps/tools/m4.exe',
             '"UNICODE"',
             '"/MT"',
             '"_WIN32_WINNT"',
@@ -79,12 +79,22 @@ class LiblouisBuildContractTests(unittest.TestCase):
         for required in (
             "dist",
             "client_braille",
+            r'vendor\nvda\liblouis\build\liblouis.dll',
             r'liblouis\tables',
             'liblouis.dll',
             r'include\liblouis\liblouis\liblouis.h',
         ):
             with self.subTest(required=required):
                 self.assertIn(required, text.lower())
+        for forbidden in (
+            r'%client%\*.pyd',
+            r'%client%\*.pyo',
+            r'%client%\*.pyc',
+            r'for /d /r "%client%" %%d in (__pycache__)',
+            ".venv",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text.lower())
 
     def test_batch_bootstrap_removes_shadowing_source_header(self):
         text = (ROOT / "scripts" / "build-liblouis.bat").read_text(encoding="utf-8")
@@ -111,8 +121,8 @@ class LiblouisBuildContractTests(unittest.TestCase):
                 self.assertIn(required, text)
 
     def test_repo_contains_m4_toolchain_files(self):
-        self.assertTrue((ROOT / "miscdeps" / "tools" / "m4.exe").is_file())
-        self.assertTrue((ROOT / "miscdeps" / "tools" / "regex2.dll").is_file())
+        self.assertTrue((ROOT / "miscDeps" / "tools" / "m4.exe").is_file())
+        self.assertTrue((ROOT / "miscDeps" / "tools" / "regex2.dll").is_file())
 
     def test_windows_clean_script_stays_within_submodule_outputs(self):
         text = (ROOT / "include" / "liblouis" / "windows" / "clean.bat").read_text(encoding="utf-8")

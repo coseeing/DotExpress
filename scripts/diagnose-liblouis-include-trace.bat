@@ -43,7 +43,7 @@ clang-cl /nologo /E ^
     /Iinclude\liblouis\liblouis ^
     /Iinclude ^
     /Iinclude\wil\include ^
-    /Imiscdeps\include ^
+    /ImiscDeps\include ^
     /D_CRT_SECURE_NO_DEPRECATE ^
     /D_WIN32_WINNT=_WIN32_WINNT_WIN10 ^
     /DNOMINMAX ^
@@ -65,7 +65,7 @@ clang-cl /nologo /E /showIncludes ^
     /Iinclude\liblouis\liblouis ^
     /Iinclude ^
     /Iinclude\wil\include ^
-    /Imiscdeps\include ^
+    /ImiscDeps\include ^
     /D_CRT_SECURE_NO_DEPRECATE ^
     /D_WIN32_WINNT=_WIN32_WINNT_WIN10 ^
     /DNOMINMAX ^

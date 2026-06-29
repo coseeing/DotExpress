@@ -53,7 +53,7 @@ def _adapt_sconscript(source: str) -> str:
     for marker in (
         'outDir = sourceDir.Dir("louis")',
         'unitTestTablesDir = env.Dir("#tests/unit/brailleTables")',
-        'env["M4"] = f\'"{env.File("#miscdeps/tools/m4.exe")}"\'',
+        'env["M4"] = f\'"{env.File("#miscDeps/tools/m4.exe")}"\'',
         '# Custom tables unit test',
     ):
         if marker not in source:

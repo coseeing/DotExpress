@@ -103,8 +103,11 @@ To build the executable or generate translation files locally, ensure your Pytho
 
 ```bash
 pip install -r requirements.txt
-git submodule update --init --recursive
+git submodule update --init include/liblouis
+git submodule update --init include/nvda
 ```
+
+This initializes the top-level `include/liblouis` and `include/nvda` submodules without recursively fetching nested submodules declared inside NVDA. Use `git submodule update --init --recursive` only when you explicitly need nested submodules as well.
 
 ---
 
@@ -138,14 +141,17 @@ The source of truth is the pair of submodule pointers, with `vendor/nvda/libloui
 - Visual Studio 2022 C++ tools
 - Clang tools for Windows
 - Python 3 with SCons (`py -m pip install scons`)
-- GNU `m4.exe` and `regex2.dll` in `miscdeps/tools/`
+- GNU `m4.exe` and `regex2.dll` in `miscDeps/tools/`
 
 ### Initial checkout and build
 
 ```bat
-git submodule update --init --recursive
+git submodule update --init include/liblouis
+git submodule update --init include/nvda
 py scripts\sync_nvda_liblouis.py
+scripts\clean-liblouis.bat
 scripts\build-liblouis.bat
+scripts\install-liblouis.bat
 ```
 
 ### Manual NVDA upgrade

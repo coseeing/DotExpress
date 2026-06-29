@@ -108,6 +108,18 @@ class DictionaryManagerTest(unittest.TestCase):
         self.assertEqual(imported_path, self.dictionary_dir / "science.csv")
         self.assertEqual(imported_path.read_text(encoding="utf-8"), source_path.read_text(encoding="utf-8"))
 
+    def test_import_dictionary_allows_periods_in_dictionary_name(self) -> None:
+        source_path = Path(self._tmpdir.name) / "source.csv"
+        with source_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(DEFAULT_HEADER)
+            writer.writerow(["term", "braille", "General"])
+
+        imported_path = import_dictionary(self.dictionary_dir, source_path, "1.1")
+
+        self.assertEqual(imported_path, self.dictionary_dir / "1.1.csv")
+        self.assertEqual(imported_path.read_text(encoding="utf-8"), source_path.read_text(encoding="utf-8"))
+
     def test_import_dictionary_rejects_invalid_header(self) -> None:
         source_path = Path(self._tmpdir.name) / "invalid.csv"
         with source_path.open("w", newline="", encoding="utf-8") as f:

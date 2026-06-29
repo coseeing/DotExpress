@@ -17,10 +17,10 @@ from dictionaries.manager import (
 	ensure_default_dictionary,
 	export_dictionary,
 	get_dictionary_directory,
-	import_dictionary,
 	list_dictionary_names,
 	rename_dictionary,
 )
+from dictionaries.import_flow import import_dictionary_after_name_prompt
 from documents.session import (
 	document_name_exists,
 	find_document,
@@ -176,6 +176,14 @@ _MENU_TRANSLATION_MARKERS = (
 )
 
 language_map_translate_table = get_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
+
+
+def _prompt_for_dictionary_name(parent: wx.Window | None, *, title: str, initial_name: str = "") -> str | None:
+	with DictionaryNameDialog(parent, initial_name=initial_name) as dialog:
+		dialog.SetTitle(title)
+		if dialog.ShowModal() != wx.ID_OK:
+			return None
+		return dialog.get_dictionary_name()
 
 
 class ConvertingDialog(wx.Dialog):
@@ -1198,10 +1206,9 @@ class BrailleFrame(wx.Frame):
 
 	def add_dictionary(self, parent: wx.Window | None) -> str | None:
 		dialog_parent = parent or self
-		with DictionaryNameDialog(dialog_parent) as dialog:
-			if dialog.ShowModal() != wx.ID_OK:
-				return None
-			dictionary_name = dialog.get_dictionary_name()
+		dictionary_name = _prompt_for_dictionary_name(dialog_parent, title=_("Add Dictionary"))
+		if dictionary_name is None:
+			return None
 
 		try:
 			path = create_dictionary(self.dictionary_dir, dictionary_name)
@@ -1267,14 +1274,13 @@ class BrailleFrame(wx.Frame):
 		dialog_parent = parent or self
 		if is_default_dictionary(selected_name):
 			return None
-		with DictionaryNameDialog(dialog_parent) as dialog:
-			dialog.SetTitle(_("Rename Dictionary"))
-			dialog.name_ctrl.SetValue(selected_name)
-			dialog.name_ctrl.SetFocus()
-			dialog.name_ctrl.SelectAll()
-			if dialog.ShowModal() != wx.ID_OK:
-				return None
-			dictionary_name = dialog.get_dictionary_name()
+		dictionary_name = _prompt_for_dictionary_name(
+			dialog_parent,
+			title=_("Rename Dictionary"),
+			initial_name=selected_name,
+		)
+		if dictionary_name is None:
+			return None
 
 		try:
 			path = rename_dictionary(self.dictionary_dir, selected_name, dictionary_name)
@@ -1317,16 +1323,28 @@ class BrailleFrame(wx.Frame):
 				return None
 			source_path = Path(file_dialog.GetPath())
 
-		with DictionaryNameDialog(dialog_parent) as dialog:
-			if dialog.ShowModal() != wx.ID_OK:
-				return None
-			dictionary_name = dialog.get_dictionary_name()
+		dictionary_name = None
+
+		def prompt_name(initial_name: str) -> str | None:
+			nonlocal dictionary_name
+			dictionary_name = _prompt_for_dictionary_name(
+				dialog_parent,
+				title=_("Add Dictionary"),
+				initial_name=initial_name,
+			)
+			return dictionary_name
 
 		try:
-			path = import_dictionary(self.dictionary_dir, source_path, dictionary_name)
+			path = import_dictionary_after_name_prompt(
+				self.dictionary_dir,
+				source_path,
+				prompt_name=prompt_name,
+			)
+			if path is None:
+				return None
 		except FileExistsError:
 			wx.MessageBox(
-				_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
+				_('Dictionary "{name}" already exists.').format(name=dictionary_name or source_path.stem),
 				_("Error"),
 				wx.OK | wx.ICON_ERROR,
 				parent=dialog_parent,

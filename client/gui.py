@@ -17,10 +17,11 @@ from dictionaries.manager import (
 	ensure_default_dictionary,
 	export_dictionary,
 	get_dictionary_directory,
+	import_dictionary,
 	list_dictionary_names,
 	rename_dictionary,
 )
-from dictionaries.import_flow import import_dictionary_after_name_prompt
+from dictionaries.name_prompt import prompt_dictionary_name_until_success
 from documents.session import (
 	document_name_exists,
 	find_document,
@@ -1206,22 +1207,26 @@ class BrailleFrame(wx.Frame):
 
 	def add_dictionary(self, parent: wx.Window | None) -> str | None:
 		dialog_parent = parent or self
-		dictionary_name = _prompt_for_dictionary_name(dialog_parent, title=_("Add Dictionary"))
-		if dictionary_name is None:
-			return None
-
 		try:
-			path = create_dictionary(self.dictionary_dir, dictionary_name)
-		except FileExistsError:
-			wx.MessageBox(
-				_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
-				_("Error"),
-				wx.OK | wx.ICON_ERROR,
-				parent=dialog_parent,
+			path = prompt_dictionary_name_until_success(
+				"",
+				prompt_name=lambda initial_name: _prompt_for_dictionary_name(
+					dialog_parent,
+					title=_("Add Dictionary"),
+					initial_name=initial_name,
+				),
+				on_submit=lambda dictionary_name: create_dictionary(self.dictionary_dir, dictionary_name),
+				on_duplicate=lambda dictionary_name: wx.MessageBox(
+					_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
+					_("Error"),
+					wx.OK | wx.ICON_ERROR,
+					parent=dialog_parent,
+				),
 			)
-			return None
 		except ValueError as exc:
 			wx.MessageBox(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=dialog_parent)
+			return None
+		if path is None:
 			return None
 
 		update = plan_dictionary_state_after_add(
@@ -1274,29 +1279,29 @@ class BrailleFrame(wx.Frame):
 		dialog_parent = parent or self
 		if is_default_dictionary(selected_name):
 			return None
-		dictionary_name = _prompt_for_dictionary_name(
-			dialog_parent,
-			title=_("Rename Dictionary"),
-			initial_name=selected_name,
-		)
-		if dictionary_name is None:
-			return None
-
 		try:
-			path = rename_dictionary(self.dictionary_dir, selected_name, dictionary_name)
-		except FileExistsError:
-			wx.MessageBox(
-				_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
-				_("Error"),
-				wx.OK | wx.ICON_ERROR,
-				parent=dialog_parent,
+			path = prompt_dictionary_name_until_success(
+				selected_name,
+				prompt_name=lambda initial_name: _prompt_for_dictionary_name(
+					dialog_parent,
+					title=_("Rename Dictionary"),
+					initial_name=initial_name,
+				),
+				on_submit=lambda dictionary_name: rename_dictionary(self.dictionary_dir, selected_name, dictionary_name),
+				on_duplicate=lambda dictionary_name: wx.MessageBox(
+					_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
+					_("Error"),
+					wx.OK | wx.ICON_ERROR,
+					parent=dialog_parent,
+				),
 			)
-			return None
 		except ValueError as exc:
 			wx.MessageBox(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=dialog_parent)
 			return None
 		except OSError as exc:
 			self._show_file_error(_("Failed to save dictionary: {error}"), exc, parent=dialog_parent)
+			return None
+		if path is None:
 			return None
 
 		current_active_name = self.translation_settings.selected_dictionary
@@ -1323,33 +1328,22 @@ class BrailleFrame(wx.Frame):
 				return None
 			source_path = Path(file_dialog.GetPath())
 
-		dictionary_name = None
-
-		def prompt_name(initial_name: str) -> str | None:
-			nonlocal dictionary_name
-			dictionary_name = _prompt_for_dictionary_name(
-				dialog_parent,
-				title=_("Add Dictionary"),
-				initial_name=initial_name,
-			)
-			return dictionary_name
-
 		try:
-			path = import_dictionary_after_name_prompt(
-				self.dictionary_dir,
-				source_path,
-				prompt_name=prompt_name,
+			path = prompt_dictionary_name_until_success(
+				source_path.stem,
+				prompt_name=lambda initial_name: _prompt_for_dictionary_name(
+					dialog_parent,
+					title=_("Add Dictionary"),
+					initial_name=initial_name,
+				),
+				on_submit=lambda dictionary_name: import_dictionary(self.dictionary_dir, source_path, dictionary_name),
+				on_duplicate=lambda dictionary_name: wx.MessageBox(
+					_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
+					_("Error"),
+					wx.OK | wx.ICON_ERROR,
+					parent=dialog_parent,
+				),
 			)
-			if path is None:
-				return None
-		except FileExistsError:
-			wx.MessageBox(
-				_('Dictionary "{name}" already exists.').format(name=dictionary_name or source_path.stem),
-				_("Error"),
-				wx.OK | wx.ICON_ERROR,
-				parent=dialog_parent,
-			)
-			return None
 		except ValueError:
 			wx.MessageBox(
 				_("Imported file must contain text, braille, and type headers."),
@@ -1360,6 +1354,8 @@ class BrailleFrame(wx.Frame):
 			return None
 		except OSError as exc:
 			self._show_file_error(_("Failed to import dictionary: {error}"), exc, parent=dialog_parent)
+			return None
+		if path is None:
 			return None
 
 		update = plan_dictionary_state_after_add(

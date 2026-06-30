@@ -65,7 +65,7 @@ DotExpress 目前的文件匯入只支援純文字 `TXT` 與既有封裝格式 `
 - `DOCX`、`EPUB`、`PDF` 的語意邏輯可以共用輸出規則。
 - 測試可以直接驗證語意結構，而不是只比對最終字串。
 - 未來若要增加其他輸出格式，例如純文字或 HTML，可重用同一份中介結果。
-- `PDF` fallback 純文字可以用專用節點表達，而不必假裝成有語意的段落。
+- `PDF` fallback 純文字也能直接落在既有 block vocabulary，而不需要額外 AST 節點。
 
 ### 2. AST 只支援 block-level 語意
 
@@ -79,14 +79,12 @@ DotExpress 目前的文件匯入只支援純文字 `TXT` 與既有封裝格式 `
 - `BlockQuote(blocks)`
 - `HorizontalRule()`
 - `Table(headers, rows)`
-- `RawTextBlock(text)`
 
 其中：
 
 - `Heading.level` 限定為 `1` 到 `6`
 - `Paragraph.text` 與 `Heading.text` 都只保存純文字
 - `ListItem.blocks` 允許巢狀 block，避免未來擴充時需要重寫資料模型
-- `RawTextBlock` 只用於無法可靠重建語意的內容，特別是 `PDF` 純文字 fallback
 
 不建立 inline AST，例如 `Strong`、`Emphasis`、`Link`、`Footnote`。
 
@@ -100,7 +98,6 @@ Markdown renderer 的責任是：
 - `BlockQuote` -> `>`
 - `HorizontalRule` -> `---`
 - `Table` -> Markdown table
-- `RawTextBlock` -> 原樣輸出文字區塊
 
 renderer 不應在這一層推論結構，也不應重新解讀來源內容。所有語意判斷都必須在各格式 importer 內完成。
 
@@ -143,6 +140,7 @@ renderer 不應在這一層推論結構，也不應重新解讀來源內容。�
 - `client/documents/importers/docx_importer.py`
 - `client/documents/importers/epub_importer.py`
 - `client/documents/importers/pdf_importer.py`
+- `client/documents/importers/html_to_ast.py`
 
 ### `base.py`
 
@@ -161,6 +159,17 @@ renderer 不應在這一層推論結構，也不應重新解讀來源內容。�
 
 接受 `Document` AST，輸出 Markdown 字串。所有換行規則必須集中在這裡，避免 importer 各自手寫 Markdown 導致格式漂移。
 
+### `html_to_ast.py`
+
+集中處理 `HTML/XHTML -> AST` 的 block-level 映射邏輯，供 `DOCX` 與 `EPUB` importer 共用。
+
+這一層固定使用 `lxml`：
+
+- `DOCX` 使用 `lxml.html`
+- `EPUB` 使用 `lxml.html`，必要時切換到 `lxml.etree` 的 XML 解析模式處理 XHTML
+
+本設計不使用 `BeautifulSoup` 作為主 parser。
+
 ## 各格式匯入流程
 
 ### `DOCX`
@@ -171,7 +180,7 @@ renderer 不應在這一層推論結構，也不應重新解讀來源內容。�
 
 1. 讀取 `DOCX`
 2. 用 `mammoth` 轉成乾淨 HTML
-3. 解析 HTML DOM
+3. 用 `lxml.html` 解析 HTML DOM
 4. 將下列元素映射為 AST：
    - `h1`-`h6` -> `Heading`
    - `p` -> `Paragraph`
@@ -197,7 +206,7 @@ renderer 不應在這一層推論結構，也不應重新解讀來源內容。�
 
 1. 讀取 `EPUB`
 2. 依 spine 順序取出 XHTML/HTML 內容
-3. 逐章節解析 DOM
+3. 用 `lxml` 逐章節解析 DOM
 4. 將與 `DOCX` 相同的 block-level 元素映射為 AST
 5. 在章節內容之間保留合理區隔，避免不同 spine item 直接黏成一段
 6. 將合併後 AST 交給 Markdown renderer
@@ -247,7 +256,7 @@ renderer 不應在這一層推論結構，也不應重新解讀來源內容。�
 2. 進行最小必要正規化：
    - 統一換行
    - 去除明顯的空頁輸出
-3. 依頁面順序串接文字，並以整份文件建立單一 `RawTextBlock`
+3. 依頁面順序串接文字，並依空行規則切成一個或多個 `Paragraph`
 4. 交給 Markdown renderer 輸出
 
 這條路徑的原則是：
@@ -339,6 +348,7 @@ renderer 不應在這一層推論結構，也不應重新解讀來源內容。�
 - `PyMuPDF` 純文字抽取失敗 -> 匯入失敗
 
 這裡的關鍵是：`PDF` 無語意不是失敗條件，只是切換到 fallback 路徑的條件。
+PDF fallback 產生的是一般 `Paragraph`，不引入 PDF 專用 AST 節點。
 
 ## 測試策略
 
@@ -349,7 +359,7 @@ renderer 不應在這一層推論結構，也不應重新解讀來源內容。�
 - 各 AST 節點能正確序列化成 Markdown
 - `Table` 的表頭、資料列輸出一致
 - `BlockQuote`、清單、標題之間的空行規則穩定
-- `RawTextBlock` 不會被誤加 Markdown 語意
+- `Paragraph` 在一般段落與 PDF fallback 段落時都能穩定輸出
 
 ### importer 單元測試
 
@@ -369,7 +379,7 @@ renderer 不應在這一層推論結構，也不應重新解讀來源內容。�
 `PDF`：
 
 - 有 `/MarkInfo` 與 `/StructTreeRoot` 的 tagged fixture 會走語意路徑
-- 缺少語意結構的 fixture 會走 `RawTextBlock`
+- 缺少語意結構的 fixture 會走 `Paragraph` fallback
 - untagged PDF 不會觸發 heuristic 推論
 
 ### 整合測試

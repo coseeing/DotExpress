@@ -403,6 +403,74 @@ class GuiDocumentFlowsTest(unittest.TestCase):
             },
         )
 
+    def test_export_all_missing_table_accumulates_failures_without_per_file_message_boxes(self) -> None:
+        frame = self._make_frame()
+        frame.translation_settings = Mock()
+        frame._write_export_document = Mock()
+        missing_table_message = gui._("Please select a translation table first.")
+
+        documents = [
+            Document("alpha", "text", None),
+            Document("beta", "text", None),
+        ]
+
+        with (
+            patch.dict(gui.language_map_translate_table, {"default": ""}, clear=True),
+            patch.object(gui.wx, "CallAfter", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)),
+            patch.object(gui.wx, "MessageBox") as message_box,
+        ):
+            frame._export_next_document(documents, Path("/tmp/export"), "brl", ExportBatchResult())
+
+        frame._write_export_document.assert_not_called()
+        message_box.assert_not_called()
+        frame._show_export_all_result.assert_called_once()
+        result = frame._show_export_all_result.call_args.args[0]
+        self.assertFalse(result.all_succeeded)
+        self.assertEqual(
+            result.summary_values,
+            {
+                "success_count": 0,
+                "failure_count": 2,
+                "failures": f"alpha: {missing_table_message}\nbeta: {missing_table_message}",
+            },
+        )
+
+    def test_single_pending_export_missing_table_shows_one_error_dialog_and_does_not_write_output(self) -> None:
+        frame = self._make_frame()
+        frame.translation_settings = Mock()
+        frame._write_export_document = Mock()
+
+        class _AcceptedFileDialog:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def ShowModal(self):
+                return gui.wx.ID_OK
+
+            def GetPath(self):
+                return "/tmp/exported"
+
+        with (
+            patch.dict(gui.language_map_translate_table, {"default": ""}, clear=True),
+            patch.object(gui.wx, "FileDialog", _AcceptedFileDialog),
+            patch.object(gui.wx, "MessageBox") as message_box,
+        ):
+            frame._export_document_with_dialog(Document("alpha", "text", None), "brl")
+
+        frame._write_export_document.assert_not_called()
+        message_box.assert_called_once_with(
+            gui._("Please select a translation table first."),
+            gui._("Error"),
+            gui.wx.OK | gui.wx.ICON_ERROR,
+            parent=frame,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

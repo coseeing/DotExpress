@@ -1433,14 +1433,10 @@ class BrailleFrame(wx.Frame):
 		table_file = language_map_translate_table.get("default")
 		if not table_file:
 			message = _("Please select a translation table first.")
-			wx.MessageBox(
-				message,
-				_("Info"),
-				wx.OK | wx.ICON_INFORMATION,
-				parent=self,
-			)
 			if on_missing_table is not None:
 				on_missing_table(message)
+			elif on_error is not None:
+				on_error(message)
 			return False
 		settings = self.translation_settings
 		self._start_conversion(

@@ -17,7 +17,7 @@ class ActionMenuTest(unittest.TestCase):
                 ("command", "Delete All"),
                 ("command", "Add"),
                 ("command", "Rename"),
-                ("submenu", "Import", ["DEP", "TXT", "PDF", "DOCX", "EPUB"]),
+                ("command", "Import"),
                 ("submenu", "Export", ["DEP", "BRL"]),
                 ("submenu", "Export All", ["DEP", "BRL"]),
             ],
@@ -28,11 +28,6 @@ class ActionMenuTest(unittest.TestCase):
             [item.action for item in get_document_menu_descriptors()],
             ["open", "delete", "delete_all", "add", "rename", "import", "export", "export_all"],
         )
-
-    def test_document_import_format_labels_include_semantic_formats(self) -> None:
-        from ui.action_menu import get_document_import_format_labels
-
-        self.assertEqual(get_document_import_format_labels(), ["DEP", "TXT", "PDF", "DOCX", "EPUB"])
 
     def test_document_menu_enabled_state_without_selection_or_documents(self) -> None:
         self.assertEqual(

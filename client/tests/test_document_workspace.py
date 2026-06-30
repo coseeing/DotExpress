@@ -185,6 +185,41 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertEqual(issues, [])
         loader.assert_called_once_with(source)
 
+    def test_batch_import_documents_all_detects_each_supported_extension(self) -> None:
+        source_dir = Path(self._tmpdir.name) / "incoming"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        paths = [
+            source_dir / "alpha.txt",
+            source_dir / "beta.dep",
+            source_dir / "gamma.pdf",
+            source_dir / "delta.docx",
+            source_dir / "epsilon.epub",
+        ]
+        loaders = {
+            "txt": Mock(return_value=Document("alpha", "A", None)),
+            "dep": Mock(return_value=Document("beta", "B", "⠃")),
+            "pdf": Mock(return_value=Document("gamma", "G", None)),
+            "docx": Mock(return_value=Document("delta", "D", None)),
+            "epub": Mock(return_value=Document("epsilon", "E", None)),
+        }
+
+        with patch.dict("documents.workspace.IMPORT_LOADERS", loaders, clear=False):
+            documents, issues = batch_import_documents(paths, format_key="all", existing_names=set())
+
+        self.assertEqual(
+            documents,
+            [
+                Document("alpha", "A", None),
+                Document("beta", "B", "⠃"),
+                Document("delta", "D", None),
+                Document("epsilon", "E", None),
+                Document("gamma", "G", None),
+            ],
+        )
+        self.assertEqual(issues, [])
+        for path in paths:
+            loaders[path.suffix.lstrip(".")].assert_called_once_with(path)
+
     def test_batch_import_documents_rejects_unknown_format(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported import format"):
             batch_import_documents([], format_key="rtf", existing_names=set())
@@ -237,31 +272,29 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertEqual((export_dir / "lesson1.brl").read_text(encoding="utf-8"), "⠁")
         self.assertEqual((export_dir / "lesson2.brl").read_text(encoding="utf-8"), "⠃")
 
-    def test_prepare_document_for_save_auto_converts_pending_braille(self) -> None:
+    def test_prepare_document_for_save_preserves_pending_braille_without_auto_conversion(self) -> None:
         document = Document(name="lesson1", text="old", braille=None)
 
         prepared, auto_error = prepare_document_for_save(
             document,
             text="new text",
-            braille="",
-            auto_convert=lambda text: f"converted:{text}",
+            braille="⠞⠑⠎⠞",
         )
 
-        self.assertEqual(prepared, Document(name="lesson1", text="new text", braille="converted:new text"))
+        self.assertEqual(prepared, Document(name="lesson1", text="new text", braille=None))
         self.assertIsNone(auto_error)
 
-    def test_prepare_document_for_save_stores_empty_string_when_auto_convert_fails(self) -> None:
-        document = Document(name="lesson1", text="old", braille=None)
+    def test_prepare_document_for_save_keeps_existing_braille_without_auto_conversion(self) -> None:
+        document = Document(name="lesson1", text="old", braille="⠃⠗⠇")
 
         prepared, auto_error = prepare_document_for_save(
             document,
             text="new text",
-            braille="",
-            auto_convert=lambda _text: (_ for _ in ()).throw(ValueError("boom")),
+            braille="⠃⠗⠇",
         )
 
-        self.assertEqual(prepared, Document(name="lesson1", text="new text", braille=""))
-        self.assertIsInstance(auto_error, ValueError)
+        self.assertEqual(prepared, Document(name="lesson1", text="new text", braille="⠃⠗⠇"))
+        self.assertIsNone(auto_error)
 
     def test_load_workspace_documents_sorts_valid_documents_and_collects_invalid_paths(self) -> None:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)

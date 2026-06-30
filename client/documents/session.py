@@ -55,6 +55,12 @@ def plan_delete_document(documents: list[Document], deleted_name: str, open_name
 	)
 
 
+def format_window_title(open_name: str | None) -> str:
+	if not open_name:
+		return "DotExpress"
+	return f"{open_name} - DotExpress"
+
+
 def rename_document_in_list(documents: list[Document], source_name: str, new_name: str) -> Document | None:
 	selected_document = find_document(documents, source_name)
 	if selected_document is None:

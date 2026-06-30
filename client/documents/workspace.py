@@ -143,15 +143,10 @@ def prepare_document_for_save(
     *,
     text: str,
     braille: str,
-    auto_convert,
+    auto_convert=None,
 ) -> tuple[Document, Exception | None]:
-    if document.braille is None:
-        try:
-            braille = auto_convert(text)
-            return Document(name=document.name, text=text, braille=braille), None
-        except Exception as exc:
-            return Document(name=document.name, text=text, braille=""), exc
-    return Document(name=document.name, text=text, braille=braille), None
+    saved_braille = None if document.braille is None else braille
+    return Document(name=document.name, text=text, braille=saved_braille), None
 
 
 def list_document_names(workspace_dir: Path | None = None) -> list[str]:
@@ -184,11 +179,15 @@ def batch_import_documents(
     documents: list[Document] = []
     issues: list[BatchIssue] = []
     seen_names = {name.casefold() for name in existing_names}
-    loader = IMPORT_LOADERS.get(format_key.casefold())
-    if loader is None:
+    normalized_format_key = format_key.casefold()
+    if normalized_format_key != "all" and normalized_format_key not in IMPORT_LOADERS:
         raise ValueError(f'Unsupported import format: "{format_key}".')
     for path in sorted((Path(path) for path in paths), key=lambda item: (item.stem.casefold(), item.stem)):
         try:
+            loader_key = path.suffix.lstrip(".").casefold() if normalized_format_key == "all" else normalized_format_key
+            loader = IMPORT_LOADERS.get(loader_key)
+            if loader is None:
+                raise ValueError(f'Unsupported import file type: "{path.suffix}".')
             document = loader(path)
         except Exception as exc:
             issues.append(BatchIssue(path=path, reason=str(exc)))

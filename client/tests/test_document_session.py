@@ -2,6 +2,7 @@ import unittest
 
 from documents.session import (
     DeleteDocumentDecision,
+    format_window_title,
     plan_delete_document,
 )
 from documents.workspace import Document
@@ -26,6 +27,11 @@ class DocumentSessionTest(unittest.TestCase):
             plan_delete_document(self.documents, "alpha", open_name="zoo"),
             DeleteDocumentDecision(preferred_name="math", was_open=False),
         )
+
+    def test_format_window_title_includes_open_document_name(self) -> None:
+        self.assertEqual(format_window_title("lesson1"), "lesson1 - DotExpress")
+        self.assertEqual(format_window_title(None), "DotExpress")
+        self.assertEqual(format_window_title(""), "DotExpress")
 
 
 if __name__ == "__main__":

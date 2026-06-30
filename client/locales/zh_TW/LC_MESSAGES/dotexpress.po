@@ -1343,6 +1343,10 @@ msgstr "確認刪除全部"
 msgid "Import Document"
 msgstr "匯入文件"
 
+#: ui/import_dialog.py:16
+msgid "All Supported Files"
+msgstr "所有支援的檔案"
+
 #: gui.py:1063
 msgid "PDF files (*.pdf)|*.pdf"
 msgstr "PDF 檔案 (*.pdf)|*.pdf"
@@ -1366,6 +1370,34 @@ msgstr "匯入時有部分檔案被略過。"
 #: gui.py:1100
 msgid "Export All Documents"
 msgstr "匯出全部文件"
+
+#: documents/export_results.py:8
+msgid "Export Complete"
+msgstr "匯出完成"
+
+#: documents/export_results.py:9
+msgid "Export Complete with Errors"
+msgstr "匯出完成，但有錯誤"
+
+#: documents/export_results.py:10
+msgid "All documents were exported successfully."
+msgstr "所有文件皆已成功匯出。"
+
+#: documents/export_results.py:11
+msgid ""
+"Exported documents: {success_count}\n"
+"Failed documents: {failure_count}\n"
+"\n"
+"{failures}"
+msgstr ""
+"成功匯出的文件：{success_count}\n"
+"匯出失敗的文件：{failure_count}\n"
+"\n"
+"{failures}"
+
+#: gui.py:1490
+msgid "The document was exported successfully."
+msgstr "文件已成功匯出。"
 
 #: gui.py:1120
 msgid "Export All Issues"

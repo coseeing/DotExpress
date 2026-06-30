@@ -1067,14 +1067,26 @@ msgid "TXT"
 msgstr ""
 
 #: gui.py:160
-msgid "BRL"
+msgid "PDF"
 msgstr ""
 
 #: gui.py:161
+msgid "DOCX"
+msgstr ""
+
+#: gui.py:162
+msgid "EPUB"
+msgstr ""
+
+#: gui.py:163
+msgid "BRL"
+msgstr ""
+
+#: gui.py:164
 msgid "Delete All"
 msgstr ""
 
-#: gui.py:162 gui.py:1265
+#: gui.py:165 gui.py:1265
 msgid "Confirm Delete Dictionary"
 msgstr ""
 
@@ -1276,6 +1288,18 @@ msgstr ""
 
 #: gui.py:1063
 msgid "Import Document"
+msgstr ""
+
+#: gui.py:1063
+msgid "PDF files (*.pdf)|*.pdf"
+msgstr ""
+
+#: gui.py:1063
+msgid "Word documents (*.docx)|*.docx"
+msgstr ""
+
+#: gui.py:1063
+msgid "EPUB books (*.epub)|*.epub"
 msgstr ""
 
 #: gui.py:1081

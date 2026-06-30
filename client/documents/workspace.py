@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 import sys
 import zipfile
+from collections.abc import Callable
 
+from documents.importers import ImportedDocument, import_docx, import_epub, import_pdf
 from name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEP_EXTENSION = ".dep"
@@ -115,6 +117,20 @@ def load_text_document(path: Path | str) -> Document:
     )
 
 
+def _load_imported_document(path: Path | str, importer: Callable[[Path | str], ImportedDocument]) -> Document:
+    imported = importer(path)
+    return Document(name=imported.name, text=imported.markdown_text, braille=None)
+
+
+IMPORT_LOADERS: dict[str, Callable[[Path | str], Document]] = {
+    "dep": load_document_package,
+    "txt": load_text_document,
+    "docx": lambda path: _load_imported_document(path, import_docx),
+    "epub": lambda path: _load_imported_document(path, import_epub),
+    "pdf": lambda path: _load_imported_document(path, import_pdf),
+}
+
+
 def export_document_brl(path: Path | str, document: Document) -> Path:
     destination_path = Path(path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
@@ -168,7 +184,9 @@ def batch_import_documents(
     documents: list[Document] = []
     issues: list[BatchIssue] = []
     seen_names = {name.casefold() for name in existing_names}
-    loader = load_document_package if format_key == "dep" else load_text_document
+    loader = IMPORT_LOADERS.get(format_key.casefold())
+    if loader is None:
+        raise ValueError(f'Unsupported import format: "{format_key}".')
     for path in sorted((Path(path) for path in paths), key=lambda item: (item.stem.casefold(), item.stem)):
         try:
             document = loader(path)

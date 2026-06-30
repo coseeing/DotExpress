@@ -124,7 +124,17 @@ VIEW_SCHEMES = {
 CSV_WILDCARD = "CSV files (*.csv)|*.csv"
 DEP_WILDCARD = "DotExpress files (*.dep)|*.dep"
 TXT_WILDCARD = "Text files (*.txt)|*.txt"
+PDF_WILDCARD = "PDF files (*.pdf)|*.pdf"
+DOCX_WILDCARD = "Word documents (*.docx)|*.docx"
+EPUB_WILDCARD = "EPUB books (*.epub)|*.epub"
 BRL_WILDCARD = "Braille files (*.brl)|*.brl"
+IMPORT_WILDCARDS = {
+	"dep": DEP_WILDCARD,
+	"txt": TXT_WILDCARD,
+	"pdf": PDF_WILDCARD,
+	"docx": DOCX_WILDCARD,
+	"epub": EPUB_WILDCARD,
+}
 
 
 def resource_path(relative_path: str) -> Path:
@@ -160,6 +170,9 @@ _MENU_TRANSLATION_MARKERS = (
 	_("Export All"),
 	_("DEP"),
 	_("TXT"),
+	_("PDF"),
+	_("DOCX"),
+	_("EPUB"),
 	_("BRL"),
 	_("Delete All"),
 	_("Translation"),
@@ -643,6 +656,12 @@ class BrailleFrame(wx.Frame):
 	def _get_txt_wildcard(self) -> str:
 		return _(TXT_WILDCARD)
 
+	def _get_import_wildcard(self, format_key: str) -> str:
+		try:
+			return _(IMPORT_WILDCARDS[format_key.casefold()])
+		except KeyError as exc:
+			raise ValueError(f'Unsupported import format: "{format_key}".') from exc
+
 	def _get_brl_wildcard(self) -> str:
 		return _(BRL_WILDCARD)
 
@@ -1045,7 +1064,7 @@ class BrailleFrame(wx.Frame):
 		if not self._save_open_document_with_feedback():
 			return
 		title = _("Import Document")
-		wildcard = self._get_dep_wildcard() if format_key == "dep" else self._get_txt_wildcard()
+		wildcard = self._get_import_wildcard(format_key)
 		with wx.FileDialog(self, title, wildcard=wildcard, style=wx.FD_OPEN | wx.FD_MULTIPLE) as file_dialog:
 			if file_dialog.ShowModal() != wx.ID_OK:
 				return

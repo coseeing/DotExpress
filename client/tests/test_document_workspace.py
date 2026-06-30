@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from documents.workspace import (
     BatchIssue,
@@ -173,6 +174,20 @@ class DocumentWorkspaceTest(unittest.TestCase):
                 BatchIssue(path=source_dir / "beta.txt", reason='Document "beta" already exists.'),
             ],
         )
+
+    def test_batch_import_documents_dispatches_semantic_importer(self) -> None:
+        source = Path(self._tmpdir.name) / "lesson.docx"
+        loader = Mock(return_value=Document("lesson", "# Heading\n", None))
+        with patch.dict("documents.workspace.IMPORT_LOADERS", {"docx": loader}, clear=False):
+            documents, issues = batch_import_documents([source], format_key="docx", existing_names=set())
+
+        self.assertEqual(documents, [Document("lesson", "# Heading\n", None)])
+        self.assertEqual(issues, [])
+        loader.assert_called_once_with(source)
+
+    def test_batch_import_documents_rejects_unknown_format(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported import format"):
+            batch_import_documents([], format_key="rtf", existing_names=set())
 
     def test_batch_import_documents_reports_invalid_dep(self) -> None:
         source_dir = Path(self._tmpdir.name) / "incoming"

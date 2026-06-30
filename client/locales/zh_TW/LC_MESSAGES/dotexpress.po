@@ -1094,14 +1094,26 @@ msgid "TXT"
 msgstr "TXT"
 
 #: gui.py:160
+msgid "PDF"
+msgstr "PDF"
+
+#: gui.py:161
+msgid "DOCX"
+msgstr "DOCX"
+
+#: gui.py:162
+msgid "EPUB"
+msgstr "EPUB"
+
+#: gui.py:163
 msgid "BRL"
 msgstr "BRL"
 
-#: gui.py:161
+#: gui.py:164
 msgid "Delete All"
 msgstr "刪除全部"
 
-#: gui.py:162 gui.py:1265
+#: gui.py:165 gui.py:1265
 msgid "Confirm Delete Dictionary"
 msgstr "確認刪除字典"
 
@@ -1330,6 +1342,18 @@ msgstr "確認刪除全部"
 #: gui.py:1063
 msgid "Import Document"
 msgstr "匯入文件"
+
+#: gui.py:1063
+msgid "PDF files (*.pdf)|*.pdf"
+msgstr "PDF 檔案 (*.pdf)|*.pdf"
+
+#: gui.py:1063
+msgid "Word documents (*.docx)|*.docx"
+msgstr "Word 文件 (*.docx)|*.docx"
+
+#: gui.py:1063
+msgid "EPUB books (*.epub)|*.epub"
+msgstr "EPUB 電子書 (*.epub)|*.epub"
 
 #: gui.py:1081
 msgid "Import Issues"

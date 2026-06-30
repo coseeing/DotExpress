@@ -17,7 +17,7 @@ DOCUMENT_MENU_ITEMS: tuple[DocumentMenuItem, ...] = (
     DocumentMenuItem("command", "Delete All", "delete_all"),
     DocumentMenuItem("command", "Add", "add"),
     DocumentMenuItem("command", "Rename", "rename"),
-    DocumentMenuItem("submenu", "Import", "import", ("DEP", "TXT")),
+    DocumentMenuItem("submenu", "Import", "import", ("DEP", "TXT", "PDF", "DOCX", "EPUB")),
     DocumentMenuItem("submenu", "Export", "export", ("DEP", "BRL")),
     DocumentMenuItem("submenu", "Export All", "export_all", ("DEP", "BRL")),
 )
@@ -67,7 +67,7 @@ def get_document_action_labels() -> list[str]:
 
 
 def get_document_import_format_labels() -> list[str]:
-    return ["DEP", "TXT"]
+    return ["DEP", "TXT", "PDF", "DOCX", "EPUB"]
 
 
 def get_document_export_format_labels() -> list[str]:

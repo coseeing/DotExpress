@@ -18,6 +18,12 @@ class ConversionRequest:
 	translation_tables: dict[str, str]
 
 
+@dataclass(frozen=True)
+class ConversionOutput:
+	display_text: str
+	translation_results: tuple[object, ...]
+
+
 class ConversionStageError(Exception):
 	def __init__(self, stage: str, error: Exception):
 		super().__init__(str(error))
@@ -158,11 +164,56 @@ def _translate_plain_text_segment(
 					translations.append(translate(previous_translate_table, " ", " "))
 
 	assert translations, "No translatable text segments were found."
+	return translations
+
+
+def merge_translation_results(translations):
+	from translate import TranslationResult
+
+	if not translations:
+		return TranslationResult([], [], [], [])
 	merged = translations[0]
 	for segment in translations[1:]:
 		merged = merged + segment
-
 	return merged
+
+
+def translate_with_language_segments(
+	table_file: str,
+	text: str,
+	dictionary_path: Path,
+	translation_tables: dict[str, str],
+	bopomofo_path: Path,
+):
+	if text == "":
+		return []
+
+	translations = []
+	segments = parse_inline_math_segments(text)
+	math_braille_code = translation_tables.get("math", DEFAULT_MATH_BRAILLE_TABLE)
+	for index, segment in enumerate(segments):
+		if index > 0 and _segment_needs_boundary_space(segments[index - 1], segment):
+			translations.append(build_braille_space_translation_result())
+		if segment["type"] == "text":
+			plain_results = _translate_plain_text_segment(
+				table_file,
+				segment["text"],
+				dictionary_path,
+				translation_tables,
+				bopomofo_path,
+			)
+			if isinstance(plain_results, (list, tuple)):
+				translations.extend(plain_results)
+			else:
+				translations.append(plain_results)
+		else:
+			translations.append(
+				build_math_translation_result(
+					segment["text"],
+					translate_math_segment(segment["text"], braille_code=math_braille_code),
+				)
+			)
+	return translations
 
 
 def translate_with_language(
@@ -172,39 +223,62 @@ def translate_with_language(
 	translation_tables: dict[str, str],
 	bopomofo_path: Path,
 ):
-	from translate import TranslationResult
+	return merge_translation_results(
+		translate_with_language_segments(
+			table_file,
+			text,
+			dictionary_path,
+			translation_tables,
+			bopomofo_path,
+		)
+	)
 
-	if text == "":
-		return TranslationResult([], [], [], [])
 
-	translations = []
-	segments = parse_inline_math_segments(text)
-	math_braille_code = translation_tables.get("math", DEFAULT_MATH_BRAILLE_TABLE)
-	for index, segment in enumerate(segments):
-		if index > 0 and _segment_needs_boundary_space(segments[index - 1], segment):
-			translations.append(build_braille_space_translation_result())
+def _wrap_translation_results(translations, width: int) -> tuple[str, str]:
+	translation_result = merge_translation_results(translations)
+	translation_result.reclean_braille_endspace()
+	translation_result.bind_word_tokens()
+	translation_result.reclean_token()
+	return translation_result.wrap(width)
 
-		if segment["type"] == "text":
-			translations.append(
-				_translate_plain_text_segment(
-					table_file,
-					segment["text"],
-					dictionary_path,
-					translation_tables,
-					bopomofo_path,
-				)
+
+def convert_text_with_alignment(
+	request: ConversionRequest,
+	*,
+	map_char: MapChar = translate__mapping_char,
+) -> ConversionOutput:
+	if request.raw_text == "":
+		return ConversionOutput("", ())
+	try:
+		text = map_char(
+			request.raw_text,
+			dictionary_path=request.data_dir / "BopomofoChar2Braille.csv",
+			from_field="Bopomofo",
+			to_field="Braille",
+		)
+		translations = translate_with_language_segments(
+			request.table_file,
+			text,
+			request.dictionary_path,
+			request.translation_tables,
+			request.data_dir / "Bopomofo2Braille.csv",
+		)
+		braille_wrapped, _text_wrapped = _wrap_translation_results(translations, request.width)
+	except Exception as error:
+		raise ConversionStageError("translation", error) from error
+
+	display_text = braille_wrapped
+	if request.output_mode == "ascii":
+		try:
+			display_text = map_char(
+				braille_wrapped,
+				dictionary_path=request.data_dir / "Braille2Ascii.csv",
+				from_field="Braille",
+				to_field="Ascii",
 			)
-			continue
-
-		braille_output = translate_math_segment(segment["text"], braille_code=math_braille_code)
-		translations.append(build_math_translation_result(segment["text"], braille_output))
-
-	assert translations, "No translatable text segments were found."
-	merged = translations[0]
-	for segment in translations[1:]:
-		merged = merged + segment
-
-	return merged
+		except Exception as error:
+			raise ConversionStageError("ascii", error) from error
+	return ConversionOutput(display_text, tuple(translations))
 
 
 def translate_and_wrap_both(
@@ -238,6 +312,8 @@ def convert_text_for_output(
 ) -> str:
 	if request.raw_text == "":
 		return ""
+	if wrap_both is translate_and_wrap_both:
+		return convert_text_with_alignment(request, map_char=map_char).display_text
 	try:
 		text = map_char(
 			request.raw_text,

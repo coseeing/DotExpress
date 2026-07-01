@@ -1039,6 +1039,10 @@ msgid "Open"
 msgstr ""
 
 #: gui.py:153
+msgid "Dual View"
+msgstr ""
+
+#: gui.py:154
 msgid "Rename"
 msgstr ""
 
@@ -1056,6 +1060,14 @@ msgstr ""
 
 #: gui.py:157
 msgid "Export All"
+msgstr ""
+
+#: gui.py:174
+msgid "No conversion data is available for this document."
+msgstr ""
+
+#: gui.py:175
+msgid "Translation segment"
 msgstr ""
 
 #: gui.py:158

@@ -1066,6 +1066,10 @@ msgid "Open"
 msgstr "開啟"
 
 #: gui.py:153
+msgid "Dual View"
+msgstr "雙視檢視"
+
+#: gui.py:154
 msgid "Rename"
 msgstr "重新命名"
 
@@ -1084,6 +1088,14 @@ msgstr "SimBraille"
 #: gui.py:157
 msgid "Export All"
 msgstr "匯出全部"
+
+#: gui.py:174
+msgid "No conversion data is available for this document."
+msgstr "此文件沒有可顯示的轉換資料。"
+
+#: gui.py:175
+msgid "Translation segment"
+msgstr "轉譯區段"
 
 #: gui.py:158
 msgid "DEP"

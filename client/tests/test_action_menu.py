@@ -13,6 +13,7 @@ class ActionMenuTest(unittest.TestCase):
             get_document_menu_items(),
             [
                 ("command", "Open"),
+                ("command", "Dual View"),
                 ("command", "Delete"),
                 ("command", "Delete All"),
                 ("command", "Add"),
@@ -26,7 +27,7 @@ class ActionMenuTest(unittest.TestCase):
     def test_document_menu_descriptors_include_action_keys(self) -> None:
         self.assertEqual(
             [item.action for item in get_document_menu_descriptors()],
-            ["open", "delete", "delete_all", "add", "rename", "import", "export", "export_all"],
+            ["open", "dual_view", "delete", "delete_all", "add", "rename", "import", "export", "export_all"],
         )
 
     def test_document_menu_enabled_state_without_selection_or_documents(self) -> None:
@@ -34,6 +35,7 @@ class ActionMenuTest(unittest.TestCase):
             get_document_menu_enabled_state(has_selection=False, has_documents=False),
             {
                 "Open": False,
+                "Dual View": True,
                 "Delete": False,
                 "Delete All": False,
                 "Add": True,
@@ -49,6 +51,7 @@ class ActionMenuTest(unittest.TestCase):
             get_document_menu_enabled_state(has_selection=True, has_documents=True),
             {
                 "Open": True,
+                "Dual View": True,
                 "Delete": True,
                 "Delete All": True,
                 "Add": True,
@@ -64,6 +67,7 @@ class ActionMenuTest(unittest.TestCase):
             get_document_menu_enabled_state(has_selection=True, has_documents=False),
             {
                 "Open": True,
+                "Dual View": True,
                 "Delete": True,
                 "Delete All": False,
                 "Add": True,
@@ -79,6 +83,7 @@ class ActionMenuTest(unittest.TestCase):
             get_document_menu_enabled_state(has_selection=False, has_documents=True),
             {
                 "Open": False,
+                "Dual View": True,
                 "Delete": False,
                 "Delete All": True,
                 "Add": True,

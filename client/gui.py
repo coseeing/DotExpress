@@ -8,7 +8,14 @@ import wx
 
 import about
 from braille import louis_helper
-from conversion.service import ConversionRequest, ConversionStageError, convert_text_for_output, get_public_error_message
+from conversion.service import (
+	ConversionOutput,
+	ConversionRequest,
+	ConversionStageError,
+	convert_text_for_output,
+	convert_text_with_alignment,
+	get_public_error_message,
+)
 from dictionaries.actions import is_default_dictionary
 from dictionaries.manager import (
 	create_dictionary,
@@ -98,6 +105,9 @@ from ui.section_navigation import (
 	VIEW_SECTION,
 	get_adjacent_section,
 )
+from dual_view.html import render_dual_view_html
+from dual_view.model import build_dual_view_model
+from ui.dual_view import DualViewFrame
 from ui.translation_menu import get_translation_menu_items
 from client_init import start_client_init_background
 
@@ -167,6 +177,7 @@ _MENU_TRANSLATION_MARKERS = (
 	_("Import"),
 	_("Export"),
 	_("Open"),
+	_("Dual View"),
 	_("Rename"),
 	_("Default"),
 	_("Braille Font"),
@@ -180,6 +191,8 @@ _MENU_TRANSLATION_MARKERS = (
 	_("BRL"),
 	_("Delete All"),
 	_("Translation"),
+	_("No conversion data is available for this document."),
+	_("Translation segment"),
 	_("Convert"),
 	_("Translation Settings..."),
 	_("Translation Tables Setting..."),
@@ -260,6 +273,8 @@ class BrailleFrame(wx.Frame):
 		self._simbraille_font_available = self._register_output_font()
 		self._selected_document_name: str | None = None
 		self._open_document_name: str | None = None
+		self._dual_view_frame: DualViewFrame | None = None
+		self._dual_view_results_by_document: dict[str, tuple[object, ...]] = {}
 
 		self._view_schemes = [("light", _("Light")), ("dark", _("Dark"))]
 		self._braille_font_options = [("default", _("Default")), ("simbraille", _("SimBraille"))]
@@ -365,6 +380,7 @@ class BrailleFrame(wx.Frame):
 		self.document_list.Bind(wx.EVT_KEY_DOWN, self.on_document_list_key_down)
 		self.document_list.Bind(wx.EVT_CONTEXT_MENU, self.on_document_context_menu)
 		self.Bind(wx.EVT_CHAR_HOOK, self.on_char_hook)
+		self.Bind(wx.EVT_ACTIVATE, self.on_frame_activate)
 		self.Bind(wx.EVT_CLOSE, self._on_close)
 
 	def _load_startup_documents(self) -> None:
@@ -433,6 +449,7 @@ class BrailleFrame(wx.Frame):
 		submenu_items: dict[str, dict[str, wx.MenuItem]],
 	) -> None:
 		menu.Bind(wx.EVT_MENU, self.on_open_document, menu_items["Open"])
+		menu.Bind(wx.EVT_MENU, self.on_open_dual_view, menu_items["Dual View"])
 		menu.Bind(wx.EVT_MENU, self.on_delete_document, menu_items["Delete"])
 		menu.Bind(wx.EVT_MENU, self.on_delete_all_documents, menu_items["Delete All"])
 		menu.Bind(wx.EVT_MENU, self.on_add_document, menu_items["Add"])
@@ -458,6 +475,41 @@ class BrailleFrame(wx.Frame):
 
 	def _update_window_title(self) -> None:
 		self.SetTitle(_(format_window_title(self._open_document_name)))
+
+	def _create_dual_view_frame(self) -> DualViewFrame:
+		return DualViewFrame(self, title=_("Dual View"), on_closed=self._on_dual_view_closed)
+
+	def _on_dual_view_closed(self, viewer: DualViewFrame) -> None:
+		if self._dual_view_frame is viewer:
+			self._dual_view_frame = None
+
+	def _render_dual_view_for_open_document(self) -> str:
+		results = self._dual_view_results_by_document.get(self._open_document_name or "", ())
+		return render_dual_view_html(
+			build_dual_view_model(results),
+			empty_message=_("No conversion data is available for this document."),
+			segment_label=_("Translation segment"),
+		)
+
+	def _refresh_dual_view(self) -> None:
+		if self._dual_view_frame is not None:
+			self._dual_view_frame.refresh_html(self._render_dual_view_for_open_document())
+
+	def _show_dual_view(self) -> None:
+		if self._dual_view_frame is None:
+			self._dual_view_frame = self._create_dual_view_frame()
+		self._refresh_dual_view()
+		self._dual_view_frame.Show()
+		if self._dual_view_frame.IsIconized():
+			self._dual_view_frame.Iconize(False)
+		self._dual_view_frame.Raise()
+
+	def _rename_dual_view_result(self, old_name: str, new_name: str) -> None:
+		if old_name in self._dual_view_results_by_document:
+			self._dual_view_results_by_document[new_name] = self._dual_view_results_by_document.pop(old_name)
+
+	def _delete_dual_view_result(self, name: str) -> None:
+		self._dual_view_results_by_document.pop(name, None)
 
 	def _set_control_accessible_name(
 		self,
@@ -617,6 +669,15 @@ class BrailleFrame(wx.Frame):
 		) as dialog:
 			dialog.ShowModal()
 
+	def on_open_dual_view(self, _evt) -> None:
+		self._show_dual_view()
+
+	def on_frame_activate(self, event: wx.ActivateEvent) -> None:
+		viewer = self._dual_view_frame
+		if event.GetActive() and viewer is not None and viewer.IsShown() and not viewer.IsIconized():
+			viewer.Raise()
+		event.Skip()
+
 	def _sort_documents(self) -> None:
 		self.documents.sort(key=lambda document: (document.name.casefold(), document.name))
 
@@ -773,12 +834,14 @@ class BrailleFrame(wx.Frame):
 			self._selected_document_name = decision.selected_name
 			self._clear_document_editors()
 			self._update_window_title()
+			self._refresh_dual_view()
 			return
 		self._open_document_name = decision.open_name
 		self._selected_document_name = decision.selected_name
 		self._load_document_into_editors(decision.document)
 		self._refresh_document_list(decision.selected_name)
 		self._update_window_title()
+		self._refresh_dual_view()
 
 	def _save_open_document(self) -> None:
 		if not self._open_document_name:
@@ -984,10 +1047,12 @@ class BrailleFrame(wx.Frame):
 		renamed_document = rename_document_in_list(self.documents, selected_document.name, new_name)
 		if renamed_document is None:
 			return
+		self._rename_dual_view_result(selected_document.name, renamed_document.name)
 		if self._open_document_name == selected_document.name:
 			self._open_document_name = renamed_document.name
 		self._refresh_document_list(renamed_document.name)
 		self._update_window_title()
+		self._refresh_dual_view()
 
 	def on_delete_document(self, _evt) -> None:
 		selected_document = self._get_selected_document()
@@ -1012,6 +1077,7 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to delete document: {error}"), exc)
 			return
 		self.documents = [document for document in self.documents if document.name != selected_document.name]
+		self._delete_dual_view_result(selected_document.name)
 		if delete_decision.was_open:
 			self._open_document_name = None
 			self._update_window_title()
@@ -1022,6 +1088,7 @@ class BrailleFrame(wx.Frame):
 		else:
 			self._clear_document_editors()
 			self._ensure_open_document_exists()
+		self._refresh_dual_view()
 
 	def on_delete_all_documents(self, _evt) -> None:
 		if not self.documents:
@@ -1055,10 +1122,12 @@ class BrailleFrame(wx.Frame):
 		self.documents = []
 		self._selected_document_name = None
 		self._open_document_name = None
+		self._dual_view_results_by_document.clear()
 		self._update_window_title()
 		self._refresh_document_list()
 		self._clear_document_editors()
 		self._ensure_open_document_exists()
+		self._refresh_dual_view()
 
 	def on_import_document(self, _evt) -> None:
 		if not self._save_open_document_with_feedback():
@@ -1538,6 +1607,10 @@ class BrailleFrame(wx.Frame):
 				evt.Veto()
 			return
 		self._close_converting_dialog()
+		if self._dual_view_frame is not None:
+			viewer = self._dual_view_frame
+			self._dual_view_frame = None
+			viewer.Destroy()
 		evt.Skip()
 
 	def _set_conversion_busy(self, busy: bool):
@@ -1581,7 +1654,7 @@ class BrailleFrame(wx.Frame):
 
 	def _run_conversion(self, job_id: int, table_file: str, raw_text: str, width: int, output_mode: str, dictionary_path: Path):
 		try:
-			display_text = convert_text_for_output(
+			conversion_output = convert_text_with_alignment(
 				self._build_conversion_request(raw_text, table_file, output_mode, width, dictionary_path)
 			)
 		except ConversionStageError as e:
@@ -1593,7 +1666,7 @@ class BrailleFrame(wx.Frame):
 			)
 			return
 
-		wx.CallAfter(self._finish_conversion, job_id, display_text=display_text)
+		wx.CallAfter(self._finish_conversion, job_id, conversion_output=conversion_output)
 
 	def _show_converting_dialog(self, job_id: int):
 		if job_id != self._convert_job_id:
@@ -1614,7 +1687,13 @@ class BrailleFrame(wx.Frame):
 		dialog.Unbind(wx.EVT_CLOSE)
 		dialog.Destroy()
 
-	def _finish_conversion(self, job_id: int, display_text: str | None = None, error_message: str | None = None):
+	def _finish_conversion(
+		self,
+		job_id: int,
+		conversion_output: ConversionOutput | None = None,
+		error_message: str | None = None,
+		display_text: str | None = None,
+	):
 		if job_id != self._convert_job_id:
 			return
 		if self._convert_dialog_timer is not None:
@@ -1644,10 +1723,14 @@ class BrailleFrame(wx.Frame):
 				)
 			return
 
-		converted_braille = display_text or ""
+		output = conversion_output or ConversionOutput(display_text or "", ())
+		converted_braille = output.display_text
 		if update_output:
 			self.output_txt.SetValue(converted_braille)
 			self.output_txt.SetFocus()
+			if self._open_document_name:
+				self._dual_view_results_by_document[self._open_document_name] = output.translation_results
+			self._refresh_dual_view()
 		if on_success is not None:
 			on_success(converted_braille)
 		if show_success:

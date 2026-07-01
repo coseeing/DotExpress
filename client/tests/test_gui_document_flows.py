@@ -156,7 +156,16 @@ def _install_stub_modules() -> None:
     wx.MessageBox = lambda *args, **kwargs: wx.OK
     wx.DefaultPosition = Point()
     wx.DefaultSize = Point()
+    wx.__path__ = []
     wx.__getattr__ = lambda name: type(name, (), {})
+    wx_html2 = types.ModuleType("wx.html2")
+    wx_html2.WebView = type(
+        "WebView",
+        (),
+        {"New": staticmethod(lambda parent: Mock())},
+    )
+    wx.html2 = wx_html2
+    sys.modules["wx.html2"] = wx_html2
 
     wx.ID_ANY = -1
     wx.ID_ABOUT = 1
@@ -229,6 +238,47 @@ def _install_stub_modules() -> None:
         louis_helper.terminate = lambda: None
         sys.modules["braille.louis_helper"] = louis_helper
 
+    if "mammoth" not in sys.modules:
+        mammoth = types.ModuleType("mammoth")
+        mammoth.convert_to_html = lambda *args, **kwargs: types.SimpleNamespace(value="")
+        sys.modules["mammoth"] = mammoth
+
+    if "lxml" not in sys.modules:
+        lxml = types.ModuleType("lxml")
+        etree = types.ModuleType("lxml.etree")
+        html = types.ModuleType("lxml.html")
+
+        class _QName:
+            def __init__(self, element):
+                self.localname = getattr(element, "tag", "")
+
+        etree.QName = _QName
+        etree.XMLParser = lambda *args, **kwargs: object()
+        etree.fromstring = lambda *args, **kwargs: types.SimpleNamespace(xpath=lambda *_a, **_k: [])
+        html.fragment_fromstring = lambda *args, **kwargs: types.SimpleNamespace()
+        lxml.etree = etree
+        lxml.html = html
+        sys.modules["lxml"] = lxml
+        sys.modules["lxml.etree"] = etree
+        sys.modules["lxml.html"] = html
+
+    if "ebooklib" not in sys.modules:
+        ebooklib = types.ModuleType("ebooklib")
+        epub = types.ModuleType("ebooklib.epub")
+        epub.read_epub = lambda *_args, **_kwargs: types.SimpleNamespace(spine=[], get_item_with_id=lambda _item_id: None)
+        ebooklib.epub = epub
+        sys.modules["ebooklib"] = ebooklib
+        sys.modules["ebooklib.epub"] = epub
+
+    if "pymupdf" not in sys.modules:
+        pymupdf = types.ModuleType("pymupdf")
+        sys.modules["pymupdf"] = pymupdf
+
+    if "pypdf" not in sys.modules:
+        pypdf = types.ModuleType("pypdf")
+        pypdf.PdfReader = type("PdfReader", (), {})
+        sys.modules["pypdf"] = pypdf
+
 
 _install_stub_modules()
 gui = importlib.import_module("gui")
@@ -244,10 +294,17 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._convert_dialog_timer = Mock()
         frame._convert_dialog = Mock()
         frame._convert_thread = Mock()
+        frame._convert_on_success = None
+        frame._convert_on_error = None
+        frame._convert_update_output = True
+        frame._convert_show_success = True
         frame._set_conversion_busy = Mock()
         frame._close_converting_dialog = Mock()
         frame.output_txt = Mock()
         frame._show_export_all_result = Mock()
+        frame._dual_view_frame = None
+        frame._dual_view_results_by_document = {}
+        frame._open_document_name = "alpha"
         return frame
 
     def test_manual_conversion_updates_output_focus_and_shows_completion(self) -> None:
@@ -361,6 +418,93 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._show_export_all_result.assert_called_once()
         result = frame._show_export_all_result.call_args.args[0]
         self.assertTrue(result.all_succeeded)
+
+    def test_open_dual_view_creates_refreshes_and_shows_viewer(self) -> None:
+        frame = self._make_frame()
+        frame._dual_view_results_by_document["alpha"] = ("segment",)
+        viewer = Mock()
+        frame._create_dual_view_frame = Mock(return_value=viewer)
+        frame._render_dual_view_for_open_document = Mock(return_value="<html>alpha</html>")
+        viewer.IsIconized.return_value = False
+
+        frame._show_dual_view()
+
+        frame._create_dual_view_frame.assert_called_once_with()
+        viewer.refresh_html.assert_called_once_with("<html>alpha</html>")
+        viewer.Show.assert_called_once_with()
+        viewer.Raise.assert_called_once_with()
+
+    def test_open_existing_dual_view_reuses_and_refreshes_it(self) -> None:
+        frame = self._make_frame()
+        viewer = Mock()
+        frame._dual_view_frame = viewer
+        frame._render_dual_view_for_open_document = Mock(return_value="<html>new</html>")
+        viewer.IsIconized.return_value = False
+
+        frame._show_dual_view()
+
+        viewer.refresh_html.assert_called_once_with("<html>new</html>")
+        viewer.Show.assert_called_once_with()
+        viewer.Raise.assert_called_once_with()
+
+    def test_successful_manual_conversion_stores_segments_and_refreshes_open_viewer(self) -> None:
+        frame = self._make_frame()
+        frame._convert_update_output = True
+        frame._convert_show_success = False
+        frame._dual_view_frame = Mock()
+        frame._refresh_dual_view = Mock()
+        conversion_output = gui.ConversionOutput("braille", ("segment",))
+
+        with patch.object(gui.wx, "MessageBox"):
+            frame._finish_conversion(1, conversion_output=conversion_output)
+
+        self.assertEqual(frame._dual_view_results_by_document["alpha"], ("segment",))
+        frame._refresh_dual_view.assert_called_once_with()
+
+    def test_export_conversion_does_not_replace_dual_view_cache(self) -> None:
+        frame = self._make_frame()
+        frame._convert_update_output = False
+        frame._dual_view_results_by_document["alpha"] = ("manual",)
+        conversion_output = gui.ConversionOutput("export", ("export-segment",))
+
+        frame._finish_conversion(1, conversion_output=conversion_output)
+
+        self.assertEqual(frame._dual_view_results_by_document["alpha"], ("manual",))
+
+    def test_open_document_refreshes_viewer_but_text_edit_does_not(self) -> None:
+        frame = self._make_frame()
+        frame.documents = [Document("beta", "new text", "braille")]
+        frame._dual_view_frame = Mock()
+        frame._refresh_dual_view = Mock()
+        frame._load_document_into_editors = Mock()
+        frame._refresh_document_list = Mock()
+        frame._update_window_title = Mock()
+
+        frame._open_document_by_name("beta")
+
+        frame._refresh_dual_view.assert_called_once_with()
+
+    def test_activate_raises_visible_non_iconized_viewer(self) -> None:
+        frame = self._make_frame()
+        frame._dual_view_frame = Mock()
+        frame._dual_view_frame.IsShown.return_value = True
+        frame._dual_view_frame.IsIconized.return_value = False
+        event = Mock()
+        event.GetActive.return_value = True
+
+        frame.on_frame_activate(event)
+
+        frame._dual_view_frame.Raise.assert_called_once_with()
+        event.Skip.assert_called_once_with()
+
+    def test_rename_and_delete_keep_alignment_cache_consistent(self) -> None:
+        frame = self._make_frame()
+        frame._dual_view_results_by_document = {"alpha": ("segment",)}
+
+        frame._rename_dual_view_result("alpha", "renamed")
+        frame._delete_dual_view_result("renamed")
+
+        self.assertEqual(frame._dual_view_results_by_document, {})
 
     def test_export_all_shows_one_partial_failure_dialog_with_names(self) -> None:
         frame = self._make_frame()

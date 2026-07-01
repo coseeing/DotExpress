@@ -33,13 +33,14 @@
 - `檔案` 選單下新增一個 `雙視檢視` 指令。
 - 使用者點擊後，開啟一個附屬於主視窗的 modeless viewer 視窗。
 - 如果 viewer 尚未開啟，建立新視窗。
-- 如果 viewer 已開啟，將既有 viewer 帶到前景並刷新內容。
+- 如果 viewer 已開啟，再次點擊 `雙視檢視` 時，將既有 viewer 帶到 DotExpress 主視窗前方並刷新內容。
 
 ### 視窗行為
 
 - viewer 是可關閉的獨立子視窗。
 - 關閉 viewer 不影響主視窗、目前文件或點字結果。
 - viewer 應只相對於 DotExpress 主視窗浮動，不應搶占其他應用程式的全系統最上層。
+- 當 DotExpress 主視窗重新取得前景時，若 viewer 仍開啟且未最小化，viewer 應跟著回到主視窗前方。
 - viewer 可移動、可調整大小，並保留一般視窗行為。
 
 ### 顯示內容
@@ -67,6 +68,7 @@
   - 初始 HTML shell 載入邏輯
   - 接收 JSON/view model 並重新 render 的橋接方法
 - `DualViewFrame` 應為 modeless 子 `wx.Frame`，parent 指向主 `BrailleFrame`。
+- `BrailleFrame` 應在重新取得前景時檢查 viewer 狀態；若 viewer 已開啟且未最小化，應將 viewer 一併 `Raise()` 到主視窗前方。
 
 ### 資料來源
 
@@ -181,6 +183,7 @@
 
 - `檔案` 選單下可開啟 `雙視檢視` 視窗。
 - viewer 是可關閉的 modeless 子視窗，且不搶其他應用程式的全系統最上層。
+- 當 DotExpress 主視窗重新回到前景時，已開啟的 viewer 會跟著回到主視窗前方。
 - viewer 以原文字元為主單位，顯示上方原文、下方對應點字片段。
 - viewer 顯示基於未 wrap、未 bind 的原始 translation data。
 - 整份文件可由多個 `TranslationResult` 組成，viewer 仍能正確保留 segment 邊界並顯示完整內容。

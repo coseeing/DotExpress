@@ -162,6 +162,39 @@ class SpeechSymbolsDialogFilterTest(unittest.TestCase):
         self.assertEqual(self.dialog._get_item_text(0, 1), 'Needle')
         self.assertEqual(self.dialog._get_item_text(0, 2), '\u6ce8\u97f3')
 
+    def test_filter_preserves_selected_entry_when_it_remains_visible(self) -> None:
+        self.dialog.list_ctrl.Select(1)
+
+        self.dialog.filter_entries("e")
+
+        self.assertIs(self.dialog.filtered_entries[self.dialog.list_ctrl.selected], self.beta)
+        self.assertTrue(self.dialog.edit_button.enabled)
+        self.assertTrue(self.dialog.remove_button.enabled)
+
+    def test_filter_falls_back_to_first_entry_when_selection_is_hidden(self) -> None:
+        self.dialog.list_ctrl.Select(1)
+
+        self.dialog.filter_entries("alp")
+
+        self.assertEqual(self.dialog.list_ctrl.selected, 0)
+        self.assertIs(self.dialog.filtered_entries[0], self.alpha)
+
+    def test_empty_result_clears_selection_and_disables_edit_and_delete(self) -> None:
+        self.dialog.filter_entries("missing")
+
+        self.assertEqual(self.dialog.list_ctrl.selected, -1)
+        self.assertFalse(self.dialog.edit_button.enabled)
+        self.assertFalse(self.dialog.remove_button.enabled)
+
+    def test_filter_event_applies_current_text_and_is_skipped(self) -> None:
+        self.dialog.filter_ctrl.ChangeValue("alp")
+        event = _FakeEvent()
+
+        self.dialog._on_filter_changed(event)
+
+        self.assertEqual(self.dialog.filtered_entries, [self.alpha])
+        self.assertTrue(event.skipped)
+
 
 if __name__ == '__main__':
     unittest.main()

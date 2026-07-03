@@ -998,6 +998,10 @@ msgstr "自訂字典管理器"
 msgid "Dictionary entries"
 msgstr "字典項目"
 
+#: dialog.py
+msgid "Filter by:"
+msgstr "篩選條件："
+
 #: dialog.py:381 gui.py:147
 msgid "Add"
 msgstr "新增"

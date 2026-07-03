@@ -393,6 +393,22 @@ class FileIssuesDialog(wx.Dialog):
 		self.Destroy()
 
 
+class DictionaryEntryListCtrl(wx.ListCtrl):
+	"""Virtual list that asks its owner for visible dictionary cell text."""
+
+	def __init__(
+		self,
+		parent: wx.Window,
+		get_item_text: Callable[[int, int], str],
+		**kwargs,
+	):
+		super().__init__(parent, **kwargs)
+		self._get_item_text = get_item_text
+
+	def OnGetItemText(self, item: int, column: int) -> str:
+		return self._get_item_text(item, column)
+
+
 class SpeechSymbolsDialog(wx.Dialog):
 	"""Dialog for editing custom dictionary mappings stored on disk."""
 
@@ -401,8 +417,9 @@ class SpeechSymbolsDialog(wx.Dialog):
 
 		self.dictionary_path = Path(dictionary_path) if dictionary_path else (Path("data") / "dictionary.csv")
 		self.entries: List[DictionaryEntry] = self._load_entries()
+		self.filtered_entries: List[DictionaryEntry] = list(self.entries)
 		self._build_ui()
-		self._populate_list()
+		self.filter_entries()
 		self._update_button_states()
 
 	def __enter__(self) -> "SpeechSymbolsDialog":
@@ -414,10 +431,20 @@ class SpeechSymbolsDialog(wx.Dialog):
 	def _build_ui(self) -> None:
 		main_sizer = wx.BoxSizer(wx.VERTICAL)
 
+		filter_label = wx.StaticText(self, label=_("Filter by:"))
+		main_sizer.Add(filter_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
+		self.filter_ctrl = wx.TextCtrl(self)
+		self.filter_ctrl.Bind(wx.EVT_TEXT, self._on_filter_changed)
+		main_sizer.Add(self.filter_ctrl, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+
 		list_label = wx.StaticText(self, label=_("Dictionary entries"))
 		main_sizer.Add(list_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
 
-		self.list_ctrl = wx.ListCtrl(self, style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL)
+		self.list_ctrl = DictionaryEntryListCtrl(
+			self,
+			self._get_item_text,
+			style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL | wx.LC_VIRTUAL,
+		)
 		self.list_ctrl.InsertColumn(0, _("Source Text"), width=200)
 		self.list_ctrl.InsertColumn(1, _("Braille"), width=230)
 		self.list_ctrl.InsertColumn(2, _("Type"), width=120)
@@ -473,24 +500,85 @@ class SpeechSymbolsDialog(wx.Dialog):
 		return entries
 
 	def _populate_list(self) -> None:
-		self.list_ctrl.DeleteAllItems()
-		for entry in self.entries:
-			index = self.list_ctrl.InsertItem(self.list_ctrl.GetItemCount(), entry.text)
-			self.list_ctrl.SetItem(index, 1, entry.braille)
-			self.list_ctrl.SetItem(index, 2, ENTRY_TYPE_LABELS.get(entry.entry_type, entry.entry_type))
+		self.filter_entries()
+		self._select_index(0)
+
+	def _get_item_text(self, item: int, column: int) -> str:
+		entry = self.filtered_entries[item]
+		if column == 0:
+			return entry.text
+		if column == 1:
+			return entry.braille
+		if column == 2:
+			return ENTRY_TYPE_LABELS.get(entry.entry_type, entry.entry_type)
+		raise ValueError(f"Unknown column: {column}")
+
+	def _entry_matches_filter(self, entry: DictionaryEntry, filter_text: str) -> bool:
+		normalized_filter = filter_text.casefold()
+		return normalized_filter in entry.text.casefold() or normalized_filter in entry.braille.casefold()
+
+	def filter_entries(
+		self,
+		filter_text: str | None = None,
+		preferred_entry: DictionaryEntry | None = None,
+		fallback_index: int = 0,
+	) -> None:
+		previous_entry = preferred_entry or self._get_selected_entry()
+		if filter_text is None:
+			filter_text = self.filter_ctrl.GetValue()
+
+		if filter_text:
+			self.filtered_entries = [
+				entry for entry in self.entries if self._entry_matches_filter(entry, filter_text)
+			]
+		else:
+			self.filtered_entries = list(self.entries)
+
+		self.list_ctrl.SetItemCount(len(self.filtered_entries))
+		self.list_ctrl.Refresh()
+		if not self.filtered_entries:
+			self._clear_selection()
+			self._update_button_states()
+			return
+
+		new_index = min(fallback_index, len(self.filtered_entries) - 1)
+		if previous_entry is not None:
+			try:
+				new_index = self.filtered_entries.index(previous_entry)
+			except ValueError:
+				pass
+		self._select_index(new_index)
+
+	def _on_filter_changed(self, event: wx.CommandEvent) -> None:
+		self.filter_entries(self.filter_ctrl.GetValue())
+		event.Skip()
 
 	def _update_button_states(self) -> None:
-		has_selection = self.list_ctrl.GetFirstSelected() != wx.NOT_FOUND
+		has_selection = self._get_selected_index() is not None
 		self.edit_button.Enable(has_selection)
 		self.remove_button.Enable(has_selection)
 
 	def _get_selected_index(self) -> int | None:
 		index = self.list_ctrl.GetFirstSelected()
-		return index if index != wx.NOT_FOUND else None
+		if index == wx.NOT_FOUND or index < 0 or index >= len(self.filtered_entries):
+			return None
+		return index
+
+	def _get_selected_entry(self) -> DictionaryEntry | None:
+		index = self._get_selected_index()
+		return self.filtered_entries[index] if index is not None else None
+
+	def _clear_selection(self) -> None:
+		index = self.list_ctrl.GetFirstSelected()
+		if index != wx.NOT_FOUND:
+			self.list_ctrl.Select(index, False)
 
 	def _select_index(self, index: int) -> None:
-		if index < 0 or index >= self.list_ctrl.GetItemCount():
+		if index < 0 or index >= len(self.filtered_entries):
+			self._clear_selection()
+			self._update_button_states()
 			return
+		self._clear_selection()
 		self.list_ctrl.Select(index)
 		self.list_ctrl.Focus(index)
 		self._update_button_states()

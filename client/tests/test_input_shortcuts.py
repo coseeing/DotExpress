@@ -3,6 +3,7 @@ import unittest
 from ui.shortcuts import (
     is_brl_export_shortcut,
     is_convert_shortcut,
+    is_document_cycle_shortcut,
     is_document_delete_shortcut,
     is_document_rename_shortcut,
     is_document_import_txt_shortcut,
@@ -31,6 +32,21 @@ class InputShortcutsTest(unittest.TestCase):
         for label, shortcut, kwargs, expected in cases:
             with self.subTest(label=label):
                 self.assertEqual(shortcut(**kwargs), expected)
+
+    def test_document_cycle_shortcut_direction(self) -> None:
+        cases = [
+            ("ctrl tab forward", {"key_code": 9, "control_down": True, "shift_down": False}, 1),
+            ("ctrl shift tab backward", {"key_code": 9, "control_down": True, "shift_down": True}, -1),
+            ("ctrl pagedown forward", {"key_code": 367, "control_down": True, "shift_down": False}, 1),
+            ("ctrl pageup backward", {"key_code": 366, "control_down": True, "shift_down": False}, -1),
+            ("ctrl shift pagedown still forward", {"key_code": 367, "control_down": True, "shift_down": True}, 1),
+            ("plain tab ignored", {"key_code": 9, "control_down": False, "shift_down": False}, 0),
+            ("plain pagedown ignored", {"key_code": 367, "control_down": False, "shift_down": False}, 0),
+        ]
+
+        for label, kwargs, expected in cases:
+            with self.subTest(label=label):
+                self.assertEqual(is_document_cycle_shortcut(**kwargs), expected)
 
     def test_section_navigation_shortcut_direction(self) -> None:
         cases = [

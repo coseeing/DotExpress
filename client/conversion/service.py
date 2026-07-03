@@ -172,8 +172,8 @@ def merge_translation_results(translations):
 
 	if not translations:
 		return TranslationResult([], [], [], [])
-	merged = translations[0]
-	for segment in translations[1:]:
+	merged = TranslationResult([], [], [], [])
+	for segment in translations:
 		merged = merged + segment
 	return merged
 

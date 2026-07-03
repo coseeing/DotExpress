@@ -31,6 +31,7 @@ from dictionaries.name_prompt import prompt_dictionary_name_until_success, renam
 from documents.session import (
     document_name_exists,
     find_document,
+    get_adjacent_document_name,
     get_document_names,
     format_window_title,
     plan_delete_document,
@@ -93,6 +94,7 @@ from ui.shortcuts import (
 	get_font_size_step_from_wheel,
 	is_brl_export_shortcut,
 	is_convert_shortcut,
+	is_document_cycle_shortcut,
 	is_document_delete_shortcut,
 	is_document_import_txt_shortcut,
 	is_document_rename_shortcut,
@@ -397,6 +399,7 @@ class BrailleFrame(wx.Frame):
 		translation_menu = wx.Menu()
 		translation_handlers = {
 			"convert": self.on_convert,
+			"dual_view": self.on_open_dual_view,
 			"settings": self.on_open_translation_settings,
 			"tables": self.on_open_table_dialog,
 			"dictionaries": self.on_open_dictionary_management,
@@ -449,7 +452,6 @@ class BrailleFrame(wx.Frame):
 		submenu_items: dict[str, dict[str, wx.MenuItem]],
 	) -> None:
 		menu.Bind(wx.EVT_MENU, self.on_open_document, menu_items["Open"])
-		menu.Bind(wx.EVT_MENU, self.on_open_dual_view, menu_items["Dual View"])
 		menu.Bind(wx.EVT_MENU, self.on_delete_document, menu_items["Delete"])
 		menu.Bind(wx.EVT_MENU, self.on_delete_all_documents, menu_items["Delete All"])
 		menu.Bind(wx.EVT_MENU, self.on_add_document, menu_items["Add"])
@@ -675,7 +677,7 @@ class BrailleFrame(wx.Frame):
 	def on_frame_activate(self, event: wx.ActivateEvent) -> None:
 		viewer = self._dual_view_frame
 		if event.GetActive() and viewer is not None and viewer.IsShown() and not viewer.IsIconized():
-			viewer.Raise()
+			viewer.raise_without_activating()
 		event.Skip()
 
 	def _sort_documents(self) -> None:
@@ -723,6 +725,10 @@ class BrailleFrame(wx.Frame):
 	def _load_document_into_editors(self, document: Document) -> None:
 		self.input_txt.SetValue(document.text)
 		self.output_txt.SetValue(document.braille or "")
+
+	def _reset_input_cursor_to_start(self) -> None:
+		self.input_txt.SetInsertionPoint(0)
+		self.input_txt.ShowPosition(0)
 
 	def _get_txt_wildcard(self) -> str:
 		return _(TXT_WILDCARD)
@@ -839,9 +845,23 @@ class BrailleFrame(wx.Frame):
 		self._open_document_name = decision.open_name
 		self._selected_document_name = decision.selected_name
 		self._load_document_into_editors(decision.document)
+		self._reset_input_cursor_to_start()
 		self._refresh_document_list(decision.selected_name)
 		self._update_window_title()
 		self._refresh_dual_view()
+
+	def _open_adjacent_document(self, step: int) -> None:
+		target_name = get_adjacent_document_name(
+			self.documents,
+			self._open_document_name or self._selected_document_name,
+			step,
+		)
+		if not target_name:
+			return
+		if not self._save_open_document_with_feedback():
+			return
+		self._open_document_by_name(target_name)
+		self.input_txt.SetFocus()
 
 	def _save_open_document(self) -> None:
 		if not self._open_document_name:
@@ -1112,12 +1132,19 @@ class BrailleFrame(wx.Frame):
 				self._show_file_error(_("Failed to delete document: {error}"), exc)
 				remaining_documents, invalid_paths = load_workspace_documents(self.workspace_dir)
 				self.documents = remaining_documents
+				remaining_document_names = {document.name for document in self.documents}
+				self._dual_view_results_by_document = {
+					name: results
+					for name, results in self._dual_view_results_by_document.items()
+					if name in remaining_document_names
+				}
 				self._refresh_document_list()
 				self._review_invalid_workspace_files(invalid_paths)
 				if self.documents:
 					self._open_document_by_name(self.documents[0].name)
 				else:
 					self._clear_document_editors()
+				self._refresh_dual_view()
 				return
 		self.documents = []
 		self._selected_document_name = None
@@ -1229,6 +1256,14 @@ class BrailleFrame(wx.Frame):
 	def on_char_hook(self, event: wx.KeyEvent) -> None:
 		if is_document_import_txt_shortcut(event.GetKeyCode(), event.ControlDown()):
 			self.on_import_document(None)
+			return
+		document_cycle_step = is_document_cycle_shortcut(
+			event.GetKeyCode(),
+			event.ControlDown(),
+			event.ShiftDown(),
+		)
+		if document_cycle_step != 0:
+			self._open_adjacent_document(document_cycle_step)
 			return
 		step = is_section_navigation_shortcut(event.GetKeyCode(), event.ShiftDown())
 		if step == 0:

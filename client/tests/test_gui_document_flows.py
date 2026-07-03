@@ -300,6 +300,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._convert_show_success = True
         frame._set_conversion_busy = Mock()
         frame._close_converting_dialog = Mock()
+        frame.input_txt = Mock()
         frame.output_txt = Mock()
         frame._show_export_all_result = Mock()
         frame._dual_view_frame = None
@@ -484,7 +485,63 @@ class GuiDocumentFlowsTest(unittest.TestCase):
 
         frame._refresh_dual_view.assert_called_once_with()
 
-    def test_activate_raises_visible_non_iconized_viewer(self) -> None:
+    def test_open_document_moves_input_cursor_to_start(self) -> None:
+        frame = self._make_frame()
+        frame.documents = [Document("beta", "new text", "braille")]
+        frame._refresh_dual_view = Mock()
+        frame._refresh_document_list = Mock()
+        frame._update_window_title = Mock()
+        frame.input_txt = Mock()
+        frame.output_txt = Mock()
+
+        frame._open_document_by_name("beta")
+
+        frame.input_txt.SetInsertionPoint.assert_called_once_with(0)
+        frame.input_txt.ShowPosition.assert_called_once_with(0)
+
+    def test_char_hook_cycles_forward_to_first_document_from_last(self) -> None:
+        frame = self._make_frame()
+        frame.documents = [
+            Document("alpha", "a", "1"),
+            Document("beta", "b", "2"),
+            Document("zoo", "z", "3"),
+        ]
+        frame._open_document_name = "zoo"
+        frame._selected_document_name = "zoo"
+        frame._save_open_document_with_feedback = Mock(return_value=True)
+        frame._open_document_by_name = Mock()
+        event = Mock()
+        event.GetKeyCode.return_value = 9
+        event.ControlDown.return_value = True
+        event.ShiftDown.return_value = False
+
+        frame.on_char_hook(event)
+
+        frame._open_document_by_name.assert_called_once_with("alpha")
+        event.Skip.assert_not_called()
+
+    def test_char_hook_cycles_backward_to_last_document_from_first(self) -> None:
+        frame = self._make_frame()
+        frame.documents = [
+            Document("alpha", "a", "1"),
+            Document("beta", "b", "2"),
+            Document("zoo", "z", "3"),
+        ]
+        frame._open_document_name = "alpha"
+        frame._selected_document_name = "alpha"
+        frame._save_open_document_with_feedback = Mock(return_value=True)
+        frame._open_document_by_name = Mock()
+        event = Mock()
+        event.GetKeyCode.return_value = 366
+        event.ControlDown.return_value = True
+        event.ShiftDown.return_value = False
+
+        frame.on_char_hook(event)
+
+        frame._open_document_by_name.assert_called_once_with("zoo")
+        event.Skip.assert_not_called()
+
+    def test_activate_raises_visible_non_iconized_viewer_without_taking_focus(self) -> None:
         frame = self._make_frame()
         frame._dual_view_frame = Mock()
         frame._dual_view_frame.IsShown.return_value = True
@@ -494,7 +551,8 @@ class GuiDocumentFlowsTest(unittest.TestCase):
 
         frame.on_frame_activate(event)
 
-        frame._dual_view_frame.Raise.assert_called_once_with()
+        frame._dual_view_frame.raise_without_activating.assert_called_once_with()
+        frame._dual_view_frame.Raise.assert_not_called()
         event.Skip.assert_called_once_with()
 
     def test_rename_and_delete_keep_alignment_cache_consistent(self) -> None:
@@ -505,6 +563,44 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._delete_dual_view_result("renamed")
 
         self.assertEqual(frame._dual_view_results_by_document, {})
+
+    def test_delete_all_partial_failure_reconciles_dual_view_cache_and_refreshes_viewer(self) -> None:
+        frame = self._make_frame()
+        frame.documents = [
+            Document("alpha", "text-a", "braille-a"),
+            Document("beta", "text-b", "braille-b"),
+        ]
+        frame.workspace_dir = Path("/workspace")
+        frame._dual_view_results_by_document = {
+            "alpha": ("stale-alpha",),
+            "beta": ("fresh-beta",),
+            "ghost": ("stale-ghost",),
+        }
+        frame._save_open_document_with_feedback = Mock(return_value=True)
+        frame._show_file_error = Mock()
+        frame._refresh_document_list = Mock()
+        frame._review_invalid_workspace_files = Mock()
+        frame._open_document_by_name = Mock()
+        frame._clear_document_editors = Mock()
+        frame._refresh_dual_view = Mock()
+
+        alpha_path = Mock()
+        alpha_path.exists.return_value = True
+        alpha_path.unlink.return_value = None
+        beta_path = Mock()
+        beta_path.exists.return_value = True
+        beta_path.unlink.side_effect = OSError("unlink failed")
+
+        with (
+            patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES),
+            patch.object(gui, "document_package_path_for_name", side_effect=[alpha_path, beta_path]),
+            patch.object(gui, "load_workspace_documents", return_value=([Document("beta", "reloaded", "braille-b")], [])),
+        ):
+            frame.on_delete_all_documents(None)
+
+        self.assertEqual(frame._dual_view_results_by_document, {"beta": ("fresh-beta",)})
+        frame._refresh_dual_view.assert_called_once_with()
+        frame._open_document_by_name.assert_called_once_with("beta")
 
     def test_export_all_shows_one_partial_failure_dialog_with_names(self) -> None:
         frame = self._make_frame()

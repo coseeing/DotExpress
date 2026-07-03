@@ -13,7 +13,6 @@ class DocumentMenuItem:
 
 DOCUMENT_MENU_ITEMS: tuple[DocumentMenuItem, ...] = (
     DocumentMenuItem("command", "Open", "open"),
-    DocumentMenuItem("command", "Dual View", "dual_view"),
     DocumentMenuItem("command", "Delete", "delete"),
     DocumentMenuItem("command", "Delete All", "delete_all"),
     DocumentMenuItem("command", "Add", "add"),
@@ -49,7 +48,6 @@ def get_document_menu_descriptors() -> tuple[DocumentMenuItem, ...]:
 def get_document_menu_enabled_state(*, has_selection: bool, has_documents: bool) -> dict[str, bool]:
     return {
         "Open": has_selection,
-        "Dual View": True,
         "Delete": has_selection,
         "Delete All": has_documents,
         "Add": True,

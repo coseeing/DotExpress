@@ -1,4 +1,5 @@
 import csv
+import importlib.util
 import sys
 import tempfile
 import types
@@ -24,7 +25,44 @@ class _AutoModule(types.ModuleType):
         return self
 
 
-if 'wx' not in sys.modules:
+_MODULE_UNDER_TEST_NAME = '_speech_symbols_dialog_under_test'
+_DIALOG_PATH = Path(__file__).resolve().parents[1] / 'dialog.py'
+_SCOPED_STUB_MODULES = (
+    'wx',
+    'mammoth',
+    'pymupdf',
+    'bs4',
+    'pypdf',
+    'markdown',
+    'markdownify',
+    'PIL',
+    'lxml',
+    'lxml.etree',
+    'lxml.html',
+    'ebooklib',
+    'ebooklib.epub',
+)
+_SCOPED_RESTORE_ROOTS = {
+    'Bopomofo',
+    'PIL',
+    'braille',
+    'bs4',
+    'dialog',
+    'dictionaries',
+    'documents',
+    'ebooklib',
+    'lxml',
+    'mammoth',
+    'markdown',
+    'markdownify',
+    'pymupdf',
+    'pypdf',
+    'translation',
+    'wx',
+}
+
+
+def _make_wx_stub() -> _AutoModule:
     wx_stub = _AutoModule('wx')
     wx_stub.Dialog = type('Dialog', (), {})
     wx_stub.ListCtrl = type('ListCtrl', (), {})
@@ -32,29 +70,75 @@ if 'wx' not in sys.modules:
     wx_stub.CommandEvent = type('CommandEvent', (), {})
     wx_stub.ListEvent = type('ListEvent', (), {})
     wx_stub.NOT_FOUND = -1
-    sys.modules['wx'] = wx_stub
-
-for _name in ('mammoth', 'pymupdf', 'bs4', 'pypdf', 'markdown', 'markdownify', 'PIL'):
-    sys.modules.setdefault(_name, _AutoModule(_name))
-
-_lxml = _AutoModule('lxml')
-_lxml.etree = _AutoModule('lxml.etree')
-_lxml.html = _AutoModule('lxml.html')
-sys.modules.setdefault('lxml', _lxml)
-sys.modules.setdefault('lxml.etree', _lxml.etree)
-sys.modules.setdefault('lxml.html', _lxml.html)
-
-_ebooklib = _AutoModule('ebooklib')
-_ebooklib.epub = _AutoModule('ebooklib.epub')
-sys.modules.setdefault('ebooklib', _ebooklib)
-sys.modules.setdefault('ebooklib.epub', _ebooklib.epub)
+    wx_stub.OK = 1
+    wx_stub.ICON_ERROR = 2
+    wx_stub.MessageBox = lambda *args, **kwargs: None
+    return wx_stub
 
 
-from dialog import (
-    DictionaryEntry,
-    DictionaryEntryListCtrl,
-    SpeechSymbolsDialog,
-)
+def _restore_module_binding(name: str, existed: bool, module: types.ModuleType | None) -> None:
+    if existed:
+        sys.modules[name] = module
+    else:
+        sys.modules.pop(name, None)
+
+
+def _install_scoped_import_stubs() -> None:
+    sys.modules['wx'] = _make_wx_stub()
+
+    for name in ('mammoth', 'pymupdf', 'bs4', 'pypdf', 'markdown', 'markdownify', 'PIL'):
+        sys.modules.setdefault(name, _AutoModule(name))
+
+    if 'lxml' not in sys.modules:
+        lxml = _AutoModule('lxml')
+        lxml.etree = _AutoModule('lxml.etree')
+        lxml.html = _AutoModule('lxml.html')
+        sys.modules['lxml'] = lxml
+        sys.modules['lxml.etree'] = lxml.etree
+        sys.modules['lxml.html'] = lxml.html
+
+    if 'ebooklib' not in sys.modules:
+        ebooklib = _AutoModule('ebooklib')
+        ebooklib.epub = _AutoModule('ebooklib.epub')
+        sys.modules['ebooklib'] = ebooklib
+        sys.modules['ebooklib.epub'] = ebooklib.epub
+
+
+def _restore_scoped_modules(previous_modules: dict[str, types.ModuleType]) -> None:
+    for name in list(sys.modules):
+        if name == _MODULE_UNDER_TEST_NAME:
+            del sys.modules[name]
+            continue
+        if name.split('.')[0] in _SCOPED_RESTORE_ROOTS and name not in previous_modules:
+            del sys.modules[name]
+
+    for name, previous in previous_modules.items():
+        sys.modules[name] = previous
+
+
+def _load_dialog_module() -> types.ModuleType:
+    previous_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name.split('.')[0] in _SCOPED_RESTORE_ROOTS
+    }
+    try:
+        _install_scoped_import_stubs()
+        spec = importlib.util.spec_from_file_location(_MODULE_UNDER_TEST_NAME, _DIALOG_PATH)
+        if spec is None or spec.loader is None:
+            raise ImportError(f'Unable to load dialog module from {_DIALOG_PATH}')
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[_MODULE_UNDER_TEST_NAME] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        _restore_scoped_modules(previous_modules)
+
+
+dialog = _load_dialog_module()
+DictionaryEntry = dialog.DictionaryEntry
+DictionaryEntryListCtrl = dialog.DictionaryEntryListCtrl
+SpeechSymbolsDialog = dialog.SpeechSymbolsDialog
 
 
 class _FakeListCtrl:
@@ -136,6 +220,39 @@ class DictionaryEntryListCtrlTest(unittest.TestCase):
         control._get_item_text = lambda item, column: f'{item}:{column}'
 
         self.assertEqual(control.OnGetItemText(4, 2), '4:2')
+
+
+class DialogModuleIsolationTest(unittest.TestCase):
+    def test_loader_uses_real_dialog_module_without_leaking_stubs(self) -> None:
+        had_dialog = 'dialog' in sys.modules
+        previous_dialog = sys.modules.get('dialog')
+        had_wx = 'wx' in sys.modules
+        previous_wx = sys.modules.get('wx')
+        stub_dialog = types.ModuleType('dialog')
+        sentinel_wx = types.ModuleType('wx')
+        sentinel_wx.sentinel = 'preexisting-wx'
+        sys.modules['dialog'] = stub_dialog
+        sys.modules['wx'] = sentinel_wx
+        self.addCleanup(_restore_module_binding, 'dialog', had_dialog, previous_dialog)
+        self.addCleanup(_restore_module_binding, 'wx', had_wx, previous_wx)
+        before = {name: sys.modules.get(name) for name in _SCOPED_STUB_MODULES}
+
+        loaded_dialog = _load_dialog_module()
+
+        self.assertTrue(hasattr(loaded_dialog, 'DictionaryEntry'))
+        self.assertIs(sys.modules['dialog'], stub_dialog)
+        self.assertIs(sys.modules['wx'], sentinel_wx)
+        self.assertIsNot(loaded_dialog.wx, sentinel_wx)
+        self.assertTrue(hasattr(loaded_dialog.wx, 'Dialog'))
+        self.assertEqual(loaded_dialog.wx.NOT_FOUND, -1)
+        self.assertNotIn(_MODULE_UNDER_TEST_NAME, sys.modules)
+        for name in _SCOPED_STUB_MODULES:
+            self.assertIs(sys.modules.get(name), before[name])
+
+        self.doCleanups()
+
+        self.assertIs(sys.modules.get('dialog'), previous_dialog)
+        self.assertIs(sys.modules.get('wx'), previous_wx)
 
 
 class SpeechSymbolsDialogFilterTest(unittest.TestCase):
@@ -300,7 +417,7 @@ class SpeechSymbolsDialogMutationTest(unittest.TestCase):
             ],
         )
 
-    @patch("dialog.wx.MessageBox")
+    @patch.object(dialog.wx, 'MessageBox')
     def test_edit_rejects_duplicate_source_text_outside_filter(
         self,
         message_box,

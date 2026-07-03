@@ -66,6 +66,43 @@ class ConversionServiceTest(unittest.TestCase):
         fake_module.translate_as_single_token = lambda *_args, **_kwargs: None
         return fake_module
 
+    def _mutating_translate_module(self) -> ModuleType:
+        fake_module = ModuleType("translate")
+
+        class MutatingTranslationResult:
+            def __init__(self, raw, braille, braille_to_raw_pos, raw_to_braille_pos):
+                self.raw = raw
+                self.braille = braille
+                self.braille_to_raw_pos = braille_to_raw_pos
+                self.raw_to_braille_pos = raw_to_braille_pos
+
+            def __add__(self, other):
+                raw_offset = len(self.raw)
+                braille_offset = len(self.braille)
+                return MutatingTranslationResult(
+                    self.raw + other.raw,
+                    self.braille + other.braille,
+                    list(self.braille_to_raw_pos) + [pos + raw_offset for pos in other.braille_to_raw_pos],
+                    list(self.raw_to_braille_pos) + [pos + braille_offset for pos in other.raw_to_braille_pos],
+                )
+
+            def reclean_braille_endspace(self):
+                return None
+
+            def bind_word_tokens(self):
+                self.raw = ["".join(self.raw)]
+                self.raw_to_braille_pos = [0]
+                self.braille_to_raw_pos = [0] * len(self.braille)
+
+            def reclean_token(self):
+                return None
+
+            def wrap(self, _width):
+                return "".join(self.braille), "".join(self.raw)
+
+        fake_module.TranslationResult = MutatingTranslationResult
+        return fake_module
+
     def _translation_result(self, raw, braille, braille_to_raw_pos, raw_to_braille_pos):
         return self._fake_translate_module().TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
 
@@ -249,6 +286,24 @@ class ConversionServiceTest(unittest.TestCase):
             result = convert_text_with_alignment(request, map_char=self._map_char)
 
         self.assertIsInstance(result, ConversionOutput)
+        self.assertEqual(result.display_text, "⠺⠕⠗⠙")
+        self.assertEqual(result.translation_results[0].raw, list("word"))
+        self.assertEqual(result.translation_results[0].raw_to_braille_pos, [0, 1, 2, 3])
+
+    def test_convert_text_with_alignment_preserves_character_alignment_for_single_segment_wrap(self) -> None:
+        fake_translate_module = self._mutating_translate_module()
+
+        with patch.dict("sys.modules", {"translate": fake_translate_module}):
+            segment = fake_translate_module.TranslationResult(
+                list("word"),
+                list("⠺⠕⠗⠙"),
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+            )
+
+            with patch("conversion.service.translate_with_language_segments", return_value=[segment]):
+                result = convert_text_with_alignment(self.request, map_char=self._map_char)
+
         self.assertEqual(result.display_text, "⠺⠕⠗⠙")
         self.assertEqual(result.translation_results[0].raw, list("word"))
         self.assertEqual(result.translation_results[0].raw_to_braille_pos, [0, 1, 2, 3])

@@ -9,6 +9,7 @@ class TranslationMenuTest(unittest.TestCase):
             get_translation_menu_items(),
             [
                 ("convert", "Convert"),
+                ("dual_view", "Dual View"),
                 ("settings", "Translation Settings..."),
                 ("tables", "Translation Tables Setting..."),
                 ("dictionaries", "Dictionary Management..."),

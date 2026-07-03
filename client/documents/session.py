@@ -37,6 +37,18 @@ def replace_document(documents: list[Document], updated_document: Document) -> b
 	return False
 
 
+def get_adjacent_document_name(documents: list[Document], current_name: str | None, step: int) -> str | None:
+	if not documents:
+		return None
+	if step == 0:
+		return current_name if find_document(documents, current_name) is not None else documents[0].name
+	current_index = next((index for index, document in enumerate(documents) if document.name == current_name), None)
+	if current_index is None:
+		return documents[0].name if step > 0 else documents[-1].name
+	target_index = (current_index + step) % len(documents)
+	return documents[target_index].name
+
+
 def document_name_exists(documents: list[Document], name: str, exclude_name: str | None = None) -> bool:
 	return any(document.name == name and document.name != exclude_name for document in documents)
 

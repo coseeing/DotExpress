@@ -499,10 +499,6 @@ class SpeechSymbolsDialog(wx.Dialog):
 				entries.append(DictionaryEntry(text=text, braille=braille, entry_type=entry_type))
 		return entries
 
-	def _populate_list(self) -> None:
-		self.filter_entries()
-		self._select_index(0)
-
 	def _get_item_text(self, item: int, column: int) -> str:
 		entry = self.filtered_entries[item]
 		if column == 0:
@@ -603,21 +599,24 @@ class SpeechSymbolsDialog(wx.Dialog):
 			)
 			return
 		self.entries.append(new_entry)
-		self._populate_list()
-		self._select_index(len(self.entries) - 1)
+		filter_text = self.filter_ctrl.GetValue()
+		if filter_text and not self._entry_matches_filter(new_entry, filter_text):
+			self.filter_ctrl.ChangeValue("")
+			filter_text = ""
+		self.filter_entries(filter_text, preferred_entry=new_entry)
 
 	def _on_edit_clicked(self, _event: wx.CommandEvent) -> None:
 		self._edit_selected()
 
 	def _edit_selected(self) -> None:
-		index = self._get_selected_index()
-		if index is None:
+		visible_index = self._get_selected_index()
+		current_entry = self._get_selected_entry()
+		if visible_index is None or current_entry is None:
 			return
-		current_entry = self.entries[index]
 		updated_entry = self._open_entry_dialog(current_entry)
 		if updated_entry is None:
 			return
-		if self._identifier_exists(updated_entry.text, exclude_index=index):
+		if self._identifier_exists(updated_entry.text, exclude_entry=current_entry):
 			wx.MessageBox(
 				_('Source text "{identifier}" already exists.').format(identifier=updated_entry.text),
 				_("Error"),
@@ -625,20 +624,26 @@ class SpeechSymbolsDialog(wx.Dialog):
 				parent=self,
 			)
 			return
-		self.entries[index] = updated_entry
-		self._populate_list()
-		self._select_index(index)
+		full_index = next(
+			index for index, entry in enumerate(self.entries) if entry is current_entry
+		)
+		self.entries[full_index] = updated_entry
+		self.filter_entries(
+			self.filter_ctrl.GetValue(),
+			preferred_entry=updated_entry,
+			fallback_index=visible_index,
+		)
 
 	def _on_remove_clicked(self, _event: wx.CommandEvent) -> None:
-		index = self._get_selected_index()
-		if index is None:
+		visible_index = self._get_selected_index()
+		current_entry = self._get_selected_entry()
+		if visible_index is None or current_entry is None:
 			return
-		del self.entries[index]
-		self._populate_list()
-		if self.entries:
-			self._select_index(min(index, len(self.entries) - 1))
-		else:
-			self._update_button_states()
+		self.entries.remove(current_entry)
+		self.filter_entries(
+			self.filter_ctrl.GetValue(),
+			fallback_index=visible_index,
+		)
 
 	def _open_entry_dialog(self, entry: DictionaryEntry | None = None) -> DictionaryEntry | None:
 		with AddSymbolDialog(self, entry) as dialog:
@@ -646,8 +651,15 @@ class SpeechSymbolsDialog(wx.Dialog):
 				return None
 			return dialog.get_entry()
 
-	def _identifier_exists(self, identifier: str, exclude_index: int | None = None) -> bool:
-		return any(entry.text == identifier and idx != exclude_index for idx, entry in enumerate(self.entries))
+	def _identifier_exists(
+		self,
+		identifier: str,
+		exclude_entry: DictionaryEntry | None = None,
+	) -> bool:
+		return any(
+			entry.text == identifier and entry is not exclude_entry
+			for entry in self.entries
+		)
 
 	def _normalize_type(self, entry_type: str | None) -> str:
 		if entry_type in ENTRY_TYPE_LABELS:

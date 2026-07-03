@@ -196,5 +196,82 @@ class SpeechSymbolsDialogFilterTest(unittest.TestCase):
         self.assertTrue(event.skipped)
 
 
+class SpeechSymbolsDialogMutationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.alpha = DictionaryEntry("Alpha", "\u2801", "General")
+        self.beta = DictionaryEntry("Beta", "\u2803", "General")
+        self.dialog = _make_dialog([self.alpha, self.beta])
+
+    def test_add_matching_entry_keeps_filter_and_selects_new_entry(self) -> None:
+        self.dialog.filter_ctrl.ChangeValue("alp")
+        self.dialog.filter_entries("alp")
+        added = DictionaryEntry("Alphabet", "\u2801\u2803", "General")
+        self.dialog._open_entry_dialog = lambda _entry=None: added
+
+        self.dialog._on_add_clicked(None)
+
+        self.assertEqual(self.dialog.filter_ctrl.GetValue(), "alp")
+        self.assertEqual(self.dialog.filtered_entries, [self.alpha, added])
+        self.assertIs(
+            self.dialog.filtered_entries[self.dialog.list_ctrl.selected],
+            added,
+        )
+
+    def test_add_nonmatching_entry_clears_filter_and_selects_new_entry(self) -> None:
+        self.dialog.filter_ctrl.ChangeValue("alp")
+        self.dialog.filter_entries("alp")
+        added = DictionaryEntry("Gamma", "\u281b", "General")
+        self.dialog._open_entry_dialog = lambda _entry=None: added
+
+        self.dialog._on_add_clicked(None)
+
+        self.assertEqual(self.dialog.filter_ctrl.GetValue(), "")
+        self.assertEqual(self.dialog.filtered_entries, [self.alpha, self.beta, added])
+        self.assertIs(
+            self.dialog.filtered_entries[self.dialog.list_ctrl.selected],
+            added,
+        )
+
+    def test_edit_visible_entry_updates_full_list_and_preserves_selection(self) -> None:
+        self.dialog.filter_ctrl.ChangeValue("bet")
+        self.dialog.filter_entries("bet")
+        updated = DictionaryEntry("Better", "\u2803\u2801", "General")
+        self.dialog._open_entry_dialog = lambda _entry=None: updated
+
+        self.dialog._edit_selected()
+
+        self.assertEqual(self.dialog.entries, [self.alpha, updated])
+        self.assertEqual(self.dialog.filtered_entries, [updated])
+        self.assertIs(self.dialog.filtered_entries[self.dialog.list_ctrl.selected], updated)
+
+    def test_edit_entry_that_stops_matching_removes_it_from_visible_list(self) -> None:
+        self.dialog.filter_ctrl.ChangeValue("bet")
+        self.dialog.filter_entries("bet")
+        updated = DictionaryEntry("Gamma", "\u281b", "General")
+        self.dialog._open_entry_dialog = lambda _entry=None: updated
+
+        self.dialog._edit_selected()
+
+        self.assertEqual(self.dialog.entries, [self.alpha, updated])
+        self.assertEqual(self.dialog.filtered_entries, [])
+        self.assertEqual(self.dialog.list_ctrl.selected, -1)
+        self.assertFalse(self.dialog.edit_button.enabled)
+        self.assertFalse(self.dialog.remove_button.enabled)
+
+    def test_delete_filtered_entry_selects_nearest_remaining_entry(self) -> None:
+        alpine = DictionaryEntry("Alpine", "\u2801\u2807", "General")
+        self.dialog.entries.append(alpine)
+        self.dialog.filter_ctrl.ChangeValue("a")
+        self.dialog.filter_entries("a")
+        self.dialog.list_ctrl.Select(1)
+
+        self.dialog._on_remove_clicked(None)
+
+        self.assertEqual(self.dialog.entries, [self.alpha, alpine])
+        self.assertEqual(self.dialog.filtered_entries, [self.alpha, alpine])
+        self.assertEqual(self.dialog.list_ctrl.selected, 1)
+        self.assertIs(self.dialog.filtered_entries[1], alpine)
+
+
 if __name__ == '__main__':
     unittest.main()

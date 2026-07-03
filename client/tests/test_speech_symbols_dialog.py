@@ -1,6 +1,10 @@
+import csv
 import sys
+import tempfile
 import types
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 
 class _AutoModule(types.ModuleType):
@@ -12,6 +16,12 @@ class _AutoModule(types.ModuleType):
             sub = _AutoModule(sub_name)
             sys.modules[sub_name] = sub
         return sys.modules[sub_name]
+
+    def __or__(self, other):
+        return self
+
+    def __ror__(self, other):
+        return self
 
 
 if 'wx' not in sys.modules:
@@ -271,6 +281,42 @@ class SpeechSymbolsDialogMutationTest(unittest.TestCase):
         self.assertEqual(self.dialog.filtered_entries, [self.alpha, alpine])
         self.assertEqual(self.dialog.list_ctrl.selected, 1)
         self.assertIs(self.dialog.filtered_entries[1], alpine)
+
+    def test_save_writes_all_entries_not_only_filtered_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "dictionary.csv"
+            self.dialog.dictionary_path = path
+            self.dialog.filter_entries("alp")
+
+            self.dialog._save_entries()
+
+            with path.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+        self.assertEqual(
+            rows,
+            [
+                {"text": "Alpha", "braille": "\u2801", "type": "General"},
+                {"text": "Beta", "braille": "\u2803", "type": "General"},
+            ],
+        )
+
+    @patch("dialog.wx.MessageBox")
+    def test_edit_rejects_duplicate_source_text_outside_filter(
+        self,
+        message_box,
+    ) -> None:
+        self.dialog.filter_ctrl.ChangeValue("bet")
+        self.dialog.filter_entries("bet")
+        self.dialog._open_entry_dialog = lambda _entry=None: DictionaryEntry(
+            "Alpha",
+            "\u2803",
+            "General",
+        )
+
+        self.dialog._edit_selected()
+
+        self.assertEqual(self.dialog.entries, [self.alpha, self.beta])
+        message_box.assert_called_once()
 
 
 if __name__ == '__main__':

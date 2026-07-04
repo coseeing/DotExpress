@@ -38,4 +38,5 @@ PY
 
 新增 commit list：
 
-- `2d4a74f` — `feat: optimize dialog display and dictionary management`
+- `feat: optimize dialog display and dictionary management`
+- `docs: record dialog display optimization summary`

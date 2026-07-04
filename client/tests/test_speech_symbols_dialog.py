@@ -137,8 +137,9 @@ def _load_dialog_module() -> types.ModuleType:
 
 dialog = _load_dialog_module()
 DictionaryEntry = dialog.DictionaryEntry
-DictionaryEntryListCtrl = dialog.DictionaryEntryListCtrl
+CallbackVirtualListCtrl = dialog.CallbackVirtualListCtrl
 SpeechSymbolsDialog = dialog.SpeechSymbolsDialog
+load_dictionary_entries = dialog.load_dictionary_entries
 
 
 class _FakeListCtrl:
@@ -214,12 +215,32 @@ def _make_dialog(entries: list[DictionaryEntry]) -> SpeechSymbolsDialog:
     return dialog
 
 
-class DictionaryEntryListCtrlTest(unittest.TestCase):
+class CallbackVirtualListCtrlTest(unittest.TestCase):
     def test_get_item_text_delegates_to_callback(self) -> None:
-        control = object.__new__(DictionaryEntryListCtrl)
-        control._get_item_text = lambda item, column: f'{item}:{column}'
+        control = object.__new__(CallbackVirtualListCtrl)
+        control._get_item_text = lambda item, column: f"{item}:{column}"
 
-        self.assertEqual(control.OnGetItemText(4, 2), '4:2')
+        self.assertEqual(control.OnGetItemText(4, 2), "4:2")
+
+
+class DictionaryEntryLoadingTest(unittest.TestCase):
+    def test_loads_only_rows_accepted_by_the_editor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "sample.csv"
+            with path.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["text", "braille", "type"])
+                writer.writerow(["Alpha", "\u2801", "General"])
+                writer.writerow(["", "\u2803", "General"])
+                writer.writerow(["Zhuyin", "invalid", "Bopomofo"])
+
+            with patch.object(dialog, "normalize_zhuyin_sequence", side_effect=ValueError):
+                entries = load_dictionary_entries(path)
+
+        self.assertEqual(entries, [DictionaryEntry("Alpha", "\u2801", "General")])
+
+    def test_missing_dictionary_returns_empty_list(self) -> None:
+        self.assertEqual(load_dictionary_entries(Path("missing.csv")), [])
 
 
 class DialogModuleIsolationTest(unittest.TestCase):

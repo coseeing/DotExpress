@@ -229,6 +229,7 @@ def _install_stub_modules() -> None:
             "TranslationTableDialog",
         ):
             setattr(dialog, name, _Dialog)
+        dialog.finalize_dialog_layout = lambda *args, **kwargs: None
 
         sys.modules["dialog"] = dialog
 

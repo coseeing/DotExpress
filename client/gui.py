@@ -122,6 +122,7 @@ from dialog import (
 	SpeechSymbolsDialog,
 	TranslationSettingsDialog,
 	TranslationTableDialog,
+	finalize_dialog_layout,
 )
 
 
@@ -226,8 +227,7 @@ class ConvertingDialog(wx.Dialog):
 		message = wx.StaticText(self, label=_("converting"))
 		sizer = wx.BoxSizer(wx.VERTICAL)
 		sizer.Add(message, 0, wx.ALL | wx.ALIGN_CENTER_HORIZONTAL, 20)
-		self.SetSizerAndFit(sizer)
-		self.CentreOnParent()
+		finalize_dialog_layout(self, sizer)
 		self.Bind(wx.EVT_CLOSE, self._on_close)
 
 	def _on_close(self, evt: wx.CloseEvent):
@@ -1299,6 +1299,7 @@ class BrailleFrame(wx.Frame):
 			self,
 			self._dictionary_names,
 			selected_name,
+			self.dictionary_dir,
 			self.add_dictionary,
 			self.delete_dictionary_from_dialog,
 			self.rename_dictionary_from_dialog,

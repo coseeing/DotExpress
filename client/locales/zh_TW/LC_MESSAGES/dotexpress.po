@@ -1210,6 +1210,10 @@ msgstr "寬度"
 msgid "Dictionary"
 msgstr "字典"
 
+#: dialog.py:892
+msgid "Entries"
+msgstr "條目數量"
+
 #: gui.py:275
 msgid "Convert"
 msgstr "執行轉換"

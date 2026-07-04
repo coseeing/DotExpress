@@ -12,7 +12,13 @@ import wx
 from braille.tables import listTables
 from Bopomofo import normalize_zhuyin_sequence
 from dictionaries.actions import get_action_availability, resolve_dictionary_selection
-from dictionaries.manager import DEFAULT_DICTIONARY_NAME, MAX_DICTIONARY_NAME_LENGTH, normalize_dictionary_name
+from dictionaries.manager import (
+	DEFAULT_DICTIONARY_NAME,
+	MAX_DICTIONARY_NAME_LENGTH,
+	dictionary_path_for_name,
+	list_dictionary_names,
+	normalize_dictionary_name,
+)
 from documents.workspace import normalize_document_name
 from translation.settings import MAX_CONVERSION_WIDTH, MIN_CONVERSION_WIDTH, TranslationSettings
 
@@ -44,6 +50,14 @@ ENTRY_TYPE_OPTIONS: list[tuple[str, str]] = [
 ENTRY_TYPE_LABELS = {key: label for key, label in ENTRY_TYPE_OPTIONS}
 DEFAULT_ENTRY_TYPE = ENTRY_TYPE_OPTIONS[0][0]
 BRAILLE_UNICODE_PATTERNS_START = 0x2800
+
+
+def finalize_dialog_layout(dialog: wx.Dialog, sizer: wx.Sizer) -> None:
+	dialog.SetSizerAndFit(sizer)
+	if dialog.GetParent() is not None:
+		dialog.CentreOnParent()
+	else:
+		dialog.Centre()
 
 
 def _normalize_dialog_name(
@@ -86,6 +100,34 @@ class TableOption:
 	display_name: str
 
 
+def normalize_entry_type(entry_type: str | None) -> str:
+	if entry_type in ENTRY_TYPE_LABELS:
+		return str(entry_type)
+	return DEFAULT_ENTRY_TYPE
+
+
+def load_dictionary_entries(dictionary_path: Path) -> List[DictionaryEntry]:
+	if not dictionary_path.exists():
+		return []
+
+	entries: List[DictionaryEntry] = []
+	with dictionary_path.open("r", newline="", encoding="utf-8") as fp:
+		reader = csv.DictReader(fp)
+		for row in reader:
+			text = (row.get("text") or "").strip()
+			if not text:
+				continue
+			braille = (row.get("braille") or "").strip()
+			entry_type = normalize_entry_type(row.get("type"))
+			if entry_type == "Bopomofo":
+				try:
+					normalize_zhuyin_sequence(braille)
+				except Exception:
+					continue
+			entries.append(DictionaryEntry(text=text, braille=braille, entry_type=entry_type))
+	return entries
+
+
 class AddSymbolDialog(wx.Dialog):
 	"""Dialog to create or edit a dictionary entry."""
 
@@ -118,7 +160,7 @@ class AddSymbolDialog(wx.Dialog):
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
 
-		self.SetSizerAndFit(main_sizer)
+		finalize_dialog_layout(self, main_sizer)
 		self._apply_initial_values(entry)
 		self.identifier_ctrl.SetFocus()
 
@@ -223,7 +265,7 @@ class DictionaryNameDialog(wx.Dialog):
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
 
-		self.SetSizerAndFit(main_sizer)
+		finalize_dialog_layout(self, main_sizer)
 		self._apply_initial_name(initial_name)
 
 	def get_dictionary_name(self) -> str:
@@ -291,7 +333,7 @@ class DocumentNameDialog(wx.Dialog):
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
 
-		self.SetSizerAndFit(main_sizer)
+		finalize_dialog_layout(self, main_sizer)
 		self.name_ctrl.SetFocus()
 		self.name_ctrl.SelectAll()
 
@@ -350,7 +392,7 @@ class InvalidWorkspaceFilesDialog(wx.Dialog):
 		main_sizer.Add(button_sizer, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 		delete_btn.Bind(wx.EVT_BUTTON, self._on_delete)
 		keep_btn.Bind(wx.EVT_BUTTON, self._on_keep)
-		self.SetSizerAndFit(main_sizer)
+		finalize_dialog_layout(self, main_sizer)
 		self.SetMinSize((420, 280))
 
 	def should_delete_invalid_files(self) -> bool:
@@ -383,7 +425,7 @@ class FileIssuesDialog(wx.Dialog):
 		button_sizer = self.CreateButtonSizer(wx.OK)
 		if button_sizer:
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
-		self.SetSizerAndFit(main_sizer)
+		finalize_dialog_layout(self, main_sizer)
 		self.SetMinSize((520, 320))
 
 	def __enter__(self) -> "FileIssuesDialog":
@@ -393,7 +435,7 @@ class FileIssuesDialog(wx.Dialog):
 		self.Destroy()
 
 
-class DictionaryEntryListCtrl(wx.ListCtrl):
+class CallbackVirtualListCtrl(wx.ListCtrl):
 	"""Virtual list that asks its owner for visible dictionary cell text."""
 
 	def __init__(
@@ -407,6 +449,9 @@ class DictionaryEntryListCtrl(wx.ListCtrl):
 
 	def OnGetItemText(self, item: int, column: int) -> str:
 		return self._get_item_text(item, column)
+
+
+DictionaryEntryListCtrl = CallbackVirtualListCtrl
 
 
 class SpeechSymbolsDialog(wx.Dialog):
@@ -440,7 +485,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 		list_label = wx.StaticText(self, label=_("Dictionary entries"))
 		main_sizer.Add(list_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
 
-		self.list_ctrl = DictionaryEntryListCtrl(
+		self.list_ctrl = CallbackVirtualListCtrl(
 			self,
 			self._get_item_text,
 			style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL | wx.LC_VIRTUAL,
@@ -450,7 +495,6 @@ class SpeechSymbolsDialog(wx.Dialog):
 		self.list_ctrl.InsertColumn(2, _("Type"), width=120)
 		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_selection_changed)
 		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_DESELECTED, self._on_selection_changed)
-		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self._on_item_activated)
 		main_sizer.Add(self.list_ctrl, 1, wx.EXPAND | wx.ALL, 8)
 
 		button_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -473,31 +517,10 @@ class SpeechSymbolsDialog(wx.Dialog):
 			if ok_button:
 				ok_button.Bind(wx.EVT_BUTTON, self._on_ok)
 
-		self.SetSizer(main_sizer)
-		self.SetMinSize((560, 440))
-		self.Layout()
+		finalize_dialog_layout(self, main_sizer)
 
 	def _load_entries(self) -> List[DictionaryEntry]:
-		if not self.dictionary_path.exists():
-			return []
-
-		entries: List[DictionaryEntry] = []
-		with self.dictionary_path.open("r", newline="", encoding="utf-8") as fp:
-			reader = csv.DictReader(fp)
-			for row in reader:
-				text = (row.get("text") or "").strip()
-				if not text:
-					continue
-				braille = (row.get("braille") or "").strip()
-				entry_type = self._normalize_type(row.get("type"))
-				if entry_type == "Bopomofo":
-					try:
-						normalize_zhuyin_sequence(braille)
-					except Exception:
-						continue
-
-				entries.append(DictionaryEntry(text=text, braille=braille, entry_type=entry_type))
-		return entries
+		return load_dictionary_entries(self.dictionary_path)
 
 	def _get_item_text(self, item: int, column: int) -> str:
 		entry = self.filtered_entries[item]
@@ -662,9 +685,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 		)
 
 	def _normalize_type(self, entry_type: str | None) -> str:
-		if entry_type in ENTRY_TYPE_LABELS:
-			return str(entry_type)
-		return DEFAULT_ENTRY_TYPE
+		return normalize_entry_type(entry_type)
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
 		try:
@@ -731,7 +752,7 @@ class TranslationSettingsDialog(wx.Dialog):
 		if button_sizer:
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
-		self.SetSizerAndFit(main_sizer)
+		finalize_dialog_layout(self, main_sizer)
 		self._select_output_mode(settings.output_mode)
 		self._select_dictionary(settings.selected_dictionary)
 
@@ -782,6 +803,7 @@ class DictionaryManagementDialog(wx.Dialog):
 		parent: wx.Window | None,
 		dictionary_names: list[str],
 		selected_name: str,
+		dictionary_dir: Path,
 		on_add: Callable[[wx.Window | None], str | None],
 		on_delete: Callable[[wx.Window | None, str], str | None],
 		on_rename: Callable[[wx.Window | None, str], str | None],
@@ -793,8 +815,10 @@ class DictionaryManagementDialog(wx.Dialog):
 			title=_("Dictionary Management"),
 			style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
 		)
-		self._dictionary_names = dictionary_names
+		self.dictionary_dir = Path(dictionary_dir)
+		self._dictionary_names = list(dictionary_names)
 		self._selected_name = selected_name
+		self._dictionary_counts: dict[str, int] = {}
 		self._on_add = on_add
 		self._on_delete = on_delete
 		self._on_rename = on_rename
@@ -806,14 +830,16 @@ class DictionaryManagementDialog(wx.Dialog):
 
 	def _build_ui(self) -> None:
 		main_sizer = wx.BoxSizer(wx.VERTICAL)
-		self.list_ctrl = wx.ListCtrl(
+		self.list_ctrl = CallbackVirtualListCtrl(
 			self,
-			style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL,
+			self._get_item_text,
+			style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL | wx.LC_VIRTUAL,
 		)
-		self.list_ctrl.InsertColumn(0, _("Dictionary"), width=360)
+		self.list_ctrl.InsertColumn(0, _("Dictionary"))
+		self.list_ctrl.InsertColumn(1, _("Entries"))
 		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_selection_changed)
 		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_DESELECTED, self._on_selection_changed)
-		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self._on_edit)
+		self.list_ctrl.Bind(wx.EVT_SIZE, self._on_list_size)
 		main_sizer.Add(self.list_ctrl, 1, wx.EXPAND | wx.ALL, 12)
 
 		button_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -846,26 +872,54 @@ class DictionaryManagementDialog(wx.Dialog):
 		self.import_button.Bind(wx.EVT_BUTTON, self._on_import_clicked)
 		self.export_button.Bind(wx.EVT_BUTTON, self._on_export_clicked)
 
-		self.SetSizer(main_sizer)
-		self.SetMinSize((650, 400))
-		self.Layout()
+		finalize_dialog_layout(self, main_sizer)
+		self._resize_columns()
+
+	def _get_item_text(self, item: int, column: int) -> str:
+		name = self._dictionary_names[item]
+		if column == 0:
+			return name
+		if column == 1:
+			return str(self._dictionary_counts.get(name, 0))
+		raise ValueError(f"Unknown column: {column}")
+
+	def _load_dictionary_counts(self) -> None:
+		self._dictionary_counts = {
+			name: len(load_dictionary_entries(dictionary_path_for_name(name, self.dictionary_dir)))
+			for name in self._dictionary_names
+		}
 
 	def refresh_dictionaries(
 		self,
 		dictionary_names: list[str],
 		preferred_name: str | None,
 	) -> None:
-		self._dictionary_names = dictionary_names
-		self.list_ctrl.DeleteAllItems()
-		for name in self._dictionary_names:
-			self.list_ctrl.InsertItem(self.list_ctrl.GetItemCount(), name)
+		self._dictionary_names = list(dictionary_names)
+		self._load_dictionary_counts()
+		self.list_ctrl.SetItemCount(len(self._dictionary_names))
+		self.list_ctrl.Refresh()
 		selected = resolve_dictionary_selection(self._dictionary_names, preferred_name)
 		self._selected_name = selected
 		if selected in self._dictionary_names:
 			index = self._dictionary_names.index(selected)
 			self.list_ctrl.Select(index)
 			self.list_ctrl.Focus(index)
+		self._resize_columns()
 		self._update_button_states()
+
+	def _resize_columns(self) -> None:
+		available_width = max(0, self.list_ctrl.GetClientSize().width)
+		if available_width == 0:
+			return
+		count_text_width = self.list_ctrl.GetTextExtent(_("Entries"))[0]
+		count_width = min(available_width, max(96, count_text_width + 32))
+		name_width = max(0, available_width - count_width)
+		self.list_ctrl.SetColumnWidth(0, name_width)
+		self.list_ctrl.SetColumnWidth(1, count_width)
+
+	def _on_list_size(self, event: wx.SizeEvent) -> None:
+		self._resize_columns()
+		event.Skip()
 
 	def _get_selected_name(self) -> str | None:
 		index = self.list_ctrl.GetFirstSelected()
@@ -895,26 +949,26 @@ class DictionaryManagementDialog(wx.Dialog):
 	def _on_add_clicked(self, _event: wx.CommandEvent) -> None:
 		preferred_name = self._on_add(self)
 		if preferred_name is not None:
-			self.refresh_dictionaries(self._dictionary_names, preferred_name)
+			self._refresh_from_disk(preferred_name)
 
 	def _on_delete_clicked(self, _event: wx.CommandEvent) -> None:
 		selected = self._get_selected_name()
 		if selected is not None:
 			preferred_name = self._on_delete(self, selected)
 			if preferred_name is not None:
-				self.refresh_dictionaries(self._dictionary_names, preferred_name)
+				self._refresh_from_disk(preferred_name)
 
 	def _on_rename_clicked(self, _event: wx.CommandEvent) -> None:
 		selected = self._get_selected_name()
 		if selected is not None:
 			preferred_name = self._on_rename(self, selected)
 			if preferred_name is not None:
-				self.refresh_dictionaries(self._dictionary_names, preferred_name)
+				self._refresh_from_disk(preferred_name)
 
 	def _on_import_clicked(self, _event: wx.CommandEvent) -> None:
 		preferred_name = self._on_import(self)
 		if preferred_name is not None:
-			self.refresh_dictionaries(self._dictionary_names, preferred_name)
+			self._refresh_from_disk(preferred_name)
 
 	def _on_export_clicked(self, _event: wx.CommandEvent) -> None:
 		selected = self._get_selected_name()
@@ -927,6 +981,9 @@ class DictionaryManagementDialog(wx.Dialog):
 			return
 		self.edit_dictionary_name = selected
 		self.EndModal(wx.ID_EDIT)
+
+	def _refresh_from_disk(self, preferred_name: str | None) -> None:
+		self.refresh_dictionaries(list_dictionary_names(self.dictionary_dir), preferred_name)
 
 	def __enter__(self) -> "DictionaryManagementDialog":
 		return self
@@ -990,7 +1047,7 @@ class TranslationTableDialog(wx.Dialog):
 		if button_sizer:
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
-		self.SetSizerAndFit(main_sizer)
+		finalize_dialog_layout(self, main_sizer)
 
 	def _apply_initial_selection(self) -> None:
 		for key, _label, _code in self._CHOICE_SPECS:

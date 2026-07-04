@@ -23,7 +23,9 @@ class Window(_Widget):
 
 
 class Frame(Window):
-	pass
+	def __init__(self, *args, **kwargs):
+		self.init_args = args
+		self.init_kwargs = kwargs
 
 
 class BoxSizer(_Widget):
@@ -101,6 +103,22 @@ class DualViewFrameTest(unittest.TestCase):
 
 		frame.Raise.assert_called_once_with()
 		focused_window.SetFocus.assert_called_once_with()
+
+	def test_initial_geometry_matches_parent(self):
+		parent = Mock()
+		parent.GetPosition.return_value = (120, 80)
+		parent.GetSize.return_value = (1024, 768)
+
+		frame = DualViewFrame(
+			parent,
+			title="Dual View",
+			on_closed=Mock(),
+		)
+
+		self.assertEqual(frame.init_kwargs["pos"], (120, 80))
+		self.assertEqual(frame.init_kwargs["size"], (1024, 768))
+		parent.GetPosition.assert_called_once_with()
+		parent.GetSize.assert_called_once_with()
 
 
 if __name__ == "__main__":

@@ -36,7 +36,12 @@ class DualViewFrame(wx.Frame):
 		title: str,
 		on_closed: Callable[["DualViewFrame"], None],
 	):
-		super().__init__(parent, title=title, size=(900, 650))
+		super().__init__(
+			parent,
+			title=title,
+			pos=parent.GetPosition(),
+			size=parent.GetSize(),
+		)
 		self._on_closed = on_closed
 		self.web_view = wx.html2.WebView.New(self)
 		sizer = wx.BoxSizer(wx.VERTICAL)

@@ -1163,6 +1163,10 @@ msgstr ""
 msgid "Dictionary"
 msgstr ""
 
+#: dialog.py:892
+msgid "Entries"
+msgstr ""
+
 #: gui.py:274
 msgid "Actions"
 msgstr ""

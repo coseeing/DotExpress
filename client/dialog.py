@@ -495,6 +495,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 		self.list_ctrl.InsertColumn(2, _("Type"), width=120)
 		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_selection_changed)
 		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_DESELECTED, self._on_selection_changed)
+		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self._on_item_activated)
 		main_sizer.Add(self.list_ctrl, 1, wx.EXPAND | wx.ALL, 8)
 
 		button_sizer = wx.BoxSizer(wx.HORIZONTAL)

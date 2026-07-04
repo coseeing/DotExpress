@@ -187,9 +187,35 @@ class _FakeTextCtrl:
 class _FakeButton:
     def __init__(self) -> None:
         self.enabled = True
+        self.bindings: list[tuple[object, object]] = []
 
     def Enable(self, enabled: bool = True) -> None:
         self.enabled = enabled
+
+    def Bind(self, event: object, handler: object) -> None:
+        self.bindings.append((event, handler))
+
+
+class _FakeSizer:
+    def Add(self, *_args, **_kwargs) -> None:
+        pass
+
+
+class _FakeControl:
+    def __init__(self, *_args, **_kwargs) -> None:
+        self.bindings: list[tuple[object, object]] = []
+
+    def Bind(self, event: object, handler: object) -> None:
+        self.bindings.append((event, handler))
+
+
+class _FakeBuildListCtrl(_FakeControl):
+    def __init__(self, *_args, **_kwargs) -> None:
+        super().__init__()
+        self.columns: list[tuple[int, str, int | None]] = []
+
+    def InsertColumn(self, index: int, label: str, width: int | None = None) -> None:
+        self.columns.append((index, label, width))
 
 
 class _FakeEvent:
@@ -342,6 +368,74 @@ class SpeechSymbolsDialogFilterTest(unittest.TestCase):
 
         self.assertEqual(self.dialog.filtered_entries, [self.alpha])
         self.assertTrue(event.skipped)
+
+
+class SpeechSymbolsDialogBuildUiTest(unittest.TestCase):
+    def test_build_ui_binds_item_activation_to_edit_handler(self) -> None:
+        list_ctrls: list[_FakeBuildListCtrl] = []
+
+        class _FakeWx:
+            VERTICAL = object()
+            HORIZONTAL = object()
+            LEFT = 1
+            RIGHT = 2
+            TOP = 4
+            BOTTOM = 8
+            ALL = 16
+            EXPAND = 32
+            LC_REPORT = 64
+            BORDER_SUNKEN = 128
+            LC_SINGLE_SEL = 256
+            LC_VIRTUAL = 512
+            OK = 1024
+            CANCEL = 2048
+            EVT_TEXT = object()
+            EVT_LIST_ITEM_SELECTED = object()
+            EVT_LIST_ITEM_DESELECTED = object()
+            EVT_LIST_ITEM_ACTIVATED = object()
+            EVT_BUTTON = object()
+            ID_OK = 1
+
+            @staticmethod
+            def BoxSizer(_orientation: object) -> _FakeSizer:
+                return _FakeSizer()
+
+            @staticmethod
+            def StaticText(*_args, **_kwargs) -> object:
+                return object()
+
+            @staticmethod
+            def TextCtrl(*_args, **_kwargs) -> _FakeControl:
+                return _FakeControl()
+
+            @staticmethod
+            def Button(*_args, **_kwargs) -> _FakeButton:
+                return _FakeButton()
+
+        def _fake_list_ctrl_factory(*_args, **_kwargs) -> _FakeBuildListCtrl:
+            list_ctrl = _FakeBuildListCtrl()
+            list_ctrls.append(list_ctrl)
+            return list_ctrl
+
+        speech_dialog = object.__new__(SpeechSymbolsDialog)
+        speech_dialog.CreateButtonSizer = lambda _flags: None
+        speech_dialog.FindWindowById = lambda _window_id: None
+
+        with patch.object(dialog, 'wx', _FakeWx), patch.object(
+            dialog,
+            'CallbackVirtualListCtrl',
+            side_effect=_fake_list_ctrl_factory,
+        ), patch.object(dialog, 'finalize_dialog_layout'):
+            speech_dialog._build_ui()
+
+        self.assertEqual(
+            list_ctrls[0].bindings,
+            [
+                (_FakeWx.EVT_LIST_ITEM_SELECTED, speech_dialog._on_selection_changed),
+                (_FakeWx.EVT_LIST_ITEM_DESELECTED, speech_dialog._on_selection_changed),
+                (_FakeWx.EVT_LIST_ITEM_ACTIVATED, speech_dialog._on_item_activated),
+            ],
+        )
 
 
 class SpeechSymbolsDialogMutationTest(unittest.TestCase):

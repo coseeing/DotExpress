@@ -8,7 +8,8 @@ import webbrowser
 import wx
 
 import about
-from braille import louis_helper
+from adapters.translation.contracts import TranslationRuntime
+from adapters.translation.provider import build_default_translation_runtime
 from conversion.service import (
 	ConversionOutput,
 	ConversionRequest,
@@ -251,8 +252,9 @@ class NamedControlAccessible(wx.Accessible):
 
 
 class BrailleFrame(wx.Frame):
-	def __init__(self, *args, **kwargs):
+	def __init__(self, *args, runtime: TranslationRuntime, **kwargs):
 		super().__init__(*args, **kwargs)
+		self.translation_runtime = runtime
 
 		self._initialize_frame()
 		initial_settings = self._initialize_state()
@@ -715,7 +717,8 @@ class BrailleFrame(wx.Frame):
 				settings.output_mode,
 				settings.width,
 				dictionary_path,
-			)
+			),
+			runtime=self.translation_runtime,
 		)
 
 	def _format_batch_issue_lines(self, issues: list[BatchIssue]) -> list[str]:
@@ -1618,7 +1621,8 @@ class BrailleFrame(wx.Frame):
 	def _run_conversion(self, job_id: int, table_file: str, raw_text: str, width: int, output_mode: str, dictionary_path: Path):
 		try:
 			conversion_output = convert_text_with_alignment(
-				self._build_conversion_request(raw_text, table_file, output_mode, width, dictionary_path)
+				self._build_conversion_request(raw_text, table_file, output_mode, width, dictionary_path),
+				runtime=self.translation_runtime,
 			)
 		except ConversionStageError as e:
 			message_template = _("ASCII conversion failed: {error}") if e.stage == "ascii" else _("Translation failed: {error}")
@@ -1702,14 +1706,14 @@ class BrailleFrame(wx.Frame):
 
 class BrailleApp(wx.App):
 	def OnInit(self):
-		louis_helper.initialize()
-		self.frame = BrailleFrame(None)
+		self.translation_runtime = build_default_translation_runtime()
+		self.frame = BrailleFrame(None, runtime=self.translation_runtime)
 		self.frame.Show()
 		start_client_init_background()
 		return True
 
 	def OnExit(self):
-		louis_helper.terminate()
+		self.translation_runtime.close()
 		return 0
 
 

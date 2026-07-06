@@ -330,6 +330,7 @@ def make_snapshot(
 class GuiDocumentFlowsTest(unittest.TestCase):
     def _make_frame(self) -> gui.BrailleFrame:
         frame = gui.BrailleFrame.__new__(gui.BrailleFrame)
+        frame.translation_runtime = Mock()
         frame._convert_job_id = 1
         frame._convert_dialog_timer = Mock()
         frame._convert_dialog = Mock()
@@ -347,6 +348,65 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._dual_view_results_by_document = {}
         frame._open_document_name = "alpha"
         return frame
+
+    def test_convert_text_for_output_forwards_runtime(self) -> None:
+        frame = self._make_frame()
+        frame.translation_settings = Mock(width=40, output_mode="unicode")
+        frame._get_selected_dictionary_path = Mock(return_value=Path("dictionary/default.csv"))
+        frame._build_conversion_request = Mock(return_value=Mock())
+
+        with patch.object(gui, "convert_text_for_output", return_value="braille") as convert_mock:
+            result = frame._convert_text_for_output("source")
+
+        self.assertEqual(result, "braille")
+        convert_mock.assert_called_once_with(
+            frame._build_conversion_request.return_value,
+            runtime=frame.translation_runtime,
+        )
+
+
+class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
+    def test_app_builds_runtime_and_passes_it_to_frame(self) -> None:
+        runtime = Mock()
+        frame = Mock()
+
+        with (
+            patch.object(gui, "build_default_translation_runtime", return_value=runtime),
+            patch.object(gui, "BrailleFrame", return_value=frame) as frame_class,
+            patch.object(gui, "start_client_init_background"),
+        ):
+            app = gui.BrailleApp()
+            result = app.OnInit()
+
+        self.assertTrue(result)
+        frame_class.assert_called_once_with(None, runtime=runtime)
+        frame.Show.assert_called_once_with()
+
+    def test_app_exit_closes_runtime(self) -> None:
+        runtime = Mock()
+        app = gui.BrailleApp()
+        app.translation_runtime = runtime
+
+        result = app.OnExit()
+
+        self.assertEqual(result, 0)
+        runtime.close.assert_called_once_with()
+
+    def test_run_conversion_forwards_runtime(self) -> None:
+        frame = self._make_frame()
+        frame._build_conversion_request = Mock(return_value=Mock())
+        frame._finish_conversion = Mock()
+
+        with (
+            patch.object(gui, "convert_text_with_alignment", return_value=Mock()) as convert_mock,
+            patch.object(gui.wx, "CallAfter", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)),
+        ):
+            frame._run_conversion(2, "zh-tw.ctb", "source", 40, "unicode", Path("dictionary/default.csv"))
+
+        convert_mock.assert_called_once_with(
+            frame._build_conversion_request.return_value,
+            runtime=frame.translation_runtime,
+        )
 
     def test_manual_conversion_updates_output_focus_and_shows_completion(self) -> None:
         frame = self._make_frame()

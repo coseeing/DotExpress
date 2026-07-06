@@ -184,6 +184,20 @@ def set_braille_font(braille_font: str) -> None:
     _set_section_value(VIEW_SECTION, BRAILLE_FONT_KEY, braille_font)
 
 
+def set_view_settings(font_size: int, scheme: str, braille_font: str) -> None:
+    data = _load_from_file()
+    section_data = _get_section(data, VIEW_SECTION).copy()
+    section_data.update(
+        {
+            FONT_SIZE_KEY: font_size,
+            SCHEME_KEY: scheme,
+            BRAILLE_FONT_KEY: braille_font,
+        }
+    )
+    data[VIEW_SECTION] = section_data
+    _save_to_file(data)
+
+
 def get_or_create_client_id() -> str:
     data = _load_from_file()
     value = _get_section(data, CLIENT_SECTION).get(CLIENT_ID_KEY)

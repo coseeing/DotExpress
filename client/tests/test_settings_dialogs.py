@@ -39,6 +39,35 @@ def _install_stub_modules() -> None:
     class Button(Window):
         pass
 
+    class Choice(Window):
+        def GetSelection(self):
+            return -1
+
+        def SetSelection(self, index):
+            pass
+
+        def AppendItems(self, items):
+            pass
+
+        def Append(self, item):
+            pass
+
+        def Disable(self):
+            pass
+
+        def Enable(self, state=True):
+            pass
+
+    class SpinCtrl(Window):
+        def GetValue(self):
+            return 0
+
+        def SetValue(self, value):
+            pass
+
+        def Bind(self, event, handler):
+            pass
+
     class Sizer(_Widget):
         pass
 
@@ -47,6 +76,10 @@ def _install_stub_modules() -> None:
 
     class GridBagSizer(Sizer):
         pass
+
+    class FlexGridSizer(Sizer):
+        def AddGrowableCol(self, idx, proportion=1):
+            pass
 
     class ListCtrl(Window):
         def GetSelection(self):
@@ -65,11 +98,21 @@ def _install_stub_modules() -> None:
     wx.Frame = Frame
     wx.StaticText = StaticText
     wx.Button = Button
+    wx.Choice = Choice
+    wx.SpinCtrl = SpinCtrl
     wx.Sizer = Sizer
     wx.BoxSizer = BoxSizer
     wx.GridBagSizer = GridBagSizer
+    wx.FlexGridSizer = FlexGridSizer
     wx.ListCtrl = ListCtrl
     wx.Accessible = Accessible
+
+    braille = types.ModuleType("braille")
+    braille_tables = types.ModuleType("braille.tables")
+    braille_tables.listTables = lambda: []
+    braille.tables = braille_tables
+    sys.modules["braille"] = braille
+    sys.modules["braille.tables"] = braille_tables
 
     wx_lib = types.ModuleType("wx.lib")
     wx_lib_scrolledpanel = types.ModuleType("wx.lib.scrolledpanel")
@@ -106,12 +149,22 @@ def _install_stub_modules() -> None:
     wx.EVT_CHAR_HOOK = 102
     wx.EVT_CLOSE = 103
     wx.EVT_BUTTON = 104
+    wx.NOT_FOUND = -1
     wx.ALL = 0x0010
     wx.EXPAND = 0x0020
     wx.VERTICAL = 0x0001
     wx.HORIZONTAL = 0x0002
     wx.ALIGN_RIGHT = 0x0200
     wx.ALIGN_CENTER = 0x0100
+    wx.ALIGN_CENTER_VERTICAL = 0x0200
+    wx.LEFT = 0x0040
+    wx.RIGHT = 0x0080
+    wx.TOP = 0x0100
+    wx.BOTTOM = 0x0200
+    wx.SP_WRAP = 0x0001
+    wx.SP_ARROW_KEYS = 0x0002
+    wx.EVT_SPINCTRL = 110
+    wx.EVT_TEXT = 111
 
     sys.modules["wx"] = wx
 
@@ -124,6 +177,46 @@ from settings_dialogs import (
     SettingsPanel,
     SettingsPanelAccessible,
 )
+
+from settings_state import DotExpressSettingsSnapshot
+from translation.settings import TranslationSettings
+from view_settings import ViewSettings
+
+
+class FakeChoice:
+    def __init__(self, selection):
+        self._selection = selection
+
+    def GetSelection(self):
+        return self._selection
+
+
+class FakeSpin:
+    def __init__(self, value):
+        self._value = value
+
+    def GetValue(self):
+        return self._value
+
+
+def make_snapshot(font_size=40):
+    return DotExpressSettingsSnapshot.create(
+        translation=TranslationSettings("unicode", 40, "default"),
+        translation_tables={},
+        view=ViewSettings(font_size, "light", "default"),
+    )
+
+
+def make_dialog_without_wx_constructor():
+    from settings_dialogs import DotExpressSettingsDialog
+
+    dialog = object.__new__(DotExpressSettingsDialog)
+    dialog.snapshot = make_snapshot()
+    dialog.commit = Mock()
+    dialog.select_category = Mock()
+    dialog.Destroy = Mock()
+    dialog.panel_instances = {}
+    return dialog
 
 
 class SettingsPanelAccessibleTest(unittest.TestCase):
@@ -173,6 +266,70 @@ class MultiCategorySettingsDialogTest(unittest.TestCase):
         dialog.category_classes = [Mock, Mock, Mock]
         self.assertEqual(dialog._cycled_category_index(2, 1), 0)
         self.assertEqual(dialog._cycled_category_index(0, -1), 2)
+
+
+class TranslationSettingsPanelTest(unittest.TestCase):
+    def test_translation_panel_collects_controls_without_mutating_baseline(self) -> None:
+        from settings_dialogs import TranslationSettingsPanel
+
+        baseline = make_snapshot()
+        panel = object.__new__(TranslationSettingsPanel)
+        panel.output_choice = FakeChoice(1)
+        panel.width_spin = FakeSpin(52)
+        panel.dictionary_choice = FakeChoice(1)
+        panel.dictionary_names = ["default", "math"]
+
+        result = panel.on_save(baseline)
+
+        self.assertEqual(result.translation, TranslationSettings("ascii", 52, "math"))
+        self.assertEqual(baseline.translation, TranslationSettings("unicode", 40, "default"))
+
+
+class TranslationTablesPanelTest(unittest.TestCase):
+    def test_tables_panel_requires_default_and_math(self) -> None:
+        from settings_dialogs import TranslationTablesPanel
+
+        panel = object.__new__(TranslationTablesPanel)
+        panel._selected_file_name = Mock(
+            side_effect=lambda key: "" if key == "default" else "UEB"
+        )
+        self.assertFalse(panel.is_valid())
+
+
+class ViewSettingsPanelTest(unittest.TestCase):
+    def test_view_panel_tracks_font_size_dirty_state(self) -> None:
+        from settings_dialogs import ViewSettingsPanel
+
+        panel = object.__new__(ViewSettingsPanel)
+        panel.font_size_dirty = False
+        panel._on_font_size_changed(None)
+        self.assertTrue(panel.font_size_dirty)
+
+
+class DotExpressSettingsDialogFlowTest(unittest.TestCase):
+    def test_apply_validates_all_panels_before_commit(self) -> None:
+        dialog = make_dialog_without_wx_constructor()
+        invalid = Mock(is_valid=Mock(return_value=False))
+        valid = Mock(is_valid=Mock(return_value=True))
+        dialog.panel_instances = {0: valid, 1: invalid}
+
+        dialog.on_apply()
+
+        dialog.commit.assert_not_called()
+        valid.on_save.assert_not_called()
+
+    def test_successful_apply_reloads_normalized_baseline(self) -> None:
+        dialog = make_dialog_without_wx_constructor()
+        committed = make_snapshot(font_size=18)
+        dialog.commit = Mock(return_value=committed)
+        panel = Mock(is_valid=Mock(return_value=True))
+        panel.on_save.return_value = committed
+        dialog.panel_instances = {0: panel}
+
+        dialog.on_apply()
+
+        self.assertEqual(dialog.snapshot, committed)
+        panel.load_snapshot.assert_called_once_with(committed)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,6 @@ import sys
 from typing import List
 
 import wx
-from braille.tables import listTables
 from Bopomofo import normalize_zhuyin_sequence
 from dictionaries.actions import get_action_availability, resolve_dictionary_selection
 from dictionaries.manager import (
@@ -20,7 +19,6 @@ from dictionaries.manager import (
 	normalize_dictionary_name,
 )
 from documents.workspace import normalize_document_name
-from translation.settings import MAX_CONVERSION_WIDTH, MIN_CONVERSION_WIDTH, TranslationSettings
 
 
 def resource_path(relative_path: str) -> Path:
@@ -92,12 +90,6 @@ class DictionaryEntry:
 	text: str
 	braille: str
 	entry_type: str = DEFAULT_ENTRY_TYPE
-
-
-@dataclass(frozen=True)
-class TableOption:
-	file_name: str
-	display_name: str
 
 
 def normalize_entry_type(entry_type: str | None) -> str:
@@ -705,97 +697,6 @@ class SpeechSymbolsDialog(wx.Dialog):
 				writer.writerow({"text": entry.text, "braille": entry.braille, "type": entry.entry_type})
 
 
-class TranslationSettingsDialog(wx.Dialog):
-	"""Dialog that stages translation settings changes."""
-
-	_OUTPUT_MODES: list[tuple[str, str]] = [
-		("unicode", _("Unicode")),
-		("ascii", _("ASCII")),
-	]
-
-	def __init__(
-		self,
-		parent: wx.Window | None,
-		settings: TranslationSettings,
-		dictionary_names: list[str],
-	):
-		super().__init__(parent, title=_("Translation Settings"))
-		self._initial_settings = settings
-		self._dictionary_names = list(dictionary_names)
-
-		main_sizer = wx.BoxSizer(wx.VERTICAL)
-		grid = wx.FlexGridSizer(3, 2, 8, 8)
-
-		output_label = wx.StaticText(self, label=_("Braille Type"))
-		self.output_choice = wx.Choice(self, choices=[label for _key, label in self._OUTPUT_MODES])
-		grid.Add(output_label, 0, wx.ALIGN_CENTER_VERTICAL)
-		grid.Add(self.output_choice, 1, wx.EXPAND)
-
-		width_label = wx.StaticText(self, label=_("Width"))
-		self.width_spin = wx.SpinCtrl(
-			self,
-			min=MIN_CONVERSION_WIDTH,
-			max=MAX_CONVERSION_WIDTH,
-			initial=max(MIN_CONVERSION_WIDTH, min(MAX_CONVERSION_WIDTH, settings.width)),
-		)
-		grid.Add(width_label, 0, wx.ALIGN_CENTER_VERTICAL)
-		grid.Add(self.width_spin, 1, wx.EXPAND)
-
-		dictionary_label = wx.StaticText(self, label=_("Dictionary"))
-		self.dictionary_choice = wx.Choice(self, choices=self._dictionary_names)
-		grid.Add(dictionary_label, 0, wx.ALIGN_CENTER_VERTICAL)
-		grid.Add(self.dictionary_choice, 1, wx.EXPAND)
-		grid.AddGrowableCol(1, 1)
-
-		main_sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 12)
-
-		button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
-		if button_sizer:
-			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
-
-		finalize_dialog_layout(self, main_sizer)
-		self._select_output_mode(settings.output_mode)
-		self._select_dictionary(settings.selected_dictionary)
-
-	def get_settings(self) -> TranslationSettings:
-		output_index = self.output_choice.GetSelection()
-		dictionary_index = self.dictionary_choice.GetSelection()
-		output_mode = (
-			self._OUTPUT_MODES[output_index][0]
-			if output_index != wx.NOT_FOUND
-			else self._initial_settings.output_mode
-		)
-		selected_dictionary = (
-			self._dictionary_names[dictionary_index]
-			if dictionary_index != wx.NOT_FOUND and self._dictionary_names
-			else self._initial_settings.selected_dictionary
-		)
-		return TranslationSettings(
-			output_mode=output_mode,
-			width=self.width_spin.GetValue(),
-			selected_dictionary=selected_dictionary,
-		)
-
-	def _select_output_mode(self, output_mode: str) -> None:
-		index = next((idx for idx, (key, _label) in enumerate(self._OUTPUT_MODES) if key == output_mode), 0)
-		self.output_choice.SetSelection(index)
-
-	def _select_dictionary(self, dictionary_name: str) -> None:
-		if not self._dictionary_names:
-			self.dictionary_choice.SetSelection(wx.NOT_FOUND)
-			self.dictionary_choice.Disable()
-			return
-
-		index = next((idx for idx, name in enumerate(self._dictionary_names) if name == dictionary_name), 0)
-		self.dictionary_choice.SetSelection(index)
-
-	def __enter__(self) -> "TranslationSettingsDialog":
-		return self
-
-	def __exit__(self, exc_type, exc, _tb) -> None:
-		self.Destroy()
-
-
 class DictionaryManagementDialog(wx.Dialog):
 	"""Dialog that stages dictionary lifecycle actions through callbacks."""
 
@@ -987,123 +888,6 @@ class DictionaryManagementDialog(wx.Dialog):
 		self.refresh_dictionaries(list_dictionary_names(self.dictionary_dir), preferred_name)
 
 	def __enter__(self) -> "DictionaryManagementDialog":
-		return self
-
-	def __exit__(self, exc_type, exc, _tb) -> None:
-		self.Destroy()
-
-
-class TranslationTableDialog(wx.Dialog):
-	"""Dialog that allows configuring translation tables for each supported language."""
-
-	_CHOICE_SPECS = [
-		("default", _("Default Translation Table"), None),
-		("en", _("English Translation Table"), "en"),
-		("zh", _("Chinese Translation Table"), "zh"),
-		("ja", _("Japanese Translation Table"), "ja"),
-		("math", _("Math Translation Table"), None),
-	]
-
-	def __init__(self, parent: wx.Window | None, language_map: dict[str, str]):
-		super().__init__(parent, title=_("Translation Tables Setting"))
-		self.language_map = language_map
-		self.table_options: List[TableOption] = self._load_table_options()
-		self._choice_controls: dict[str, wx.Choice] = {}
-		self._options_by_key: dict[str, List[TableOption]] = {}
-		self._build_ui()
-		self._apply_initial_selection()
-
-	def get_selected_tables(self) -> dict[str, str]:
-		results: dict[str, str] = {}
-		for key, _label, _lang_code in self._CHOICE_SPECS:
-			option = self._get_selected_option(key)
-			if option:
-				results[key] = option.file_name
-		return results
-
-	def _build_ui(self) -> None:
-		main_sizer = wx.BoxSizer(wx.VERTICAL)
-		grid = wx.FlexGridSizer(len(self._CHOICE_SPECS), 2, 8, 8)
-
-		for key, label, lang_code in self._CHOICE_SPECS:
-			static_lbl = wx.StaticText(self, label=label)
-			options = self._options_for_key(key, lang_code)
-			if key not in {"default", "math"}:
-				options = [TableOption(file_name="", display_name=_("None selected"))] + options
-			choice = wx.Choice(self)
-			choice.AppendItems([option.display_name for option in options])
-			self._choice_controls[key] = choice
-			self._options_by_key[key] = options
-
-			grid.Add(static_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
-			grid.Add(choice, 1, wx.EXPAND)
-
-			if not options:
-				choice.Disable()
-
-		grid.AddGrowableCol(1, 1)
-		main_sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 12)
-
-		button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
-		if button_sizer:
-			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
-
-		finalize_dialog_layout(self, main_sizer)
-
-	def _apply_initial_selection(self) -> None:
-		for key, _label, _code in self._CHOICE_SPECS:
-			self._select_choice_value(key, self.language_map.get(key))
-
-	def _select_choice_value(self, key: str, file_name: str | None) -> None:
-		choice = self._choice_controls[key]
-		options = self._options_by_key[key]
-		if not options:
-			choice.SetSelection(wx.NOT_FOUND)
-			return
-
-		index = next((idx for idx, option in enumerate(options) if option.file_name == file_name), None)
-		if index is None:
-			index = 0
-		choice.SetSelection(index)
-
-	def _get_selected_option(self, key: str) -> TableOption | None:
-		choice = self._choice_controls.get(key)
-		if not choice:
-			return None
-		selection = choice.GetSelection()
-		if selection == wx.NOT_FOUND:
-			return None
-		options = self._options_by_key.get(key, [])
-		if selection >= len(options):
-			return None
-		return options[selection]
-
-	def _options_for_lang(self, lang_code: str | None) -> List[TableOption]:
-		if lang_code is None:
-			return self.table_options
-		prefix = lang_code.lower()
-		return [option for option in self.table_options if option.file_name.lower().startswith(prefix)]
-
-	def _options_for_key(self, key: str, lang_code: str | None) -> List[TableOption]:
-		if key == "math":
-			return [
-				TableOption(file_name="UEB", display_name="UEB"),
-				TableOption(file_name="Nemeth", display_name="Nemeth"),
-			]
-		return self._options_for_lang(lang_code)
-
-	def _load_table_options(self) -> List[TableOption]:
-		tables = [table for table in listTables() if getattr(table, "output", False)]
-		options = [
-			TableOption(
-				file_name=table.fileName,
-				display_name=_(table.displayName),
-			)
-			for table in tables
-		]
-		return sorted(options, key=lambda option: option.display_name.lower())
-
-	def __enter__(self) -> "TranslationTableDialog":
 		return self
 
 	def __exit__(self, exc_type, exc, _tb) -> None:

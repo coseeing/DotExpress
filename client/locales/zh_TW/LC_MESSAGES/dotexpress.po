@@ -1032,7 +1032,7 @@ msgstr "儲存失敗：{error}"
 msgid "Dictionary Management"
 msgstr "字典管理"
 
-#: dialog.py:740 settings_dialogs.py:316
+#: dialog.py:740 settings/dialogs.py:316
 msgid "Dictionary"
 msgstr "字典"
 
@@ -1060,15 +1060,15 @@ msgstr "開啟"
 msgid "Dual View"
 msgstr "雙視檢視"
 
-#: gui.py:180 settings_dialogs.py:278
+#: gui.py:180 settings/dialogs.py:278
 msgid "Default"
 msgstr "預設"
 
-#: gui.py:181 settings_dialogs.py:526
+#: gui.py:181 settings/dialogs.py:526
 msgid "Braille Font"
 msgstr "點字字型"
 
-#: gui.py:182 settings_dialogs.py:279
+#: gui.py:182 settings/dialogs.py:279
 msgid "SimBraille"
 msgstr "SimBraille"
 
@@ -1104,7 +1104,7 @@ msgstr "BRL"
 msgid "Delete All"
 msgstr "刪除全部"
 
-#: gui.py:191 gui.py:364 gui.py:1574 settings_dialogs.py:284
+#: gui.py:191 gui.py:364 gui.py:1574 settings/dialogs.py:284
 msgid "Translation"
 msgstr "轉譯"
 
@@ -1365,113 +1365,113 @@ msgstr "轉譯失敗：{error}"
 msgid "Conversion completed."
 msgstr "轉換完成。"
 
-#: settings_dialogs.py:179
+#: settings/dialogs.py:179
 msgid "&Categories:"
 msgstr "分類(&C)："
 
-#: settings_dialogs.py:196
+#: settings/dialogs.py:196
 msgid "Categories"
 msgstr "分類"
 
-#: settings_dialogs.py:204
+#: settings/dialogs.py:204
 msgid "OK"
 msgstr "確定"
 
-#: settings_dialogs.py:206
+#: settings/dialogs.py:206
 msgid "Cancel"
 msgstr "取消"
 
-#: settings_dialogs.py:208
+#: settings/dialogs.py:208
 msgid "Apply"
 msgstr "套用"
 
-#: settings_dialogs.py:268
+#: settings/dialogs.py:268
 msgid "Unicode"
 msgstr "Unicode"
 
-#: settings_dialogs.py:269
+#: settings/dialogs.py:269
 msgid "ASCII"
 msgstr "ASCII"
 
-#: settings_dialogs.py:273
+#: settings/dialogs.py:273
 msgid "Light"
 msgstr "淺色"
 
-#: settings_dialogs.py:274
+#: settings/dialogs.py:274
 msgid "Dark"
 msgstr "深色"
 
-#: settings_dialogs.py:286
+#: settings/dialogs.py:286
 msgid "Translation output mode, width, and dictionary options"
 msgstr "轉譯輸出模式、寬度與字典選項"
 
-#: settings_dialogs.py:295
+#: settings/dialogs.py:295
 msgid "Braille Type"
 msgstr "點字類型"
 
-#: settings_dialogs.py:303
+#: settings/dialogs.py:303
 msgid "Width"
 msgstr "寬度"
 
-#: settings_dialogs.py:380
+#: settings/dialogs.py:380
 msgid "Translation Tables"
 msgstr "轉譯表"
 
-#: settings_dialogs.py:382
+#: settings/dialogs.py:382
 msgid "Translation table mappings for different languages"
 msgstr "不同語言的轉譯表對應"
 
-#: settings_dialogs.py:386
+#: settings/dialogs.py:386
 msgid "Default Translation Table"
 msgstr "預設轉譯表"
 
-#: settings_dialogs.py:387
+#: settings/dialogs.py:387
 msgid "English Translation Table"
 msgstr "英文轉譯表"
 
-#: settings_dialogs.py:388
+#: settings/dialogs.py:388
 msgid "Chinese Translation Table"
 msgstr "中文轉譯表"
 
-#: settings_dialogs.py:389
+#: settings/dialogs.py:389
 msgid "Japanese Translation Table"
 msgstr "日文轉譯表"
 
-#: settings_dialogs.py:390
+#: settings/dialogs.py:390
 msgid "Math Translation Table"
 msgstr "數學轉譯表"
 
-#: settings_dialogs.py:404
+#: settings/dialogs.py:404
 msgid "None selected"
 msgstr "未選擇"
 
-#: settings_dialogs.py:494
+#: settings/dialogs.py:494
 msgid "View"
 msgstr "檢視"
 
-#: settings_dialogs.py:496
+#: settings/dialogs.py:496
 msgid ""
 "Font, font size, and color scheme for the main window input and output areas"
 msgstr "主視窗輸入與輸出區的字型、字體大小與配色"
 
-#: settings_dialogs.py:505
+#: settings/dialogs.py:505
 msgid "Font Size"
 msgstr "字型大小"
 
-#: settings_dialogs.py:518
+#: settings/dialogs.py:518
 msgid "Scheme"
 msgstr "配色"
 
-#: settings_dialogs.py:631
+#: settings/dialogs.py:631
 msgid "DotExpress Settings"
 msgstr "DotExpress 設定"
 
-#: settings_dialogs.py:457
+#: settings/dialogs.py:457
 #, python-brace-format
 msgid "Please select a value for {field}."
 msgstr "請先選擇{field}。"
 
-#: settings_dialogs.py:632
+#: settings/dialogs.py:632
 #, python-brace-format
 msgid "DotExpress Settings: {category}"
 msgstr "DotExpress 設定：{category}"

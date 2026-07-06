@@ -66,9 +66,7 @@ from ui.action_menu import (
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from config import (
 	DEFAULT_TRANSLATION_TABLES,
-	get_translation_tables,
 	set_selected_dictionary,
-	set_translation_tables,
 )
 from settings.translation import (
 	TranslationSettings,
@@ -76,6 +74,7 @@ from settings.translation import (
 	normalize_translation_settings,
 	save_translation_settings,
 )
+from settings.translation_tables import load_translation_tables, save_translation_tables
 from translation.dictionary_state import (
 	plan_dictionary_state_after_add,
 	plan_dictionary_state_after_delete,
@@ -120,8 +119,8 @@ from settings.view import (
 	normalize_view_settings,
 	save_view_settings,
 )
-from settings_state import DotExpressSettingsSnapshot
-from settings_dialogs import DotExpressSettingsDialog, TranslationSettingsPanel
+from settings.state import DotExpressSettingsSnapshot
+from settings.dialogs import DotExpressSettingsDialog, TranslationSettingsPanel
 
 
 VIEW_SCHEMES = {
@@ -211,7 +210,7 @@ _MENU_TRANSLATION_MARKERS = (
 	_("All Supported Files"),
 )
 
-language_map_translate_table = get_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
+language_map_translate_table = load_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
 
 
 def _prompt_for_dictionary_name(parent: wx.Window | None, *, title: str, initial_name: str = "") -> str | None:
@@ -573,7 +572,7 @@ class BrailleFrame(wx.Frame):
 		self._apply_editor_view_settings(view)
 
 		save_translation_settings(translation)
-		set_translation_tables(tables)
+		save_translation_tables(tables)
 		save_view_settings(view)
 		return DotExpressSettingsSnapshot.create(translation, tables, view)
 

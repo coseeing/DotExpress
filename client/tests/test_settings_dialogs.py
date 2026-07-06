@@ -261,13 +261,13 @@ def _install_stub_modules() -> None:
 _install_stub_modules()
 import wx
 
-from settings_dialogs import (
+from settings.dialogs import (
     MultiCategorySettingsDialog,
     SettingsPanel,
     SettingsPanelAccessible,
 )
 
-from settings_state import DotExpressSettingsSnapshot
+from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
 
@@ -322,7 +322,7 @@ def make_snapshot(font_size=40):
 
 
 def make_dialog_without_wx_constructor():
-    from settings_dialogs import DotExpressSettingsDialog
+    from settings.dialogs import DotExpressSettingsDialog
 
     dialog = object.__new__(DotExpressSettingsDialog)
     dialog.base_title = "DotExpress Settings"
@@ -407,7 +407,7 @@ class MultiCategorySettingsDialogTest(unittest.TestCase):
         dialog._change_category.assert_not_called()
 
     def test_layout_uses_headerless_list_ctrl_and_explicit_categories_name(self) -> None:
-        import settings_dialogs
+        import settings.dialogs as dialogs_module
 
         saved_modules = {
             name: sys.modules.get(name)
@@ -432,13 +432,13 @@ class MultiCategorySettingsDialogTest(unittest.TestCase):
         dialog._change_category = Mock()
 
         try:
-            with patch.object(settings_dialogs, "wx", fresh_wx):
+            with patch.object(dialogs_module, "wx", fresh_wx):
                 with patch.object(
-                    settings_dialogs,
+                    dialogs_module,
                     "ScrolledPanel",
                     fresh_wx.lib.scrolledpanel.ScrolledPanel,
                 ):
-                    with patch("settings_dialogs._", side_effect=lambda text: text):
+                    with patch("settings.dialogs._", side_effect=lambda text: text):
                         dialog._build_layout()
 
             self.assertEqual(dialog.category_label.label, "&Categories:")
@@ -458,7 +458,7 @@ class MultiCategorySettingsDialogTest(unittest.TestCase):
 
 class TranslationSettingsPanelTest(unittest.TestCase):
     def test_translation_panel_collects_controls_without_mutating_baseline(self) -> None:
-        from settings_dialogs import TranslationSettingsPanel
+        from settings.dialogs import TranslationSettingsPanel
 
         baseline = make_snapshot()
         panel = object.__new__(TranslationSettingsPanel)
@@ -475,7 +475,7 @@ class TranslationSettingsPanelTest(unittest.TestCase):
 
 class TranslationTablesPanelTest(unittest.TestCase):
     def test_tables_panel_requires_default_and_math(self) -> None:
-        from settings_dialogs import TranslationTablesPanel
+        from settings.dialogs import TranslationTablesPanel
 
         panel = object.__new__(TranslationTablesPanel)
         panel._selected_file_name = Mock(
@@ -484,7 +484,7 @@ class TranslationTablesPanelTest(unittest.TestCase):
         self.assertFalse(panel.is_valid())
 
     def test_tables_panel_validation_points_to_missing_required_control(self) -> None:
-        from settings_dialogs import TranslationTablesPanel
+        from settings.dialogs import TranslationTablesPanel
 
         default_choice = Mock()
         math_choice = Mock()
@@ -504,7 +504,7 @@ class TranslationTablesPanelTest(unittest.TestCase):
             side_effect=lambda key: "" if key == "default" else "UEB"
         )
 
-        with patch("settings_dialogs._", side_effect=lambda text: text):
+        with patch("settings.dialogs._", side_effect=lambda text: text):
             message, focus_control = panel.validation_error()
 
         self.assertEqual(
@@ -516,7 +516,7 @@ class TranslationTablesPanelTest(unittest.TestCase):
 
 class ViewSettingsPanelTest(unittest.TestCase):
     def test_view_panel_tracks_font_size_dirty_state(self) -> None:
-        from settings_dialogs import ViewSettingsPanel
+        from settings.dialogs import ViewSettingsPanel
 
         panel = object.__new__(ViewSettingsPanel)
         panel.font_size_dirty = False
@@ -543,7 +543,7 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         valid.on_save.assert_not_called()
 
     def test_apply_shows_message_and_focuses_missing_required_translation_table(self) -> None:
-        from settings_dialogs import TranslationTablesPanel
+        from settings.dialogs import TranslationTablesPanel
 
         dialog = make_dialog_without_wx_constructor()
         default_choice = Mock()
@@ -564,8 +564,8 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         )
         dialog.panel_instances = {1: panel}
 
-        with patch("settings_dialogs._", side_effect=lambda text: text):
-            with patch("settings_dialogs.wx.MessageBox") as message_box:
+        with patch("settings.dialogs._", side_effect=lambda text: text):
+            with patch("settings.dialogs.wx.MessageBox") as message_box:
                 result = dialog.on_apply()
 
         self.assertFalse(result)
@@ -596,7 +596,7 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         panel.load_snapshot.assert_called_once_with(committed)
 
     def test_show_singleton_reraises_unexpected_existing_dialog_errors(self) -> None:
-        from settings_dialogs import DotExpressSettingsDialog
+        from settings.dialogs import DotExpressSettingsDialog
 
         class TestDialog(DotExpressSettingsDialog):
             category_classes = DotExpressSettingsDialog.category_classes
@@ -624,7 +624,7 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
             )
 
     def test_sync_open_font_size_updates_snapshot_before_view_panel_exists(self) -> None:
-        from settings_dialogs import DotExpressSettingsDialog
+        from settings.dialogs import DotExpressSettingsDialog
 
         dialog = make_dialog_without_wx_constructor()
         dialog.snapshot = make_snapshot(font_size=12)
@@ -639,7 +639,7 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         self.assertEqual(dialog.snapshot.view.font_size, 20)
 
     def test_sync_open_font_size_keeps_dirty_view_panel_draft(self) -> None:
-        from settings_dialogs import DotExpressSettingsDialog, ViewSettingsPanel
+        from settings.dialogs import DotExpressSettingsDialog, ViewSettingsPanel
 
         dialog = make_dialog_without_wx_constructor()
         dialog.snapshot = make_snapshot(font_size=12)
@@ -658,7 +658,7 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         view_panel.font_size_spin.SetValue.assert_not_called()
 
     def test_title_format_uses_localizable_template(self) -> None:
-        from settings_dialogs import DotExpressSettingsDialog
+        from settings.dialogs import DotExpressSettingsDialog
 
         dialog = object.__new__(DotExpressSettingsDialog)
         dialog.title_template = "DotExpress 設定：{category}"

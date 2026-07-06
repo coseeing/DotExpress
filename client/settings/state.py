@@ -1,7 +1,7 @@
 from dataclasses import dataclass, replace
 
-from settings.translation import TranslationSettings
-from settings.view import ViewSettings
+from .translation import TranslationSettings
+from .view import ViewSettings
 
 
 @dataclass(frozen=True)

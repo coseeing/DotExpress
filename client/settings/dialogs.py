@@ -10,13 +10,13 @@ import wx
 from wx.lib.scrolledpanel import ScrolledPanel
 
 from braille.tables import listTables
-from settings_state import DotExpressSettingsSnapshot
-from settings.translation import (
+from .state import DotExpressSettingsSnapshot
+from .translation import (
     MAX_CONVERSION_WIDTH,
     MIN_CONVERSION_WIDTH,
     TranslationSettings,
 )
-from settings.view import (
+from .view import (
     VIEW_FONT_SIZE_MAX,
     VIEW_FONT_SIZE_MIN,
     ViewSettings,
@@ -28,7 +28,7 @@ def resource_path(relative_path: str) -> Path:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         base_path = Path(sys._MEIPASS)
     else:
-        base_path = Path(__file__).resolve().parent
+        base_path = Path(__file__).resolve().parents[1]
     return base_path / relative_path
 
 

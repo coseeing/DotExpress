@@ -308,8 +308,8 @@ gui = importlib.import_module("gui")
 
 from documents.workspace import Document
 from documents.export_results import ExportBatchResult
-from settings_dialogs import TranslationSettingsPanel
-from settings_state import DotExpressSettingsSnapshot
+from settings.dialogs import TranslationSettingsPanel
+from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
 
@@ -823,7 +823,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         )
 
         with patch.object(gui, "save_translation_settings"), \
-             patch.object(gui, "set_translation_tables"), \
+             patch.object(gui, "save_translation_tables"), \
              patch.object(gui, "save_view_settings"):
             result = frame.apply_settings_from_dialog(snapshot)
 

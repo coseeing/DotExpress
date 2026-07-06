@@ -1,6 +1,6 @@
 import unittest
 
-from settings_state import DotExpressSettingsSnapshot
+from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
 

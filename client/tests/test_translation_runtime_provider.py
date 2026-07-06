@@ -118,6 +118,51 @@ class TranslationRuntimeProviderTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "defect"):
                 provider.create_default_text_translator(platform="win32")
 
+    def test_default_text_factory_normalizes_initialize_load_errors(self) -> None:
+        from adapters.translation import provider
+
+        braille_module = types.ModuleType("braille")
+        louis_helper = types.ModuleType("braille.louis_helper")
+        tables_module = types.ModuleType("braille.tables")
+        tables_module.TABLES_DIR = "/tables"
+
+        for error in (ImportError("missing package"), OSError("missing DLL")):
+            with self.subTest(error_type=type(error).__name__):
+                louis_helper.initialize = Mock(side_effect=error)
+                with patch.dict(
+                    sys.modules,
+                    {
+                        "braille": braille_module,
+                        "braille.louis_helper": louis_helper,
+                        "braille.tables": tables_module,
+                    },
+                    clear=False,
+                ):
+                    with self.assertRaisesRegex(RuntimeUnavailableError, str(error)):
+                        provider.create_default_text_translator(platform="win32")
+
+    def test_default_text_factory_normalizes_native_adapter_import_error(self) -> None:
+        from adapters.translation import provider
+
+        with patch.dict(
+            sys.modules,
+            {"adapters.translation.liblouis": None},
+            clear=False,
+        ):
+            with self.assertRaises(RuntimeUnavailableError):
+                provider.create_default_text_translator(platform="win32")
+
+    def test_default_math_factory_normalizes_native_adapter_import_error(self) -> None:
+        from adapters.translation import provider
+
+        with patch.dict(
+            sys.modules,
+            {"adapters.translation.mathcat": None},
+            clear=False,
+        ):
+            with self.assertRaises(RuntimeUnavailableError):
+                provider.create_default_math_translator(platform="win32")
+
     def test_default_math_factory_propagates_unexpected_initialize_errors(self) -> None:
         from adapters.translation import provider
 

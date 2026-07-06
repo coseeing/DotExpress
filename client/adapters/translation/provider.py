@@ -51,15 +51,15 @@ def create_default_text_translator(
     if (platform or sys.platform) != "win32":
         raise RuntimeUnavailableError("bundled liblouis requires Windows")
 
-    from adapters.translation.liblouis import LiblouisTextTranslator
-
     try:
+        from adapters.translation.liblouis import LiblouisTextTranslator
         from braille import louis_helper
         from braille.tables import TABLES_DIR
+
+        louis_helper.initialize()
     except (ImportError, OSError) as error:
         raise RuntimeUnavailableError(str(error)) from error
 
-    louis_helper.initialize()
     return LiblouisTextTranslator(
         helper=louis_helper,
         tables_dir=TABLES_DIR,
@@ -73,10 +73,10 @@ def create_default_math_translator(
     if (platform or sys.platform) != "win32":
         raise RuntimeUnavailableError("bundled MathCAT requires Windows")
 
-    from adapters.translation.mathcat import MathCATMathTranslator
-    from conversion.math_service import translate_math_segment
-
     try:
+        from adapters.translation.mathcat import MathCATMathTranslator
+        from conversion.math_service import translate_math_segment
+
         get_shared_mathcat_adapter().initialize()
     except (ImportError, OSError, MathCATError) as error:
         raise RuntimeUnavailableError(str(error)) from error

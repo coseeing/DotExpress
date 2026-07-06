@@ -21,6 +21,7 @@ This change includes:
 - Moving `client/settings_state.py` into `client/settings/state.py`
 - Moving `client/settings_dialogs.py` into `client/settings/dialogs.py`
 - Updating application and test imports to use the new package paths
+- Removing the old module files after every internal consumer has migrated
 
 This change does not include:
 
@@ -131,12 +132,20 @@ This module remains the authoritative home for translation settings data and per
 
 Responsibilities:
 
-- Provide translation-table settings load/save helpers
-- Centralize any default-mapping normalization used by settings flows
+- Provide `load_translation_tables()` and `save_translation_tables()` helpers
+- Delegate storage and the existing default merge behavior to
+  `config.get_translation_tables()` and `config.set_translation_tables()`
+- Return and persist copied mappings so callers do not share mutable input objects
 - Keep translation-table persistence separate from the wx UI layer
 
 This module should not own table option discovery from liblouis. UI option loading
 still belongs in the dialog layer because it depends on presentation and runtime data.
+
+This refactor does not introduce a separate translation-table normalization step.
+The settings dialog already validates required selections, while `config.py` already
+filters persisted key/value types and merges missing entries with
+`DEFAULT_TRANSLATION_TABLES` when loading. Adding another normalization policy would
+change behavior rather than reorganize it.
 
 ### `client/settings/state.py`
 
@@ -177,10 +186,9 @@ This keeps wx UI as the outermost layer.
 
 ## Public Package Surface
 
-`client/settings/__init__.py` should re-export the settings APIs that are imported
-widely by the application and tests:
+`client/settings/__init__.py` should re-export the non-UI settings APIs that are
+imported widely by the application and tests:
 
-- `DotExpressSettingsDialog`
 - `DotExpressSettingsSnapshot`
 - `TranslationSettings`
 - `ViewSettings`
@@ -189,20 +197,28 @@ widely by the application and tests:
 - `normalize_translation_settings`
 - `load_translation_tables`
 - `save_translation_tables`
-- `normalize_translation_tables`
 - `load_view_settings`
 - `save_view_settings`
 - `normalize_view_settings`
 
-The goal is not to hide all submodules. Direct submodule imports remain acceptable
-when a caller needs only one concern. The re-export exists to give the package an
-obvious entry point.
+The package root must not import `settings/dialogs.py`. Importing any submodule first
+executes `settings/__init__.py`; re-exporting dialog classes there would make
+non-UI imports such as `settings.translation` require wx. UI consumers must import
+`DotExpressSettingsDialog`, panels, and dialog framework classes explicitly from
+`settings.dialogs`.
+
+Direct submodule imports remain acceptable when a caller needs only one concern.
+The non-UI re-exports give the package an obvious entry point without coupling all
+settings code to wx.
 
 ## Migration Strategy
 
 ### Step 1. Create the Package and Move Modules
 
 Create `client/settings/` and move the current top-level settings modules into it.
+Delete the old `client/view_settings.py`, `client/settings_state.py`,
+`client/settings_dialogs.py`, and `client/translation/settings.py` files as part of
+the moves; do not leave compatibility shims.
 
 ### Step 2. Separate Translation-Table Persistence
 
@@ -210,7 +226,9 @@ Move translation-table settings read/write helpers out of `gui.py` call sites an
 into `settings/translation_tables.py`.
 
 `gui.py` should stop calling `config.get_translation_tables()` and
-`config.set_translation_tables()` directly.
+`config.set_translation_tables()` directly. Module initialization should call
+`load_translation_tables()`, and settings apply should call
+`save_translation_tables()`.
 
 ### Step 3. Update Application Imports
 
@@ -226,8 +244,16 @@ Update test imports in:
 - `client/tests/test_settings_dialogs.py`
 - `client/tests/test_gui_document_flows.py`
 - `client/tests/test_translation_settings.py`
+- `client/tests/test_conversion_service.py`
+- `client/tests/test_dialog_display.py`
 
-Additional tests should be updated if import failures reveal other settings consumers.
+`test_conversion_service.py` must read `settings/dialogs.py` instead of the removed
+top-level dialog module. `test_dialog_display.py` must stub or clear the new
+`settings` and `settings.translation` module paths used during isolated imports.
+
+Add focused tests for `settings/translation_tables.py` that verify load/save
+delegation and copied mapping behavior. Additional tests should be updated if import
+failures reveal other settings consumers.
 
 ### Step 5. Keep Behavior Stable
 
@@ -258,7 +284,14 @@ At minimum, run focused client tests covering settings modules and the settings 
 - `python3 -m unittest tests.test_settings_state -v`
 - `python3 -m unittest tests.test_settings_dialogs -v`
 - `python3 -m unittest tests.test_translation_settings -v`
+- `python3 -m unittest tests.test_translation_tables -v`
 - `python3 -m unittest tests.test_gui_document_flows -v`
+- `python3 -m unittest tests.test_conversion_service -v`
+- `python3 -m unittest tests.test_dialog_display -v`
+
+After focused tests pass, run discovery from `client/`:
+
+- `python3 -m unittest discover -s tests -v`
 
 Run these from `client/`, consistent with repository guidance.
 

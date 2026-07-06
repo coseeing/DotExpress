@@ -344,7 +344,9 @@ class ConversionServiceTest(unittest.TestCase):
         self.assertEqual(result.raw_to_braille_pos, [0])
 
     def test_math_translation_table_options_list_ueb_before_nemeth(self) -> None:
-        source = Path("/workspace/DotExpress/client/dialog.py").read_text(encoding="utf-8")
+        source = (
+            Path(__file__).resolve().parents[1] / "settings_dialogs.py"
+        ).read_text(encoding="utf-8")
 
         self.assertLess(source.index('TableOption(file_name="UEB"'), source.index('TableOption(file_name="Nemeth"'))
 

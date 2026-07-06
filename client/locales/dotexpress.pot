@@ -1130,6 +1130,38 @@ msgstr ""
 msgid "About DotExpress"
 msgstr ""
 
+#: gui.py:203
+msgid "CSV files (*.csv)|*.csv"
+msgstr ""
+
+#: gui.py:204
+msgid "DotExpress files (*.dep)|*.dep"
+msgstr ""
+
+#: gui.py:205
+msgid "Text files (*.txt)|*.txt"
+msgstr ""
+
+#: gui.py:206
+msgid "PDF files (*.pdf)|*.pdf"
+msgstr ""
+
+#: gui.py:207
+msgid "Word documents (*.docx)|*.docx"
+msgstr ""
+
+#: gui.py:208
+msgid "EPUB books (*.epub)|*.epub"
+msgstr ""
+
+#: gui.py:209
+msgid "Braille files (*.brl)|*.brl"
+msgstr ""
+
+#: gui.py:210
+msgid "All Supported Files"
+msgstr ""
+
 #: gui.py:221
 msgid "converting"
 msgstr ""
@@ -1310,12 +1342,12 @@ msgstr ""
 msgid "Conversion completed."
 msgstr ""
 
-#: settings_dialogs.py:171
-msgid "Categories:"
+#: settings_dialogs.py:179
+msgid "&Categories:"
 msgstr ""
 
-#: settings_dialogs.py:178
-msgid "Category"
+#: settings_dialogs.py:196
+msgid "Categories"
 msgstr ""
 
 #: settings_dialogs.py:204
@@ -1407,6 +1439,16 @@ msgstr ""
 msgid "Scheme"
 msgstr ""
 
-#: settings_dialogs.py:601
+#: settings_dialogs.py:631
 msgid "DotExpress Settings"
+msgstr ""
+
+#: settings_dialogs.py:457
+#, python-brace-format
+msgid "Please select a value for {field}."
+msgstr ""
+
+#: settings_dialogs.py:632
+#, python-brace-format
+msgid "DotExpress Settings: {category}"
 msgstr ""

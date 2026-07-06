@@ -1153,6 +1153,38 @@ msgstr "Coseeing 網站"
 msgid "About DotExpress"
 msgstr "關於 DotExpress"
 
+#: gui.py:203
+msgid "CSV files (*.csv)|*.csv"
+msgstr "CSV 檔案 (*.csv)|*.csv"
+
+#: gui.py:204
+msgid "DotExpress files (*.dep)|*.dep"
+msgstr "DotExpress 檔案 (*.dep)|*.dep"
+
+#: gui.py:205
+msgid "Text files (*.txt)|*.txt"
+msgstr "文字檔 (*.txt)|*.txt"
+
+#: gui.py:206
+msgid "PDF files (*.pdf)|*.pdf"
+msgstr "PDF 檔案 (*.pdf)|*.pdf"
+
+#: gui.py:207
+msgid "Word documents (*.docx)|*.docx"
+msgstr "Word 文件 (*.docx)|*.docx"
+
+#: gui.py:208
+msgid "EPUB books (*.epub)|*.epub"
+msgstr "EPUB 電子書 (*.epub)|*.epub"
+
+#: gui.py:209
+msgid "Braille files (*.brl)|*.brl"
+msgstr "點字檔 (*.brl)|*.brl"
+
+#: gui.py:210
+msgid "All Supported Files"
+msgstr "所有支援的檔案"
+
 #: gui.py:221
 msgid "converting"
 msgstr "轉換中"
@@ -1333,12 +1365,12 @@ msgstr "轉譯失敗：{error}"
 msgid "Conversion completed."
 msgstr "轉換完成。"
 
-#: settings_dialogs.py:171
-msgid "Categories:"
-msgstr "分類："
+#: settings_dialogs.py:179
+msgid "&Categories:"
+msgstr "分類(&C)："
 
-#: settings_dialogs.py:178
-msgid "Category"
+#: settings_dialogs.py:196
+msgid "Categories"
 msgstr "分類"
 
 #: settings_dialogs.py:204
@@ -1430,9 +1462,19 @@ msgstr "字型大小"
 msgid "Scheme"
 msgstr "配色"
 
-#: settings_dialogs.py:601
+#: settings_dialogs.py:631
 msgid "DotExpress Settings"
 msgstr "DotExpress 設定"
+
+#: settings_dialogs.py:457
+#, python-brace-format
+msgid "Please select a value for {field}."
+msgstr "請先選擇{field}。"
+
+#: settings_dialogs.py:632
+#, python-brace-format
+msgid "DotExpress Settings: {category}"
+msgstr "DotExpress 設定：{category}"
 
 #~ msgid "Translation Tables Setting"
 #~ msgstr "轉譯表設定"
@@ -1473,18 +1515,6 @@ msgstr "DotExpress 設定"
 #~ "儲存時自動轉換失敗。文件已以空白點字內容儲存。\n"
 #~ "\n"
 #~ "{error}"
-
-#~ msgid "All Supported Files"
-#~ msgstr "所有支援的檔案"
-
-#~ msgid "PDF files (*.pdf)|*.pdf"
-#~ msgstr "PDF 檔案 (*.pdf)|*.pdf"
-
-#~ msgid "Word documents (*.docx)|*.docx"
-#~ msgstr "Word 文件 (*.docx)|*.docx"
-
-#~ msgid "EPUB books (*.epub)|*.epub"
-#~ msgstr "EPUB 電子書 (*.epub)|*.epub"
 
 #~ msgid "Export Complete with Errors"
 #~ msgstr "匯出完成，但有錯誤"
@@ -1541,15 +1571,6 @@ msgstr "DotExpress 設定"
 
 #~ msgid "Batch Export Documents"
 #~ msgstr "批次匯出文件"
-
-#~ msgid "CSV files (*.csv)|*.csv"
-#~ msgstr "CSV 檔案 (*.csv)|*.csv"
-
-#~ msgid "Text files (*.txt)|*.txt"
-#~ msgstr "文字檔 (*.txt)|*.txt"
-
-#~ msgid "Braille files (*.brl)|*.brl"
-#~ msgstr "點字檔 (*.brl)|*.brl"
 
 #~ msgid "Text to Unicode Braille"
 #~ msgstr "文字轉 Unicode 點字"

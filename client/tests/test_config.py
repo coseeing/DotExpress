@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+import gettext
 from pathlib import Path
 from uuid import UUID
 
@@ -134,6 +135,50 @@ class ConfigSettingsTest(unittest.TestCase):
 
         self.assertEqual(data["view"], {"font_size": 18})
         self.assertEqual(data["client"], {"id": client_id})
+
+    def test_zh_tw_catalog_keeps_runtime_wildcard_translations_active(self) -> None:
+        with open(
+            Path(__file__).resolve().parents[1]
+            / "locales"
+            / "zh_TW"
+            / "LC_MESSAGES"
+            / "dotexpress.mo",
+            "rb",
+        ) as mo_file:
+            translation = gettext.GNUTranslations(mo_file)
+
+        self.assertEqual(
+            translation.gettext("CSV files (*.csv)|*.csv"),
+            "CSV 檔案 (*.csv)|*.csv",
+        )
+        self.assertEqual(
+            translation.gettext("DotExpress files (*.dep)|*.dep"),
+            "DotExpress 檔案 (*.dep)|*.dep",
+        )
+        self.assertEqual(
+            translation.gettext("Text files (*.txt)|*.txt"),
+            "文字檔 (*.txt)|*.txt",
+        )
+        self.assertEqual(
+            translation.gettext("PDF files (*.pdf)|*.pdf"),
+            "PDF 檔案 (*.pdf)|*.pdf",
+        )
+        self.assertEqual(
+            translation.gettext("Word documents (*.docx)|*.docx"),
+            "Word 文件 (*.docx)|*.docx",
+        )
+        self.assertEqual(
+            translation.gettext("EPUB books (*.epub)|*.epub"),
+            "EPUB 電子書 (*.epub)|*.epub",
+        )
+        self.assertEqual(
+            translation.gettext("Braille files (*.brl)|*.brl"),
+            "點字檔 (*.brl)|*.brl",
+        )
+        self.assertEqual(
+            translation.gettext("All Supported Files"),
+            "所有支援的檔案",
+        )
 
 
 if __name__ == "__main__":

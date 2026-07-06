@@ -200,6 +200,14 @@ _MENU_TRANSLATION_MARKERS = (
 	_("Help"),
 	_("Coseeing Website"),
 	_("About DotExpress"),
+	_("CSV files (*.csv)|*.csv"),
+	_("DotExpress files (*.dep)|*.dep"),
+	_("Text files (*.txt)|*.txt"),
+	_("PDF files (*.pdf)|*.pdf"),
+	_("Word documents (*.docx)|*.docx"),
+	_("EPUB books (*.epub)|*.epub"),
+	_("Braille files (*.brl)|*.brl"),
+	_("All Supported Files"),
 )
 
 language_map_translate_table = get_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()

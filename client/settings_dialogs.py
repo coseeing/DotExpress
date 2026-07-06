@@ -90,6 +90,9 @@ class SettingsPanel(wx.Panel):
     def on_discard(self) -> None:
         pass
 
+    def validation_error(self) -> tuple[str, wx.Window | None] | None:
+        return None
+
 
 class SettingsDialog(wx.Dialog):
     INITIAL_SIZE = (720, 440)
@@ -123,6 +126,7 @@ class MultiCategorySettingsDialog(SettingsDialog):
         self.initial_category = initial_category
         self.panel_instances: dict[int, SettingsPanel] = {}
         self.current_panel: SettingsPanel | None = None
+        self._active_category_index: int | None = None
         super().__init__(parent, title=title)
         self._build_layout()
         self.SetMinSize(self.MIN_SIZE)
@@ -148,12 +152,14 @@ class MultiCategorySettingsDialog(SettingsDialog):
         return panel
 
     def _current_category_index(self) -> int:
-        selection = self.category_list.GetSelection()
+        selection = self.category_list.GetFirstSelected()
         if selection < 0:
             return 0
         return selection
 
     def _change_category(self, index: int) -> None:
+        if self.current_panel is not None and index == self._active_category_index:
+            return
         if self.current_panel is not None:
             self.current_panel.on_panel_deactivated()
         panel = self._get_category_panel(index)
@@ -162,21 +168,35 @@ class MultiCategorySettingsDialog(SettingsDialog):
         self._layout_container.Layout()
         self._after_category_change(panel)
         self.current_panel = panel
+        self._active_category_index = index
 
     def _after_category_change(self, panel: SettingsPanel) -> None:
         pass
 
     def _build_layout(self) -> None:
         sizer = wx.GridBagSizer(vgap=5, hgap=5)
-        label = wx.StaticText(self, label=_("Categories:"))
-        sizer.Add(label, pos=(0, 0), span=(1, 2), flag=wx.ALL, border=5)
+        categories_label_text = _("&Categories:")
+        self.category_label = wx.StaticText(self, label=categories_label_text)
+        sizer.Add(
+            self.category_label,
+            pos=(0, 0),
+            span=(1, 2),
+            flag=wx.ALL,
+            border=5,
+        )
 
         self.category_list = wx.ListCtrl(
             self,
-            style=wx.LC_SINGLE_SEL | wx.LC_REPORT | wx.BORDER_SUNKEN,
+            style=(
+                wx.LC_SINGLE_SEL
+                | wx.LC_REPORT
+                | wx.LC_NO_HEADER
+                | wx.BORDER_SUNKEN
+            ),
         )
-        self.category_list.InsertColumn(0, _("Category"))
+        self.category_list.InsertColumn(0, categories_label_text)
         self.category_list.SetMinSize((150, 10))
+        self.category_list.SetName(_("Categories"))
         for category_class in self.category_classes:
             self.category_list.Append((category_class.title.replace("&", ""),))
         sizer.Add(
@@ -234,13 +254,13 @@ class MultiCategorySettingsDialog(SettingsDialog):
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
 
         initial_index = self._get_initial_category_index(self.initial_category)
-        self.category_list.SetSelection(initial_index)
+        self.category_list.Select(initial_index)
         self.category_list.Focus(initial_index)
         self._change_category(initial_index)
 
     def _on_category_selected(self, event) -> None:
-        index = event.GetSelection()
-        if index < 0:
+        index = event.GetIndex()
+        if index < 0 or index == self._active_category_index:
             return
         self._change_category(index)
 
@@ -251,7 +271,7 @@ class MultiCategorySettingsDialog(SettingsDialog):
                 self._current_category_index(),
                 step,
             )
-            self.category_list.SetSelection(next_index)
+            self.category_list.Select(next_index)
             self.category_list.Focus(next_index)
             self._change_category(next_index)
             return
@@ -426,6 +446,15 @@ class TranslationTablesPanel(SettingsPanel):
             and self._selected_file_name("math")
         )
 
+    def validation_error(self) -> tuple[str, wx.Window | None] | None:
+        for key, label, _lang in self.CHOICE_SPECS:
+            if key in {"default", "math"} and not self._selected_file_name(key):
+                return (
+                    _("Please select a value for {field}.").format(field=label),
+                    self._choice_controls.get(key),
+                )
+        return None
+
     def on_save(self, snapshot: DotExpressSettingsSnapshot) -> DotExpressSettingsSnapshot:
         values = {
             key: self._selected_file_name(key)
@@ -599,6 +628,7 @@ CommitSettings = Callable[
 
 class DotExpressSettingsDialog(MultiCategorySettingsDialog):
     base_title = _("DotExpress Settings")
+    title_template = _("DotExpress Settings: {category}")
     category_classes = [
         TranslationSettingsPanel,
         TranslationTablesPanel,
@@ -620,19 +650,33 @@ class DotExpressSettingsDialog(MultiCategorySettingsDialog):
         self.commit = commit
         super().__init__(
             parent,
-            title=f"{self.base_title}: {self.category_classes[0].title}",
+            title=self._format_title(self.category_classes[0].title),
             initial_category=initial_category,
         )
 
+    def _format_title(self, category: str) -> str:
+        return self.title_template.format(category=category)
+
     def _after_category_change(self, panel: SettingsPanel) -> None:
-        self.SetTitle(f"{self.base_title}: {panel.title}")
+        self.SetTitle(self._format_title(panel.title))
 
     def _collect(self) -> DotExpressSettingsSnapshot | None:
         panels = list(self.panel_instances.values())
         for panel in panels:
             if not panel.is_valid():
                 self.select_category(type(panel))
-                panel.SetFocus()
+                message_and_focus = panel.validation_error()
+                focus_target: wx.Window | None = panel
+                if message_and_focus is not None:
+                    message, focus_target = message_and_focus
+                    wx.MessageBox(
+                        message,
+                        self.base_title,
+                        wx.OK | wx.ICON_ERROR,
+                        self,
+                    )
+                if focus_target is not None:
+                    focus_target.SetFocus()
                 return None
         candidate = self.snapshot.copied()
         for panel in panels:
@@ -664,9 +708,23 @@ class DotExpressSettingsDialog(MultiCategorySettingsDialog):
 
     def select_category(self, category_class) -> None:
         index = self.category_classes.index(category_class)
-        self.category_list.SetSelection(index)
+        self.category_list.Select(index)
         self.category_list.Focus(index)
         self._change_category(index)
+
+    @staticmethod
+    def _is_destroyed_window_error(error: Exception) -> bool:
+        if isinstance(error, getattr(wx, "PyDeadObjectError", ())):
+            return True
+        if not isinstance(error, (ReferenceError, RuntimeError)):
+            return False
+        message = str(error).lower()
+        return (
+            "wrapped c/c++ object" in message
+            or "has been deleted" in message
+            or "already deleted" in message
+            or "destroyed" in message
+        )
 
     @classmethod
     def show_singleton(
@@ -689,7 +747,9 @@ class DotExpressSettingsDialog(MultiCategorySettingsDialog):
                 instance.Raise()
                 instance.SetFocus()
                 return instance
-            except Exception:
+            except (ReferenceError, RuntimeError, wx.PyDeadObjectError) as error:
+                if not cls._is_destroyed_window_error(error):
+                    raise
                 cls._instance = None
         instance = cls(
             parent,
@@ -707,27 +767,21 @@ class DotExpressSettingsDialog(MultiCategorySettingsDialog):
         instance = cls._instance
         if instance is None:
             return
+        normalized_view = normalize_view_settings(
+            ViewSettings(
+                font_size,
+                instance.snapshot.view.scheme,
+                instance.snapshot.view.braille_font,
+            )
+        )
         view_panel = None
         for panel in instance.panel_instances.values():
             if isinstance(panel, ViewSettingsPanel):
                 view_panel = panel
                 break
-        if view_panel is None:
+        if view_panel is not None and getattr(view_panel, "font_size_dirty", False):
             return
-        if getattr(view_panel, "font_size_dirty", False):
-            return
-        view_panel.font_size_spin.SetValue(
-            max(
-                VIEW_FONT_SIZE_MIN,
-                min(VIEW_FONT_SIZE_MAX, font_size),
-            )
-        )
-        instance.snapshot = instance.snapshot.with_view(
-            normalize_view_settings(
-                ViewSettings(
-                    font_size,
-                    instance.snapshot.view.scheme,
-                    instance.snapshot.view.braille_font,
-                )
-            )
-        )
+        instance.snapshot = instance.snapshot.with_view(normalized_view)
+        if view_panel is not None:
+            view_panel.font_size_spin.SetValue(normalized_view.font_size)
+            view_panel.font_size_dirty = False

@@ -16,7 +16,6 @@ from conversion.service import (
     translate_with_language,
     translate_with_language_segments,
 )
-from translate import TranslationResult
 
 
 class ConversionServiceTest(unittest.TestCase):
@@ -119,6 +118,8 @@ class ConversionServiceTest(unittest.TestCase):
         return fake_module
 
     def _translation_result(self, raw, braille, braille_to_raw_pos, raw_to_braille_pos):
+        from translate import TranslationResult
+
         return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
 
     def test_convert_text_for_output_returns_empty_string_for_empty_input(self) -> None:
@@ -270,6 +271,8 @@ class ConversionServiceTest(unittest.TestCase):
         )
 
         def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path, *, runtime):
+            from translate import TranslationResult
+
             braille = list(f"T[{text}]")
             return [TranslationResult([text], braille, [0] * len(braille), [0])]
 
@@ -330,6 +333,8 @@ class ConversionServiceTest(unittest.TestCase):
         self.assertEqual(result.translation_results[0].raw_to_braille_pos, [0, 1, 2, 3])
 
     def test_convert_text_with_alignment_preserves_character_alignment_for_single_segment_wrap(self) -> None:
+        from translate import TranslationResult
+
         segment = TranslationResult(
             list("word"),
             list("⠺⠕⠗⠙"),
@@ -362,6 +367,8 @@ class ConversionServiceTest(unittest.TestCase):
         )
 
         def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path, *, runtime):
+            from translate import TranslationResult
+
             braille = list(text)
             return [TranslationResult([text], braille, [0] * len(braille), [0])]
 
@@ -391,6 +398,8 @@ class ConversionServiceTest(unittest.TestCase):
         runtime.math_translator.translate.side_effect = ValueError("math failed")
 
         def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path, *, runtime):
+            from translate import TranslationResult
+
             braille = list(text)
             return [TranslationResult([text], braille, [0] * len(braille), [0])]
 
@@ -417,6 +426,8 @@ class ConversionServiceTest(unittest.TestCase):
         )
 
         def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path, *, runtime):
+            from translate import TranslationResult
+
             braille = list(text)
             return [TranslationResult([text], braille, [0] * len(braille), [0])]
 
@@ -437,6 +448,8 @@ class ConversionServiceTest(unittest.TestCase):
         runtime = self._runtime(text_translator=Mock(), math_translator=Mock())
 
         def fake_text_translate(_table_file, text, _dictionary_path, _translation_tables, _bopomofo_path, *, runtime):
+            from translate import TranslationResult
+
             braille = list(text)
             return [TranslationResult([text], braille, [0] * len(braille), [0])]
 

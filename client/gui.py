@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 import gettext
 import sys
@@ -64,18 +65,9 @@ from ui.action_menu import (
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from config import (
 	DEFAULT_TRANSLATION_TABLES,
-	DEFAULT_VIEW_FONT_SIZE,
-	DEFAULT_VIEW_SCHEME,
-	DEFAULT_BRAILLE_FONT,
-	get_braille_font,
 	get_translation_tables,
-	get_view_font_size,
-	get_view_scheme,
 	set_selected_dictionary,
 	set_translation_tables,
-	set_view_font_size,
-	set_view_scheme,
-	set_braille_font,
 )
 from translation.settings import (
 	TranslationSettings,
@@ -104,7 +96,6 @@ from ui.section_navigation import (
 	BRAILLE_RESULT_SECTION,
 	DOCUMENT_LIST_SECTION,
 	SOURCE_TEXT_SECTION,
-	VIEW_SECTION,
 	get_adjacent_section,
 )
 from dual_view.html import render_dual_view_html
@@ -120,14 +111,18 @@ from dialog import (
 	FileIssuesDialog,
 	InvalidWorkspaceFilesDialog,
 	SpeechSymbolsDialog,
-	TranslationSettingsDialog,
-	TranslationTableDialog,
 	finalize_dialog_layout,
 )
+from view_settings import (
+	ViewSettings,
+	load_view_settings,
+	normalize_view_settings,
+	save_view_settings,
+)
+from settings_state import DotExpressSettingsSnapshot
+from settings_dialogs import DotExpressSettingsDialog, TranslationSettingsPanel
 
 
-VIEW_FONT_SIZE_MIN = 8
-VIEW_FONT_SIZE_MAX = 48
 VIEW_SCHEMES = {
 	"light": {
 		"background": wx.Colour(255, 255, 255),
@@ -264,7 +259,7 @@ class BrailleFrame(wx.Frame):
 		self.SetSize((900, 600))
 		self.SetMenuBar(self._create_menu_bar())
 
-	def _initialize_state(self) -> dict[str, str | int]:
+	def _initialize_state(self) -> ViewSettings:
 		self.dictionary_dir = get_dictionary_directory()
 		ensure_default_dictionary(self.dictionary_dir)
 		self._dictionary_names = list_dictionary_names(self.dictionary_dir)
@@ -278,22 +273,16 @@ class BrailleFrame(wx.Frame):
 		self._dual_view_frame: DualViewFrame | None = None
 		self._dual_view_results_by_document: dict[str, tuple[object, ...]] = {}
 
-		self._view_schemes = [("light", _("Light")), ("dark", _("Dark"))]
-		self._braille_font_options = [("default", _("Default")), ("simbraille", _("SimBraille"))]
+		self.view_settings = load_view_settings()
+		return self.view_settings
 
-		return {
-			"font_size": self._clamp_view_font_size(get_view_font_size(DEFAULT_VIEW_FONT_SIZE)),
-			"scheme": self._normalize_view_scheme(get_view_scheme(DEFAULT_VIEW_SCHEME)),
-			"braille_font": self._normalize_braille_font(get_braille_font(DEFAULT_BRAILLE_FONT)),
-		}
-
-	def _create_main_layout(self, initial_settings: dict[str, str | int]) -> None:
+	def _create_main_layout(self, initial_settings: ViewSettings) -> None:
 		panel = wx.Panel(self)
 		vbox = wx.BoxSizer(wx.VERTICAL)
 
 		content_box = wx.BoxSizer(wx.HORIZONTAL)
 		content_box.Add(self._create_document_list(panel), 0, wx.EXPAND | wx.LEFT | wx.BOTTOM, 8)
-		content_box.Add(self._create_editor_area(panel, int(initial_settings["font_size"])), 1, wx.EXPAND | wx.RIGHT | wx.BOTTOM, 8)
+		content_box.Add(self._create_editor_area(panel), 1, wx.EXPAND | wx.RIGHT | wx.BOTTOM, 8)
 		vbox.Add(content_box, 1, wx.EXPAND)
 
 		panel.SetSizer(vbox)
@@ -313,30 +302,8 @@ class BrailleFrame(wx.Frame):
 		documents_box.Add(self.document_list, 1, wx.EXPAND | wx.ALL, 8)
 		return documents_box
 
-	def _create_editor_area(self, panel: wx.Window, initial_font_size: int) -> wx.BoxSizer:
-		view_group, view_box, view_row = self._create_labeled_group(panel, _("View"))
-		font_size_lbl = wx.StaticText(view_box, label=_("Font Size"))
-		self.font_size_spin = wx.SpinCtrl(
-			view_box,
-			min=VIEW_FONT_SIZE_MIN,
-			max=VIEW_FONT_SIZE_MAX,
-			initial=initial_font_size,
-		)
-		scheme_lbl = wx.StaticText(view_box, label=_("Scheme"))
-		self.scheme_choice = wx.Choice(view_box, choices=[label for _, label in self._view_schemes])
-		braille_font_lbl = wx.StaticText(view_box, label=_("Braille Font"))
-		self.braille_font_choice = wx.Choice(view_box, choices=[label for _, label in self._braille_font_options])
-
-		view_row.Add(font_size_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
-		view_row.Add(self.font_size_spin, 0, wx.RIGHT, 12)
-		view_row.Add(scheme_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
-		view_row.Add(self.scheme_choice, 0, wx.RIGHT, 12)
-		view_row.Add(braille_font_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
-		view_row.Add(self.braille_font_choice, 0)
-		view_row.AddStretchSpacer()
-
+	def _create_editor_area(self, panel: wx.Window) -> wx.BoxSizer:
 		editors_box = wx.BoxSizer(wx.VERTICAL)
-		editors_box.Add(view_group, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
 		self.input_txt = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
 		self._set_control_accessible_name(self.input_txt, _("Source Text"))
 		editors_box.Add(self.input_txt, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
@@ -357,21 +324,10 @@ class BrailleFrame(wx.Frame):
 		self._convert_update_output = True
 		self._convert_show_success = True
 
-	def _apply_initial_settings(self, initial_settings: dict[str, str | int]) -> None:
-		initial_font_size = int(initial_settings["font_size"])
-		initial_scheme = str(initial_settings["scheme"])
-		initial_braille_font = str(initial_settings["braille_font"])
-
-		self._set_scheme_selection(initial_scheme)
-		self._set_braille_font_selection(initial_braille_font)
-		self.font_size_spin.SetValue(initial_font_size)
-		self._apply_editor_view_settings(initial_font_size, initial_scheme)
+	def _apply_initial_settings(self, initial_settings: ViewSettings) -> None:
+		self._apply_editor_view_settings(initial_settings)
 
 	def _bind_events(self) -> None:
-		self.font_size_spin.Bind(wx.EVT_SPINCTRL, self.on_font_size_change)
-		self.font_size_spin.Bind(wx.EVT_TEXT, self.on_font_size_change)
-		self.scheme_choice.Bind(wx.EVT_CHOICE, self.on_scheme_change)
-		self.braille_font_choice.Bind(wx.EVT_CHOICE, self.on_braille_font_change)
 		self.input_txt.Bind(wx.EVT_KEY_DOWN, self.on_input_text_key_down)
 		self.input_txt.Bind(wx.EVT_MOUSEWHEEL, self.on_editor_mousewheel)
 		self.output_txt.Bind(wx.EVT_KEY_DOWN, self.on_output_text_key_down)
@@ -400,8 +356,8 @@ class BrailleFrame(wx.Frame):
 		translation_handlers = {
 			"convert": self.on_convert,
 			"dual_view": self.on_open_dual_view,
-			"settings": self.on_open_translation_settings,
-			"tables": self.on_open_table_dialog,
+			"settings": self.on_open_settings,
+			"tables": self.on_open_settings,
 			"dictionaries": self.on_open_dictionary_management,
 		}
 		for key, label in get_translation_menu_items():
@@ -532,11 +488,6 @@ class BrailleFrame(wx.Frame):
 	def _get_section_controls(self) -> dict[str, tuple[wx.Window, ...]]:
 		return {
 			DOCUMENT_LIST_SECTION: (self.document_list,),
-			VIEW_SECTION: (
-				self.font_size_spin,
-				self.scheme_choice,
-				self.braille_font_choice,
-			),
 			SOURCE_TEXT_SECTION: (self.input_txt,),
 			BRAILLE_RESULT_SECTION: (self.output_txt,),
 		}
@@ -555,67 +506,29 @@ class BrailleFrame(wx.Frame):
 		target = self._get_section_controls()[section_name][0]
 		target.SetFocus()
 
-	def _clamp_view_font_size(self, font_size: int) -> int:
-		return max(VIEW_FONT_SIZE_MIN, min(VIEW_FONT_SIZE_MAX, font_size))
-
-	def _normalize_view_scheme(self, scheme: str) -> str:
-		return scheme if scheme in VIEW_SCHEMES else DEFAULT_VIEW_SCHEME
-
-	def _set_scheme_selection(self, scheme: str):
-		for index, (scheme_key, _label) in enumerate(self._view_schemes):
-			if scheme_key == scheme:
-				self.scheme_choice.SetSelection(index)
-				return
-		self.scheme_choice.SetSelection(0)
-
-	def _get_selected_scheme(self) -> str:
-		selection = self.scheme_choice.GetSelection()
-		if selection == wx.NOT_FOUND:
-			return DEFAULT_VIEW_SCHEME
-		return self._view_schemes[selection][0]
-
-	def _normalize_braille_font(self, braille_font: str) -> str:
-		valid_fonts = {font_key for font_key, _label in self._braille_font_options}
-		return braille_font if braille_font in valid_fonts else DEFAULT_BRAILLE_FONT
-
-	def _set_braille_font_selection(self, braille_font: str):
-		for index, (font_key, _label) in enumerate(self._braille_font_options):
-			if font_key == braille_font:
-				self.braille_font_choice.SetSelection(index)
-				return
-		self.braille_font_choice.SetSelection(0)
-
-	def _get_selected_braille_font(self) -> str:
-		selection = self.braille_font_choice.GetSelection()
-		if selection == wx.NOT_FOUND:
-			return DEFAULT_BRAILLE_FONT
-		return self._braille_font_options[selection][0]
-
 	def _register_output_font(self) -> bool:
 		return register_private_font_for_windows(get_simbraille_font_path(resource_path(".")))
 
-	def _apply_editor_font_size(self, font_size: int):
+	def _apply_editor_view_settings(self, settings: ViewSettings) -> None:
+		settings = normalize_view_settings(settings)
 		input_font = self.input_txt.GetFont()
-		input_font.SetPointSize(font_size)
+		input_font.SetPointSize(settings.font_size)
 		self.input_txt.SetFont(input_font)
 
 		output_font = wx.Font(self._default_output_font)
-		output_font.SetPointSize(font_size)
-		selected_braille_font = self._normalize_braille_font(self._get_selected_braille_font())
-		if selected_braille_font == "simbraille" and (self._simbraille_font_available or sys.platform == "win32"):
+		output_font.SetPointSize(settings.font_size)
+		if (
+			settings.braille_font == "simbraille"
+			and (self._simbraille_font_available or sys.platform == "win32")
+		):
 			output_font.SetFaceName(SIMBRAILLE_FACE_NAME)
 		self.output_txt.SetFont(output_font)
 
-	def _apply_editor_scheme(self, scheme: str):
-		scheme_colors = VIEW_SCHEMES[self._normalize_view_scheme(scheme)]
+		colors = VIEW_SCHEMES[settings.scheme]
 		for control in (self.input_txt, self.output_txt):
-			control.SetBackgroundColour(scheme_colors["background"])
-			control.SetForegroundColour(scheme_colors["foreground"])
+			control.SetBackgroundColour(colors["background"])
+			control.SetForegroundColour(colors["foreground"])
 			control.Refresh()
-
-	def _apply_editor_view_settings(self, font_size: int, scheme: str):
-		self._apply_editor_font_size(font_size)
-		self._apply_editor_scheme(scheme)
 		self.Layout()
 
 	def _refresh_dictionary_names(self, preferred_name: str | None = None) -> str:
@@ -627,6 +540,34 @@ class BrailleFrame(wx.Frame):
 	def get_dictionary_names_for_dialog(self) -> list[str]:
 		self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
 		return list(self._dictionary_names)
+
+	def get_settings_snapshot(self) -> DotExpressSettingsSnapshot:
+		dictionary_names = self.get_dictionary_names_for_dialog()
+		return DotExpressSettingsSnapshot.create(
+			normalize_translation_settings(self.translation_settings, dictionary_names),
+			language_map_translate_table,
+			normalize_view_settings(self.view_settings),
+		)
+
+	def apply_settings_from_dialog(
+		self,
+		snapshot: DotExpressSettingsSnapshot,
+	) -> DotExpressSettingsSnapshot:
+		dictionary_names = self.get_dictionary_names_for_dialog()
+		translation = normalize_translation_settings(snapshot.translation, dictionary_names)
+		view = normalize_view_settings(snapshot.view)
+		tables = dict(snapshot.translation_tables)
+
+		self.translation_settings = translation
+		self.view_settings = view
+		language_map_translate_table.clear()
+		language_map_translate_table.update(tables)
+		self._apply_editor_view_settings(view)
+
+		save_translation_settings(translation)
+		set_translation_tables(tables)
+		save_view_settings(view)
+		return DotExpressSettingsSnapshot.create(translation, tables, view)
 
 	def _set_active_dictionary(self, selected_name: str) -> None:
 		self.translation_settings = TranslationSettings(
@@ -827,11 +768,12 @@ class BrailleFrame(wx.Frame):
 		self._continue_single_export(document, destination_path, format_key)
 
 	def _set_view_font_size(self, font_size: int) -> None:
-		font_size = self._clamp_view_font_size(font_size)
-		if self.font_size_spin.GetValue() != font_size:
-			self.font_size_spin.SetValue(font_size)
-		self._apply_editor_view_settings(font_size, self._get_selected_scheme())
-		set_view_font_size(font_size)
+		self.view_settings = normalize_view_settings(
+			replace(self.view_settings, font_size=font_size)
+		)
+		self._apply_editor_view_settings(self.view_settings)
+		save_view_settings(self.view_settings)
+		DotExpressSettingsDialog.sync_open_font_size(self.view_settings.font_size)
 
 	def _open_document_by_name(self, name: str | None) -> None:
 		decision = plan_open_document(self.documents, name)
@@ -1215,18 +1157,21 @@ class BrailleFrame(wx.Frame):
 			return
 		self._export_next_document(list(self.documents), destination_dir, format_key, ExportBatchResult())
 
-	def on_font_size_change(self, _evt):
-		self._set_view_font_size(self.font_size_spin.GetValue())
+	def on_editor_mousewheel(self, event: wx.MouseEvent) -> None:
+		step = get_font_size_step_from_wheel(event.GetWheelRotation(), event.ControlDown())
+		if step == 0:
+			event.Skip()
+			return
+		self._set_view_font_size(self.view_settings.font_size + step)
 
-	def on_scheme_change(self, _evt):
-		scheme = self._normalize_view_scheme(self._get_selected_scheme())
-		self._apply_editor_view_settings(self._clamp_view_font_size(self.font_size_spin.GetValue()), scheme)
-		set_view_scheme(scheme)
-
-	def on_braille_font_change(self, _evt):
-		braille_font = self._normalize_braille_font(self._get_selected_braille_font())
-		self._apply_editor_view_settings(self._clamp_view_font_size(self.font_size_spin.GetValue()), self._get_selected_scheme())
-		set_braille_font(braille_font)
+	def on_open_settings(self, _event) -> None:
+		DotExpressSettingsDialog.show_singleton(
+			parent=self,
+			snapshot=self.get_settings_snapshot(),
+			dictionary_names=self.get_dictionary_names_for_dialog(),
+			commit=self.apply_settings_from_dialog,
+			initial_category=TranslationSettingsPanel,
+		)
 
 	def on_input_text_key_down(self, event: wx.KeyEvent) -> None:
 		if is_convert_shortcut(event.GetKeyCode(), event.ControlDown()):
@@ -1276,23 +1221,6 @@ class BrailleFrame(wx.Frame):
 			target_section = get_adjacent_section(current_section, step)
 		self._focus_section(target_section)
 
-	def on_editor_mousewheel(self, event: wx.MouseEvent) -> None:
-		step = get_font_size_step_from_wheel(event.GetWheelRotation(), event.ControlDown())
-		if step == 0:
-			event.Skip()
-			return
-		self._set_view_font_size(self.font_size_spin.GetValue() + step)
-
-	def on_open_translation_settings(self, _evt) -> None:
-		dictionary_names = self.get_dictionary_names_for_dialog()
-		staged_settings = normalize_translation_settings(self.translation_settings, dictionary_names)
-		with TranslationSettingsDialog(self, staged_settings, dictionary_names) as dialog:
-			if dialog.ShowModal() != wx.ID_OK:
-				return
-			self.translation_settings = normalize_translation_settings(dialog.get_settings(), dictionary_names)
-			self._set_active_dictionary(self.translation_settings.selected_dictionary)
-			save_translation_settings(self.translation_settings)
-
 	def on_open_dictionary_management(self, _evt) -> None:
 		selected_name = self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
 		with DictionaryManagementDialog(
@@ -1314,13 +1242,6 @@ class BrailleFrame(wx.Frame):
 		dictionary_path = dictionary_path_for_name(edit_name, self.dictionary_dir)
 		with SpeechSymbolsDialog(self, dictionary_path=dictionary_path) as editor:
 			editor.ShowModal()
-
-	def on_open_table_dialog(self, _evt):
-		with TranslationTableDialog(self, language_map_translate_table) as dialog:
-			if dialog.ShowModal() == wx.ID_OK:
-				selections = dialog.get_selected_tables()
-				language_map_translate_table.update(selections)
-				set_translation_tables(language_map_translate_table)
 
 	def add_dictionary(self, parent: wx.Window | None) -> str | None:
 		dialog_parent = parent or self

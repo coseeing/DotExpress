@@ -167,6 +167,28 @@ def _install_stub_modules() -> None:
     wx.html2 = wx_html2
     sys.modules["wx.html2"] = wx_html2
 
+    wx_lib = types.ModuleType("wx.lib")
+    wx_lib_scrolledpanel = types.ModuleType("wx.lib.scrolledpanel")
+
+    class _ScrolledPanel(Window):
+        def SetupScrolling(self, *args, **kwargs):
+            pass
+
+        def SetSizer(self, *args, **kwargs):
+            pass
+
+        def Fit(self):
+            pass
+
+        def Layout(self):
+            pass
+
+    wx_lib_scrolledpanel.ScrolledPanel = _ScrolledPanel
+    wx_lib.ScrolledPanel = _ScrolledPanel
+    wx.lib = wx_lib
+    sys.modules["wx.lib"] = wx_lib
+    sys.modules["wx.lib.scrolledpanel"] = wx_lib_scrolledpanel
+
     wx.ID_ANY = -1
     wx.ID_ABOUT = 1
     wx.ID_OK = 2
@@ -286,6 +308,23 @@ gui = importlib.import_module("gui")
 
 from documents.workspace import Document
 from documents.export_results import ExportBatchResult
+from settings_dialogs import TranslationSettingsPanel
+from settings_state import DotExpressSettingsSnapshot
+from translation.settings import TranslationSettings
+from view_settings import ViewSettings
+
+
+def make_snapshot(
+    *,
+    translation=TranslationSettings("unicode", 40, "default"),
+    tables=None,
+    view=ViewSettings(40, "light", "default"),
+) -> DotExpressSettingsSnapshot:
+    return DotExpressSettingsSnapshot.create(
+        translation=translation,
+        translation_tables={} if tables is None else tables,
+        view=view,
+    )
 
 
 class GuiDocumentFlowsTest(unittest.TestCase):
@@ -711,6 +750,40 @@ class GuiDocumentFlowsTest(unittest.TestCase):
             gui.wx.OK | gui.wx.ICON_ERROR,
             parent=frame,
         )
+
+    def test_apply_settings_from_dialog_updates_all_live_state(self) -> None:
+        frame = object.__new__(gui.BrailleFrame)
+        frame._dictionary_names = ["default", "math"]
+        frame._apply_editor_view_settings = Mock()
+        frame.get_dictionary_names_for_dialog = Mock(return_value=["default", "math"])
+        snapshot = make_snapshot(
+            translation=TranslationSettings("ascii", 52, "math"),
+            tables={"default": "en-ueb-g1.ctb", "math": "Nemeth"},
+            view=ViewSettings(18, "dark", "default"),
+        )
+
+        with patch.object(gui, "save_translation_settings"), \
+             patch.object(gui, "set_translation_tables"), \
+             patch.object(gui, "save_view_settings"):
+            result = frame.apply_settings_from_dialog(snapshot)
+
+        self.assertEqual(frame.translation_settings, snapshot.translation)
+        self.assertEqual(frame.view_settings, snapshot.view)
+        self.assertEqual(gui.language_map_translate_table, snapshot.translation_tables)
+        frame._apply_editor_view_settings.assert_called_once_with(snapshot.view)
+        self.assertEqual(result, snapshot)
+
+    def test_open_settings_uses_singleton_dialog(self) -> None:
+        frame = object.__new__(gui.BrailleFrame)
+        frame.get_settings_snapshot = Mock(return_value=make_snapshot())
+        frame.get_dictionary_names_for_dialog = Mock(return_value=["default"])
+        frame.apply_settings_from_dialog = Mock()
+
+        with patch.object(gui.DotExpressSettingsDialog, "show_singleton") as show:
+            frame.on_open_settings(None)
+
+        show.assert_called_once()
+        self.assertIs(show.call_args.kwargs["initial_category"], TranslationSettingsPanel)
 
 
 if __name__ == "__main__":

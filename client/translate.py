@@ -1,14 +1,6 @@
-import os
 import string
-from typing import Sequence, Tuple, TypeVar
 
-from braille import louis_helper
-from braille.tables import TABLES_DIR
 from char import build_language_blocks, language_has_char, language_has_all
-
-
-TranslationResult = Tuple[str, str, Sequence[int], Sequence[int]]
-BRAILLE_UNICODE_PATTERNS_START = 0x2800
 
 
 class TranslationResult:
@@ -321,7 +313,7 @@ class TranslationResult:
 		若相鄰兩個 token 構成：前一 token 以 RIGHT_PUNCT 結尾、下一 token 以 LEFT_PUNCT 開頭，
 		則在它們之間插入一個空白 token 與對應的點字空格。
 		"""
-		blank_cell = chr(BRAILLE_UNICODE_PATTERNS_START)
+		blank_cell = chr(0x2800)
 		i = 1
 		# 以 while 迴圈處理，因為過程會動態插入 token、改變長度
 		while i < len(self.raw):
@@ -356,7 +348,7 @@ class TranslationResult:
 		if not self.braille_to_raw_pos or not self.raw_to_braille_pos:
 			return
 
-		blank = chr(BRAILLE_UNICODE_PATTERNS_START)
+		blank = chr(0x2800)
 		n_tokens = len(self.raw)
 
 		for t_idx in range(n_tokens):
@@ -394,7 +386,7 @@ class TranslationResult:
 				self.raw_to_braille_pos[k] = blen
 
 	def wrap(self, width: int) -> tuple[str, str]:
-		blank = chr(BRAILLE_UNICODE_PATTERNS_START)
+		blank = chr(0x2800)
 		width = max(1, int(width or 1))
 		current_len = 0
 
@@ -485,42 +477,3 @@ class TranslationResult:
 		raw_lines_str = ["".join(item) for item in raw_lines]
 
 		return "\n".join(braille_lines_str), "\n".join(raw_lines_str)
-
-
-def translate(table_file: str, text: str, raw: str) -> TranslationResult:
-	# Use absolute path for the first table so includes resolve relative to it.
-	table_path = os.path.join(TABLES_DIR, table_file)
-	braille_cells, braille_to_raw_pos, raw_to_braille_pos, _ = louis_helper.translate(
-		[table_path], text, mode=4
-	)
-	raw = [s for s in text]
-	braille = [chr(b + BRAILLE_UNICODE_PATTERNS_START) for b in braille_cells]
-
-	return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
-
-
-def translate_as_single_token(table_file: str, text: str, raw: str) -> TranslationResult:
-	"""
-	Translate with liblouis but force the entire input text to be one token.
-	"""
-	table_path = os.path.join(TABLES_DIR, table_file)
-	braille_cells, _braille_to_raw_pos, _raw_to_braille_pos, _ = louis_helper.translate(
-		[table_path], text, mode=4
-	)
-
-	braille = [chr(b + BRAILLE_UNICODE_PATTERNS_START) for b in braille_cells]
-	if text:
-		raw = [raw]
-		braille_to_raw_pos = [0] * len(braille)
-		raw_to_braille_pos = [0]
-	else:
-		raw = []
-		braille_to_raw_pos = []
-		raw_to_braille_pos = []
-
-	return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
-
-
-if __name__ == '__main__':
-	tr = translate("zh-tw.ctb", "我「們這，一家")
-	print(tr.raw)

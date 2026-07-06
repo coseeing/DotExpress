@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from adapters.translation.contracts import TranslationRuntime
 from config import DEFAULT_MATH_BRAILLE_TABLE
-from conversion.math_service import translate_math_segment
 from utils import translate__mapping_char
 
 
@@ -71,24 +71,11 @@ def parse_inline_math_segments(text: str) -> list[dict[str, str]]:
 	return segments
 
 
-def build_math_translation_result(math_text: str, braille_text: str):
-	from translate import TranslationResult
-
-	braille = list(braille_text)
-	return TranslationResult([math_text], braille, [0] * len(braille), [0])
-
-
 def build_literal_translation_result(text: str):
 	from translate import TranslationResult
 
 	braille = list(text)
 	return TranslationResult([text], braille, [0] * len(braille), [0])
-
-
-def build_braille_space_translation_result():
-	from translate import TranslationResult
-
-	return TranslationResult([" "], ["⠀"], [0], [0])
 
 
 def _segment_needs_boundary_space(left_segment: dict[str, str], right_segment: dict[str, str]) -> bool:
@@ -119,10 +106,11 @@ def _translate_plain_text_segment(
 	dictionary_path: Path,
 	translation_tables: dict[str, str],
 	bopomofo_path: Path,
+	*,
+	runtime: TranslationRuntime,
 ):
 	from Bopomofo import normalize_zhuyin_sequence
 	from languageDetection import LangChangeCommand, LanguageDetector
-	from translate import TranslationResult, translate, translate_as_single_token
 	from utils import apply_dictionary, split_bracket_segments
 
 	language = [key for key, value in translation_tables.items() if key not in {"default", "math"} and value != ""]
@@ -145,10 +133,14 @@ def _translate_plain_text_segment(
 			for raw_segment, replacement_segment in zip(raw_segments, replacement_segments):
 				if raw_segment["atomic"] != replacement_segment["atomic"]:
 					raise ValueError("atomic not match")
-				if replacement_segment["atomic"]:
-					translations.append(translate_as_single_token(translate_table, replacement_segment["text"], raw_segment["text"]))
-				else:
-					translations.append(translate(translate_table, replacement_segment["text"], raw_segment["text"]))
+				translations.append(
+					runtime.text_translator.translate(
+						replacement_segment["text"],
+						table=translate_table,
+						raw=raw_segment["text"],
+						single_token=replacement_segment["atomic"],
+					)
+				)
 		elif isinstance(item, LangChangeCommand):
 			previous_translate_table = translate_table
 			lang = item.lang.split("_")[0]
@@ -161,7 +153,13 @@ def _translate_plain_text_segment(
 			if translate_table != previous_translate_table:
 				raw = translations[-1].raw if translations else None
 				if raw and not raw[-1].isspace():
-					translations.append(translate(previous_translate_table, " ", " "))
+					translations.append(
+						runtime.text_translator.translate(
+							" ",
+							table=previous_translate_table,
+							raw=" ",
+						)
+					)
 
 	assert translations, "No translatable text segments were found."
 	return translations
@@ -184,6 +182,8 @@ def translate_with_language_segments(
 	dictionary_path: Path,
 	translation_tables: dict[str, str],
 	bopomofo_path: Path,
+	*,
+	runtime: TranslationRuntime,
 ):
 	if text == "":
 		return []
@@ -193,7 +193,13 @@ def translate_with_language_segments(
 	math_braille_code = translation_tables.get("math", DEFAULT_MATH_BRAILLE_TABLE)
 	for index, segment in enumerate(segments):
 		if index > 0 and _segment_needs_boundary_space(segments[index - 1], segment):
-			translations.append(build_braille_space_translation_result())
+			translations.append(
+				runtime.text_translator.translate(
+					" ",
+					table=table_file,
+					raw=" ",
+				)
+			)
 		if segment["type"] == "text":
 			plain_results = _translate_plain_text_segment(
 				table_file,
@@ -201,6 +207,7 @@ def translate_with_language_segments(
 				dictionary_path,
 				translation_tables,
 				bopomofo_path,
+				runtime=runtime,
 			)
 			if isinstance(plain_results, (list, tuple)):
 				translations.extend(plain_results)
@@ -208,9 +215,9 @@ def translate_with_language_segments(
 				translations.append(plain_results)
 		else:
 			translations.append(
-				build_math_translation_result(
+				runtime.math_translator.translate(
 					segment["text"],
-					translate_math_segment(segment["text"], braille_code=math_braille_code),
+					braille_code=math_braille_code,
 				)
 			)
 	return translations
@@ -222,6 +229,8 @@ def translate_with_language(
 	dictionary_path: Path,
 	translation_tables: dict[str, str],
 	bopomofo_path: Path,
+	*,
+	runtime: TranslationRuntime,
 ):
 	return merge_translation_results(
 		translate_with_language_segments(
@@ -230,6 +239,7 @@ def translate_with_language(
 			dictionary_path,
 			translation_tables,
 			bopomofo_path,
+			runtime=runtime,
 		)
 	)
 
@@ -246,6 +256,7 @@ def convert_text_with_alignment(
 	request: ConversionRequest,
 	*,
 	map_char: MapChar = translate__mapping_char,
+	runtime: TranslationRuntime,
 ) -> ConversionOutput:
 	if request.raw_text == "":
 		return ConversionOutput("", ())
@@ -262,6 +273,7 @@ def convert_text_with_alignment(
 			request.dictionary_path,
 			request.translation_tables,
 			request.data_dir / "Bopomofo2Braille.csv",
+			runtime=runtime,
 		)
 		braille_wrapped, _text_wrapped = _wrap_translation_results(translations, request.width)
 	except Exception as error:
@@ -289,6 +301,7 @@ def translate_and_wrap_both(
 	dictionary_path: Path,
 	translation_tables: dict[str, str],
 	bopomofo_path: Path,
+	runtime: TranslationRuntime,
 ) -> tuple[str, str]:
 	translation_result = translate_with_language(
 		table_file,
@@ -296,6 +309,7 @@ def translate_and_wrap_both(
 		dictionary_path,
 		translation_tables,
 		bopomofo_path,
+		runtime=runtime,
 	)
 	translation_result.reclean_braille_endspace()
 	translation_result.bind_word_tokens()
@@ -309,11 +323,12 @@ def convert_text_for_output(
 	*,
 	map_char: MapChar = translate__mapping_char,
 	wrap_both: WrapBoth = translate_and_wrap_both,
+	runtime: TranslationRuntime,
 ) -> str:
 	if request.raw_text == "":
 		return ""
 	if wrap_both is translate_and_wrap_both:
-		return convert_text_with_alignment(request, map_char=map_char).display_text
+		return convert_text_with_alignment(request, map_char=map_char, runtime=runtime).display_text
 	try:
 		text = map_char(
 			request.raw_text,
@@ -328,6 +343,7 @@ def convert_text_for_output(
 			dictionary_path=request.dictionary_path,
 			translation_tables=request.translation_tables,
 			bopomofo_path=request.data_dir / "Bopomofo2Braille.csv",
+			runtime=runtime,
 		)
 	except Exception as error:
 		raise ConversionStageError("translation", error) from error

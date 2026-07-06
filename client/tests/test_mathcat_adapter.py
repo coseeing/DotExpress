@@ -6,6 +6,14 @@ from conversion.mathcat_adapter import MathCATAdapter, MathCATError
 
 
 class MathCATAdapterTest(unittest.TestCase):
+    def test_initialize_loads_runtime_once(self) -> None:
+        adapter = MathCATAdapter(resource_root=Path("mathcat/assets"))
+
+        with patch.object(adapter, "_load_libmathcat") as load_runtime:
+            adapter.initialize()
+
+        load_runtime.assert_called_once_with()
+
     def test_resolve_speech_style_falls_back_to_simple_speak_when_clearspeak_missing(self) -> None:
         adapter = MathCATAdapter(resource_root=Path("/tmp/mathcat/assets"))
 

@@ -23,6 +23,9 @@ class MathCATAdapter:
 	_libmathcat: object | None = None
 	_dll_directory_handle: object | None = None
 
+	def initialize(self) -> None:
+		self._load_libmathcat()
+
 	def _rules_dir(self) -> Path:
 		return self.resource_root / "Rules"
 

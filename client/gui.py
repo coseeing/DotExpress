@@ -357,7 +357,6 @@ class BrailleFrame(wx.Frame):
 			"convert": self.on_convert,
 			"dual_view": self.on_open_dual_view,
 			"settings": self.on_open_settings,
-			"tables": self.on_open_settings,
 			"dictionaries": self.on_open_dictionary_management,
 		}
 		for key, label in get_translation_menu_items():

@@ -1,8 +1,8 @@
 import unittest
 
 from settings_state import DotExpressSettingsSnapshot
-from translation.settings import TranslationSettings
-from view_settings import ViewSettings
+from settings.translation import TranslationSettings
+from settings.view import ViewSettings
 
 
 class SettingsSnapshotTest(unittest.TestCase):

@@ -310,8 +310,8 @@ from documents.workspace import Document
 from documents.export_results import ExportBatchResult
 from settings_dialogs import TranslationSettingsPanel
 from settings_state import DotExpressSettingsSnapshot
-from translation.settings import TranslationSettings
-from view_settings import ViewSettings
+from settings.translation import TranslationSettings
+from settings.view import ViewSettings
 
 
 def make_snapshot(

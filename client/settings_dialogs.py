@@ -11,12 +11,12 @@ from wx.lib.scrolledpanel import ScrolledPanel
 
 from braille.tables import listTables
 from settings_state import DotExpressSettingsSnapshot
-from translation.settings import (
+from settings.translation import (
     MAX_CONVERSION_WIDTH,
     MIN_CONVERSION_WIDTH,
     TranslationSettings,
 )
-from view_settings import (
+from settings.view import (
     VIEW_FONT_SIZE_MAX,
     VIEW_FONT_SIZE_MIN,
     ViewSettings,

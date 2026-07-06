@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 import config
-from view_settings import (
+from settings.view import (
     ViewSettings,
     load_view_settings,
     normalize_view_settings,

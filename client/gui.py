@@ -70,7 +70,7 @@ from config import (
 	set_selected_dictionary,
 	set_translation_tables,
 )
-from translation.settings import (
+from settings.translation import (
 	TranslationSettings,
 	load_translation_settings,
 	normalize_translation_settings,
@@ -114,7 +114,7 @@ from dialog import (
 	SpeechSymbolsDialog,
 	finalize_dialog_layout,
 )
-from view_settings import (
+from settings.view import (
 	ViewSettings,
 	load_view_settings,
 	normalize_view_settings,

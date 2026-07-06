@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from translation.settings import (
+from settings.translation import (
     DEFAULT_TRANSLATION_SETTINGS,
     TranslationSettings,
     load_translation_settings,
@@ -10,9 +10,9 @@ from translation.settings import (
 
 
 class TranslationSettingsTest(unittest.TestCase):
-    @patch("translation.settings.get_selected_dictionary", return_value="missing")
-    @patch("translation.settings.get_conversion_width", return_value=999)
-    @patch("translation.settings.get_output_mode", return_value="invalid")
+    @patch("settings.translation.get_selected_dictionary", return_value="missing")
+    @patch("settings.translation.get_conversion_width", return_value=999)
+    @patch("settings.translation.get_output_mode", return_value="invalid")
     def test_load_normalizes_invalid_config(
         self,
         _get_output_mode,
@@ -30,9 +30,9 @@ class TranslationSettingsTest(unittest.TestCase):
             ),
         )
 
-    @patch("translation.settings.get_selected_dictionary", return_value="math")
-    @patch("translation.settings.get_conversion_width", return_value=52)
-    @patch("translation.settings.get_output_mode", return_value="ascii")
+    @patch("settings.translation.get_selected_dictionary", return_value="math")
+    @patch("settings.translation.get_conversion_width", return_value=52)
+    @patch("settings.translation.get_output_mode", return_value="ascii")
     def test_load_keeps_valid_config(
         self,
         _get_output_mode,
@@ -44,9 +44,9 @@ class TranslationSettingsTest(unittest.TestCase):
             TranslationSettings("ascii", 52, "math"),
         )
 
-    @patch("translation.settings.set_selected_dictionary")
-    @patch("translation.settings.set_conversion_width")
-    @patch("translation.settings.set_output_mode")
+    @patch("settings.translation.set_selected_dictionary")
+    @patch("settings.translation.set_conversion_width")
+    @patch("settings.translation.set_output_mode")
     def test_save_persists_one_complete_settings_value(
         self,
         set_output_mode,

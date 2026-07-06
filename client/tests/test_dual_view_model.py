@@ -1,5 +1,6 @@
 import unittest
 
+from adapters.translation.fallback import FallbackTextTranslator
 from dual_view.model import build_dual_view_model
 
 
@@ -63,6 +64,23 @@ class DualViewModelTest(unittest.TestCase):
 
 	def test_empty_results_produce_empty_document(self):
 		self.assertEqual(build_dual_view_model([]).segments, ())
+
+	def test_fallback_character_mapping_builds_dual_view_segments(self) -> None:
+		result = FallbackTextTranslator().translate(
+			"ignored",
+			table="zh-tw.ctb",
+			raw="我 們",
+		)
+
+		model = build_dual_view_model((result,))
+
+		self.assertEqual(
+			[
+				(item.raw_char, item.braille_text)
+				for item in model.segments[0].items
+			],
+			[("我", "⣿"), (" ", "⠀"), ("們", "⣿")],
+		)
 
 
 if __name__ == "__main__":

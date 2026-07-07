@@ -63,6 +63,7 @@ class SettingsPanel(wx.Panel):
         super().__init__(parent)
         self.owner = owner
         self.make_settings()
+        self.SetLabel(self.title.replace("&", "&&"))
         self.SetName(self.title.replace("&", ""))
         self.SetAccessible(SettingsPanelAccessible(self))
 

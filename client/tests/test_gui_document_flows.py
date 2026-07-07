@@ -331,10 +331,11 @@ class GuiDocumentFlowsTest(unittest.TestCase):
     def _make_frame(self) -> gui.BrailleFrame:
         frame = gui.BrailleFrame.__new__(gui.BrailleFrame)
         frame.translation_runtime = Mock()
-        frame._convert_job_id = 1
+        frame._conversion_runner = Mock()
+        frame._conversion_runner.is_running.return_value = False
+        frame._conversion_runner.start = Mock(return_value=7)
         frame._convert_dialog_timer = Mock()
         frame._convert_dialog = Mock()
-        frame._convert_thread = Mock()
         frame._convert_on_success = None
         frame._convert_on_error = None
         frame._convert_update_output = True
@@ -392,26 +393,38 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         self.assertEqual(result, 0)
         runtime.close.assert_called_once_with()
 
-    def test_run_conversion_forwards_runtime(self) -> None:
+    def test_start_conversion_builds_request_and_starts_runner(self) -> None:
         frame = self._make_frame()
         frame._build_conversion_request = Mock(return_value=Mock())
-        frame._finish_conversion = Mock()
+        with patch.object(gui.wx, "CallLater", return_value=Mock()) as call_later:
+            frame._start_conversion(
+                "zh-tw.ctb",
+                "source",
+                40,
+                "unicode",
+                Path("dictionary/default.csv"),
+            )
 
-        with (
-            patch.object(gui, "convert_text_with_alignment", return_value=Mock()) as convert_mock,
-            patch.object(gui.wx, "CallAfter", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)),
-        ):
-            frame._run_conversion(2, "zh-tw.ctb", "source", 40, "unicode", Path("dictionary/default.csv"))
-
-        convert_mock.assert_called_once_with(
-            frame._build_conversion_request.return_value,
-            runtime=frame.translation_runtime,
+        frame._build_conversion_request.assert_called_once_with(
+            "source",
+            "zh-tw.ctb",
+            "unicode",
+            40,
+            Path("dictionary/default.csv"),
         )
+        frame._conversion_runner.start.assert_called_once_with(
+            gui.ConversionJobRequest(
+                conversion_request=frame._build_conversion_request.return_value,
+            )
+        )
+        frame._set_conversion_busy.assert_called_once_with(True)
+        frame._close_converting_dialog.assert_called_once_with()
+        call_later.assert_called_once_with(2000, frame._show_converting_dialog, 7)
 
     def test_manual_conversion_updates_output_focus_and_shows_completion(self) -> None:
         frame = self._make_frame()
         with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._finish_conversion(1, display_text="braille")
+            frame._complete_conversion(display_text="braille")
 
         frame.output_txt.SetValue.assert_called_once_with("braille")
         frame.output_txt.SetFocus.assert_called_once_with()
@@ -431,7 +444,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._convert_show_success = False
 
         with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._finish_conversion(1, display_text="braille")
+            frame._complete_conversion(display_text="braille")
 
         on_success.assert_called_once_with("braille")
         frame.output_txt.SetValue.assert_not_called()
@@ -447,7 +460,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._convert_show_success = False
 
         with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._finish_conversion(1, error_message="boom")
+            frame._complete_conversion(error_message="boom")
 
         on_error.assert_called_once_with("boom")
         message_box.assert_not_called()
@@ -557,7 +570,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         conversion_output = gui.ConversionOutput("braille", ("segment",))
 
         with patch.object(gui.wx, "MessageBox"):
-            frame._finish_conversion(1, conversion_output=conversion_output)
+            frame._finish_conversion_success(
+                gui.ConversionJobSuccess(job_id=1, conversion_output=conversion_output)
+            )
 
         self.assertEqual(frame._dual_view_results_by_document["alpha"], ("segment",))
         frame._refresh_dual_view.assert_called_once_with()
@@ -568,7 +583,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._dual_view_results_by_document["alpha"] = ("manual",)
         conversion_output = gui.ConversionOutput("export", ("export-segment",))
 
-        frame._finish_conversion(1, conversion_output=conversion_output)
+        frame._finish_conversion_success(
+            gui.ConversionJobSuccess(job_id=1, conversion_output=conversion_output)
+        )
 
         self.assertEqual(frame._dual_view_results_by_document["alpha"], ("manual",))
 

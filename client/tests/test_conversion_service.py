@@ -12,7 +12,6 @@ from conversion.service import (
     convert_text_for_output,
     convert_text_with_alignment,
     get_public_error_message,
-    parse_inline_math_segments,
     translate_with_language,
     translate_with_language_segments,
 )
@@ -226,34 +225,11 @@ class ConversionServiceTest(unittest.TestCase):
     def test_get_public_error_message_replaces_empty_error_text(self) -> None:
         self.assertEqual(get_public_error_message(ValueError("")), "An unknown error occurred.")
 
-    def test_parse_inline_math_segments_splits_multiple_math_ranges(self) -> None:
-        self.assertEqual(
-            parse_inline_math_segments("計算$1+2$和$3+4$"),
-            [
-                {"type": "text", "text": "計算"},
-                {"type": "math", "text": "1+2"},
-                {"type": "text", "text": "和"},
-                {"type": "math", "text": "3+4"},
-            ],
-        )
+    def test_service_keeps_segment_boundary_helper_alias_for_patch_compatibility(self) -> None:
+        from conversion import service
+        from conversion.segments import segment_needs_boundary_space
 
-    def test_parse_inline_math_segments_keeps_escaped_dollar_inside_math(self) -> None:
-        self.assertEqual(
-            parse_inline_math_segments("$1+\\$2$"),
-            [{"type": "math", "text": "1+\\$2"}],
-        )
-
-    def test_parse_inline_math_segments_treats_unmatched_opening_dollar_as_text(self) -> None:
-        self.assertEqual(
-            parse_inline_math_segments("計算$1+2"),
-            [{"type": "text", "text": "計算$1+2"}],
-        )
-
-    def test_parse_inline_math_segments_keeps_escaped_dollar_outside_math(self) -> None:
-        self.assertEqual(
-            parse_inline_math_segments("價格\\$100"),
-            [{"type": "text", "text": "價格\\$100"}],
-        )
+        self.assertIs(service._segment_needs_boundary_space, segment_needs_boundary_space)
 
     def test_translate_with_language_merges_text_and_math_segments_in_order(self) -> None:
         from conversion import service
@@ -312,6 +288,30 @@ class ConversionServiceTest(unittest.TestCase):
             )
 
         self.assertEqual(results, [text_result, space_result, math_result])
+
+    def test_translate_with_language_segments_uses_service_boundary_space_alias(self) -> None:
+        from conversion import service
+
+        text_result = self._translation_result(list("ab"), list("⠁⠃"), [0, 1], [0, 1])
+        math_result = self._translation_result(["x+1"], list("⠭⠬⠼⠁"), [0, 0, 0, 0], [0])
+        runtime = self._runtime(text_translator=Mock(), math_translator=Mock())
+        runtime.math_translator.translate.return_value = math_result
+
+        with (
+            patch.object(service, "_translate_plain_text_segment", return_value=[text_result]),
+            patch.object(service, "_segment_needs_boundary_space", return_value=False),
+        ):
+            results = translate_with_language_segments(
+                "table.ctb",
+                "ab$x+1$",
+                Path("dictionary.csv"),
+                {"default": "table.ctb", "math": "Nemeth"},
+                Path("bopomofo.csv"),
+                runtime=runtime,
+            )
+
+        runtime.text_translator.translate.assert_not_called()
+        self.assertEqual(results, [text_result, math_result])
 
     def test_convert_text_with_alignment_keeps_segments_unbound(self) -> None:
         segment = self._translation_result(list("word"), list("⠺⠕⠗⠙"), [0, 1, 2, 3], [0, 1, 2, 3])

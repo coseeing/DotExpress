@@ -1,16 +1,23 @@
 from __future__ import annotations
 
-import csv
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 import gettext
 import sys
 from typing import List
 
 import wx
-from Bopomofo import normalize_zhuyin_sequence
 from dictionaries.actions import get_action_availability, resolve_dictionary_selection
+from dictionaries.entries import (
+	DEFAULT_ENTRY_TYPE,
+	ENTRY_TYPE_LABELS,
+	ENTRY_TYPE_OPTIONS,
+	DictionaryEntry,
+	load_dictionary_entries,
+	normalize_entry_type,
+	save_dictionary_entries,
+	validate_dictionary_entry,
+)
 from dictionaries.manager import (
 	DEFAULT_DICTIONARY_NAME,
 	MAX_DICTIONARY_NAME_LENGTH,
@@ -38,16 +45,6 @@ _translation = gettext.translation(
 	fallback=True,
 )
 _ = _translation.gettext
-
-
-ENTRY_TYPE_OPTIONS: list[tuple[str, str]] = [
-	("General", _("General")),
-	("Bopomofo", _("Bopomofo")),
-	("Braille", _("Unicode Braille")),
-]
-ENTRY_TYPE_LABELS = {key: label for key, label in ENTRY_TYPE_OPTIONS}
-DEFAULT_ENTRY_TYPE = ENTRY_TYPE_OPTIONS[0][0]
-BRAILLE_UNICODE_PATTERNS_START = 0x2800
 
 
 def finalize_dialog_layout(dialog: wx.Dialog, sizer: wx.Sizer) -> None:
@@ -83,41 +80,6 @@ def _normalize_dialog_name(
 		if "exceed" in str(exc):
 			return None, length_message
 		return None, invalid_message
-
-
-@dataclass
-class DictionaryEntry:
-	text: str
-	braille: str
-	entry_type: str = DEFAULT_ENTRY_TYPE
-
-
-def normalize_entry_type(entry_type: str | None) -> str:
-	if entry_type in ENTRY_TYPE_LABELS:
-		return str(entry_type)
-	return DEFAULT_ENTRY_TYPE
-
-
-def load_dictionary_entries(dictionary_path: Path) -> List[DictionaryEntry]:
-	if not dictionary_path.exists():
-		return []
-
-	entries: List[DictionaryEntry] = []
-	with dictionary_path.open("r", newline="", encoding="utf-8") as fp:
-		reader = csv.DictReader(fp)
-		for row in reader:
-			text = (row.get("text") or "").strip()
-			if not text:
-				continue
-			braille = (row.get("braille") or "").strip()
-			entry_type = normalize_entry_type(row.get("type"))
-			if entry_type == "Bopomofo":
-				try:
-					normalize_zhuyin_sequence(braille)
-				except Exception:
-					continue
-			entries.append(DictionaryEntry(text=text, braille=braille, entry_type=entry_type))
-	return entries
 
 
 class AddSymbolDialog(wx.Dialog):
@@ -192,40 +154,23 @@ class AddSymbolDialog(wx.Dialog):
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
 		try:
-			identifier = self.get_identifier()
+			entry = self.get_entry()
 		except RuntimeError:
 			event.Skip()
 			return
 
-		if not identifier:
-			wx.MessageBox(_("Please enter the source text."), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+		try:
+			validate_dictionary_entry(entry)
+		except ValueError as exc:
+			wx.MessageBox(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 			try:
-				self.identifier_ctrl.SetFocus()
+				if not entry.text:
+					self.identifier_ctrl.SetFocus()
+				else:
+					self.braille_ctrl.SetFocus()
 			except RuntimeError:
 				pass
 			return
-
-		braille = self.get_braille()
-		entry_type = self.get_entry_type()
-		if entry_type == "Bopomofo":
-			try:
-				normalize_zhuyin_sequence(braille)
-			except Exception:
-				wx.MessageBox(_("Please enter the a valid Bopomofo sequence."), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
-				try:
-					self.braille_ctrl.SetFocus()
-				except RuntimeError:
-					pass
-				return
-		elif entry_type == "Braille":
-			for b in braille:
-				if not BRAILLE_UNICODE_PATTERNS_START <= ord(b) < BRAILLE_UNICODE_PATTERNS_START + 256:
-					wx.MessageBox(_("Please enter the a valid Unicode Braille sequence."), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
-					try:
-						self.braille_ctrl.SetFocus()
-					except RuntimeError:
-						pass
-					return
 
 		event.Skip()
 
@@ -689,12 +634,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 		event.Skip()
 
 	def _save_entries(self) -> None:
-		self.dictionary_path.parent.mkdir(parents=True, exist_ok=True)
-		with self.dictionary_path.open("w", newline="", encoding="utf-8") as fp:
-			writer = csv.DictWriter(fp, fieldnames=["text", "braille", "type"])
-			writer.writeheader()
-			for entry in self.entries:
-				writer.writerow({"text": entry.text, "braille": entry.braille, "type": entry.entry_type})
+		save_dictionary_entries(self.dictionary_path, self.entries)
 
 
 class DictionaryManagementDialog(wx.Dialog):

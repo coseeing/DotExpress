@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from dictionaries.entries import DictionaryEntry, load_dictionary_entries
+
 
 class _AutoModule(types.ModuleType):
     def __getattr__(self, name):
@@ -136,10 +138,8 @@ def _load_dialog_module() -> types.ModuleType:
 
 
 dialog = _load_dialog_module()
-DictionaryEntry = dialog.DictionaryEntry
 CallbackVirtualListCtrl = dialog.CallbackVirtualListCtrl
 SpeechSymbolsDialog = dialog.SpeechSymbolsDialog
-load_dictionary_entries = dialog.load_dictionary_entries
 
 
 class _FakeListCtrl:
@@ -260,7 +260,7 @@ class DictionaryEntryLoadingTest(unittest.TestCase):
                 writer.writerow(["", "\u2803", "General"])
                 writer.writerow(["Zhuyin", "invalid", "Bopomofo"])
 
-            with patch.object(dialog, "normalize_zhuyin_sequence", side_effect=ValueError):
+            with patch("dictionaries.entries.normalize_zhuyin_sequence", side_effect=ValueError):
                 entries = load_dictionary_entries(path)
 
         self.assertEqual(entries, [DictionaryEntry("Alpha", "\u2801", "General")])
@@ -286,7 +286,6 @@ class DialogModuleIsolationTest(unittest.TestCase):
 
         loaded_dialog = _load_dialog_module()
 
-        self.assertTrue(hasattr(loaded_dialog, 'DictionaryEntry'))
         self.assertIs(sys.modules['dialog'], stub_dialog)
         self.assertIs(sys.modules['wx'], sentinel_wx)
         self.assertIsNot(loaded_dialog.wx, sentinel_wx)

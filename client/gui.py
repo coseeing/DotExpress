@@ -2,7 +2,6 @@ from dataclasses import replace
 from pathlib import Path
 import gettext
 import sys
-import threading
 import webbrowser
 
 import wx
@@ -10,6 +9,12 @@ import wx
 import about
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
+from conversion.jobs import (
+	ConversionJobFailure,
+	ConversionJobRequest,
+	ConversionJobRunner,
+	ConversionJobSuccess,
+)
 from conversion.service import (
 	ConversionOutput,
 	ConversionRequest,
@@ -30,16 +35,13 @@ from dictionaries.manager import (
 	list_dictionary_names,
 )
 from dictionaries.name_prompt import prompt_dictionary_name_until_success, rename_dictionary_after_name_prompt
+from documents.controller import DocumentController
 from documents.session import (
     document_name_exists,
     find_document,
     get_adjacent_document_name,
     get_document_names,
     format_window_title,
-    plan_delete_document,
-    plan_open_document,
-    rename_document_in_list,
-    replace_document,
 )
 from documents.workspace import (
     BatchIssue,
@@ -280,6 +282,12 @@ class BrailleFrame(wx.Frame):
 		self._open_document_name: str | None = None
 		self._dual_view_frame: DualViewFrame | None = None
 		self._dual_view_results_by_document: dict[str, tuple[object, ...]] = {}
+		self._document_controller = DocumentController(
+			documents=self.documents,
+			open_name=self._open_document_name,
+			selected_name=self._selected_document_name,
+			dual_view_results_by_document=self._dual_view_results_by_document,
+		)
 
 		self.view_settings = load_view_settings()
 		return self.view_settings
@@ -323,10 +331,14 @@ class BrailleFrame(wx.Frame):
 		return editors_box
 
 	def _initialize_conversion_state(self) -> None:
-		self._convert_thread = None
+		self._conversion_runner = ConversionJobRunner(
+			runtime=self.translation_runtime,
+			on_success=self._finish_conversion_success,
+			on_failure=self._finish_conversion_failure,
+			call_after=wx.CallAfter,
+		)
 		self._convert_dialog = None
 		self._convert_dialog_timer = None
-		self._convert_job_id = 0
 		self._convert_on_success = None
 		self._convert_on_error = None
 		self._convert_update_output = True
@@ -631,11 +643,29 @@ class BrailleFrame(wx.Frame):
 	def _sort_documents(self) -> None:
 		self.documents.sort(key=lambda document: (document.name.casefold(), document.name))
 
+	def _sync_document_controller_state(self, *, from_controller: bool = False) -> None:
+		if not isinstance(getattr(self, "_document_controller", None), DocumentController):
+			self._document_controller = DocumentController()
+		if from_controller:
+			self.documents = self._document_controller.documents
+			self._open_document_name = self._document_controller.open_name
+			self._selected_document_name = self._document_controller.selected_name
+			self._dual_view_results_by_document = self._document_controller.dual_view_results_by_document
+			return
+		self._document_controller.set_state(
+			documents=self.documents,
+			open_name=self._open_document_name,
+			selected_name=self._selected_document_name,
+			dual_view_results_by_document=self._dual_view_results_by_document,
+		)
+
 	def _get_document_by_name(self, name: str | None) -> Document | None:
 		return find_document(self.documents, name)
 
 	def _replace_document(self, updated_document: Document) -> None:
-		replace_document(self.documents, updated_document)
+		self._sync_document_controller_state()
+		self._document_controller.replace_document(updated_document)
+		self._sync_document_controller_state(from_controller=True)
 
 	def _document_name_exists(self, name: str, exclude_name: str | None = None) -> bool:
 		return document_name_exists(self.documents, name, exclude_name=exclude_name)
@@ -784,19 +814,17 @@ class BrailleFrame(wx.Frame):
 		DotExpressSettingsDialog.sync_open_font_size(self.view_settings.font_size)
 
 	def _open_document_by_name(self, name: str | None) -> None:
-		decision = plan_open_document(self.documents, name)
-		if decision.document is None:
-			self._open_document_name = decision.open_name
-			self._selected_document_name = decision.selected_name
+		self._sync_document_controller_state()
+		document = self._document_controller.open_document(name)
+		self._sync_document_controller_state(from_controller=True)
+		if document is None:
 			self._clear_document_editors()
 			self._update_window_title()
 			self._refresh_dual_view()
 			return
-		self._open_document_name = decision.open_name
-		self._selected_document_name = decision.selected_name
-		self._load_document_into_editors(decision.document)
+		self._load_document_into_editors(document)
 		self._reset_input_cursor_to_start()
-		self._refresh_document_list(decision.selected_name)
+		self._refresh_document_list(self._selected_document_name)
 		self._update_window_title()
 		self._refresh_dual_view()
 
@@ -1014,12 +1042,11 @@ class BrailleFrame(wx.Frame):
 		except OSError as exc:
 			self._show_file_error(_("Failed to save document: {error}"), exc)
 			return
-		renamed_document = rename_document_in_list(self.documents, selected_document.name, new_name)
+		self._sync_document_controller_state()
+		renamed_document = self._document_controller.rename_document(selected_document.name, new_name)
+		self._sync_document_controller_state(from_controller=True)
 		if renamed_document is None:
 			return
-		self._rename_dual_view_result(selected_document.name, renamed_document.name)
-		if self._open_document_name == selected_document.name:
-			self._open_document_name = renamed_document.name
 		self._refresh_document_list(renamed_document.name)
 		self._update_window_title()
 		self._refresh_dual_view()
@@ -1038,7 +1065,6 @@ class BrailleFrame(wx.Frame):
 		)
 		if confirmation != wx.YES:
 			return
-		delete_decision = plan_delete_document(self.documents, selected_document.name, self._open_document_name)
 		try:
 			package_path = document_package_path_for_name(selected_document.name, self.workspace_dir)
 			if package_path.exists():
@@ -1046,16 +1072,15 @@ class BrailleFrame(wx.Frame):
 		except OSError as exc:
 			self._show_file_error(_("Failed to delete document: {error}"), exc)
 			return
-		self.documents = [document for document in self.documents if document.name != selected_document.name]
-		self._delete_dual_view_result(selected_document.name)
-		if delete_decision.was_open:
-			self._open_document_name = None
-			self._update_window_title()
-		self._refresh_document_list(delete_decision.preferred_name)
+		self._sync_document_controller_state()
+		delete_decision = self._document_controller.delete_document(selected_document.name)
+		self._sync_document_controller_state(from_controller=True)
+		self._refresh_document_list(self._selected_document_name)
 		if self.documents:
-			if delete_decision.was_open and delete_decision.preferred_name:
-				self._open_document_by_name(delete_decision.preferred_name)
+			if delete_decision.was_open and self._open_document_name:
+				self._open_document_by_name(self._open_document_name)
 		else:
+			self._update_window_title()
 			self._clear_document_editors()
 			self._ensure_open_document_exists()
 		self._refresh_dual_view()
@@ -1081,13 +1106,9 @@ class BrailleFrame(wx.Frame):
 			except OSError as exc:
 				self._show_file_error(_("Failed to delete document: {error}"), exc)
 				remaining_documents, invalid_paths = load_workspace_documents(self.workspace_dir)
-				self.documents = remaining_documents
-				remaining_document_names = {document.name for document in self.documents}
-				self._dual_view_results_by_document = {
-					name: results
-					for name, results in self._dual_view_results_by_document.items()
-					if name in remaining_document_names
-				}
+				self._sync_document_controller_state()
+				self._document_controller.restore_documents_after_delete_all_failure(remaining_documents)
+				self._sync_document_controller_state(from_controller=True)
 				self._refresh_document_list()
 				self._review_invalid_workspace_files(invalid_paths)
 				if self.documents:
@@ -1096,10 +1117,9 @@ class BrailleFrame(wx.Frame):
 					self._clear_document_editors()
 				self._refresh_dual_view()
 				return
-		self.documents = []
-		self._selected_document_name = None
-		self._open_document_name = None
-		self._dual_view_results_by_document.clear()
+		self._sync_document_controller_state()
+		self._document_controller.delete_all_documents()
+		self._sync_document_controller_state(from_controller=True)
 		self._update_window_title()
 		self._refresh_document_list()
 		self._clear_document_editors()
@@ -1541,7 +1561,7 @@ class BrailleFrame(wx.Frame):
 		)
 
 	def on_convert(self, _evt):
-		if self._convert_thread and self._convert_thread.is_alive():
+		if self._conversion_runner.is_running():
 			return
 
 		table_file = language_map_translate_table.get("default")
@@ -1564,7 +1584,7 @@ class BrailleFrame(wx.Frame):
 		)
 
 	def _on_close(self, evt: wx.CloseEvent):
-		if self._convert_thread and self._convert_thread.is_alive() and evt.CanVeto():
+		if self._conversion_runner.is_running() and evt.CanVeto():
 			evt.Veto()
 			return
 		if not self._save_open_document_with_feedback():
@@ -1601,43 +1621,29 @@ class BrailleFrame(wx.Frame):
 		update_output: bool = True,
 		show_success: bool = True,
 	):
-		self._convert_job_id += 1
-		job_id = self._convert_job_id
 		self._convert_on_success = on_success
 		self._convert_on_error = on_error
 		self._convert_update_output = update_output
 		self._convert_show_success = show_success
 		self._set_conversion_busy(True)
 		self._close_converting_dialog()
-		self._convert_dialog_timer = wx.CallLater(2000, self._show_converting_dialog, job_id)
-		self._convert_thread = threading.Thread(
-			target=self._run_conversion,
-			args=(job_id, table_file, raw_text, width, output_mode, dictionary_path),
-			daemon=True,
+		job_id = self._conversion_runner.start(
+			ConversionJobRequest(
+				conversion_request=self._build_conversion_request(
+					raw_text,
+					table_file,
+					output_mode,
+					width,
+					dictionary_path,
+				)
+			)
 		)
-		self._convert_thread.start()
-
-	def _run_conversion(self, job_id: int, table_file: str, raw_text: str, width: int, output_mode: str, dictionary_path: Path):
-		try:
-			conversion_output = convert_text_with_alignment(
-				self._build_conversion_request(raw_text, table_file, output_mode, width, dictionary_path),
-				runtime=self.translation_runtime,
-			)
-		except ConversionStageError as e:
-			message_template = _("ASCII conversion failed: {error}") if e.stage == "ascii" else _("Translation failed: {error}")
-			wx.CallAfter(
-				self._finish_conversion,
-				job_id,
-				error_message=message_template.format(error=get_public_error_message(e.error)),
-			)
-			return
-
-		wx.CallAfter(self._finish_conversion, job_id, conversion_output=conversion_output)
+		self._convert_dialog_timer = wx.CallLater(2000, self._show_converting_dialog, job_id)
 
 	def _show_converting_dialog(self, job_id: int):
-		if job_id != self._convert_job_id:
+		if job_id != self._conversion_runner.active_job_id:
 			return
-		if not (self._convert_thread and self._convert_thread.is_alive()):
+		if not self._conversion_runner.is_running():
 			return
 		if self._convert_dialog is not None:
 			return
@@ -1653,20 +1659,16 @@ class BrailleFrame(wx.Frame):
 		dialog.Unbind(wx.EVT_CLOSE)
 		dialog.Destroy()
 
-	def _finish_conversion(
+	def _complete_conversion(
 		self,
-		job_id: int,
 		conversion_output: ConversionOutput | None = None,
 		error_message: str | None = None,
 		display_text: str | None = None,
 	):
-		if job_id != self._convert_job_id:
-			return
 		if self._convert_dialog_timer is not None:
 			self._convert_dialog_timer.Stop()
 			self._convert_dialog_timer = None
 		self._close_converting_dialog()
-		self._convert_thread = None
 		self._set_conversion_busy(False)
 		on_success = self._convert_on_success
 		on_error = self._convert_on_error
@@ -1701,6 +1703,15 @@ class BrailleFrame(wx.Frame):
 			on_success(converted_braille)
 		if show_success:
 			wx.MessageBox(_("Conversion completed."), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+
+	def _finish_conversion_success(self, result: ConversionJobSuccess) -> None:
+		self._complete_conversion(conversion_output=result.conversion_output)
+
+	def _finish_conversion_failure(self, result: ConversionJobFailure) -> None:
+		message_template = _("ASCII conversion failed: {error}") if result.error.stage == "ascii" else _("Translation failed: {error}")
+		self._complete_conversion(
+			error_message=message_template.format(error=get_public_error_message(result.error.error)),
+		)
 
 
 class BrailleApp(wx.App):

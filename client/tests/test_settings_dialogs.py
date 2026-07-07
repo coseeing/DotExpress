@@ -349,6 +349,27 @@ class SettingsPanelAccessibleTest(unittest.TestCase):
         )
 
 
+class SettingsPanelTest(unittest.TestCase):
+    def test_uses_title_for_accessible_label(self) -> None:
+        from settings.dialogs import SettingsPanel
+
+        class TestPanel(SettingsPanel):
+            title = "Translation"
+
+            def make_settings(self) -> None:
+                return None
+
+            def on_save(self, snapshot):
+                return snapshot
+
+            def load_snapshot(self, snapshot) -> None:
+                return None
+
+        panel = TestPanel(None, Mock())
+
+        self.assertEqual(panel.label, "Translation")
+
+
 class MultiCategorySettingsDialogTest(unittest.TestCase):
     def test_rejects_initial_category_outside_registered_categories(self) -> None:
         class RegisteredPanel(SettingsPanel):

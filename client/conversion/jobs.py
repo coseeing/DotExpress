@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import threading
 from typing import Callable
 
@@ -12,20 +12,31 @@ from conversion.service import (
 
 
 @dataclass(frozen=True)
+class ConversionCompletionPolicy:
+	on_success: Callable[[str], object] | None = None
+	on_error: Callable[[str], object] | None = None
+	update_output: bool = True
+	show_success: bool = True
+
+
+@dataclass(frozen=True)
 class ConversionJobRequest:
 	conversion_request: ConversionRequest
+	completion_policy: ConversionCompletionPolicy = field(default_factory=ConversionCompletionPolicy)
 
 
 @dataclass(frozen=True)
 class ConversionJobSuccess:
 	job_id: int
 	conversion_output: ConversionOutput
+	completion_policy: ConversionCompletionPolicy = field(default_factory=ConversionCompletionPolicy)
 
 
 @dataclass(frozen=True)
 class ConversionJobFailure:
 	job_id: int
 	error: ConversionStageError
+	completion_policy: ConversionCompletionPolicy = field(default_factory=ConversionCompletionPolicy)
 
 
 ThreadFactory = Callable[..., threading.Thread]
@@ -77,11 +88,22 @@ class ConversionJobRunner:
 				runtime=self._runtime,
 			)
 		except ConversionStageError as error:
-			self._call_after(self._deliver_failure, ConversionJobFailure(job_id=job_id, error=error))
+			self._call_after(
+				self._deliver_failure,
+				ConversionJobFailure(
+					job_id=job_id,
+					error=error,
+					completion_policy=request.completion_policy,
+				),
+			)
 			return
 		self._call_after(
 			self._deliver_success,
-			ConversionJobSuccess(job_id=job_id, conversion_output=conversion_output),
+			ConversionJobSuccess(
+				job_id=job_id,
+				conversion_output=conversion_output,
+				completion_policy=request.completion_policy,
+			),
 		)
 
 	def _deliver_success(self, result: ConversionJobSuccess) -> None:

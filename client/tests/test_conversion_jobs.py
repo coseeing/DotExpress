@@ -2,6 +2,7 @@ from pathlib import Path
 import unittest
 
 from conversion.jobs import (
+	ConversionCompletionPolicy,
 	ConversionJobFailure,
 	ConversionJobRequest,
 	ConversionJobRunner,
@@ -33,7 +34,7 @@ class FakeThread:
 
 
 class ConversionJobRunnerTest(unittest.TestCase):
-	def make_request(self) -> ConversionJobRequest:
+	def make_request(self, *, completion_policy=None) -> ConversionJobRequest:
 		return ConversionJobRequest(
 			conversion_request=ConversionRequest(
 				raw_text="source",
@@ -43,7 +44,8 @@ class ConversionJobRunnerTest(unittest.TestCase):
 				dictionary_path=Path("dictionary/default.csv"),
 				data_dir=Path("data"),
 				translation_tables={"default": "zh-tw.ctb", "math": "nemeth.ctb"},
-			)
+			),
+			completion_policy=ConversionCompletionPolicy() if completion_policy is None else completion_policy,
 		)
 
 	def make_runner(self, *, converter):
@@ -68,6 +70,7 @@ class ConversionJobRunnerTest(unittest.TestCase):
 
 	def test_start_runs_conversion_and_reports_success(self) -> None:
 		output = ConversionOutput("braille", ("segment",))
+		policy = ConversionCompletionPolicy()
 
 		def converter(request, *, runtime):
 			self.assertEqual(request, self.make_request().conversion_request)
@@ -76,15 +79,20 @@ class ConversionJobRunnerTest(unittest.TestCase):
 
 		runner, successes, failures, threads = self.make_runner(converter=converter)
 
-		job_id = runner.start(self.make_request())
+		request = self.make_request(completion_policy=policy)
+		job_id = runner.start(request)
 		threads[0].run()
 
 		self.assertEqual(job_id, 1)
-		self.assertEqual(successes, [ConversionJobSuccess(job_id=1, conversion_output=output)])
+		self.assertEqual(
+			successes,
+			[ConversionJobSuccess(job_id=1, conversion_output=output, completion_policy=policy)],
+		)
 		self.assertEqual(failures, [])
 
 	def test_reports_conversion_stage_error_failure(self) -> None:
 		error = ConversionStageError("translation", RuntimeError("boom"))
+		policy = ConversionCompletionPolicy()
 
 		def converter(_request, *, runtime):
 			self.assertIsNotNone(runtime)
@@ -92,17 +100,23 @@ class ConversionJobRunnerTest(unittest.TestCase):
 
 		runner, successes, failures, threads = self.make_runner(converter=converter)
 
-		job_id = runner.start(self.make_request())
+		request = self.make_request(completion_policy=policy)
+		job_id = runner.start(request)
 		threads[0].run()
 
 		self.assertEqual(successes, [])
-		self.assertEqual(failures, [ConversionJobFailure(job_id=job_id, error=error)])
+		self.assertEqual(
+			failures,
+			[ConversionJobFailure(job_id=job_id, error=error, completion_policy=policy)],
+		)
 
 	def test_stale_job_completion_is_ignored(self) -> None:
 		outputs = [
 			ConversionOutput("first", ("old",)),
 			ConversionOutput("second", ("new",)),
 		]
+		first_policy = ConversionCompletionPolicy()
+		second_policy = ConversionCompletionPolicy()
 
 		def converter(_request, *, runtime):
 			self.assertIsNotNone(runtime)
@@ -110,15 +124,46 @@ class ConversionJobRunnerTest(unittest.TestCase):
 
 		runner, successes, failures, threads = self.make_runner(converter=converter)
 
-		first_job_id = runner.start(self.make_request())
-		second_job_id = runner.start(self.make_request())
+		first_job_id = runner.start(self.make_request(completion_policy=first_policy))
+		second_job_id = runner.start(self.make_request(completion_policy=second_policy))
 		threads[0].run()
 		threads[1].run()
 
 		self.assertEqual(first_job_id, 1)
 		self.assertEqual(second_job_id, 2)
-		self.assertEqual(successes, [ConversionJobSuccess(job_id=2, conversion_output=ConversionOutput("second", ("new",)))])
+		self.assertEqual(
+			successes,
+			[
+				ConversionJobSuccess(
+					job_id=2,
+					conversion_output=ConversionOutput("second", ("new",)),
+					completion_policy=second_policy,
+				)
+			],
+		)
 		self.assertEqual(failures, [])
+
+	def test_stale_failure_completion_is_ignored(self) -> None:
+		error = ConversionStageError("translation", RuntimeError("boom"))
+		first_policy = ConversionCompletionPolicy()
+		second_policy = ConversionCompletionPolicy()
+
+		def converter(_request, *, runtime):
+			self.assertIsNotNone(runtime)
+			raise error
+
+		runner, successes, failures, threads = self.make_runner(converter=converter)
+
+		runner.start(self.make_request(completion_policy=first_policy))
+		second_job_id = runner.start(self.make_request(completion_policy=second_policy))
+		threads[0].run()
+		threads[1].run()
+
+		self.assertEqual(successes, [])
+		self.assertEqual(
+			failures,
+			[ConversionJobFailure(job_id=second_job_id, error=error, completion_policy=second_policy)],
+		)
 
 
 if __name__ == "__main__":

@@ -272,6 +272,24 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertEqual((export_dir / "lesson1.brl").read_text(encoding="utf-8"), "⠁")
         self.assertEqual((export_dir / "lesson2.brl").read_text(encoding="utf-8"), "⠃")
 
+    def test_batch_export_documents_to_folder_writes_dep_packages_without_pending_metadata(self) -> None:
+        export_dir = Path(self._tmpdir.name) / "export"
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        conflicts = batch_export_documents_to_folder(
+            export_dir,
+            [Document(name="lesson1", text="a", braille=None)],
+            format_key="dep",
+            overwrite=True,
+        )
+
+        self.assertEqual(conflicts, [])
+
+        import zipfile
+
+        with zipfile.ZipFile(export_dir / "lesson1.dep", "r") as archive:
+            self.assertEqual(sorted(archive.namelist()), ["lesson1.brl", "lesson1.txt"])
+
     def test_prepare_document_for_save_preserves_pending_braille_without_auto_conversion(self) -> None:
         document = Document(name="lesson1", text="old", braille=None)
 

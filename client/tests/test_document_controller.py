@@ -55,6 +55,28 @@ class DocumentControllerTest(unittest.TestCase):
             Document(name="zoo", text="z", braille="3"),
         ]
 
+    def test_document_accessors_expose_current_state(self) -> None:
+        controller = DocumentController(
+            documents=list(self.documents),
+            open_name="beta",
+            selected_name="alpha",
+        )
+
+        self.assertEqual(controller.document_names, ["alpha", "beta", "zoo"])
+        self.assertEqual(controller.open_document_name, "beta")
+        self.assertEqual(controller.selected_document_name, "alpha")
+        self.assertEqual(controller.get_document("beta"), self.documents[1])
+        self.assertIsNone(controller.get_document("missing"))
+
+    def test_sort_documents_orders_in_place(self) -> None:
+        controller = DocumentController(
+            documents=[self.documents[2], self.documents[0], self.documents[1]]
+        )
+
+        controller.sort_documents()
+
+        self.assertEqual(controller.document_names, ["alpha", "beta", "zoo"])
+
     def test_open_existing_document_updates_open_and_selected_names(self) -> None:
         controller = DocumentController(documents=list(self.documents))
 
@@ -164,6 +186,34 @@ class DocumentControllerTest(unittest.TestCase):
         self.assertIsNone(controller.open_name)
         self.assertIsNone(controller.selected_name)
         self.assertEqual(controller.dual_view_results_by_document, {"beta": ("keep",)})
+
+    def test_rename_document_moves_dual_view_cache_entries(self) -> None:
+        controller = DocumentController(
+            documents=list(self.documents),
+            open_name="alpha",
+            selected_name="alpha",
+            dual_view_results_by_document={"alpha": ("segment",), "beta": ("keep",)},
+        )
+
+        renamed_document = controller.rename_document("alpha", "renamed")
+
+        self.assertEqual(renamed_document, Document(name="renamed", text="a", braille="1"))
+        self.assertEqual(controller.dual_view_results_by_document, {"renamed": ("segment",), "beta": ("keep",)})
+
+    def test_delete_document_removes_dual_view_cache_entry_and_preserves_preferred_selection(self) -> None:
+        controller = DocumentController(
+            documents=list(self.documents),
+            open_name="beta",
+            selected_name="beta",
+            dual_view_results_by_document={"alpha": ("keep",), "beta": ("remove",), "zoo": ("keep-zoo",)},
+        )
+
+        decision = controller.delete_document("beta")
+
+        self.assertTrue(decision.was_open)
+        self.assertEqual(controller.open_document_name, "alpha")
+        self.assertEqual(controller.selected_document_name, "alpha")
+        self.assertEqual(controller.dual_view_results_by_document, {"alpha": ("keep",), "zoo": ("keep-zoo",)})
 
 
 if __name__ == "__main__":

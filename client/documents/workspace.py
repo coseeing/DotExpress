@@ -7,7 +7,7 @@ import sys
 import zipfile
 from collections.abc import Callable
 
-from documents.importers import ImportedDocument, import_docx, import_epub, import_pdf
+from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_format, get_importable_formats, get_supported_import_filter_keys
 from name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEP_EXTENSION = ".dep"
@@ -117,17 +117,10 @@ def load_text_document(path: Path | str) -> Document:
     )
 
 
-def _load_imported_document(path: Path | str, importer: Callable[[Path | str], ImportedDocument]) -> Document:
-    imported = importer(path)
-    return Document(name=imported.name, text=imported.markdown_text, braille=None)
-
-
 IMPORT_LOADERS: dict[str, Callable[[Path | str], Document]] = {
-    "dep": load_document_package,
-    "txt": load_text_document,
-    "docx": lambda path: _load_imported_document(path, import_docx),
-    "epub": lambda path: _load_imported_document(path, import_epub),
-    "pdf": lambda path: _load_imported_document(path, import_pdf),
+    descriptor.key: descriptor.loader
+    for descriptor in get_importable_formats()
+    if descriptor.loader is not None
 }
 
 
@@ -180,11 +173,11 @@ def batch_import_documents(
     issues: list[BatchIssue] = []
     seen_names = {name.casefold() for name in existing_names}
     normalized_format_key = format_key.casefold()
-    if normalized_format_key != "all" and normalized_format_key not in IMPORT_LOADERS:
+    if normalized_format_key != ALL_SUPPORTED_FILTER_KEY and normalized_format_key not in get_supported_import_filter_keys():
         raise ValueError(f'Unsupported import format: "{format_key}".')
     for path in sorted((Path(path) for path in paths), key=lambda item: (item.stem.casefold(), item.stem)):
         try:
-            loader_key = path.suffix.lstrip(".").casefold() if normalized_format_key == "all" else normalized_format_key
+            loader_key = path.suffix.lstrip(".").casefold() if normalized_format_key == ALL_SUPPORTED_FILTER_KEY else normalized_format_key
             loader = IMPORT_LOADERS.get(loader_key)
             if loader is None:
                 raise ValueError(f'Unsupported import file type: "{path.suffix}".')
@@ -209,16 +202,16 @@ def batch_export_documents_to_folder(
 ) -> list[Path]:
     folder = Path(directory)
     folder.mkdir(parents=True, exist_ok=True)
-    suffix = DEP_EXTENSION if format_key == "dep" else BRL_EXTENSION
+    descriptor = get_format(format_key)
+    if not descriptor.exportable or descriptor.writer is None:
+        raise ValueError(f'Unsupported export format: "{format_key}".')
+    suffix = descriptor.extension
     conflicts = [folder / f"{document.name}{suffix}" for document in documents if (folder / f"{document.name}{suffix}").exists()]
     if conflicts and not overwrite:
         return conflicts
     for document in documents:
         destination_path = folder / f"{document.name}{suffix}"
-        if format_key == "dep":
-            save_document_package(destination_path, document, include_pending_metadata=False)
-        else:
-            export_document_brl(destination_path, document)
+        descriptor.writer(destination_path, document)
     return []
 
 

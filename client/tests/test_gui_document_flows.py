@@ -336,10 +336,6 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._conversion_runner.start = Mock(return_value=7)
         frame._convert_dialog_timer = Mock()
         frame._convert_dialog = Mock()
-        frame._convert_on_success = None
-        frame._convert_on_error = None
-        frame._convert_update_output = True
-        frame._convert_show_success = True
         frame._set_conversion_busy = Mock()
         frame._close_converting_dialog = Mock()
         frame.input_txt = Mock()
@@ -415,6 +411,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._conversion_runner.start.assert_called_once_with(
             gui.ConversionJobRequest(
                 conversion_request=frame._build_conversion_request.return_value,
+                completion_policy=gui.ConversionCompletionPolicy(),
             )
         )
         frame._set_conversion_busy.assert_called_once_with(True)
@@ -423,8 +420,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_manual_conversion_updates_output_focus_and_shows_completion(self) -> None:
         frame = self._make_frame()
+        policy = gui.ConversionCompletionPolicy()
         with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._complete_conversion(display_text="braille")
+            frame._complete_conversion(policy, display_text="braille")
 
         frame.output_txt.SetValue.assert_called_once_with("braille")
         frame.output_txt.SetFocus.assert_called_once_with()
@@ -438,13 +436,14 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
     def test_export_conversion_calls_success_callback_without_manual_message(self) -> None:
         frame = self._make_frame()
         on_success = Mock()
-        frame._convert_on_success = on_success
-        frame._convert_on_error = None
-        frame._convert_update_output = False
-        frame._convert_show_success = False
+        policy = gui.ConversionCompletionPolicy(
+            on_success=on_success,
+            update_output=False,
+            show_success=False,
+        )
 
         with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._complete_conversion(display_text="braille")
+            frame._complete_conversion(policy, display_text="braille")
 
         on_success.assert_called_once_with("braille")
         frame.output_txt.SetValue.assert_not_called()
@@ -454,16 +453,50 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
     def test_export_conversion_calls_error_callback_without_showing_worker_error(self) -> None:
         frame = self._make_frame()
         on_error = Mock()
-        frame._convert_on_success = None
-        frame._convert_on_error = on_error
-        frame._convert_update_output = False
-        frame._convert_show_success = False
+        policy = gui.ConversionCompletionPolicy(
+            on_error=on_error,
+            update_output=False,
+            show_success=False,
+        )
 
         with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._complete_conversion(error_message="boom")
+            frame._complete_conversion(policy, error_message="boom")
 
         on_error.assert_called_once_with("boom")
         message_box.assert_not_called()
+
+    def test_later_job_uses_its_own_policy_after_previous_completion(self) -> None:
+        frame = self._make_frame()
+        first_policy = gui.ConversionCompletionPolicy(
+            on_success=Mock(),
+            update_output=False,
+            show_success=False,
+        )
+        second_policy = gui.ConversionCompletionPolicy()
+        first_result = gui.ConversionJobSuccess(
+            job_id=1,
+            conversion_output=gui.ConversionOutput("first", ("old",)),
+            completion_policy=first_policy,
+        )
+        second_result = gui.ConversionJobSuccess(
+            job_id=2,
+            conversion_output=gui.ConversionOutput("second", ("new",)),
+            completion_policy=second_policy,
+        )
+
+        with patch.object(gui.wx, "MessageBox") as message_box:
+            frame._finish_conversion_success(first_result)
+            frame._finish_conversion_success(second_result)
+
+        first_policy.on_success.assert_called_once_with("first")
+        frame.output_txt.SetValue.assert_called_once_with("second")
+        frame.output_txt.SetFocus.assert_called_once_with()
+        message_box.assert_called_once_with(
+            gui._("Conversion completed."),
+            gui._("Info"),
+            gui.wx.OK | gui.wx.ICON_INFORMATION,
+            parent=frame,
+        )
 
     def test_export_all_continues_after_conversion_failure(self) -> None:
         frame = self._make_frame()
@@ -563,15 +596,18 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_successful_manual_conversion_stores_segments_and_refreshes_open_viewer(self) -> None:
         frame = self._make_frame()
-        frame._convert_update_output = True
-        frame._convert_show_success = False
+        policy = gui.ConversionCompletionPolicy(show_success=False)
         frame._dual_view_frame = Mock()
         frame._refresh_dual_view = Mock()
         conversion_output = gui.ConversionOutput("braille", ("segment",))
 
         with patch.object(gui.wx, "MessageBox"):
             frame._finish_conversion_success(
-                gui.ConversionJobSuccess(job_id=1, conversion_output=conversion_output)
+                gui.ConversionJobSuccess(
+                    job_id=1,
+                    conversion_output=conversion_output,
+                    completion_policy=policy,
+                )
             )
 
         self.assertEqual(frame._dual_view_results_by_document["alpha"], ("segment",))
@@ -579,12 +615,16 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_export_conversion_does_not_replace_dual_view_cache(self) -> None:
         frame = self._make_frame()
-        frame._convert_update_output = False
+        policy = gui.ConversionCompletionPolicy(update_output=False)
         frame._dual_view_results_by_document["alpha"] = ("manual",)
         conversion_output = gui.ConversionOutput("export", ("export-segment",))
 
         frame._finish_conversion_success(
-            gui.ConversionJobSuccess(job_id=1, conversion_output=conversion_output)
+            gui.ConversionJobSuccess(
+                job_id=1,
+                conversion_output=conversion_output,
+                completion_policy=policy,
+            )
         )
 
         self.assertEqual(frame._dual_view_results_by_document["alpha"], ("manual",))

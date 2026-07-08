@@ -26,6 +26,29 @@ class DocumentController:
             dual_view_results_by_document if dual_view_results_by_document is not None else {}
         )
 
+    @property
+    def document_names(self) -> list[str]:
+        return [document.name for document in self.documents]
+
+    @property
+    def open_document_name(self) -> str | None:
+        return self.open_name
+
+    @property
+    def selected_document_name(self) -> str | None:
+        return self.selected_name
+
+    def get_document(self, name: str | None) -> Document | None:
+        if not name:
+            return None
+        for document in self.documents:
+            if document.name == name:
+                return document
+        return None
+
+    def sort_documents(self) -> None:
+        self.documents.sort(key=lambda document: (document.name.casefold(), document.name))
+
     def set_state(
         self,
         *,

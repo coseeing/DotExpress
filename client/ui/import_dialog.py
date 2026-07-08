@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from documents.formats import (
+    ALL_SUPPORTED_FILTER_INDEX,
+    ALL_SUPPORTED_FILTER_KEY,
+    build_import_wildcard as build_format_wildcard,
+    get_import_filter_labels as get_format_import_filter_labels,
+    get_importable_formats,
+)
+
 
 @dataclass(frozen=True)
 class ImportFilter:
@@ -10,31 +18,23 @@ class ImportFilter:
     pattern: str
 
 
-IMPORT_FILTERS: tuple[ImportFilter, ...] = (
-    ImportFilter("dep", "DEP", "*.dep"),
-    ImportFilter("docx", "DOCX", "*.docx"),
-    ImportFilter("epub", "EPUB", "*.epub"),
-    ImportFilter("pdf", "PDF", "*.pdf"),
-    ImportFilter("txt", "TXT", "*.txt"),
-    ImportFilter("all", "All Supported Files", "*.dep;*.docx;*.epub;*.pdf;*.txt"),
-)
-
-ALL_SUPPORTED_FILTER_INDEX = len(IMPORT_FILTERS) - 1
-
-
 def get_import_filters() -> tuple[ImportFilter, ...]:
-    return IMPORT_FILTERS
+    importable_formats = get_importable_formats()
+    labels = get_format_import_filter_labels()
+    filters = tuple(
+        ImportFilter(descriptor.key, descriptor.wildcard_label, f"*{descriptor.extension}")
+        for descriptor in importable_formats
+    )
+    all_patterns = ";".join(f"*{descriptor.extension}" for descriptor in importable_formats)
+    return filters + (ImportFilter(ALL_SUPPORTED_FILTER_KEY, labels[-1], all_patterns),)
 
 
 def build_import_wildcard(translate=lambda value: value) -> str:
-    parts: list[str] = []
-    for item in IMPORT_FILTERS:
-        parts.extend((f"{translate(item.label)} ({item.pattern})", item.pattern))
-    return "|".join(parts)
+    return build_format_wildcard(translate)
 
 
 def get_import_filter_labels() -> list[str]:
-    return [item.label for item in IMPORT_FILTERS]
+    return list(get_format_import_filter_labels())
 
 
 def get_import_wildcard_text() -> str:

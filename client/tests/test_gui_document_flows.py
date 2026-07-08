@@ -405,6 +405,31 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         self.assertEqual(written, [Path("/tmp/export/alpha.braille")])
         get_format_mock.assert_called_once_with("brl")
 
+    def test_sync_document_menu_state_before_document_list_exists(self) -> None:
+        frame = self._make_frame()
+        menu_items = {
+            "Open": Mock(),
+            "Delete": Mock(),
+            "Delete All": Mock(),
+            "Add": Mock(),
+            "Rename": Mock(),
+            "Import": Mock(),
+            "Export": Mock(),
+            "Export All": Mock(),
+        }
+
+        frame._sync_document_menu_state(menu_items)
+
+        self.assertNotIn("document_list", frame.__dict__)
+        menu_items["Open"].Enable.assert_called_once_with(False)
+        menu_items["Delete"].Enable.assert_called_once_with(False)
+        menu_items["Delete All"].Enable.assert_called_once_with(False)
+        menu_items["Add"].Enable.assert_called_once_with(True)
+        menu_items["Rename"].Enable.assert_called_once_with(False)
+        menu_items["Import"].Enable.assert_called_once_with(True)
+        menu_items["Export"].Enable.assert_called_once_with(False)
+        menu_items["Export All"].Enable.assert_called_once_with(False)
+
 
 class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
     def test_app_builds_runtime_and_passes_it_to_frame(self) -> None:

@@ -469,8 +469,9 @@ class BrailleFrame(wx.Frame):
 		target_items = menu_items if menu_items is not None else getattr(self, "_document_menu_items", None)
 		if not target_items or not hasattr(self, "documents") or not hasattr(self, "_selected_document_name"):
 			return
+		selected_document = self._get_selected_document() if "document_list" in self.__dict__ else None
 		menu_state = get_document_menu_enabled_state(
-			has_selection=self._get_selected_document() is not None,
+			has_selection=selected_document is not None,
 			has_documents=bool(self.documents),
 		)
 		for label, enabled in menu_state.items():
@@ -967,6 +968,8 @@ class BrailleFrame(wx.Frame):
 		self._update_window_title()
 
 	def _get_selected_document_name(self) -> str | None:
+		if "document_list" not in self.__dict__:
+			return self._selected_document_name
 		selection = self.document_list.GetFirstSelected()
 		if selection == wx.NOT_FOUND or selection >= len(self.documents):
 			return self._selected_document_name

@@ -3,7 +3,7 @@ import unittest
 from conversion.text.math_segments import parse_inline_math_segments, segment_needs_boundary_space
 
 
-class ConversionSegmentsTest(unittest.TestCase):
+class ConversionTextMathSegmentsTest(unittest.TestCase):
     def test_parse_inline_math_segments_splits_multiple_math_ranges(self) -> None:
         self.assertEqual(
             parse_inline_math_segments("計算$1+2$和$3+4$"),
@@ -60,3 +60,4 @@ class ConversionSegmentsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

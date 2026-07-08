@@ -227,7 +227,7 @@ class ConversionServiceTest(unittest.TestCase):
 
     def test_service_keeps_segment_boundary_helper_alias_for_patch_compatibility(self) -> None:
         from conversion import service
-        from conversion.segments import segment_needs_boundary_space
+        from conversion.text.math_segments import segment_needs_boundary_space
 
         self.assertIs(service._segment_needs_boundary_space, segment_needs_boundary_space)
 

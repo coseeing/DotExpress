@@ -1,5 +1,6 @@
 from adapters.translation.contracts import TranslationRuntime
 from config import DEFAULT_MATH_BRAILLE_TABLE
+from conversion.text.char_maps import translate__mapping_char
 from conversion.output import (
     ConversionOutput,
     ConversionRequest,
@@ -12,15 +13,14 @@ from conversion.output import (
 from conversion.plain_text import (
     build_literal_translation_result,
     get_public_error_message,
-    translate_plain_text_segment,
 )
-from conversion.segments import parse_inline_math_segments, segment_needs_boundary_space
+from conversion.text.math_segments import parse_inline_math_segments, segment_needs_boundary_space
+from conversion.text.pipeline import translate_plain_text_segment
 from conversion.wrapping import (
     merge_translation_results,
     translate_and_wrap_both as _translate_and_wrap_both,
     wrap_translation_results,
 )
-from utils import translate__mapping_char
 
 
 _translate_plain_text_segment = translate_plain_text_segment

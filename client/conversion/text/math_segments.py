@@ -45,3 +45,4 @@ def segment_needs_boundary_space(left_segment: dict[str, str], right_segment: di
         and not left_text[-1].isspace()
         and not right_text[0].isspace()
     )
+

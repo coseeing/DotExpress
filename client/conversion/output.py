@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Callable
 
 from adapters.translation.contracts import TranslationRuntime
-from utils import translate__mapping_char
+from conversion.text.char_maps import translate__mapping_char
+from conversion.text.pipeline import preprocess_source_text
 
 
 @dataclass(frozen=True)
@@ -48,12 +49,7 @@ def convert_text_with_alignment(
     if request.raw_text == "":
         return ConversionOutput("", ())
     try:
-        text = map_char(
-            request.raw_text,
-            dictionary_path=request.data_dir / "BopomofoChar2Braille.csv",
-            from_field="Bopomofo",
-            to_field="Braille",
-        )
+        text = preprocess_source_text(request.raw_text, data_dir=request.data_dir, map_char=map_char)
         translations = translate_segments(
             request.table_file,
             text,
@@ -94,12 +90,7 @@ def convert_text_for_output(
     if wrap_both is default_wrap_both:
         return convert_with_alignment(request, map_char=map_char, runtime=runtime).display_text
     try:
-        text = map_char(
-            request.raw_text,
-            dictionary_path=request.data_dir / "BopomofoChar2Braille.csv",
-            from_field="Bopomofo",
-            to_field="Braille",
-        )
+        text = preprocess_source_text(request.raw_text, data_dir=request.data_dir, map_char=map_char)
         braille_wrapped, _text_wrapped = wrap_both(
             table_file=request.table_file,
             text=text,

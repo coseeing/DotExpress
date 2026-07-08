@@ -4,6 +4,7 @@ import importlib
 import sys
 import types
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -312,6 +313,7 @@ from settings.dialogs import TranslationSettingsPanel
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
+from documents.formats import get_format
 
 
 def make_snapshot(
@@ -360,6 +362,48 @@ class GuiDocumentFlowsTest(unittest.TestCase):
             frame._build_conversion_request.return_value,
             runtime=frame.translation_runtime,
         )
+
+    def test_write_export_document_uses_registry_writer(self) -> None:
+        frame = self._make_frame()
+        document = Document("alpha", "text", "braille")
+        writer = Mock()
+        descriptor = replace(get_format("dep"), writer=writer)
+
+        with patch.object(gui, "get_format", return_value=descriptor) as get_format_mock:
+            frame._write_export_document(Path("/tmp/custom.dep"), document, "dep")
+
+        get_format_mock.assert_called_once_with("dep")
+        writer.assert_called_once_with(Path("/tmp/custom.dep"), document)
+
+    def test_write_export_document_rejects_non_exportable_format(self) -> None:
+        frame = self._make_frame()
+        document = Document("alpha", "text", "braille")
+        descriptor = replace(get_format("txt"), writer=Mock())
+
+        with patch.object(gui, "get_format", return_value=descriptor):
+            with self.assertRaisesRegex(ValueError, 'Unsupported export format: "txt"\\.'):
+                frame._write_export_document(Path("/tmp/custom.txt"), document, "txt")
+
+    def test_export_next_document_uses_registry_extension(self) -> None:
+        frame = self._make_frame()
+        written: list[Path] = []
+        document = Document("alpha", "text", "braille")
+        descriptor = replace(get_format("brl"), extension=".braille")
+
+        def write_export_document(destination_path: Path, export_document: Document, format_key: str) -> None:
+            written.append(destination_path)
+
+        frame._write_export_document = write_export_document
+        frame._start_export_conversion = Mock(side_effect=AssertionError("conversion should not run"))
+
+        with (
+            patch.object(gui, "get_format", return_value=descriptor) as get_format_mock,
+            patch.object(gui.wx, "CallAfter", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)),
+        ):
+            frame._export_next_document([document], Path("/tmp/export"), "brl", ExportBatchResult())
+
+        self.assertEqual(written, [Path("/tmp/export/alpha.braille")])
+        get_format_mock.assert_called_once_with("brl")
 
 
 class BrailleAppLifecycleTest(GuiDocumentFlowsTest):

@@ -1458,10 +1458,10 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to export dictionary: {error}"), exc, parent=dialog_parent)
 
 	def _write_export_document(self, destination_path: Path, document: Document, format_key: str) -> None:
-		if format_key == "dep":
-			save_document_package(destination_path, document, include_pending_metadata=False)
-		else:
-			export_document_brl(destination_path, document)
+		descriptor = get_format(format_key)
+		if not descriptor.exportable or descriptor.writer is None:
+			raise ValueError(f'Unsupported export format: "{format_key}".')
+		descriptor.writer(destination_path, document)
 
 	def _continue_single_export(self, document: Document, destination_path: Path, format_key: str) -> None:
 		try:
@@ -1519,9 +1519,10 @@ class BrailleFrame(wx.Frame):
 			self._show_export_all_result(result)
 			return
 
+		descriptor = get_format(format_key)
 		document = remaining[0]
 		rest = remaining[1:]
-		destination_path = destination_dir / f"{document.name}.{format_key}"
+		destination_path = destination_dir / f"{document.name}{descriptor.extension}"
 
 		def continue_batch() -> None:
 			wx.CallAfter(self._export_next_document, rest, destination_dir, format_key, result)

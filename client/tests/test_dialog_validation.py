@@ -6,6 +6,7 @@ import unittest
 if "wx" not in sys.modules:
     wx_stub = types.ModuleType("wx")
     wx_stub.Dialog = type("Dialog", (), {})
+    wx_stub.ListCtrl = type("ListCtrl", (), {})
     wx_stub.Window = type("Window", (), {})
     wx_stub.CommandEvent = type("CommandEvent", (), {})
     sys.modules["wx"] = wx_stub

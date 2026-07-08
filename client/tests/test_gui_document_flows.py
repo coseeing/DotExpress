@@ -14,7 +14,7 @@ def _install_stub_modules() -> None:
 
     class _Widget:
         def __init__(self, *args, **kwargs):
-            pass
+            self.label = kwargs.get("label", "")
 
         def __getattr__(self, _name):
             def _method(*args, **kwargs):
@@ -22,12 +22,18 @@ def _install_stub_modules() -> None:
 
             return _method
 
+        def SetLabel(self, label):
+            self.label = label
+
     class Window(_Widget):
         @staticmethod
         def FindFocus():
             return None
 
     class Frame(Window):
+        pass
+
+    class Panel(Window):
         pass
 
     class Dialog(Window):
@@ -127,6 +133,7 @@ def _install_stub_modules() -> None:
 
     wx.Window = Window
     wx.Frame = Frame
+    wx.Panel = Panel
     wx.Dialog = Dialog
     wx.Accessible = Accessible
     wx.App = App
@@ -199,7 +206,7 @@ def _install_stub_modules() -> None:
     wx.NO = 0
     wx.YES_NO = 16
     wx.NO_DEFAULT = 32
-    wx.ICON_ERROR = 64
+    wx.ICON_ERROR = 512
     wx.ICON_INFORMATION = 128
     wx.ICON_WARNING = 256
     wx.DEFAULT_DIALOG_STYLE = 512
@@ -222,6 +229,12 @@ def _install_stub_modules() -> None:
     wx.FD_OVERWRITE_PROMPT = 1 << 23
     wx.NOT_FOUND = -1
     wx.ACC_OK = 0
+    wx.ROLE_SYSTEM_PROPERTYPAGE = 38
+
+    class PyDeadObjectError(RuntimeError):
+        pass
+
+    wx.PyDeadObjectError = PyDeadObjectError
 
     sys.modules["wx"] = wx
 
@@ -261,47 +274,6 @@ def _install_stub_modules() -> None:
         louis_helper.initialize = lambda: None
         louis_helper.terminate = lambda: None
         sys.modules["braille.louis_helper"] = louis_helper
-
-    if "mammoth" not in sys.modules:
-        mammoth = types.ModuleType("mammoth")
-        mammoth.convert_to_html = lambda *args, **kwargs: types.SimpleNamespace(value="")
-        sys.modules["mammoth"] = mammoth
-
-    if "lxml" not in sys.modules:
-        lxml = types.ModuleType("lxml")
-        etree = types.ModuleType("lxml.etree")
-        html = types.ModuleType("lxml.html")
-
-        class _QName:
-            def __init__(self, element):
-                self.localname = getattr(element, "tag", "")
-
-        etree.QName = _QName
-        etree.XMLParser = lambda *args, **kwargs: object()
-        etree.fromstring = lambda *args, **kwargs: types.SimpleNamespace(xpath=lambda *_a, **_k: [])
-        html.fragment_fromstring = lambda *args, **kwargs: types.SimpleNamespace()
-        lxml.etree = etree
-        lxml.html = html
-        sys.modules["lxml"] = lxml
-        sys.modules["lxml.etree"] = etree
-        sys.modules["lxml.html"] = html
-
-    if "ebooklib" not in sys.modules:
-        ebooklib = types.ModuleType("ebooklib")
-        epub = types.ModuleType("ebooklib.epub")
-        epub.read_epub = lambda *_args, **_kwargs: types.SimpleNamespace(spine=[], get_item_with_id=lambda _item_id: None)
-        ebooklib.epub = epub
-        sys.modules["ebooklib"] = ebooklib
-        sys.modules["ebooklib.epub"] = epub
-
-    if "pymupdf" not in sys.modules:
-        pymupdf = types.ModuleType("pymupdf")
-        sys.modules["pymupdf"] = pymupdf
-
-    if "pypdf" not in sys.modules:
-        pypdf = types.ModuleType("pypdf")
-        pypdf.PdfReader = type("PdfReader", (), {})
-        sys.modules["pypdf"] = pypdf
 
 
 _install_stub_modules()

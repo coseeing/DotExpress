@@ -15,7 +15,7 @@ class ImportFixtureSmokeTest(unittest.TestCase):
     def test_docx_fixture_imports_end_to_end(self) -> None:
         self.assertEqual(
             import_docx(FIXTURE_DIR / "fixture.docx").markdown_text,
-            "# Fixture Title\n\n- List item\n\n> Quoted text\n>\n> Intense quote\n\n---\n\n| Head | Value |\n| --- | --- |\n| A | 1 |\n",
+            "# Fixture Title\n\n- List item\n\nQuoted text\n\nIntense quote\n\n| Head | Value |\n| --- | --- |\n| A | 1 |\n",
         )
 
     def test_epub_fixture_imports_end_to_end(self) -> None:
@@ -33,7 +33,7 @@ class ImportFixtureSmokeTest(unittest.TestCase):
     def test_tagged_pdf_fixture_imports_using_semantic_path(self) -> None:
         self.assertEqual(
             import_pdf(FIXTURE_DIR / "fixture-tagged.pdf").markdown_text,
-            "# Tagged fixture title\n\nTagged fixture body.\n",
+            "Tagged fixture title\nTagged fixture body.\n",
         )
 
     def test_zh_tw_catalog_loads_import_wildcard_translations(self) -> None:

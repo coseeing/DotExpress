@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 
 def _install_stub_modules() -> None:
-    wx = sys.modules.get("wx", types.ModuleType("wx"))
+    wx = types.ModuleType("wx")
 
     class _Widget:
         def __init__(self, *args, **kwargs):

@@ -2,7 +2,6 @@ import csv
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
 
 from adapters.translation.contracts import TranslationRuntime
 from conversion.output import ConversionRequest, convert_text_for_output, convert_text_with_alignment
@@ -21,7 +20,11 @@ class ConversionTextPipelineTest(unittest.TestCase):
         return path
 
     def _runtime(self) -> TranslationRuntime:
-        return TranslationRuntime(text_translator=Mock(), math_translator=Mock())
+        class Translator:
+            def translate(self, *_args, **_kwargs):
+                raise AssertionError("runtime translator should not be used")
+
+        return TranslationRuntime(text_translator=Translator(), math_translator=Translator())
 
     def test_preprocess_source_text_applies_bopomofo_char_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

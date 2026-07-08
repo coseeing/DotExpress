@@ -25,20 +25,6 @@ def _load_dialog_module():
 		wx.Window = type("Window", (), {})
 		wx.NOT_FOUND = -1
 		sys.modules["wx"] = wx
-		for name in (
-			"braille",
-			"braille.tables",
-			"Bopomofo",
-			"dictionaries",
-			"dictionaries.actions",
-			"dictionaries.manager",
-			"documents",
-			"documents.workspace",
-			"translation",
-			"settings",
-			"settings.translation",
-		):
-			sys.modules.setdefault(name, _AutoModule(name))
 		spec = importlib.util.spec_from_file_location("_dialog_display_test", dialog_path)
 		module = importlib.util.module_from_spec(spec)
 		sys.modules[spec.name] = module

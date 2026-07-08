@@ -1,6 +1,9 @@
+import json
+import tempfile
 import unittest
-from unittest.mock import patch
+from pathlib import Path
 
+import config
 from settings.translation import (
     DEFAULT_TRANSLATION_SETTINGS,
     TranslationSettings,
@@ -10,15 +13,28 @@ from settings.translation import (
 
 
 class TranslationSettingsTest(unittest.TestCase):
-    @patch("settings.translation.get_selected_dictionary", return_value="missing")
-    @patch("settings.translation.get_conversion_width", return_value=999)
-    @patch("settings.translation.get_output_mode", return_value="invalid")
-    def test_load_normalizes_invalid_config(
-        self,
-        _get_output_mode,
-        _get_conversion_width,
-        _get_selected_dictionary,
-    ) -> None:
+    def setUp(self) -> None:
+        self._original_config_path = config.CONFIG_PATH
+        self._tmpdir = tempfile.TemporaryDirectory()
+        config.CONFIG_PATH = str(Path(self._tmpdir.name) / "config.json")
+
+    def tearDown(self) -> None:
+        config.CONFIG_PATH = self._original_config_path
+        self._tmpdir.cleanup()
+
+    def _write_config(self, conversion: dict[str, object]) -> None:
+        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump({"conversion": conversion}, f)
+
+    def test_load_normalizes_invalid_config(self) -> None:
+        self._write_config(
+            {
+                config.OUTPUT_MODE_KEY: "invalid",
+                config.WIDTH_KEY: 999,
+                config.SELECTED_DICTIONARY_KEY: "missing",
+            }
+        )
+
         settings = load_translation_settings(["default", "math"])
 
         self.assertEqual(
@@ -30,36 +46,36 @@ class TranslationSettingsTest(unittest.TestCase):
             ),
         )
 
-    @patch("settings.translation.get_selected_dictionary", return_value="math")
-    @patch("settings.translation.get_conversion_width", return_value=52)
-    @patch("settings.translation.get_output_mode", return_value="ascii")
-    def test_load_keeps_valid_config(
-        self,
-        _get_output_mode,
-        _get_conversion_width,
-        _get_selected_dictionary,
-    ) -> None:
+    def test_load_keeps_valid_config(self) -> None:
+        self._write_config(
+            {
+                config.OUTPUT_MODE_KEY: "ascii",
+                config.WIDTH_KEY: 52,
+                config.SELECTED_DICTIONARY_KEY: "math",
+            }
+        )
+
         self.assertEqual(
             load_translation_settings(["default", "math"]),
             TranslationSettings("ascii", 52, "math"),
         )
 
-    @patch("settings.translation.set_selected_dictionary")
-    @patch("settings.translation.set_conversion_width")
-    @patch("settings.translation.set_output_mode")
-    def test_save_persists_one_complete_settings_value(
-        self,
-        set_output_mode,
-        set_conversion_width,
-        set_selected_dictionary,
-    ) -> None:
+    def test_save_persists_one_complete_settings_value(self) -> None:
         settings = TranslationSettings("ascii", 64, "math")
 
         save_translation_settings(settings)
 
-        set_output_mode.assert_called_once_with("ascii")
-        set_conversion_width.assert_called_once_with(64)
-        set_selected_dictionary.assert_called_once_with("math")
+        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+            self.assertEqual(
+                json.load(f),
+                {
+                    "conversion": {
+                        config.OUTPUT_MODE_KEY: "ascii",
+                        config.WIDTH_KEY: 64,
+                        config.SELECTED_DICTIONARY_KEY: "math",
+                    }
+                },
+            )
 
 
 if __name__ == "__main__":

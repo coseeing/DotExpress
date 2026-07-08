@@ -88,23 +88,6 @@ def _restore_module_binding(name: str, existed: bool, module: types.ModuleType |
 def _install_scoped_import_stubs() -> None:
     sys.modules['wx'] = _make_wx_stub()
 
-    for name in ('mammoth', 'pymupdf', 'bs4', 'pypdf', 'markdown', 'markdownify', 'PIL'):
-        sys.modules.setdefault(name, _AutoModule(name))
-
-    if 'lxml' not in sys.modules:
-        lxml = _AutoModule('lxml')
-        lxml.etree = _AutoModule('lxml.etree')
-        lxml.html = _AutoModule('lxml.html')
-        sys.modules['lxml'] = lxml
-        sys.modules['lxml.etree'] = lxml.etree
-        sys.modules['lxml.html'] = lxml.html
-
-    if 'ebooklib' not in sys.modules:
-        ebooklib = _AutoModule('ebooklib')
-        ebooklib.epub = _AutoModule('ebooklib.epub')
-        sys.modules['ebooklib'] = ebooklib
-        sys.modules['ebooklib.epub'] = ebooklib.epub
-
 
 def _restore_scoped_modules(previous_modules: dict[str, types.ModuleType]) -> None:
     for name in list(sys.modules):

@@ -1,7 +1,6 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
 
 import dictionaries.import_flow as import_flow
 from dictionaries.manager import DEFAULT_HEADER
@@ -22,11 +21,11 @@ class DictionaryImportFlowTest(unittest.TestCase):
 
     def test_import_dictionary_after_name_prompt_uses_prompted_name(self) -> None:
         source_path = self._create_source_dictionary()
-        prompt_name = Mock(return_value="edited")
+        prompt_calls = []
 
-        original_import_dictionary = import_flow.import_dictionary
-        import_flow.import_dictionary = Mock(return_value=self.dictionary_dir / "edited.csv")
-        self.addCleanup(setattr, import_flow, "import_dictionary", original_import_dictionary)
+        def prompt_name(default_name: str) -> str:
+            prompt_calls.append(default_name)
+            return "edited"
 
         result = import_flow.import_dictionary_after_name_prompt(
             self.dictionary_dir,
@@ -35,16 +34,16 @@ class DictionaryImportFlowTest(unittest.TestCase):
         )
 
         self.assertEqual(result, self.dictionary_dir / "edited.csv")
-        prompt_name.assert_called_once_with("1.1")
-        import_flow.import_dictionary.assert_called_once_with(self.dictionary_dir, source_path, "edited")
+        self.assertEqual(prompt_calls, ["1.1"])
+        self.assertTrue((self.dictionary_dir / "edited.csv").exists())
 
     def test_import_dictionary_after_name_prompt_returns_none_when_prompt_is_cancelled(self) -> None:
         source_path = self._create_source_dictionary()
-        prompt_name = Mock(return_value=None)
+        prompt_calls = []
 
-        original_import_dictionary = import_flow.import_dictionary
-        import_flow.import_dictionary = Mock()
-        self.addCleanup(setattr, import_flow, "import_dictionary", original_import_dictionary)
+        def prompt_name(default_name: str) -> None:
+            prompt_calls.append(default_name)
+            return None
 
         result = import_flow.import_dictionary_after_name_prompt(
             self.dictionary_dir,
@@ -53,5 +52,5 @@ class DictionaryImportFlowTest(unittest.TestCase):
         )
 
         self.assertIsNone(result)
-        prompt_name.assert_called_once_with("1.1")
-        import_flow.import_dictionary.assert_not_called()
+        self.assertEqual(prompt_calls, ["1.1"])
+        self.assertFalse(self.dictionary_dir.exists())

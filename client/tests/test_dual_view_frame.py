@@ -53,6 +53,7 @@ sys.modules["wx"] = wx
 sys.modules["wx.html2"] = wx_html2
 
 from ui.dual_view import DualViewFrame
+import ui.dual_view as dual_view
 
 
 class DualViewFrameTest(unittest.TestCase):
@@ -119,6 +120,24 @@ class DualViewFrameTest(unittest.TestCase):
 		self.assertEqual(frame.init_kwargs["size"], (1024, 768))
 		parent.GetPosition.assert_called_once_with()
 		parent.GetSize.assert_called_once_with()
+
+	def test_initialization_logs_native_backend(self):
+		parent = Mock()
+		parent.GetPosition.return_value = (0, 0)
+		parent.GetSize.return_value = (800, 600)
+		web_view = Mock()
+		web_view.GetNativeBackend.return_value = "Edge"
+
+		with patch.object(dual_view.wx.html2.WebView, "New", return_value=web_view), patch.object(
+			dual_view.logger, "debug"
+		) as log_debug:
+			DualViewFrame(
+				parent,
+				title="Dual View",
+				on_closed=Mock(),
+			)
+
+		log_debug.assert_called_once_with("Dual view webview backend: %s", "Edge")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
 
+import documents.workspace as workspace
 from documents.workspace import (
     BatchIssue,
     Document,
@@ -177,13 +177,23 @@ class DocumentWorkspaceTest(unittest.TestCase):
 
     def test_batch_import_documents_dispatches_semantic_importer(self) -> None:
         source = Path(self._tmpdir.name) / "lesson.docx"
-        loader = Mock(return_value=Document("lesson", "# Heading\n", None))
-        with patch.dict("documents.workspace.IMPORT_LOADERS", {"docx": loader}, clear=False):
+        calls = []
+
+        def loader(path: Path | str) -> Document:
+            calls.append(Path(path))
+            return Document("lesson", "# Heading\n", None)
+
+        original_loaders = workspace.IMPORT_LOADERS.copy()
+        workspace.IMPORT_LOADERS["docx"] = loader
+        try:
             documents, issues = batch_import_documents([source], format_key="docx", existing_names=set())
+        finally:
+            workspace.IMPORT_LOADERS.clear()
+            workspace.IMPORT_LOADERS.update(original_loaders)
 
         self.assertEqual(documents, [Document("lesson", "# Heading\n", None)])
         self.assertEqual(issues, [])
-        loader.assert_called_once_with(source)
+        self.assertEqual(calls, [source])
 
     def test_batch_import_documents_all_detects_each_supported_extension(self) -> None:
         source_dir = Path(self._tmpdir.name) / "incoming"
@@ -195,16 +205,30 @@ class DocumentWorkspaceTest(unittest.TestCase):
             source_dir / "delta.docx",
             source_dir / "epsilon.epub",
         ]
+        calls = []
+
+        def make_loader(key: str, document: Document):
+            def loader(path: Path | str) -> Document:
+                calls.append((key, Path(path)))
+                return document
+
+            return loader
+
         loaders = {
-            "txt": Mock(return_value=Document("alpha", "A", None)),
-            "dep": Mock(return_value=Document("beta", "B", "⠃")),
-            "pdf": Mock(return_value=Document("gamma", "G", None)),
-            "docx": Mock(return_value=Document("delta", "D", None)),
-            "epub": Mock(return_value=Document("epsilon", "E", None)),
+            "txt": make_loader("txt", Document("alpha", "A", None)),
+            "dep": make_loader("dep", Document("beta", "B", "⠃")),
+            "pdf": make_loader("pdf", Document("gamma", "G", None)),
+            "docx": make_loader("docx", Document("delta", "D", None)),
+            "epub": make_loader("epub", Document("epsilon", "E", None)),
         }
 
-        with patch.dict("documents.workspace.IMPORT_LOADERS", loaders, clear=False):
+        original_loaders = workspace.IMPORT_LOADERS.copy()
+        workspace.IMPORT_LOADERS.update(loaders)
+        try:
             documents, issues = batch_import_documents(paths, format_key="all", existing_names=set())
+        finally:
+            workspace.IMPORT_LOADERS.clear()
+            workspace.IMPORT_LOADERS.update(original_loaders)
 
         self.assertEqual(
             documents,
@@ -217,8 +241,10 @@ class DocumentWorkspaceTest(unittest.TestCase):
             ],
         )
         self.assertEqual(issues, [])
-        for path in paths:
-            loaders[path.suffix.lstrip(".")].assert_called_once_with(path)
+        self.assertEqual(
+            sorted(calls),
+            sorted((path.suffix.lstrip("."), path) for path in paths),
+        )
 
     def test_batch_import_documents_rejects_unknown_format(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unsupported import format"):

@@ -1,10 +1,16 @@
 from collections.abc import Callable
 import ctypes
 from ctypes import wintypes
+import logging
 import sys
 
 import wx
 import wx.html2
+
+from log import get_logger
+
+
+logger = get_logger("dotexpress.dual_view", "log/dual_view.log", level=logging.DEBUG)
 
 
 def _raise_windows_without_activating(window: wx.Window) -> bool:
@@ -28,6 +34,15 @@ def _raise_windows_without_activating(window: wx.Window) -> bool:
 	return bool(set_window_pos(window.GetHandle(), 0, 0, 0, 0, 0, flags))
 
 
+def _get_native_backend_name(web_view: wx.html2.WebView) -> str:
+	get_native_backend = getattr(web_view, "GetNativeBackend", None)
+	if callable(get_native_backend):
+		backend = get_native_backend()
+	else:
+		backend = getattr(web_view, "NativeBackend", None)
+	return str(backend) if backend else "unknown"
+
+
 class DualViewFrame(wx.Frame):
 	def __init__(
 		self,
@@ -44,6 +59,7 @@ class DualViewFrame(wx.Frame):
 		)
 		self._on_closed = on_closed
 		self.web_view = wx.html2.WebView.New(self)
+		logger.debug("Dual view webview backend: %s", _get_native_backend_name(self.web_view))
 		sizer = wx.BoxSizer(wx.VERTICAL)
 		sizer.Add(self.web_view, 1, wx.EXPAND)
 		self.SetSizer(sizer)

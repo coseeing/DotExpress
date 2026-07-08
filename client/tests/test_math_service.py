@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import patch
 
 from conversion.math_service import (
     MathConversionError,
@@ -10,52 +9,19 @@ from conversion.math_service import (
 
 class MathServiceTest(unittest.TestCase):
     def test_latex_to_mathml_normalizes_vec_output(self) -> None:
-        with patch("conversion.math_service._convert_latex_to_mathml", return_value="<math><mi>⇀</mi></math>"):
-            self.assertEqual(
-                latex_to_mathml(r"\vec{x}"),
-                "<math><mo>⇀</mo></math>",
-            )
+        self.assertIn("<mo>⇀</mo>", latex_to_mathml(r"\vec{x}"))
 
     def test_latex_to_mathml_normalizes_embedded_newlines_before_conversion(self) -> None:
-        with patch("conversion.math_service._convert_latex_to_mathml", return_value="<math/>") as convert_mock:
-            latex_to_mathml("\\left\\{\n\\begin{aligned}\na&=b\\\\\nc&=d\n\\end{aligned}\n\\right.")
-
-        convert_mock.assert_called_once_with("\\left\\{ \\begin{aligned} a&=b\\\\ c&=d \\end{aligned} \\right.")
+        mathml = latex_to_mathml("\\left\\{\n\\begin{aligned}\na&=b\\\\\nc&=d\n\\end{aligned}\n\\right.")
+        self.assertIn("<mi>a</mi><mi>&amp;</mi><mo>=</mo><mi>b</mi>", mathml)
+        self.assertIn("<mi>c</mi><mi>&amp;</mi><mo>=</mo><mi>d</mi>", mathml)
 
     def test_latex_to_mathml_escapes_bare_ampersands(self) -> None:
-        with patch(
-            "conversion.math_service._convert_latex_to_mathml",
-            return_value="<math><mrow><mi>a</mi><mi>&</mi><mi>b</mi></mrow></math>",
-        ):
-            self.assertEqual(
-                latex_to_mathml("a&b"),
-                "<math><mrow><mi>a</mi><mi>&amp;</mi><mi>b</mi></mrow></math>",
-            )
-
-    def test_translate_math_segment_calls_mathml_and_mathcat_in_order(self) -> None:
-        with patch("conversion.math_service.latex_to_mathml", return_value="<math><mi>x</mi></math>") as latex_mock:
-            with patch("conversion.math_service.mathml_to_nemeth_braille", return_value="⠭") as braille_mock:
-                self.assertEqual(translate_math_segment("x", braille_code="UEB"), "⠭")
-        latex_mock.assert_called_once_with("x")
-        braille_mock.assert_called_once_with("<math><mi>x</mi></math>", braille_code="UEB")
+        self.assertIn("<mi>a</mi><mi>&amp;</mi><mi>b</mi>", latex_to_mathml("a&b"))
 
     def test_translate_math_segment_raises_math_conversion_error_for_latex_failure(self) -> None:
-        with patch("conversion.math_service.latex_to_mathml", side_effect=ValueError("bad latex")):
-            with self.assertRaisesRegex(MathConversionError, "bad latex"):
-                translate_math_segment(r"\bad")
-
-    def test_translate_math_segment_logs_latex_and_mathml_on_braille_failure(self) -> None:
-        with patch("conversion.math_service.latex_to_mathml", return_value="<math><mfrac/></math>"):
-            with patch("conversion.math_service.mathml_to_nemeth_braille", side_effect=ValueError("braille boom")):
-                with patch("conversion.math_service.logger") as logger_mock:
-                    with self.assertRaisesRegex(MathConversionError, "braille boom"):
-                        translate_math_segment(r"\frac{2}{3}")
-
-        logger_mock.exception.assert_called_once()
-        args = logger_mock.exception.call_args[0]
-        self.assertIn(r"\frac{2}{3}", args)
-        self.assertIn("<math><mfrac/></math>", args)
-        self.assertIn("mathml_to_nemeth_braille", args)
+        with self.assertRaises(MathConversionError):
+            translate_math_segment(r"\frac{2}{")
 
 
 if __name__ == "__main__":

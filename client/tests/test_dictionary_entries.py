@@ -2,7 +2,6 @@ import csv
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from dictionaries.entries import (
 	DictionaryEntry,
@@ -42,8 +41,7 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 				writer.writerow(["", "\u2803", "General"])
 				writer.writerow(["Zhuyin", "invalid", "Bopomofo"])
 
-			with patch("dictionaries.entries.normalize_zhuyin_sequence", side_effect=ValueError):
-				entries = load_dictionary_entries(path)
+			entries = load_dictionary_entries(path)
 
 		self.assertEqual(entries, [DictionaryEntry("Alpha", "\u2801", "General")])
 
@@ -62,15 +60,14 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 	def test_save_load_roundtrip(self) -> None:
 		entries = [
 			DictionaryEntry("Alpha", "\u2801", "General"),
-			DictionaryEntry("Zhuyin", "\u3105\u02c9", "Bopomofo"),
+			DictionaryEntry("Zhuyin", "ㄉㄨˋ", "Bopomofo"),
 			DictionaryEntry("Braille", "\u2803\u2811", "Braille"),
 		]
 
 		with tempfile.TemporaryDirectory() as temp_dir:
 			path = Path(temp_dir) / "sample.csv"
 			save_dictionary_entries(path, entries)
-			with patch("dictionaries.entries.normalize_zhuyin_sequence", return_value="\u3105\u02c9"):
-				loaded_entries = load_dictionary_entries(path)
+			loaded_entries = load_dictionary_entries(path)
 
 		self.assertEqual(loaded_entries, entries)
 

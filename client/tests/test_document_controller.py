@@ -1,46 +1,4 @@
-import sys
-import types
 import unittest
-
-if "mammoth" not in sys.modules:
-    mammoth = types.ModuleType("mammoth")
-    mammoth.convert_to_html = lambda *args, **kwargs: types.SimpleNamespace(value="")
-    sys.modules["mammoth"] = mammoth
-
-if "ebooklib" not in sys.modules:
-    ebooklib = types.ModuleType("ebooklib")
-    epub = types.ModuleType("ebooklib.epub")
-    epub.read_epub = lambda *_args, **_kwargs: types.SimpleNamespace(spine=[], get_item_with_id=lambda _item_id: None)
-    ebooklib.epub = epub
-    sys.modules["ebooklib"] = ebooklib
-    sys.modules["ebooklib.epub"] = epub
-
-if "pymupdf" not in sys.modules:
-    sys.modules["pymupdf"] = types.ModuleType("pymupdf")
-
-if "pypdf" not in sys.modules:
-    pypdf = types.ModuleType("pypdf")
-    pypdf.PdfReader = type("PdfReader", (), {})
-    sys.modules["pypdf"] = pypdf
-
-if "lxml" not in sys.modules:
-    lxml = types.ModuleType("lxml")
-    etree = types.ModuleType("lxml.etree")
-    html = types.ModuleType("lxml.html")
-
-    class _QName:
-        def __init__(self, element):
-            self.localname = getattr(element, "tag", "")
-
-    etree.QName = _QName
-    etree.XMLParser = lambda *args, **kwargs: object()
-    etree.fromstring = lambda *args, **kwargs: types.SimpleNamespace(xpath=lambda *_a, **_k: [])
-    html.fragment_fromstring = lambda *args, **kwargs: types.SimpleNamespace()
-    lxml.etree = etree
-    lxml.html = html
-    sys.modules["lxml"] = lxml
-    sys.modules["lxml.etree"] = etree
-    sys.modules["lxml.html"] = html
 
 from documents.workspace import Document
 

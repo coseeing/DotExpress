@@ -1,13 +1,24 @@
 import unittest
-from unittest.mock import Mock
 
 from adapters.translation.liblouis import LiblouisTextTranslator
 
 
+class FakeLouisHelper:
+    def __init__(self) -> None:
+        self.translate_calls = []
+        self.terminated = False
+
+    def translate(self, tables, text, *, mode):
+        self.translate_calls.append((tables, text, mode))
+        return ([1, 3], [0, 1], [0, 1], None)
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+
 class LiblouisTextTranslatorTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.helper = Mock()
-        self.helper.translate.return_value = ([1, 3], [0, 1], [0, 1], None)
+        self.helper = FakeLouisHelper()
         self.adapter = LiblouisTextTranslator(
             helper=self.helper,
             tables_dir="/tables",
@@ -20,11 +31,7 @@ class LiblouisTextTranslatorTest(unittest.TestCase):
             raw="ab",
         )
 
-        self.helper.translate.assert_called_once_with(
-            ["/tables/en.ctb"],
-            "ab",
-            mode=4,
-        )
+        self.assertEqual(self.helper.translate_calls, [(["/tables/en.ctb"], "ab", 4)])
         self.assertEqual(result.raw, ["a", "b"])
         self.assertEqual(result.braille, ["⠁", "⠃"])
         self.assertEqual(result.braille_to_raw_pos, [0, 1])

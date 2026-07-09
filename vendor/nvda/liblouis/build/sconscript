@@ -14,9 +14,11 @@ Import(
 	[
 		"thirdPartyEnv",
 		"sourceDir",
+		"buildDir",
 	],
 )
 sourceDir: Base = sourceDir
+buildDir: Base = buildDir
 thirdPartyEnv: Environment = thirdPartyEnv
 env: Environment = typing.cast(Environment, thirdPartyEnv.Clone())
 
@@ -24,6 +26,7 @@ louisRootDir = env.Dir("#include/liblouis")
 louisSourceDir = louisRootDir.Dir("liblouis")
 louisTableDir = louisRootDir.Dir("tables")
 outDir = sourceDir.Dir("liblouis")
+workDir = buildDir
 signExec = env["signExec"] if (bool(env["certFile"]) ^ bool(env["apiSigningToken"])) else None
 
 RE_AC_INIT = re.compile(
@@ -74,13 +77,13 @@ env.Append(
 		"_EXPORTING",
 	],
 )
-env.Prepend(CPPPATH=[".", louisSourceDir])
+env.Prepend(CPPPATH=[workDir, louisSourceDir])
 
 # Upstream liblouis compiles without UNICODE defined.
 env["CPPDEFINES"].remove("UNICODE")
 
 liblouisH = env.Substfile(
-	"liblouis.h",
+	workDir.File("liblouis.h"),
 	louisSourceDir.File("liblouis.h.in"),
 	SUBST_DICT={"@WIDECHAR_TYPE@": "unsigned int"},
 )
@@ -95,9 +98,9 @@ sourceFiles = [
 	"metadata.c",
 	"utils.c",
 ]
-objs = [env.Object("%s.obj" % f, louisSourceDir.File(f)) for f in sourceFiles]
+objs = [env.Object(workDir.File("%s.obj" % f), louisSourceDir.File(f)) for f in sourceFiles]
 env.Requires(objs, liblouisH)
-louisLib = env.SharedLibrary("liblouis", objs)
+louisLib = env.SharedLibrary(workDir.File("liblouis"), objs)
 if signExec:
 	env.AddPostAction(louisLib[0], [signExec])
 louisLibInstall = env.Install(sourceDir, louisLib)

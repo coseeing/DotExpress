@@ -1,9 +1,11 @@
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 from adapters.translation.contracts import RuntimeUnavailableError
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
+from conversion.mathcat_adapter import MathCATError
 
 
 class ClosableTranslator:
@@ -38,6 +40,14 @@ class InitializerModule(types.ModuleType):
         if self.error is not None:
             raise self.error
         return "helper"
+
+
+class RecordingLogger:
+    def __init__(self) -> None:
+        self.warnings = []
+
+    def warning(self, message, *args, **kwargs) -> None:
+        self.warnings.append((message, args, kwargs))
 
 
 class ModuleBindings:
@@ -86,6 +96,24 @@ class TranslationRuntimeProviderTest(unittest.TestCase):
         self.assertIsInstance(runtime.text_translator, FallbackTextTranslator)
         self.assertIs(runtime.math_translator, math)
 
+    def test_logs_text_runtime_fallback_reason(self) -> None:
+        from adapters.translation import provider
+
+        logger = RecordingLogger()
+
+        with patch.object(provider, "logger", logger):
+            provider.build_translation_runtime(
+                text_factory=Factory(error=RuntimeUnavailableError("text unavailable")),
+                math_factory=Factory(ClosableTranslator()),
+            )
+
+        self.assertEqual(len(logger.warnings), 1)
+        message, args, kwargs = logger.warnings[0]
+        self.assertIn("Translation runtime fallback enabled", message)
+        self.assertEqual(args[0], "text")
+        self.assertEqual(str(args[1]), "text unavailable")
+        self.assertIs(kwargs["exc_info"], True)
+
     def test_falls_back_only_for_unavailable_math(self) -> None:
         from adapters.translation.provider import build_translation_runtime
 
@@ -98,6 +126,24 @@ class TranslationRuntimeProviderTest(unittest.TestCase):
 
         self.assertIs(runtime.text_translator, text)
         self.assertIsInstance(runtime.math_translator, FallbackMathTranslator)
+
+    def test_logs_math_runtime_fallback_reason(self) -> None:
+        from adapters.translation import provider
+
+        logger = RecordingLogger()
+
+        with patch.object(provider, "logger", logger):
+            provider.build_translation_runtime(
+                text_factory=Factory(ClosableTranslator()),
+                math_factory=Factory(error=RuntimeUnavailableError("math unavailable")),
+            )
+
+        self.assertEqual(len(logger.warnings), 1)
+        message, args, kwargs = logger.warnings[0]
+        self.assertIn("Translation runtime fallback enabled", message)
+        self.assertEqual(args[0], "math")
+        self.assertEqual(str(args[1]), "math unavailable")
+        self.assertIs(kwargs["exc_info"], True)
 
     def test_falls_back_for_both_unavailable_capabilities(self) -> None:
         from adapters.translation.provider import build_translation_runtime
@@ -197,6 +243,15 @@ class TranslationRuntimeProviderTest(unittest.TestCase):
 
         with ModuleBindings({"adapters.translation.mathcat": None}):
             with self.assertRaises(RuntimeUnavailableError):
+                provider.create_default_math_translator(platform="win32")
+
+    def test_default_math_factory_normalizes_native_runtime_errors(self) -> None:
+        from adapters.translation import provider
+
+        failing_adapter = InitializerModule("mathcat_adapter", error=MathCATError("missing MathCAT runtime"))
+
+        with patch.object(provider, "get_shared_mathcat_adapter", return_value=failing_adapter):
+            with self.assertRaisesRegex(RuntimeUnavailableError, "missing MathCAT runtime"):
                 provider.create_default_math_translator(platform="win32")
 
 

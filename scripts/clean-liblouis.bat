@@ -3,6 +3,7 @@ setlocal
 
 set "ROOT=%~dp0.."
 set "DIST=%ROOT%\vendor\nvda\liblouis\dist"
+set "BUILD_TEMP=%ROOT%\build\liblouis-temp"
 set "CLIENT=%ROOT%\client"
 set "CLIENT_BRAILLE=%CLIENT%\braille"
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -35,6 +36,7 @@ if errorlevel 1 (
 
 pushd "%ROOT%"
 if exist "%DIST%" rmdir /s /q "%DIST%"
+if exist "%BUILD_TEMP%" rmdir /s /q "%BUILD_TEMP%"
 del /q "%ROOT%\vendor\nvda\liblouis\build\liblouis.h" 2>nul
 del /q "%ROOT%\vendor\nvda\liblouis\build\liblouis.dll" "%ROOT%\vendor\nvda\liblouis\build\*.obj" "%ROOT%\vendor\nvda\liblouis\build\*.lib" "%ROOT%\vendor\nvda\liblouis\build\*.exp" "%ROOT%\vendor\nvda\liblouis\build\*.pdb" 2>nul
 del /q "%ROOT%\include\liblouis\liblouis\liblouis.h" 2>nul

@@ -1,16 +1,30 @@
 from __future__ import annotations
 
+import logging
 import sys
 from collections.abc import Callable
 
 from adapters.translation.contracts import RuntimeUnavailableError, TranslationRuntime
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
 from conversion.mathcat_adapter import MathCATError, get_shared_mathcat_adapter
+from log import get_logger
+
+
+logger = get_logger("dotexpress.translation", "log/translation.log", level=logging.WARNING)
 
 
 def _close_callback(adapter) -> Callable[[], None] | None:
     callback = getattr(adapter, "close", None)
     return callback if callable(callback) else None
+
+
+def _log_runtime_fallback(capability: str, error: RuntimeUnavailableError) -> None:
+    logger.warning(
+        "Translation runtime fallback enabled | capability=%s | reason=%s",
+        capability,
+        error,
+        exc_info=True,
+    )
 
 
 def build_translation_runtime(
@@ -21,7 +35,8 @@ def build_translation_runtime(
     callbacks = []
     try:
         text = text_factory()
-    except RuntimeUnavailableError:
+    except RuntimeUnavailableError as error:
+        _log_runtime_fallback("text", error)
         text = FallbackTextTranslator()
     else:
         callback = _close_callback(text)
@@ -30,7 +45,8 @@ def build_translation_runtime(
 
     try:
         math = math_factory()
-    except RuntimeUnavailableError:
+    except RuntimeUnavailableError as error:
+        _log_runtime_fallback("math", error)
         math = FallbackMathTranslator()
     else:
         callback = _close_callback(math)

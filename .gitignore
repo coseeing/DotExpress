@@ -6,6 +6,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+!vendor/nvda/mathcat/assets/libmathcat_py.pyd
 ref/
 storage/
 server/.venv/

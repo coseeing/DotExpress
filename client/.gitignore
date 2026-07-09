@@ -13,3 +13,4 @@ braille/liblouis.exp
 braille/louis_helper.py
 braille/liblouis/__init__.py
 braille/liblouis/tables/
+mathcat/assets/

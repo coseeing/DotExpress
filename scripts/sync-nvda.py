@@ -9,13 +9,14 @@ import tempfile
 from pathlib import Path
 
 SOURCE_REPO = "https://github.com/nvaccess/nvda.git"
-COPY_MAP = {
+LIBLOUIS_COPY_MAP = {
     "nvdaHelper/liblouis/sconscript": "build/sconscript",
     "nvdaHelper/liblouis/config.h": "build/config.h",
     "nvdaHelper/liblouis/strings.h": "build/strings.h",
     "source/louisHelper.py": "python/louisHelper.py",
     "include/liblouis/python/louis/__init__.py.in": "python/__init__.py.in",
 }
+MATHCAT_ASSETS_SOURCE = "include/nvda-mathcat/assets"
 
 
 class SyncError(RuntimeError):
@@ -206,9 +207,14 @@ def synchronize(
 ) -> None:
     nvda = root / "include" / "nvda"
     liblouis = root / "include" / "liblouis"
-    vendor = root / "vendor" / "nvda" / "liblouis"
+    vendor_root = root / "vendor" / "nvda"
+    liblouis_vendor = vendor_root / "liblouis"
+    mathcat_vendor = vendor_root / "mathcat"
+    mathcat_assets_source = nvda / MATHCAT_ASSETS_SOURCE
 
-    missing_sources = [relative for relative in COPY_MAP if not (nvda / relative).is_file()]
+    missing_sources = [relative for relative in LIBLOUIS_COPY_MAP if not (nvda / relative).is_file()]
+    if not mathcat_assets_source.is_dir():
+        missing_sources.append(MATHCAT_ASSETS_SOURCE)
     if missing_sources:
         raise SyncError("missing NVDA synchronization source: " + ", ".join(missing_sources))
 
@@ -224,12 +230,13 @@ def synchronize(
             f"liblouis commit mismatch: NVDA selects {selected_liblouis}, include/liblouis is {actual_liblouis}"
         )
 
-    vendor.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=vendor.parent) as temporary:
-        staged = Path(temporary) / "liblouis"
+    vendor_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=vendor_root) as temporary:
+        staged_liblouis = Path(temporary) / "liblouis"
+        staged_mathcat = Path(temporary) / "mathcat"
         copied_files: list[str] = []
-        for source_name, destination_name in COPY_MAP.items():
-            destination = staged / destination_name
+        for source_name, destination_name in LIBLOUIS_COPY_MAP.items():
+            destination = staged_liblouis / destination_name
             destination.parent.mkdir(parents=True, exist_ok=True)
             content = (nvda / source_name).read_text(encoding="utf-8")
             if source_name == "nvdaHelper/liblouis/sconscript":
@@ -237,7 +244,7 @@ def synchronize(
             destination.write_text(content, encoding="utf-8", newline="\n")
             copied_files.append(destination_name)
 
-        runtime_helper = staged / "runtime" / "louis_helper.py"
+        runtime_helper = staged_liblouis / "runtime" / "louis_helper.py"
         runtime_helper.parent.mkdir(parents=True)
         runtime_helper.write_text(
             _adapt_helper((nvda / "source/louisHelper.py").read_text(encoding="utf-8")),
@@ -252,15 +259,39 @@ def synchronize(
             "source_commit": nvda_commit,
             "files": sorted(copied_files),
         }
-        (staged / "SOURCE.json").write_text(
+        (staged_liblouis / "SOURCE.json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
             newline="\n",
         )
 
-        if vendor.exists():
-            shutil.rmtree(vendor)
-        shutil.copytree(staged, vendor)
+        shutil.copytree(mathcat_assets_source, staged_mathcat / "assets")
+        mathcat_files = sorted(
+            str(path.relative_to(staged_mathcat).as_posix())
+            for path in (staged_mathcat / "assets").rglob("*")
+            if path.is_file()
+        )
+        (staged_mathcat / "SOURCE.json").write_text(
+            json.dumps(
+                {
+                    "source_repo": SOURCE_REPO,
+                    "source_path": f"include/nvda/{MATHCAT_ASSETS_SOURCE}",
+                    "source_commit": nvda_commit,
+                    "files": mathcat_files,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+
+        for destination in (liblouis_vendor, mathcat_vendor):
+            if destination.exists():
+                shutil.rmtree(destination)
+        shutil.copytree(staged_liblouis, liblouis_vendor)
+        shutil.copytree(staged_mathcat, mathcat_vendor)
 
 
 def main() -> int:
@@ -276,7 +307,7 @@ def main() -> int:
             nvda_commit_override=args.nvda_commit_override,
         )
     except SyncError as error:
-        parser.exit(1, f"sync_nvda_liblouis: {error}\n")
+        parser.exit(1, f"sync-nvda: {error}\n")
     return 0
 
 

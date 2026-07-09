@@ -1,12 +1,21 @@
 import hashlib
+import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.sync_nvda_liblouis import SyncError, synchronize
+
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "sync-nvda.py"
+SPEC = importlib.util.spec_from_file_location("sync_nvda", SCRIPT_PATH)
+assert SPEC is not None and SPEC.loader is not None
+sync_nvda = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(sync_nvda)
+SyncError = sync_nvda.SyncError
+synchronize = sync_nvda.synchronize
 
 
 class SyncNvdaLiblouisTests(unittest.TestCase):
@@ -16,6 +25,7 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
         self.nvda = self.root / "include" / "nvda"
         self.liblouis = self.root / "include" / "liblouis"
         self.vendor = self.root / "vendor" / "nvda" / "liblouis"
+        self.mathcat_vendor = self.root / "vendor" / "nvda" / "mathcat"
 
         for path in (self.nvda, self.liblouis):
             path.mkdir(parents=True)
@@ -45,6 +55,10 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
             target = self.nvda / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
+        mathcat_assets = self.nvda / "include" / "nvda-mathcat" / "assets"
+        (mathcat_assets / "Rules").mkdir(parents=True, exist_ok=True)
+        (mathcat_assets / "libmathcat_py.pyd").write_bytes(b"fixture pyd")
+        (mathcat_assets / "Rules" / "prefs.yaml").write_text("prefs: fixture\n", encoding="utf-8")
 
         (self.liblouis / "configure.ac").write_text("AC_INIT\n", encoding="utf-8")
 
@@ -80,6 +94,15 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
         self.assertNotIn("synced_at", metadata)
         self.assertEqual(sorted(metadata["files"]), metadata["files"])
 
+        mathcat_metadata = json.loads((self.mathcat_vendor / "SOURCE.json").read_text(encoding="utf-8"))
+        self.assertEqual("https://github.com/nvaccess/nvda.git", mathcat_metadata["source_repo"])
+        self.assertEqual("include/nvda/include/nvda-mathcat/assets", mathcat_metadata["source_path"])
+        self.assertEqual(self.nvda_commit, mathcat_metadata["source_commit"])
+        self.assertEqual(
+            ["assets/Rules/prefs.yaml", "assets/libmathcat_py.pyd"],
+            mathcat_metadata["files"],
+        )
+
     def test_missing_allowlisted_source_fails_before_writing_vendor(self):
         (self.nvda / "source" / "louisHelper.py").unlink()
         with self.assertRaisesRegex(SyncError, "source/louisHelper.py"):
@@ -89,6 +112,18 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
                 nvda_commit_override=self.nvda_commit,
             )
         self.assertFalse(self.vendor.exists())
+
+    def test_missing_mathcat_assets_fails_before_writing_vendor(self):
+        shutil_target = self.nvda / "include" / "nvda-mathcat"
+        shutil.rmtree(shutil_target)
+        with self.assertRaisesRegex(SyncError, "include/nvda-mathcat/assets"):
+            synchronize(
+                root=self.root,
+                expected_liblouis_commit=self.liblouis_commit,
+                nvda_commit_override=self.nvda_commit,
+            )
+        self.assertFalse(self.vendor.exists())
+        self.assertFalse(self.mathcat_vendor.exists())
 
     def test_liblouis_revision_mismatch_fails(self):
         with self.assertRaisesRegex(SyncError, "liblouis commit mismatch"):
@@ -102,6 +137,9 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
         stale = self.vendor / "build" / "removed-upstream.h"
         stale.parent.mkdir(parents=True)
         stale.write_text("stale", encoding="utf-8")
+        stale_mathcat = self.mathcat_vendor / "assets" / "removed-upstream.pyd"
+        stale_mathcat.parent.mkdir(parents=True)
+        stale_mathcat.write_bytes(b"stale")
 
         synchronize(
             root=self.root,
@@ -118,6 +156,11 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
         second = hashlib.sha256((self.vendor / "SOURCE.json").read_bytes()).hexdigest()
 
         self.assertFalse(stale.exists())
+        self.assertFalse(stale_mathcat.exists())
+        self.assertEqual(
+            b"fixture pyd",
+            (self.mathcat_vendor / "assets" / "libmathcat_py.pyd").read_bytes(),
+        )
         self.assertEqual(first, second)
         self.assertEqual(
             [

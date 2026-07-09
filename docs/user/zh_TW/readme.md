@@ -128,6 +128,7 @@ DotExpress 會從兩份受版本控管的原始碼檢出內容建置 liblouis：
 * `include/liblouis/`：上游 liblouis 原始碼 submodule
 * `include/nvda/`：固定版本的 NVDA 原始碼 submodule，用於提供 liblouis 整合層
 * `vendor/nvda/liblouis/`：由 NVDA 同步過來、凍結在 repo 內的 vendor 快照
+* `vendor/nvda/mathcat/`：由 NVDA 同步過來的 MathCAT assets 快照
 
 最後產生的執行期輸出如下：
 
@@ -135,8 +136,9 @@ DotExpress 會從兩份受版本控管的原始碼檢出內容建置 liblouis：
 * `client/braille/liblouis/tables/`
 * `client/braille/louis_helper.py`
 * `client/braille/liblouis/__init__.py`
+* `client/mathcat/assets/`
 
-真正的來源依據是兩個 submodule 指標，而 `vendor/nvda/liblouis/` 則是 `include/nvda/` 與受追蹤執行期 Python 檔案之間的凍結同步快照。執行期所需的 DLL、helper、wrapper 與 tables 都是由這些來源產生，不應手動修改。
+真正的來源依據是兩個 submodule 指標，而 `vendor/nvda/liblouis/` 與 `vendor/nvda/mathcat/` 則是從 `include/nvda/` 同步出的凍結快照。執行期所需的 DLL、helper、wrapper 與 tables 都是由這些來源產生，不應手動修改。
 
 ### 先備條件
 
@@ -150,18 +152,18 @@ DotExpress 會從兩份受版本控管的原始碼檢出內容建置 liblouis：
 ```bat
 git submodule update --init include/liblouis
 git submodule update --init include/nvda
-py scripts\sync_nvda_liblouis.py
+py scripts\sync-nvda.py
 scripts\clean-liblouis.bat
 scripts\build-liblouis.bat
-scripts\install-liblouis.bat
+scripts\install.bat
 ```
 
 ### 手動升級 NVDA
 
 1. 在 `include/nvda` 切換到核准使用的 commit。
 2. 將 `include/liblouis` 設為 `git -C include/nvda rev-parse HEAD:include/liblouis` 所輸出的 gitlink。
-3. 執行 `py scripts\sync_nvda_liblouis.py`。
-4. 檢查 `vendor/nvda/liblouis/`、`SOURCE.json` 與重新產生的執行期 Python 檔案。
+3. 執行 `py scripts\sync-nvda.py`。
+4. 檢查 `vendor/nvda/liblouis/`、`vendor/nvda/mathcat/`、`SOURCE.json` 與重新產生的執行期檔案。
 5. 重新 clean、build，並執行 liblouis 執行期測試。
 6. 將兩個 submodule 指標、同步後的 vendor 檔案與重新產生的執行期檔案一併提交。
 

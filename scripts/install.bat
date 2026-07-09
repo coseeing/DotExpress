@@ -34,4 +34,19 @@ pushd "%ROOT%"
 scons install %*
 set "RESULT=%ERRORLEVEL%"
 popd
+if not "%RESULT%"=="0" exit /b %RESULT%
+
+set "MATHCAT_ASSETS_SOURCE=%ROOT%\vendor\nvda\mathcat\assets"
+set "MATHCAT_ASSETS=%ROOT%\client\mathcat\assets"
+
+if not exist "%MATHCAT_ASSETS_SOURCE%\libmathcat_py.pyd" (
+    echo Missing MathCAT runtime: %MATHCAT_ASSETS_SOURCE%\libmathcat_py.pyd
+    exit /b 1
+)
+
+if exist "%MATHCAT_ASSETS%" rmdir /s /q "%MATHCAT_ASSETS%"
+mkdir "%MATHCAT_ASSETS%"
+xcopy "%MATHCAT_ASSETS_SOURCE%\*" "%MATHCAT_ASSETS%\" /E /I /Y >nul
+if errorlevel 1 exit /b 1
+
 exit /b %RESULT%

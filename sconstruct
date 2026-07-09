@@ -48,6 +48,7 @@ thirdPartyEnv.Append(
 thirdPartyEnv.Append(ARFLAGS=["/WX", "/subsystem:windows,10.00"])
 thirdPartyEnv.Append(M4FLAGS="-G")
 dist_root_dir = thirdPartyEnv.Dir("#vendor/nvda/liblouis/dist")
+build_root_dir = thirdPartyEnv.Dir("#build/liblouis-temp")
 client_root_dir = thirdPartyEnv.Dir("#client/braille")
 dist_tables_dir = "#vendor/nvda/liblouis/dist/liblouis/tables"
 client_tables_dir = "#client/braille/liblouis/tables"
@@ -57,6 +58,7 @@ def _remove_liblouis_artifacts(target, source, env):
     root = env.Dir("#").abspath
     patterns = (
         "#vendor/nvda/liblouis/dist",
+        "#build/liblouis-temp",
         "#vendor/nvda/liblouis/build/liblouis.h",
         "#vendor/nvda/liblouis/build/liblouis.dll",
         "#vendor/nvda/liblouis/build/*.obj",
@@ -85,7 +87,8 @@ def _remove_liblouis_artifacts(target, source, env):
 
 
 sourceDir = dist_root_dir
-Export("thirdPartyEnv", "sourceDir")
+buildDir = build_root_dir
+Export("thirdPartyEnv", "sourceDir", "buildDir")
 build_outputs = SConscript("vendor/nvda/liblouis/build/sconscript")
 louis_lib_install, louis_python, louis_tables, *_ = build_outputs
 helper_build = thirdPartyEnv.InstallAs(

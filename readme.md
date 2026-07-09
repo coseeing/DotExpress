@@ -126,6 +126,7 @@ DotExpress builds liblouis from two tracked source checkouts:
 - `include/liblouis/`: upstream liblouis source submodule
 - `include/nvda/`: pinned NVDA source submodule used for the liblouis integration layer
 - `vendor/nvda/liblouis/`: synced NVDA-derived vendor snapshot
+- `vendor/nvda/mathcat/`: synced NVDA MathCAT assets snapshot
 
 The generated runtime outputs are:
 
@@ -133,8 +134,9 @@ The generated runtime outputs are:
 - `client/braille/liblouis/tables/`
 - `client/braille/louis_helper.py`
 - `client/braille/liblouis/__init__.py`
+- `client/mathcat/assets/`
 
-The source of truth is the pair of submodule pointers, with `vendor/nvda/liblouis/` acting as the frozen sync snapshot between `include/nvda/` and the tracked runtime Python files. The runtime DLL, helper, wrapper, and tables are generated from those sources and should not be hand-edited.
+The source of truth is the pair of submodule pointers, with `vendor/nvda/liblouis/` and `vendor/nvda/mathcat/` acting as frozen sync snapshots from `include/nvda/`. The runtime DLLs, helper, wrapper, and tables are generated from those sources and should not be hand-edited.
 
 ### Prerequisites
 
@@ -148,18 +150,18 @@ The source of truth is the pair of submodule pointers, with `vendor/nvda/libloui
 ```bat
 git submodule update --init include/liblouis
 git submodule update --init include/nvda
-py scripts\sync_nvda_liblouis.py
+py scripts\sync-nvda.py
 scripts\clean-liblouis.bat
 scripts\build-liblouis.bat
-scripts\install-liblouis.bat
+scripts\install.bat
 ```
 
 ### Manual NVDA upgrade
 
 1. Check out the approved commit in `include/nvda`.
 2. Set `include/liblouis` to the gitlink printed by `git -C include/nvda rev-parse HEAD:include/liblouis`.
-3. Run `py scripts\sync_nvda_liblouis.py`.
-4. Review `vendor/nvda/liblouis/`, `SOURCE.json`, and the regenerated runtime Python files.
+3. Run `py scripts\sync-nvda.py`.
+4. Review `vendor/nvda/liblouis/`, `vendor/nvda/mathcat/`, `SOURCE.json`, and the regenerated runtime files.
 5. Clean-build and run the liblouis runtime tests.
 6. Commit both submodule pointers, synchronized vendor files, and generated runtime files together.
 

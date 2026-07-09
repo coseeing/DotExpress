@@ -23,7 +23,7 @@ if errorlevel 1 (
     exit /b %RESULT%
 )
 
-call scripts\install-liblouis.bat
+call scripts\install.bat
 if errorlevel 1 (
     set "RESULT=%ERRORLEVEL%"
     popd

@@ -10,6 +10,8 @@ class LiblouisBuildContractTests(unittest.TestCase):
         text = (ROOT / ".gitignore").read_text(encoding="utf-8")
         self.assertIn("__pycache__/", text)
         self.assertIn("*.pyc", text)
+        self.assertIn("*.pyd", text)
+        self.assertIn("!vendor/nvda/mathcat/assets/libmathcat_py.pyd", text)
 
     def test_client_gitignore_owns_client_specific_ignore_rules(self):
         root_text = (ROOT / ".gitignore").read_text(encoding="utf-8")
@@ -28,6 +30,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
             "braille/louis_helper.py",
             "braille/liblouis/__init__.py",
             "braille/liblouis/tables/",
+            "mathcat/assets/",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, client_text)
@@ -43,6 +46,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
             '"apiSigningToken"',
             "vendor/nvda/liblouis/build/sconscript",
             "vendor/nvda/liblouis/dist",
+            "build/liblouis-temp",
             'tools=["default", "m4"]',
             'miscDeps/tools/m4.exe',
             '"UNICODE"',
@@ -70,8 +74,21 @@ class LiblouisBuildContractTests(unittest.TestCase):
         self.assertNotIn("M4_EXE", text)
 
     def test_install_batch_invokes_scons_install(self):
-        text = (ROOT / "scripts" / "install-liblouis.bat").read_text(encoding="utf-8")
+        text = (ROOT / "scripts" / "install.bat").read_text(encoding="utf-8")
         self.assertIn("scons install", text.lower())
+        self.assertIn(r"vendor\nvda\mathcat\assets", text.lower())
+        self.assertIn(r"client\mathcat\assets", text.lower())
+        self.assertIn("xcopy", text.lower())
+        self.assertIn("/e /i /y", text.lower())
+        self.assertFalse((ROOT / "scripts" / "install-liblouis.bat").exists())
+
+    def test_nvda_sync_script_is_renamed_and_syncs_mathcat_assets(self):
+        self.assertFalse((ROOT / "scripts" / "sync-nvda-liblouis.py").exists())
+        text = (ROOT / "scripts" / "sync-nvda.py").read_text(encoding="utf-8")
+        self.assertIn("LIBLOUIS_COPY_MAP", text)
+        self.assertIn("MATHCAT_ASSETS_SOURCE", text)
+        self.assertIn("include/nvda-mathcat/assets", text)
+        self.assertIn("vendor_root / \"mathcat\"", text)
 
     def test_clean_batch_invokes_scons_clean(self):
         text = (ROOT / "scripts" / "clean-liblouis.bat").read_text(encoding="utf-8")
@@ -79,6 +96,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
         for required in (
             "dist",
             "client_braille",
+            r'build\liblouis-temp',
             r'vendor\nvda\liblouis\build\liblouis.dll',
             r'liblouis\tables',
             'liblouis.dll',
@@ -114,7 +132,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
         for required in (
             r"call scripts\clean-liblouis.bat",
             r"call scripts\build-liblouis.bat",
-            r"call scripts\install-liblouis.bat",
+            r"call scripts\install.bat",
             r"call scripts\build-dotexpress.bat",
         ):
             with self.subTest(required=required):

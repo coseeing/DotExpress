@@ -27,6 +27,7 @@ louisSourceDir = louisRootDir.Dir("liblouis")
 louisTableDir = louisRootDir.Dir("tables")
 outDir = sourceDir.Dir("liblouis")
 workDir = buildDir
+buildInputsDir = env.Dir(".")
 signExec = env["signExec"] if (bool(env["certFile"]) ^ bool(env["apiSigningToken"])) else None
 
 RE_AC_INIT = re.compile(
@@ -77,7 +78,7 @@ env.Append(
 		"_EXPORTING",
 	],
 )
-env.Prepend(CPPPATH=[workDir, louisSourceDir])
+env.Prepend(CPPPATH=[workDir, buildInputsDir, louisSourceDir])
 
 # Upstream liblouis compiles without UNICODE defined.
 env["CPPDEFINES"].remove("UNICODE")

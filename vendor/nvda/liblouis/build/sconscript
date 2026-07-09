@@ -100,7 +100,7 @@ sourceFiles = [
 ]
 objs = [env.Object(workDir.File("%s.obj" % f), louisSourceDir.File(f)) for f in sourceFiles]
 env.Requires(objs, liblouisH)
-louisLib = env.SharedLibrary(workDir.File("liblouis"), objs)
+louisLib = env.SharedLibrary(workDir.File("liblouis.dll"), objs)
 if signExec:
 	env.AddPostAction(louisLib[0], [signExec])
 louisLibInstall = env.Install(sourceDir, louisLib)

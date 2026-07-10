@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable
+
+from conversion.math_service import latex_to_mathml
 
 
 @dataclass(frozen=True)
@@ -11,12 +13,14 @@ class DualViewSegment:
 @dataclass(frozen=True)
 class AlignmentItem:
 	raw_index: int
-	raw_char: str
+	raw_text: str
 	braille_start: int
 	braille_end: int
 	braille_text: str
 	is_space: bool
 	is_newline: bool
+	source_kind: str
+	source_html: str | None
 
 
 @dataclass(frozen=True)
@@ -37,10 +41,11 @@ def _token_braille_end(raw_to_braille_pos: list[int], token_index: int, braille_
 	return braille_length
 
 
-def build_dual_view_model(translation_results: Iterable[object]) -> DualViewModel:
-	segments: list[AlignmentSegment] = []
+def build_dual_view_model(segments: Iterable[DualViewSegment], *, mathml_converter: Callable[[str], str] = latex_to_mathml) -> DualViewModel:
+	result_segments: list[AlignmentSegment] = []
 
-	for result in translation_results:
+	for segment in segments:
+		result = segment.result
 		raw_tokens = list(result.raw)
 		braille = list(result.braille)
 		raw_to_braille_pos = list(result.raw_to_braille_pos)
@@ -49,7 +54,6 @@ def build_dual_view_model(translation_results: Iterable[object]) -> DualViewMode
 			raise ValueError("raw_to_braille_pos must contain one entry per raw token")
 
 		items: list[AlignmentItem] = []
-		raw_index = 0
 		for token_index, raw_token in enumerate(raw_tokens):
 			start = raw_to_braille_pos[token_index]
 			end = _token_braille_end(raw_to_braille_pos, token_index, len(braille))
@@ -58,22 +62,21 @@ def build_dual_view_model(translation_results: Iterable[object]) -> DualViewMode
 				raise ValueError("invalid raw-to-braille alignment range")
 
 			raw_text = str(raw_token)
-			for character_index, raw_char in enumerate(raw_text):
-				character_start = start if character_index == 0 else end
-				items.append(
-					AlignmentItem(
-						raw_index=raw_index,
-						raw_char=raw_char,
-						braille_start=character_start,
-						braille_end=end,
-						braille_text="".join(braille[character_start:end]),
-						is_space=raw_char.isspace() and raw_char != "\n",
-						is_newline=raw_char == "\n",
-					)
+			items.append(
+				AlignmentItem(
+					raw_index=token_index,
+					raw_text=raw_text,
+					braille_start=start,
+					braille_end=end,
+					braille_text="".join(braille[start:end]),
+					is_space=(raw_text == " "),
+					is_newline=(raw_text == "\n"),
+					source_kind=segment.source_kind,
+					source_html=mathml_converter(raw_text) if segment.source_kind == "math" else None,
 				)
-				raw_index += 1
+			)
 
-		segments.append(
+		result_segments.append(
 			AlignmentSegment(
 				source_text="".join(str(token) for token in raw_tokens),
 				braille_text="".join(braille),
@@ -81,4 +84,4 @@ def build_dual_view_model(translation_results: Iterable[object]) -> DualViewMode
 			)
 		)
 
-	return DualViewModel(tuple(segments))
+	return DualViewModel(tuple(result_segments))

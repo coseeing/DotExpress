@@ -640,7 +640,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         policy = gui.ConversionCompletionPolicy(show_success=False)
         frame._dual_view_frame = Mock()
         frame._refresh_dual_view = Mock()
-        conversion_output = gui.ConversionOutput("braille", ("segment",))
+        conversion_output = gui.ConversionOutput("braille", ("segment",), dual_view_segments=("segment",))
 
         with patch.object(gui.wx, "MessageBox"):
             frame._finish_conversion_success(

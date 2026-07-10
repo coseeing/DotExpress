@@ -9,7 +9,7 @@ def _render_item(item: AlignmentItem) -> str:
 		return '<span class="line-break" role="separator"></span>'
 
 	classes = "cell space" if item.is_space else "cell"
-	source = "&nbsp;" if item.is_space else html.escape(item.raw_char, quote=True)
+	source = "&nbsp;" if item.is_space else html.escape(item.raw_text, quote=True)
 	braille = html.escape(item.braille_text, quote=True) or '<span class="empty">∅</span>'
 	metadata = html.escape(
 		json.dumps(

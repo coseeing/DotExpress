@@ -22,6 +22,7 @@ class ConversionRequest:
 class ConversionOutput:
     display_text: str
     translation_results: tuple[object, ...]
+    dual_view_segments: tuple[object, ...] = ()
 
 
 class ConversionStageError(Exception):

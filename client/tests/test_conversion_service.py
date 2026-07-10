@@ -6,10 +6,12 @@ from types import ModuleType
 
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
+from dual_view.model import DualViewSegment
 from conversion.service import (
     ConversionRequest,
     ConversionStageError,
     convert_text_for_output,
+    convert_text_with_alignment,
     get_public_error_message,
     translate_with_language,
     translate_with_language_segments,
@@ -51,6 +53,7 @@ class ConversionServiceTest(unittest.TestCase):
         self.bopomofo_path = self.test_dir / "Bopomofo2Braille.csv"
         self._write_csv(self.dictionary_path, ["text", "braille", "type"], [])
         self._write_csv(self.bopomofo_path, ["Bopomofo", "Braille"], [])
+        self._write_csv(self.test_dir / "BopomofoChar2Braille.csv", ["Bopomofo", "Braille"], [])
         self.calls: list[tuple] = []
         self.request = ConversionRequest(
             raw_text="abc",
@@ -354,6 +357,86 @@ class ConversionServiceTest(unittest.TestCase):
 
         self.assertEqual(result.raw, ["價格\\$100"])
         self.assertEqual("".join(result.braille), "T[價格\\$100]")
+
+    def test_dual_view_segments_exposes_text_source_kind(self) -> None:
+        request = ConversionRequest(
+            raw_text="hello",
+            table_file="zh-tw.ctb",
+            output_mode="unicode",
+            width=40,
+            dictionary_path=self.dictionary_path,
+            data_dir=self.test_dir,
+            translation_tables={"default": "zh-tw.ctb"},
+        )
+        output = convert_text_with_alignment(request, runtime=self._runtime())
+
+        self.assertEqual(len(output.dual_view_segments), 1)
+        self.assertEqual(output.dual_view_segments[0].source_kind, "text")
+        self.assertIs(output.translation_results[0], output.dual_view_segments[0].result)
+
+    def test_dual_view_segments_exposes_math_source_kind(self) -> None:
+        request = ConversionRequest(
+            raw_text="a$x$b",
+            table_file="zh-tw.ctb",
+            output_mode="unicode",
+            width=40,
+            dictionary_path=self.dictionary_path,
+            data_dir=self.test_dir,
+            translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
+        )
+        output = convert_text_with_alignment(request, runtime=self._runtime())
+
+        self.assertEqual(
+            [seg.source_kind for seg in output.dual_view_segments],
+            ["text", "text", "math", "text", "text"],
+        )
+
+    def test_dual_view_segments_boundary_space_is_text(self) -> None:
+        request = ConversionRequest(
+            raw_text="計算$1+2$的值",
+            table_file="zh-tw.ctb",
+            output_mode="unicode",
+            width=40,
+            dictionary_path=self.dictionary_path,
+            data_dir=self.test_dir,
+            translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
+        )
+        output = convert_text_with_alignment(request, runtime=self._runtime())
+
+        self.assertEqual(
+            [seg.source_kind for seg in output.dual_view_segments],
+            ["text", "text", "math", "text", "text"],
+        )
+
+    def test_translate_with_language_segments_still_returns_plain_results(self) -> None:
+        runtime = self._runtime()
+        results = translate_with_language_segments(
+            "table.ctb",
+            "ab$x+1$",
+            self.dictionary_path,
+            {"default": "table.ctb", "math": "Nemeth"},
+            self.bopomofo_path,
+            runtime=runtime,
+        )
+
+        for result in results:
+            self.assertIsInstance(result, TranslationResult)
+
+    def test_dual_view_segments_empty_convert_has_empty_tuple(self) -> None:
+        request = ConversionRequest(
+            raw_text="",
+            table_file="zh-tw.ctb",
+            output_mode="unicode",
+            width=40,
+            dictionary_path=self.dictionary_path,
+            data_dir=self.test_dir,
+            translation_tables={"default": "zh-tw.ctb"},
+        )
+        output = convert_text_with_alignment(request, runtime=self._runtime())
+
+        self.assertEqual(output.display_text, "")
+        self.assertEqual(output.translation_results, ())
+        self.assertEqual(output.dual_view_segments, ())
 
 if __name__ == "__main__":
     unittest.main()

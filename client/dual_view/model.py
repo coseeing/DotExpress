@@ -3,6 +3,12 @@ from typing import Iterable
 
 
 @dataclass(frozen=True)
+class DualViewSegment:
+    result: object
+    source_kind: str
+
+
+@dataclass(frozen=True)
 class AlignmentItem:
 	raw_index: int
 	raw_char: str

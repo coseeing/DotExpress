@@ -1089,10 +1089,6 @@ msgstr ""
 msgid "No conversion data is available for this document."
 msgstr ""
 
-#: gui.py:193 gui.py:447
-msgid "Translation segment"
-msgstr ""
-
 #: gui.py:194
 msgid "Convert"
 msgstr ""

@@ -1112,10 +1112,8 @@ msgstr "轉譯"
 msgid "No conversion data is available for this document."
 msgstr "此文件沒有可顯示的轉換資料。"
 
-#: gui.py:193 gui.py:447
-msgid "Translation segment"
-msgstr "轉譯區段"
-
+#~ msgid "Translation segment"
+#~ msgstr "轉譯區段"
 #: gui.py:194
 msgid "Convert"
 msgstr "執行轉換"

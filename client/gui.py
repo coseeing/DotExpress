@@ -190,7 +190,6 @@ _MENU_TRANSLATION_MARKERS = (
 	_("Delete All"),
 	_("Translation"),
 	_("No conversion data is available for this document."),
-	_("Translation segment"),
 	_("Convert"),
 	_("Settings"),
 	_("Dictionary Management..."),

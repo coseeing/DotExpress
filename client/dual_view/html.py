@@ -9,7 +9,10 @@ def _render_item(item: AlignmentItem) -> str:
 		return '<span class="line-break" role="separator"></span>'
 
 	classes = "cell space" if item.is_space else "cell"
-	source = "&nbsp;" if item.is_space else html.escape(item.raw_text, quote=True)
+	if item.source_kind == "math" and item.source_html is not None:
+		source = item.source_html
+	else:
+		source = "&nbsp;" if item.is_space else html.escape(item.raw_text, quote=True)
 	braille = html.escape(item.braille_text, quote=True) or '<span class="empty">∅</span>'
 	metadata = html.escape(
 		json.dumps(
@@ -30,9 +33,9 @@ def _render_item(item: AlignmentItem) -> str:
 	)
 
 
-def _render_segment(segment: AlignmentSegment, *, segment_label: str) -> str:
+def _render_segment(segment: AlignmentSegment) -> str:
 	return (
-		f'<section class="segment" aria-label="{html.escape(segment_label, quote=True)}">'
+		'<section class="segment">'
 		+ "".join(_render_item(item) for item in segment.items)
 		+ "</section>"
 	)
@@ -42,10 +45,9 @@ def render_dual_view_html(
 	model: DualViewModel,
 	*,
 	empty_message: str = "No conversion data is available for this document.",
-	segment_label: str = "Translation segment",
 ) -> str:
 	if model.segments:
-		body = "".join(_render_segment(segment, segment_label=segment_label) for segment in model.segments)
+		body = "".join(_render_segment(segment) for segment in model.segments)
 	else:
 		body = f'<p class="empty-state">{html.escape(empty_message, quote=True)}</p>'
 

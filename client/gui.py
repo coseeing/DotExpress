@@ -494,7 +494,6 @@ class BrailleFrame(wx.Frame):
 		return render_dual_view_html(
 			build_dual_view_model(results),
 			empty_message=_("No conversion data is available for this document."),
-			segment_label=_("Translation segment"),
 		)
 
 	def _refresh_dual_view(self) -> None:

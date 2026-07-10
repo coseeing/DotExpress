@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock
 
 from dual_view.html import render_dual_view_html
 from dual_view.model import DualViewSegment, build_dual_view_model
@@ -13,24 +14,29 @@ class TranslationResult:
 
 
 class DualViewHtmlTest(unittest.TestCase):
-	def render(self, raw, braille, positions):
+	def render(self, raw, braille, positions, *, source_kind="text"):
 		result = TranslationResult(list(raw), list(braille), [0] * len(braille), positions)
 		return render_dual_view_html(build_dual_view_model([
-			DualViewSegment(result=result, source_kind="text"),
+			DualViewSegment(result=result, source_kind=source_kind),
 		]))
 
-	def test_renders_source_above_braille(self):
+	def test_renders_source_text_from_raw_text(self):
 		output = self.render("a", "⠁", [0])
 
 		self.assertIn('<span class="source">a</span>', output)
 		self.assertIn('<span class="braille">⠁</span>', output)
 
-	def test_escapes_source_and_metadata(self):
+	def test_embedded_source_text_is_escaped_for_text_items(self):
+		output = self.render("<", "⠣", [0])
+
+		self.assertIn("&lt;", output)
+		self.assertNotIn('<span class="source"><</span>', output)
+
+	def test_escapes_metadata(self):
 		output = self.render("<", "⠣", [0])
 
 		self.assertIn("&lt;", output)
 		self.assertIn("&quot;raw_index&quot;", output)
-		self.assertNotIn('<span class="source"><</span>', output)
 
 	def test_renders_space_and_newline_semantics(self):
 		output = self.render(" \n", "⠀", [0, 1])
@@ -38,24 +44,49 @@ class DualViewHtmlTest(unittest.TestCase):
 		self.assertIn('class="cell space"', output)
 		self.assertIn('class="line-break"', output)
 
+	def test_math_item_renders_mathml_in_source_area(self):
+		fake_mathml = "<math><mi>x</mi></math>"
+		result = TranslationResult(list("x"), list("⠭"), [0], [0])
+		output = render_dual_view_html(build_dual_view_model(
+			[DualViewSegment(result=result, source_kind="math")],
+			mathml_converter=lambda _: fake_mathml,
+		))
+
+		self.assertIn(fake_mathml, output)
+
+	def test_generated_mathml_is_not_escaped_as_visible_text(self):
+		fake_mathml = "<math><mi>x</mi></math>"
+		result = TranslationResult(list("x"), list("⠭"), [0], [0])
+		output = render_dual_view_html(build_dual_view_model(
+			[DualViewSegment(result=result, source_kind="math")],
+			mathml_converter=lambda _: fake_mathml,
+		))
+
+		self.assertIn(fake_mathml, output)
+		self.assertNotIn("&lt;math", output)
+
+	def test_segment_section_is_present(self):
+		output = self.render("a", "⠁", [0])
+
+		self.assertIn('<section class="segment">', output)
+
+	def test_aria_label_is_absent(self):
+		output = self.render("a", "⠁", [0])
+
+		self.assertNotIn("aria-label", output)
+
+	def test_role_region_is_absent(self):
+		output = self.render("a", "⠁", [0])
+
+		self.assertNotIn('role="region"', output)
+
 	def test_renders_empty_state(self):
 		output = render_dual_view_html(
 			build_dual_view_model([]),
 			empty_message="此文件沒有可顯示的轉換資料。",
-			segment_label="轉譯區段",
 		)
 
 		self.assertIn("此文件沒有可顯示的轉換資料。", output)
-
-	def test_renders_localized_segment_label(self):
-		result = TranslationResult(list("a"), list("⠁"), [0], [0])
-		output = render_dual_view_html(
-			build_dual_view_model([DualViewSegment(result=result, source_kind="text")]),
-			empty_message="此文件沒有可顯示的轉換資料。",
-			segment_label="轉譯區段",
-		)
-
-		self.assertIn('aria-label="轉譯區段"', output)
 
 
 if __name__ == "__main__":

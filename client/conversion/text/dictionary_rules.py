@@ -1,5 +1,6 @@
 import csv
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, TypedDict
 
@@ -15,6 +16,60 @@ DICTIONARY_MARKER_PATTERN = re.compile(
 class BracketSegment(TypedDict):
     text: str
     atomic: bool
+
+
+@dataclass
+class _TrieNode:
+    children: dict[str, "_TrieNode"] = field(default_factory=dict)
+    target: str | None = None
+
+
+def _replace_with_trie(text: str, replacements: Iterable[tuple[str, str]]) -> str:
+    """Replace source text using left-to-right, longest-prefix matching.
+
+    The trie is built from dictionary sources and only the original input is
+    scanned. Emitted targets are never re-scanned, so replacement rules cannot
+    cascade into one another.
+    """
+    root = _TrieNode()
+    for source, target in replacements:
+        if not source:
+            continue
+
+        node = root
+        for char in source:
+            child = node.children.get(char)
+            if child is None:
+                child = _TrieNode()
+                node.children[char] = child
+            node = child
+        # Match the existing replacement order: the first duplicate source wins.
+        if node.target is None:
+            node.target = target
+
+    result: list[str] = []
+    index = 0
+    while index < len(text):
+        node = root
+        cursor = index
+        longest_target: str | None = None
+        longest_end = index
+
+        while cursor < len(text) and text[cursor] in node.children:
+            node = node.children[text[cursor]]
+            cursor += 1
+            if node.target is not None:
+                longest_target = node.target
+                longest_end = cursor
+
+        if longest_target is None:
+            result.append(text[index])
+            index += 1
+        else:
+            result.append(longest_target)
+            index = longest_end
+
+    return "".join(result)
 
 
 def _wrap_atomic_parts(parts: list[str]) -> str:
@@ -37,30 +92,20 @@ def mapping(
     *,
     marker: bool = False,
 ) -> str:
-    # 依據來源字串長度由長到短排序，避免較短的匹配先行替換造成重疊問題。
-    ordered_replacements = sorted(
-        replacements,
-        key=lambda item: len(item[0]),
-        reverse=True,
-    )
+    if not marker:
+        return _replace_with_trie(text, replacements)
 
-    result = text
-    for source, target in ordered_replacements:
-        if not marker:
-            result = result.replace(source, target)
-            continue
-
-        segments = split_bracket_segments(result)
-        tmp = ""
-        for segment in segments:
-            segment_text = segment["text"]
-            if not segment["atomic"]:
-                segment_text = segment_text.replace(source, target)
-            else:
-                segment_text = f"{DICTIONARY_MARKER_OPEN}{segment_text}{DICTIONARY_MARKER_CLOSE}"
-            tmp += segment_text
-        result = tmp
-    return result
+    # Keep pre-existing atomic segments intact, while applying the same trie to
+    # every non-atomic segment. Materialize the iterable because each segment
+    # needs the full rule set.
+    rules = list(replacements)
+    result: list[str] = []
+    for segment in split_bracket_segments(text):
+        if segment["atomic"]:
+            result.append(f"{DICTIONARY_MARKER_OPEN}{segment['text']}{DICTIONARY_MARKER_CLOSE}")
+        else:
+            result.append(_replace_with_trie(segment["text"], rules))
+    return "".join(result)
 
 
 def translate__mapping_string(
@@ -159,8 +204,11 @@ def apply_dictionary(
             raws.append((source, _wrap_atomic_parts(raw_parts)))
             replacements.append((source, _wrap_atomic_parts(replacement_parts)))
 
-    raw = mapping(text, raws, marker=True)
-    replacement = mapping(text, replacements, marker=True)
+    # Both outputs are derived from the same original text. The trie therefore
+    # gives them identical dictionary-match boundaries without relying on marker
+    # wrapping to prevent a second replacement pass.
+    raw = mapping(text, raws)
+    replacement = mapping(text, replacements)
 
     return {
         "raw": raw,

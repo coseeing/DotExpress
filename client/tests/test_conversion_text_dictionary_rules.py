@@ -89,6 +89,33 @@ def test_apply_dictionary_longer_source_strings_win_over_shorter_overlaps(tmp_pa
     ]
 
 
+def test_apply_dictionary_uses_longest_trie_match_without_target_prefix_requirement(tmp_path) -> None:
+    dictionary_path = tmp_path / "dictionary.csv"
+    bopomofo_path = tmp_path / "bopomofo.csv"
+
+    with dictionary_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["text", "braille", "type"])
+        writer.writeheader()
+        writer.writerow({"text": "台", "braille": "t", "type": ""})
+        writer.writerow({"text": "台灣", "braille": "wt", "type": ""})
+
+    with bopomofo_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["Bopomofo", "Braille"])
+        writer.writeheader()
+
+    result = apply_dictionary(
+        "台灣台",
+        dictionary_path=dictionary_path,
+        bopomofo_path=bopomofo_path,
+        processing=lambda text: text,
+    )
+
+    assert split_bracket_segments(result["replacement"]) == [
+        {"text": "wt", "atomic": True},
+        {"text": "t", "atomic": True},
+    ]
+
+
 def test_apply_dictionary_bopomofo_branch_calls_processing_and_maps_output(tmp_path) -> None:
     dictionary_path = tmp_path / "dictionary.csv"
     bopomofo_path = tmp_path / "bopomofo.csv"

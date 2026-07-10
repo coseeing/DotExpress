@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import sys
 
-from name_validation import MAX_NAME_LENGTH, normalize_base_name
+from shared.name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEFAULT_DICTIONARY_NAME = "default"
 DEFAULT_HEADER = ["text", "braille", "type"]

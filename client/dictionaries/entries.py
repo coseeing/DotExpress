@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import gettext
 from pathlib import Path
 
-from Bopomofo import normalize_zhuyin_sequence
+from text.zhuyin import normalize_zhuyin_sequence
 
 
 def _resource_path(relative_path: str) -> Path:

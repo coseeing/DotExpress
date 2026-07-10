@@ -118,6 +118,15 @@ class DualViewModelTest(unittest.TestCase):
 		with self.assertRaises(ValueError):
 			build_dual_view_model([dangling])
 
+	def test_unknown_source_kind_raises_value_error(self):
+		segment = DualViewSegment(
+			result=self.result("a", "⠁", [0]),
+			source_kind="unknown",
+		)
+
+		with self.assertRaisesRegex(ValueError, "source_kind"):
+			build_dual_view_model([segment])
+
 	def test_fallback_character_mapping_builds_dual_view_segments(self) -> None:
 		result = FallbackTextTranslator().translate(
 			"ignored",

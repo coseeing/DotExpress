@@ -44,7 +44,7 @@ def translate_plain_text_segment(
     *,
     runtime: TranslationRuntime,
 ):
-    from Bopomofo import normalize_zhuyin_sequence
+    from text.zhuyin import normalize_zhuyin_sequence
     from languageDetection import LangChangeCommand, LanguageDetector
 
     language = [key for key, value in translation_tables.items() if key not in {"default", "math"} and value != ""]

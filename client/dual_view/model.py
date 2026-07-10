@@ -45,6 +45,9 @@ def build_dual_view_model(segments: Iterable[DualViewSegment], *, mathml_convert
 	result_segments: list[AlignmentSegment] = []
 
 	for segment in segments:
+		if segment.source_kind not in {"text", "math"}:
+			raise ValueError("source_kind must be 'text' or 'math'")
+
 		result = segment.result
 		raw_tokens = list(result.raw)
 		braille = list(result.braille)

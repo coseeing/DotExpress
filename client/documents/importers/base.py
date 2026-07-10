@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from name_validation import normalize_base_name
+from shared.name_validation import normalize_base_name
 
 
 @dataclass(frozen=True)

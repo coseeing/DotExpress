@@ -1,6 +1,10 @@
 import string
 
-from char import build_language_blocks, language_has_char, language_has_all
+from languageDetection.unicode_blocks import (
+    build_language_blocks,
+    language_has_all,
+    language_has_char,
+)
 
 
 class TranslationResult:

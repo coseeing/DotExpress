@@ -8,7 +8,7 @@ import zipfile
 from collections.abc import Callable
 
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_format, get_importable_formats, get_supported_import_filter_keys
-from name_validation import MAX_NAME_LENGTH, normalize_base_name
+from shared.name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEP_EXTENSION = ".dep"
 TXT_EXTENSION = ".txt"

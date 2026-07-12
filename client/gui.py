@@ -1701,6 +1701,15 @@ class BrailleFrame(wx.Frame):
 			self.output_txt.SetValue(converted_braille)
 			self.output_txt.SetFocus()
 			if self._open_document_name:
+				document = self._get_document_by_name(self._open_document_name)
+				if document is not None:
+					self._replace_document(
+						Document(
+							document.name,
+							self.input_txt.GetValue(),
+							converted_braille,
+						)
+					)
 				self._dual_view_results_by_document[self._open_document_name] = output.dual_view_segments
 			self._refresh_dual_view()
 		if on_success is not None:

@@ -318,6 +318,9 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._dual_view_frame = None
         frame._dual_view_results_by_document = {}
         frame._open_document_name = "alpha"
+        frame._documents_by_name = {"alpha": Document("alpha", "source", None)}
+        frame._get_document_by_name = lambda name: frame._documents_by_name.get(name)
+        frame._replace_document = lambda document: frame._documents_by_name.__setitem__(document.name, document)
         return frame
 
     def test_convert_text_for_output_forwards_runtime(self) -> None:
@@ -461,12 +464,14 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_manual_conversion_updates_output_focus_and_shows_completion(self) -> None:
         frame = self._make_frame()
+        frame.input_txt.GetValue.return_value = "source"
         policy = gui.ConversionCompletionPolicy()
         with patch.object(gui.wx, "MessageBox") as message_box:
             frame._complete_conversion(policy, display_text="braille")
 
         frame.output_txt.SetValue.assert_called_once_with("braille")
         frame.output_txt.SetFocus.assert_called_once_with()
+        self.assertEqual(frame._documents_by_name["alpha"].braille, "braille")
         message_box.assert_called_once_with(
             gui._("Conversion completed."),
             gui._("Info"),

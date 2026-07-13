@@ -25,8 +25,8 @@ The table below summarizes the current DotExpress shortcuts and common interacti
 | `Add` | Creates a new document. |
 | `Rename` | Renames the currently selected document. |
 | `Import` | Imports one or more documents. Use the submenu to choose `DEP` or `TXT`. |
-| `Export` | Exports a single document. |
-| `Export All` | Exports all documents. |
+| `Export` | Exports a single document as `Package DEP`, `Braille BRL`, or `Dual View HTML`. |
+| `Export All` | Exports all documents as `Package DEP`, `Braille BRL`, or `Dual View HTML`. |
 
 ## Notes
 

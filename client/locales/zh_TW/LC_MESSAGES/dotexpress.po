@@ -1080,6 +1080,10 @@ msgstr "匯出全部"
 msgid "DEP"
 msgstr "DEP"
 
+#: gui.py
+msgid "Package DEP"
+msgstr "封裝檔 DEP"
+
 #: gui.py:185
 msgid "TXT"
 msgstr "TXT"
@@ -1099,6 +1103,14 @@ msgstr "EPUB"
 #: gui.py:189
 msgid "BRL"
 msgstr "BRL"
+
+#: gui.py
+msgid "Braille BRL"
+msgstr "點字檔 BRL"
+
+#: gui.py
+msgid "Dual View HTML"
+msgstr "雙視檔 HTML"
 
 #: gui.py:190
 msgid "Delete All"

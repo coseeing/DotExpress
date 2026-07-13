@@ -350,6 +350,23 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         get_format_mock.assert_called_once_with("dep")
         writer.assert_called_once_with(Path("/tmp/custom.dep"), document)
 
+    def test_write_html_export_document_passes_cached_dual_view_results(self) -> None:
+        frame = self._make_frame()
+        document = Document("alpha", "text", "braille")
+        cached_results = (Mock(),)
+        frame._dual_view_results_by_document["alpha"] = cached_results
+        writer = Mock()
+        descriptor = replace(get_format("html"), writer=writer)
+
+        with patch.object(gui, "get_format", return_value=descriptor):
+            frame._write_export_document(Path("/tmp/custom.html"), document, "html")
+
+        writer.assert_called_once_with(
+            Path("/tmp/custom.html"),
+            document,
+            dual_view_results=cached_results,
+        )
+
     def test_write_export_document_rejects_non_exportable_format(self) -> None:
         frame = self._make_frame()
         document = Document("alpha", "text", "braille")

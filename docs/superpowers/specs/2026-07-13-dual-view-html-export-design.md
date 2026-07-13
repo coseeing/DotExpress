@@ -17,7 +17,7 @@
 ## 實作設計
 
 - 在文件格式 registry 新增可匯出的 `html` descriptor，副檔名為 `.html`，不直接要求既有 `document.braille`，因為 HTML 必須使用雙視檢視的對齊資料。
-- 新增純函式／writer，將文件目前可用的雙視檢視 model 交給既有 `render_dual_view_html()` 產生完整 HTML，寫入 UTF-8 檔案。
+- 新增 HTML writer，接收 GUI 傳入的文件對應雙視結果，將其建立為 model 後交給既有 `render_dual_view_html()` 產生完整 HTML，寫入 UTF-8 檔案；不把暫存對齊資料加入 `Document` 持久化模型。
 - GUI 單一匯出與批次匯出沿用既有 format registry、檔名、副檔名修正、轉換失敗與結果摘要流程；HTML 匯出在缺少對齊資料時使用與雙視檢視相同的空狀態內容，若尚未有轉換資料則先完成轉換。
 - 匯出對話框的 wildcard 與格式標籤由 descriptor 驅動，避免新增第三套格式判斷。
 - 將動態選單標籤加入 gettext markers，並更新繁體中文翻譯檔；編譯 `.mo` 依專案既有流程處理。

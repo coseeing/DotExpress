@@ -5,12 +5,16 @@ from pathlib import Path
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from dual_view.html import render_dual_view_html
+from dual_view.model import build_dual_view_model
+
 if TYPE_CHECKING:
     from documents.importers import ImportedDocument
 
 
 DEP_EXTENSION = ".dep"
 BRL_EXTENSION = ".brl"
+HTML_EXTENSION = ".html"
 ALL_SUPPORTED_FILTER_KEY = "all"
 
 
@@ -78,6 +82,17 @@ def _write_brl(path: Path | str, document: object) -> object:
     return export_document_brl(path, document)
 
 
+def _write_html(
+    path: Path | str,
+    document: object,
+    *,
+    dual_view_results: tuple[object, ...] = (),
+) -> object:
+    del document
+    html = render_dual_view_html(build_dual_view_model(dual_view_results))
+    return Path(path).write_text(html, encoding="utf-8")
+
+
 DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="dep",
@@ -136,6 +151,16 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
         loader=None,
         writer=_write_brl,
         requires_braille=True,
+        importable=False,
+        exportable=True,
+    ),
+    DocumentFormatDescriptor(
+        key="html",
+        extension=HTML_EXTENSION,
+        wildcard_label="HTML",
+        loader=None,
+        writer=_write_html,
+        requires_braille=False,
         importable=False,
         exportable=True,
     ),

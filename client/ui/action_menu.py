@@ -8,7 +8,7 @@ class DocumentMenuItem:
     kind: str
     label: str
     action: str = ""
-    formats: tuple[str, ...] = ()
+    formats: tuple[tuple[str, str], ...] = ()
 
 
 DOCUMENT_MENU_ITEMS: tuple[DocumentMenuItem, ...] = (
@@ -18,8 +18,18 @@ DOCUMENT_MENU_ITEMS: tuple[DocumentMenuItem, ...] = (
     DocumentMenuItem("command", "Add", "add"),
     DocumentMenuItem("command", "Rename", "rename"),
     DocumentMenuItem("command", "Import", "import"),
-    DocumentMenuItem("submenu", "Export", "export", ("DEP", "BRL")),
-    DocumentMenuItem("submenu", "Export All", "export_all", ("DEP", "BRL")),
+    DocumentMenuItem(
+        "submenu",
+        "Export",
+        "export",
+        (("dep", "Package DEP"), ("brl", "Braille BRL"), ("html", "Dual View HTML")),
+    ),
+    DocumentMenuItem(
+        "submenu",
+        "Export All",
+        "export_all",
+        (("dep", "Package DEP"), ("brl", "Braille BRL"), ("html", "Dual View HTML")),
+    ),
 )
 
 
@@ -35,7 +45,7 @@ def get_document_menu_items() -> list[tuple[str, str] | tuple[str, str, list[str
     items: list[tuple[str, str] | tuple[str, str, list[str]]] = []
     for item in DOCUMENT_MENU_ITEMS:
         if item.kind == "submenu":
-            items.append((item.kind, item.label, list(item.formats)))
+            items.append((item.kind, item.label, [label for _key, label in item.formats]))
         else:
             items.append((item.kind, item.label))
     return items
@@ -67,4 +77,8 @@ def get_document_action_labels() -> list[str]:
 
 
 def get_document_export_format_labels() -> list[str]:
-    return ["DEP", "BRL"]
+    return [label for _key, label in DOCUMENT_MENU_ITEMS[-2].formats]
+
+
+def get_document_export_format_keys() -> list[str]:
+    return [key for key, _label in DOCUMENT_MENU_ITEMS[-2].formats]

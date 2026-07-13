@@ -140,6 +140,7 @@ PDF_WILDCARD = "PDF files (*.pdf)|*.pdf"
 DOCX_WILDCARD = "Word documents (*.docx)|*.docx"
 EPUB_WILDCARD = "EPUB books (*.epub)|*.epub"
 BRL_WILDCARD = "Braille files (*.brl)|*.brl"
+HTML_WILDCARD = "HTML files (*.html)|*.html"
 IMPORT_WILDCARDS = {
 	"dep": DEP_WILDCARD,
 	"txt": TXT_WILDCARD,
@@ -182,11 +183,14 @@ _MENU_TRANSLATION_MARKERS = (
 	_("SimBraille"),
 	_("Export All"),
 	_("DEP"),
+	_("Package DEP"),
 	_("TXT"),
 	_("PDF"),
 	_("DOCX"),
 	_("EPUB"),
 	_("BRL"),
+	_("Braille BRL"),
+	_("Dual View HTML"),
 	_("Delete All"),
 	_("Translation"),
 	_("No conversion data is available for this document."),
@@ -442,9 +446,9 @@ class BrailleFrame(wx.Frame):
 			submenu = wx.Menu()
 			menu_items[item.label] = menu.AppendSubMenu(submenu, _(item.label))
 			submenu_items[item.action] = {}
-			for format_label in item.formats:
+			for format_key, format_label in item.formats:
 				submenu_item = submenu.Append(wx.ID_ANY, _(format_label))
-				submenu_items[item.action][format_label.casefold()] = submenu_item
+				submenu_items[item.action][format_key.casefold()] = submenu_item
 		return menu_items, submenu_items
 
 	def _bind_document_menu_handlers(
@@ -728,6 +732,16 @@ class BrailleFrame(wx.Frame):
 	def _get_brl_wildcard(self) -> str:
 		return _(BRL_WILDCARD)
 
+	def _get_html_wildcard(self) -> str:
+		return _(HTML_WILDCARD)
+
+	def _get_export_wildcard(self, format_key: str) -> str:
+		return {
+			"dep": self._get_dep_wildcard,
+			"brl": self._get_brl_wildcard,
+			"html": self._get_html_wildcard,
+		}[format_key.casefold()]()
+
 	def _build_conversion_request(self, raw_text: str, table_file: str, output_mode: str, width: int, dictionary_path: Path) -> ConversionRequest:
 		return ConversionRequest(
 			raw_text=raw_text,
@@ -780,7 +794,7 @@ class BrailleFrame(wx.Frame):
 	def _export_document_with_dialog(self, document: Document, format_key: str) -> None:
 		descriptor = get_format(format_key)
 		default_file = f"{document.name}{descriptor.extension}"
-		wildcard = self._get_dep_wildcard() if descriptor.key == "dep" else self._get_brl_wildcard()
+		wildcard = self._get_export_wildcard(descriptor.key)
 		with wx.FileDialog(
 			self,
 			_("Export Document"),
@@ -1462,6 +1476,13 @@ class BrailleFrame(wx.Frame):
 		descriptor = get_format(format_key)
 		if not descriptor.exportable or descriptor.writer is None:
 			raise ValueError(f'Unsupported export format: "{format_key}".')
+		if descriptor.key == "html":
+			descriptor.writer(
+				destination_path,
+				document,
+				dual_view_results=self._dual_view_results_by_document.get(document.name, ()),
+			)
+			return
 		descriptor.writer(destination_path, document)
 
 	def _continue_single_export(self, document: Document, destination_path: Path, format_key: str) -> None:

@@ -1,11 +1,29 @@
 import unittest
 
 from ui.action_menu import (
+    get_document_export_format_labels,
     get_document_menu_enabled_state,
+    get_document_menu_items,
 )
 
 
 class ActionMenuTest(unittest.TestCase):
+    def test_export_submenus_use_descriptive_formats_in_order(self) -> None:
+        items = get_document_menu_items()
+
+        self.assertEqual(
+            next(item for item in items if item[1] == "Export"),
+            ("submenu", "Export", ["Package DEP", "Braille BRL", "Dual View HTML"]),
+        )
+        self.assertEqual(
+            next(item for item in items if item[1] == "Export All"),
+            ("submenu", "Export All", ["Package DEP", "Braille BRL", "Dual View HTML"]),
+        )
+        self.assertEqual(
+            get_document_export_format_labels(),
+            ["Package DEP", "Braille BRL", "Dual View HTML"],
+        )
+
     def test_document_menu_enabled_state_without_selection_or_documents(self) -> None:
         self.assertEqual(
             get_document_menu_enabled_state(has_selection=False, has_documents=False),

@@ -2,6 +2,10 @@ from pathlib import Path
 from typing import Callable
 
 from adapters.translation.contracts import TranslationRuntime
+from conversion.preprocessing.literal_braille import (
+    build_literal_translation_result,
+    is_unicode_braille,
+)
 from .char_maps import map_characters
 from .dictionary_rules import apply_dictionary, split_bracket_segments
 
@@ -67,14 +71,20 @@ def translate_plain_text_segment(
             for raw_segment, replacement_segment in zip(raw_segments, replacement_segments):
                 if raw_segment["atomic"] != replacement_segment["atomic"]:
                     raise ValueError("atomic not match")
-                translations.append(
-                    runtime.text_translator.translate(
-                        replacement_segment["text"],
-                        table=translate_table,
-                        raw=raw_segment["text"],
-                        single_token=replacement_segment["atomic"],
+                replacement_text = replacement_segment["text"]
+                if is_unicode_braille(replacement_text):
+                    translations.append(
+                        build_literal_translation_result(raw_segment["text"], replacement_text)
                     )
-                )
+                else:
+                    translations.append(
+                        runtime.text_translator.translate(
+                            replacement_text,
+                            table=translate_table,
+                            raw=raw_segment["text"],
+                            single_token=replacement_segment["atomic"],
+                        )
+                    )
         elif isinstance(item, LangChangeCommand):
             previous_translate_table = translate_table
             lang = item.lang.split("_")[0]

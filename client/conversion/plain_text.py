@@ -1,10 +1,3 @@
-def build_literal_translation_result(text: str):
-    from translate import TranslationResult
-
-    braille = list(text)
-    return TranslationResult([text], braille, [0] * len(braille), [0])
-
-
 def get_public_error_message(error: Exception) -> str:
     message = str(error)
     if not message:

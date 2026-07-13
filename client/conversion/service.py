@@ -10,9 +10,11 @@ from conversion.output import (
     convert_text_for_output as _convert_text_for_output,
     convert_text_with_alignment as _convert_text_with_alignment,
 )
-from conversion.plain_text import (
+from conversion.plain_text import get_public_error_message
+from conversion.preprocessing.literal_braille import (
+    LiteralBrailleToken,
     build_literal_translation_result,
-    get_public_error_message,
+    preprocess_punctuation,
 )
 from conversion.text.math_segments import parse_inline_math_segments, segment_needs_boundary_space
 from conversion.text.pipeline import translate_plain_text_segment
@@ -53,19 +55,32 @@ def translate_with_language_dual_view_segments(
             )
             segments_records.append(DualViewSegment(result=result, source_kind="text"))
         if segment["type"] == "text":
-            plain_results = _translate_plain_text_segment(
-                table_file,
-                segment["text"],
-                dictionary_path,
-                translation_tables,
-                bopomofo_path,
-                runtime=runtime,
-            )
-            if isinstance(plain_results, (list, tuple)):
-                for res in plain_results:
-                    segments_records.append(DualViewSegment(result=res, source_kind="text"))
-            else:
-                segments_records.append(DualViewSegment(result=plain_results, source_kind="text"))
+            for punctuation_token in preprocess_punctuation(segment["text"]):
+                if isinstance(punctuation_token, LiteralBrailleToken):
+                    segments_records.append(
+                        DualViewSegment(
+                            result=build_literal_translation_result(
+                                punctuation_token.source_text,
+                                punctuation_token.braille_text,
+                            ),
+                            source_kind="text",
+                        )
+                    )
+                    continue
+
+                plain_results = _translate_plain_text_segment(
+                    table_file,
+                    punctuation_token.text,
+                    dictionary_path,
+                    translation_tables,
+                    bopomofo_path,
+                    runtime=runtime,
+                )
+                if isinstance(plain_results, (list, tuple)):
+                    for res in plain_results:
+                        segments_records.append(DualViewSegment(result=res, source_kind="text"))
+                else:
+                    segments_records.append(DualViewSegment(result=plain_results, source_kind="text"))
         else:
             result = runtime.math_translator.translate(
                 segment["text"],

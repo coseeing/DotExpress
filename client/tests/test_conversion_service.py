@@ -16,6 +16,8 @@ from conversion.service import (
     translate_with_language,
     translate_with_language_segments,
 )
+from conversion.preprocessing.literal_braille import build_literal_translation_result
+from conversion.wrapping import wrap_translation_results
 from translate import TranslationResult
 
 
@@ -299,6 +301,54 @@ class ConversionServiceTest(unittest.TestCase):
 
         self.assertEqual([result.raw for result in results], [["ab"], [" "], ["x+1"]])
         self.assertEqual(["".join(result.braille) for result in results], ["T[ab]", "⠀", "M[x+1]"])
+
+    def test_literal_punctuation_bypasses_text_translation_and_preserves_source_token(self) -> None:
+        text_translator = FakeTextTranslator()
+        runtime = self._runtime(text_translator=text_translator)
+
+        results = translate_with_language_segments(
+            "table.ctb",
+            "A「B」",
+            self.dictionary_path,
+            {"default": "table.ctb", "math": "Nemeth"},
+            self.bopomofo_path,
+            runtime=runtime,
+        )
+
+        self.assertEqual([result.raw for result in results], [["A"], ["「"], ["B"], ["」"]])
+        self.assertEqual("".join("".join(result.braille) for result in results), "T[A]⠠⠦T[B]⠠⠴")
+        self.assertEqual([call[0] for call in text_translator.calls], ["A", "B"])
+
+    def test_unicode_braille_dictionary_replacement_bypasses_text_translation(self) -> None:
+        self._write_csv(
+            self.dictionary_path,
+            ["text", "braille", "type"],
+            [{"text": "台灣", "braille": "⠞⠺", "type": "Braille/Unicode"}],
+        )
+        text_translator = FakeTextTranslator()
+        runtime = self._runtime(text_translator=text_translator)
+
+        results = translate_with_language_segments(
+            "table.ctb",
+            "台灣",
+            self.dictionary_path,
+            {"default": "table.ctb"},
+            self.bopomofo_path,
+            runtime=runtime,
+        )
+
+        self.assertEqual([result.raw for result in results], [["台灣"]])
+        self.assertEqual(["".join(result.braille) for result in results], ["⠞⠺"])
+        self.assertEqual(text_translator.calls, [])
+
+    def test_literal_punctuation_participates_in_existing_wrap_with_its_braille_width(self) -> None:
+        literal = build_literal_translation_result("——", "⠐⠠⠤")
+        text = self._translation_result(["A"], ["⠁"], [0], [0])
+
+        braille, source = wrap_translation_results([literal, text], width=4)
+
+        self.assertEqual(braille, "⠐⠠⠤⠁")
+        self.assertEqual(source, "——A")
 
     def test_translate_with_language_does_not_duplicate_existing_spaces_around_math(self) -> None:
         from conversion import service

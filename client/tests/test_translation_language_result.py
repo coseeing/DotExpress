@@ -1,5 +1,6 @@
 import ctypes
 import unittest
+from pathlib import Path
 
 
 if not hasattr(ctypes, "WINFUNCTYPE"):
@@ -10,24 +11,25 @@ try:
 except Exception as exc:
 	raise unittest.SkipTest(f"liblouis bindings unavailable: {exc}") from exc
 
-from gui import translate_with_language, translate_and_wrap_both
+from adapters.translation.provider import build_default_translation_runtime
+from config import DEFAULT_TRANSLATION_TABLES
+from conversion.service import translate_with_language
+
+
+BASE_DIR = Path(__file__).resolve().parents[1]
 
 
 def test_add_blank_between_language_change() -> None:
-	"""在點字系統轉換前加入空白，如果上一片段結尾沒有空白"""
-	text = (
-		"嶼我I起"
-	)
-	result = translate_with_language("zh-tw.ctb", text)
+	runtime = build_default_translation_runtime()
+	try:
+		result = translate_with_language(
+			"zh-tw.ctb",
+			"嶼我I起",
+			BASE_DIR / "dictionary" / "default.csv",
+			DEFAULT_TRANSLATION_TABLES,
+			BASE_DIR / "data" / "Bopomofo2Braille.csv",
+			runtime=runtime,
+		)
+	finally:
+		runtime.close()
 	assert "".join(result.raw) == "嶼我 I 起"
-
-
-def test_blank_on_start_line() -> None:
-	"""移除開頭的空白"""
-	text = (
-		"I am a student. I want to school every day"
-	)
-	result = translate_and_wrap_both("zh-tw.ctb", text, 40)
-	# result.bind_word_tokens()
-	# result.reclean_token()
-	assert result[1] == "I am a student. I want to school every\nday"

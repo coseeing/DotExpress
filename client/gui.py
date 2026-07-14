@@ -20,7 +20,6 @@ from conversion.service import (
 	ConversionOutput,
 	ConversionRequest,
 	ConversionStageError,
-	convert_text_for_output,
 	get_public_error_message,
 )
 from dictionaries.actions import is_default_dictionary
@@ -752,25 +751,6 @@ class BrailleFrame(wx.Frame):
 			dictionary_path=dictionary_path,
 			data_dir=resource_path("data"),
 			translation_tables=language_map_translate_table.copy(),
-		)
-
-	def _convert_text_for_output(self, raw_text: str) -> str:
-		if raw_text == "":
-			return ""
-		table_file = language_map_translate_table.get("default")
-		if not table_file:
-			raise ValueError(_("Please select a translation table first."))
-		settings = self.translation_settings
-		dictionary_path = self._get_selected_dictionary_path()
-		return convert_text_for_output(
-			self._build_conversion_request(
-				raw_text,
-				table_file,
-				settings.output_mode,
-				settings.width,
-				dictionary_path,
-			),
-			runtime=self.translation_runtime,
 		)
 
 	def _format_batch_issue_lines(self, issues: list[BatchIssue]) -> list[str]:

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from adapters.translation.contracts import TranslationRuntime
-from conversion.output import ConversionRequest, convert_text_for_output, convert_text_with_alignment
+from conversion.output import ConversionRequest, convert_text_with_alignment
 from conversion.text.dictionary_rules import split_bracket_segments
 from conversion.text.pipeline import TextProcessingError, apply_plain_text_rules, preprocess_source_text
 
@@ -143,54 +143,39 @@ class ConversionTextPipelineTest(unittest.TestCase):
                 [segment["atomic"] for segment in replacement_segments],
             )
 
-    def test_both_output_entry_points_share_source_preprocessing(self) -> None:
+    def test_alignment_output_entry_applies_source_preprocessing_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             directory = Path(tmpdir)
             data_dir = directory / "data"
+            dictionary_dir = directory / "dictionary"
             data_dir.mkdir()
-            dictionary_path = self._write_csv(directory, "dictionary.csv", ["text", "braille", "type"], [])
-            self._write_csv(
-                data_dir,
-                "BopomofoChar2Braille.csv",
-                ["Bopomofo", "Braille"],
-                [{"Bopomofo": "ㄅ", "Braille": "⠃"}],
+            dictionary_dir.mkdir()
+            dictionary_path = self._write_csv(dictionary_dir, "default.csv", ["text", "braille", "type"], [])
+            (dictionary_dir / "preprocessing.py").write_text(
+                "def main(text):\n    return text.replace('raw', 'processed')\n",
+                encoding="utf-8",
             )
+            self._write_csv(data_dir, "BopomofoChar2Braille.csv", ["Bopomofo", "Braille"], [])
             self._write_csv(data_dir, "Bopomofo2Braille.csv", ["Bopomofo", "Braille"], [])
-            self._write_csv(data_dir, "Braille2Ascii.csv", ["Braille", "Ascii"], [{"Braille": "⠁", "Ascii": "a"}])
 
             request = ConversionRequest(
-                raw_text="ㄅ",
-                table_file="zh-tw.ctb",
+                raw_text="raw",
+                table_file="table.ctb",
                 output_mode="unicode",
                 width=40,
                 dictionary_path=dictionary_path,
                 data_dir=data_dir,
-                translation_tables={"default": "zh-tw.ctb"},
+                translation_tables={"default": "table.ctb"},
             )
 
-            runtime = self._runtime()
-            map_calls: list[str] = []
-
-            def map_char(text: str, *, dictionary_path: Path, from_field: str, to_field: str) -> str:
-                map_calls.append(text)
-                return f"mapped:{text}"
-
-            alignment_result = convert_text_with_alignment(
+            translated_texts = []
+            result = convert_text_with_alignment(
                 request,
-                translate_segments=lambda *args, **kwargs: [],
-                wrap_translation_results=lambda translations, width: ("wrapped", "source"),
-                map_char=map_char,
-                runtime=runtime,
-            )
-            output_result = convert_text_for_output(
-                request,
-                convert_with_alignment=lambda *args, **kwargs: alignment_result,
-                default_wrap_both=lambda **kwargs: ("wrapped", "source"),
-                wrap_both=lambda **kwargs: ("wrapped", "source"),
-                map_char=map_char,
-                runtime=runtime,
+                translate_segments=lambda _table, text, *_args, **_kwargs: translated_texts.append(text) or [],
+                wrap_translation_results=lambda translations, width: ("wrapped", "processed"),
+                map_char=lambda text, **kwargs: text,
+                runtime=self._runtime(),
             )
 
-            self.assertIsNotNone(alignment_result)
-            self.assertEqual(output_result, "wrapped")
-            self.assertEqual(map_calls, ["ㄅ", "ㄅ"])
+            self.assertEqual(result.display_text, "wrapped")
+            self.assertEqual(translated_texts, ["processed"])

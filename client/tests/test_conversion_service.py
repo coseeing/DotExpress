@@ -11,7 +11,6 @@ from conversion.service import (
     ConversionOutput,
     ConversionRequest,
     ConversionStageError,
-    convert_text_for_output,
     convert_text_with_alignment,
     get_public_error_message,
     translate_with_language,
@@ -164,26 +163,6 @@ class ConversionServiceTest(unittest.TestCase):
 
         return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
 
-    def test_convert_text_for_output_returns_empty_string_for_empty_input(self) -> None:
-        request = ConversionRequest(
-            raw_text="",
-            table_file="zh-tw.ctb",
-            output_mode="unicode",
-            width=40,
-            dictionary_path=Path("dictionary/default.csv"),
-            data_dir=Path("data"),
-            translation_tables={"default": "zh-tw.ctb"},
-        )
-
-        result = convert_text_for_output(
-            request,
-            map_char=self._map_char,
-            wrap_both=self._wrap,
-            runtime=self._fallback_runtime(),
-        )
-
-        self.assertEqual(result, "")
-
     def test_empty_source_does_not_read_or_execute_preprocessing_script(self) -> None:
         dictionary_dir = self.test_dir / "dictionary"
         dictionary_dir.mkdir()
@@ -255,76 +234,6 @@ class ConversionServiceTest(unittest.TestCase):
 
         self.assertEqual(context.exception.stage, "text_processing")
         self.assertEqual(str(context.exception.error), "script boom")
-
-    def test_convert_text_for_output_returns_unicode_braille_output(self) -> None:
-        result = convert_text_for_output(
-            self.request,
-            map_char=self._map_char,
-            wrap_both=self._wrap,
-            runtime=self._fallback_runtime(),
-        )
-
-        self.assertEqual(result, "braille-output")
-
-    def test_convert_text_for_output_maps_braille_to_ascii_when_requested(self) -> None:
-        request = ConversionRequest(
-            raw_text="abc",
-            table_file="zh-tw.ctb",
-            output_mode="ascii",
-            width=40,
-            dictionary_path=Path("dictionary/default.csv"),
-            data_dir=Path("data"),
-            translation_tables={"default": "zh-tw.ctb"},
-        )
-
-        result = convert_text_for_output(
-            request,
-            map_char=self._map_char,
-            wrap_both=self._wrap,
-            runtime=self._fallback_runtime(),
-        )
-
-        self.assertEqual(result, "ascii:braille-output")
-
-    def test_convert_text_for_output_propagates_translation_failures(self) -> None:
-        def failing_wrap(**_kwargs):
-            raise ValueError("translation boom")
-
-        with self.assertRaisesRegex(ConversionStageError, "translation boom") as context:
-            convert_text_for_output(
-                self.request,
-                map_char=self._map_char,
-                wrap_both=failing_wrap,
-                runtime=self._fallback_runtime(),
-            )
-        self.assertEqual(context.exception.stage, "translation")
-        self.assertIsInstance(context.exception.error, ValueError)
-
-    def test_convert_text_for_output_propagates_ascii_failures(self) -> None:
-        def failing_map(text: str, *, dictionary_path: Path, from_field: str, to_field: str) -> str:
-            if from_field == "Braille":
-                raise ValueError("ascii boom")
-            return self._map_char(text, dictionary_path=dictionary_path, from_field=from_field, to_field=to_field)
-
-        request = ConversionRequest(
-            raw_text="abc",
-            table_file="zh-tw.ctb",
-            output_mode="ascii",
-            width=40,
-            dictionary_path=Path("dictionary/default.csv"),
-            data_dir=Path("data"),
-            translation_tables={"default": "zh-tw.ctb"},
-        )
-
-        with self.assertRaisesRegex(ConversionStageError, "ascii boom") as context:
-            convert_text_for_output(
-                request,
-                map_char=failing_map,
-                wrap_both=self._wrap,
-                runtime=self._fallback_runtime(),
-            )
-        self.assertEqual(context.exception.stage, "ascii")
-        self.assertIsInstance(context.exception.error, ValueError)
 
     def test_get_public_error_message_hides_liblouis_internal_translate_details(self) -> None:
         error = RuntimeError(

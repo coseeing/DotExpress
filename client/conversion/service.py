@@ -6,8 +6,6 @@ from conversion.output import (
     ConversionRequest,
     ConversionStageError,
     MapChar,
-    WrapBoth,
-    convert_text_for_output as _convert_text_for_output,
     convert_text_with_alignment as _convert_text_with_alignment,
 )
 from conversion.plain_text import get_public_error_message
@@ -15,7 +13,6 @@ from conversion.text.math_segments import parse_inline_math_segments, segment_ne
 from conversion.text.pipeline import translate_plain_text_segment
 from conversion.wrapping import (
     merge_translation_results,
-    translate_and_wrap_both as _translate_and_wrap_both,
     wrap_translation_results,
 )
 from dual_view.model import DualViewSegment
@@ -146,42 +143,3 @@ def convert_text_with_alignment(
     )
 
     return ConversionOutput(output.display_text, output.translation_results, tuple(captured_segments))
-
-
-def translate_and_wrap_both(
-    *,
-    table_file: str,
-    text: str,
-    width: int,
-    dictionary_path,
-    translation_tables: dict[str, str],
-    bopomofo_path,
-    runtime: TranslationRuntime,
-) -> tuple[str, str]:
-    return _translate_and_wrap_both(
-        table_file=table_file,
-        text=text,
-        width=width,
-        dictionary_path=dictionary_path,
-        translation_tables=translation_tables,
-        bopomofo_path=bopomofo_path,
-        runtime=runtime,
-        translate_with_language=translate_with_language,
-    )
-
-
-def convert_text_for_output(
-    request: ConversionRequest,
-    *,
-    map_char: MapChar = translate__mapping_char,
-    wrap_both: WrapBoth = translate_and_wrap_both,
-    runtime: TranslationRuntime,
-) -> str:
-    return _convert_text_for_output(
-        request,
-        convert_with_alignment=convert_text_with_alignment,
-        default_wrap_both=translate_and_wrap_both,
-        wrap_both=wrap_both,
-        map_char=map_char,
-        runtime=runtime,
-    )

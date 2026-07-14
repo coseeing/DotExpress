@@ -323,21 +323,6 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._replace_document = lambda document: frame._documents_by_name.__setitem__(document.name, document)
         return frame
 
-    def test_convert_text_for_output_forwards_runtime(self) -> None:
-        frame = self._make_frame()
-        frame.translation_settings = Mock(width=40, output_mode="unicode")
-        frame._get_selected_dictionary_path = Mock(return_value=Path("dictionary/default.csv"))
-        frame._build_conversion_request = Mock(return_value=Mock())
-
-        with patch.object(gui, "convert_text_for_output", return_value="braille") as convert_mock:
-            result = frame._convert_text_for_output("source")
-
-        self.assertEqual(result, "braille")
-        convert_mock.assert_called_once_with(
-            frame._build_conversion_request.return_value,
-            runtime=frame.translation_runtime,
-        )
-
     def test_write_export_document_uses_registry_writer(self) -> None:
         frame = self._make_frame()
         document = Document("alpha", "text", "braille")

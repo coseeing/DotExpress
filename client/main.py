@@ -6,12 +6,8 @@ from conversion.service import ConversionRequest, convert_text_with_alignment
 
 
 BASE_DIR = Path(__file__).resolve().parent
-SAMPLE_TEXT = """  但只要見到你，任誰都得劍拔弩張。
-  ──德國劇作家與詩人布希萊特（Bertolt Bercht, 1898-1956）
-
-p.15
-
-    第一章 正義的殿堂
+SAMPLE_TEXT = """
+請計算$\frac{1}{2} + \frac{2}{5}$的值是？ the test
 """
 
 
@@ -21,7 +17,6 @@ def run_demo(text: str = SAMPLE_TEXT) -> None:
         output = convert_text_with_alignment(
             ConversionRequest(
                 raw_text=text,
-                table_file="zh-tw.ctb",
                 output_mode="unicode",
                 width=40,
                 dictionary_path=BASE_DIR / "dictionary" / "default.csv",

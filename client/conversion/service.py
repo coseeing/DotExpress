@@ -24,7 +24,6 @@ _wrap_translation_results = wrap_translation_results
 
 
 def translate_with_language_dual_view_segments(
-    table_file: str,
     text: str,
     dictionary_path,
     translation_tables: dict[str, str],
@@ -37,18 +36,18 @@ def translate_with_language_dual_view_segments(
 
     segments_records = []
     segments = parse_inline_math_segments(text)
+    default_table = translation_tables["default"]
     math_braille_code = translation_tables.get("math", DEFAULT_MATH_BRAILLE_TABLE)
     for index, segment in enumerate(segments):
         if index > 0 and _segment_needs_boundary_space(segments[index - 1], segment):
             result = runtime.text_translator.translate(
                 " ",
-                table=table_file,
+                table=default_table,
                 raw=" ",
             )
             segments_records.append(DualViewSegment(result=result, source_kind="text"))
         if segment["type"] == "text":
             plain_results = _translate_plain_text_segment(
-                table_file,
                 segment["text"],
                 dictionary_path,
                 translation_tables,
@@ -70,7 +69,6 @@ def translate_with_language_dual_view_segments(
 
 
 def translate_with_language_segments(
-    table_file: str,
     text: str,
     dictionary_path,
     translation_tables: dict[str, str],
@@ -81,7 +79,6 @@ def translate_with_language_segments(
     return [
         segment.result
         for segment in translate_with_language_dual_view_segments(
-            table_file,
             text,
             dictionary_path,
             translation_tables,
@@ -92,7 +89,6 @@ def translate_with_language_segments(
 
 
 def translate_with_language(
-    table_file: str,
     text: str,
     dictionary_path,
     translation_tables: dict[str, str],
@@ -102,7 +98,6 @@ def translate_with_language(
 ):
     return merge_translation_results(
         translate_with_language_segments(
-            table_file,
             text,
             dictionary_path,
             translation_tables,
@@ -121,10 +116,9 @@ def convert_text_with_alignment(
     captured_segments: list[DualViewSegment] = []
 
     def translate_segments_with_dual_view(
-        table_file, text, dictionary_path, translation_tables, bopomofo_path, *, runtime
+        text, dictionary_path, translation_tables, bopomofo_path, *, runtime
     ):
         segments = translate_with_language_dual_view_segments(
-            table_file,
             text,
             dictionary_path,
             translation_tables,

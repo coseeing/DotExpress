@@ -160,7 +160,6 @@ class ConversionTextPipelineTest(unittest.TestCase):
 
             request = ConversionRequest(
                 raw_text="raw",
-                table_file="table.ctb",
                 output_mode="unicode",
                 width=40,
                 dictionary_path=dictionary_path,
@@ -171,7 +170,7 @@ class ConversionTextPipelineTest(unittest.TestCase):
             translated_texts = []
             result = convert_text_with_alignment(
                 request,
-                translate_segments=lambda _table, text, *_args, **_kwargs: translated_texts.append(text) or [],
+                translate_segments=lambda text, *_args, **_kwargs: translated_texts.append(text) or [],
                 wrap_translation_results=lambda translations, width: ("wrapped", "processed"),
                 map_char=lambda text, **kwargs: text,
                 runtime=self._runtime(),

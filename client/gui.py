@@ -765,10 +765,9 @@ class BrailleFrame(wx.Frame):
 			"html": self._get_html_wildcard,
 		}[format_key.casefold()]()
 
-	def _build_conversion_request(self, raw_text: str, table_file: str, output_mode: str, width: int, dictionary_path: Path) -> ConversionRequest:
+	def _build_conversion_request(self, raw_text: str, output_mode: str, width: int, dictionary_path: Path) -> ConversionRequest:
 		return ConversionRequest(
 			raw_text=raw_text,
-			table_file=table_file,
 			output_mode=output_mode,
 			width=width,
 			dictionary_path=dictionary_path,
@@ -1512,8 +1511,8 @@ class BrailleFrame(wx.Frame):
 		on_error=None,
 		on_missing_table=None,
 	) -> bool:
-		table_file = language_map_translate_table.get("default")
-		if not table_file:
+		default_table = language_map_translate_table.get("default")
+		if not default_table:
 			message = _("Please select a translation table first.")
 			if on_missing_table is not None:
 				on_missing_table(message)
@@ -1522,7 +1521,6 @@ class BrailleFrame(wx.Frame):
 			return False
 		settings = self.translation_settings
 		self._start_conversion(
-			table_file,
 			document.text,
 			settings.width,
 			settings.output_mode,
@@ -1593,8 +1591,8 @@ class BrailleFrame(wx.Frame):
 		if self._conversion_runner.is_running():
 			return
 
-		table_file = language_map_translate_table.get("default")
-		if not table_file:
+		default_table = language_map_translate_table.get("default")
+		if not default_table:
 			wx.MessageBox(
 				_("Please select a translation table first."),
 				_("Info"),
@@ -1605,7 +1603,6 @@ class BrailleFrame(wx.Frame):
 		raw_text = self.input_txt.GetValue()
 		settings = self.translation_settings
 		self._start_conversion(
-			table_file,
 			raw_text,
 			settings.width,
 			settings.output_mode,
@@ -1639,7 +1636,6 @@ class BrailleFrame(wx.Frame):
 
 	def _start_conversion(
 		self,
-		table_file: str,
 		raw_text: str,
 		width: int,
 		output_mode: str,
@@ -1660,10 +1656,9 @@ class BrailleFrame(wx.Frame):
 		)
 		job_id = self._conversion_runner.start(
 			ConversionJobRequest(
-				conversion_request=self._build_conversion_request(
-					raw_text,
-					table_file,
-					output_mode,
+			conversion_request=self._build_conversion_request(
+				raw_text,
+				output_mode,
 					width,
 					dictionary_path,
 				),

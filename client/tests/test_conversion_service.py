@@ -57,7 +57,6 @@ class ConversionServiceTest(unittest.TestCase):
         self.calls: list[tuple] = []
         self.request = ConversionRequest(
             raw_text="abc",
-            table_file="zh-tw.ctb",
             output_mode="unicode",
             width=40,
             dictionary_path=Path("dictionary/default.csv"),
@@ -79,10 +78,6 @@ class ConversionServiceTest(unittest.TestCase):
         if from_field == "Braille":
             return f"ascii:{text}"
         raise AssertionError(f"unexpected mapping fields: {from_field} -> {to_field}")
-
-    def _wrap(self, *, table_file, text, width, dictionary_path, translation_tables, bopomofo_path, runtime):
-        self.calls.append(("wrap", table_file, text, width, dictionary_path, translation_tables, bopomofo_path, runtime))
-        return "braille-output", "source-output"
 
     def _fallback_runtime(self) -> TranslationRuntime:
         return TranslationRuntime(
@@ -174,7 +169,6 @@ class ConversionServiceTest(unittest.TestCase):
         )
         request = ConversionRequest(
             raw_text="",
-            table_file="table.ctb",
             output_mode="unicode",
             width=40,
             dictionary_path=dictionary_path,
@@ -197,7 +191,6 @@ class ConversionServiceTest(unittest.TestCase):
         )
         request = ConversionRequest(
             raw_text="raw",
-            table_file="table.ctb",
             output_mode="unicode",
             width=40,
             dictionary_path=dictionary_path,
@@ -221,7 +214,6 @@ class ConversionServiceTest(unittest.TestCase):
         )
         request = ConversionRequest(
             raw_text="raw",
-            table_file="table.ctb",
             output_mode="unicode",
             width=40,
             dictionary_path=dictionary_path,
@@ -254,7 +246,6 @@ class ConversionServiceTest(unittest.TestCase):
 
         runtime = self._runtime()
         result = service.translate_with_language(
-            "zh-tw.ctb",
             "計算$1+2$的值",
             self.dictionary_path,
             {"default": "zh-tw.ctb", "math": "Nemeth"},
@@ -271,7 +262,6 @@ class ConversionServiceTest(unittest.TestCase):
         runtime = self._runtime()
 
         results = translate_with_language_segments(
-            "table.ctb",
             "ab$x+1$",
             self.dictionary_path,
             {"default": "table.ctb", "math": "Nemeth"},
@@ -282,12 +272,24 @@ class ConversionServiceTest(unittest.TestCase):
         self.assertEqual([result.raw for result in results], [["ab"], [" "], ["x+1"]])
         self.assertEqual(["".join(result.braille) for result in results], ["T[ab]", "⠀", "M[x+1]"])
 
+    def test_translate_with_language_uses_default_table_for_boundary_space(self) -> None:
+        runtime = self._runtime()
+
+        translate_with_language_segments(
+            "ab$x+1$",
+            self.dictionary_path,
+            {"default": "default.ctb", "math": "Nemeth"},
+            self.bopomofo_path,
+            runtime=runtime,
+        )
+
+        self.assertIn((" ", "default.ctb", " ", False), runtime.text_translator.calls)
+
     def test_nonstandard_punctuation_is_passed_to_normal_translation(self) -> None:
         text_translator = FakeTextTranslator()
         runtime = self._runtime(text_translator=text_translator)
 
         results = translate_with_language_segments(
-            "table.ctb",
             "甲「乙」",
             self.dictionary_path,
             {"default": "table.ctb", "math": "Nemeth"},
@@ -308,7 +310,6 @@ class ConversionServiceTest(unittest.TestCase):
         runtime = self._runtime(text_translator=text_translator)
 
         results = translate_with_language_segments(
-            "table.ctb",
             "台灣",
             self.dictionary_path,
             {"default": "table.ctb"},
@@ -324,7 +325,6 @@ class ConversionServiceTest(unittest.TestCase):
         from conversion import service
         runtime = self._runtime()
         result = service.translate_with_language(
-            "zh-tw.ctb",
             "計算 $1+2$ 的值",
             self.dictionary_path,
             {"default": "zh-tw.ctb", "math": "Nemeth"},
@@ -340,7 +340,6 @@ class ConversionServiceTest(unittest.TestCase):
         runtime = self._runtime(math_translator=FakeMathTranslator(error=ValueError("math failed")))
         with self.assertRaisesRegex(ValueError, "math failed"):
             service.translate_with_language(
-                "zh-tw.ctb",
                 "計算$1+2$的值",
                 self.dictionary_path,
                 {"default": "zh-tw.ctb", "math": "Nemeth"},
@@ -353,7 +352,6 @@ class ConversionServiceTest(unittest.TestCase):
         math_translator = FakeMathTranslator()
         runtime = self._runtime(math_translator=math_translator)
         service.translate_with_language(
-            "zh-tw.ctb",
             "計算$1$",
             self.dictionary_path,
             {"default": "zh-tw.ctb", "math": "UEB"},
@@ -367,7 +365,6 @@ class ConversionServiceTest(unittest.TestCase):
         from conversion import service
         runtime = self._runtime()
         result = service.translate_with_language(
-            "zh-tw.ctb",
             "價格\\$100",
             self.dictionary_path,
             {"default": "zh-tw.ctb"},
@@ -381,7 +378,6 @@ class ConversionServiceTest(unittest.TestCase):
     def test_dual_view_segments_exposes_text_source_kind(self) -> None:
         request = ConversionRequest(
             raw_text="hello",
-            table_file="zh-tw.ctb",
             output_mode="unicode",
             width=40,
             dictionary_path=self.dictionary_path,
@@ -397,7 +393,6 @@ class ConversionServiceTest(unittest.TestCase):
     def test_dual_view_segments_exposes_math_source_kind(self) -> None:
         request = ConversionRequest(
             raw_text="a$x$b",
-            table_file="zh-tw.ctb",
             output_mode="unicode",
             width=40,
             dictionary_path=self.dictionary_path,
@@ -414,7 +409,6 @@ class ConversionServiceTest(unittest.TestCase):
     def test_dual_view_segments_boundary_space_is_text(self) -> None:
         request = ConversionRequest(
             raw_text="計算$1+2$的值",
-            table_file="zh-tw.ctb",
             output_mode="unicode",
             width=40,
             dictionary_path=self.dictionary_path,
@@ -431,7 +425,6 @@ class ConversionServiceTest(unittest.TestCase):
     def test_translate_with_language_segments_still_returns_plain_results(self) -> None:
         runtime = self._runtime()
         results = translate_with_language_segments(
-            "table.ctb",
             "ab$x+1$",
             self.dictionary_path,
             {"default": "table.ctb", "math": "Nemeth"},
@@ -445,7 +438,6 @@ class ConversionServiceTest(unittest.TestCase):
     def test_dual_view_segments_empty_convert_has_empty_tuple(self) -> None:
         request = ConversionRequest(
             raw_text="",
-            table_file="zh-tw.ctb",
             output_mode="unicode",
             width=40,
             dictionary_path=self.dictionary_path,

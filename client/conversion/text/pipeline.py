@@ -61,7 +61,6 @@ def apply_plain_text_rules(
 
 
 def translate_plain_text_segment(
-    table_file: str,
     text: str,
     dictionary_path: Path,
     translation_tables: dict[str, str],

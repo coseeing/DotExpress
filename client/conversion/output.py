@@ -11,7 +11,6 @@ from conversion.text.pipeline import TextProcessingError, preprocess_source_text
 @dataclass(frozen=True)
 class ConversionRequest:
     raw_text: str
-    table_file: str
     output_mode: str
     width: int
     dictionary_path: Path
@@ -62,7 +61,6 @@ def convert_text_with_alignment(
 
     try:
         translations = translate_segments(
-            request.table_file,
             text,
             request.dictionary_path,
             request.translation_tables,

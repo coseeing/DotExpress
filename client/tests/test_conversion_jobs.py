@@ -38,7 +38,6 @@ class ConversionJobRunnerTest(unittest.TestCase):
 		return ConversionJobRequest(
 			conversion_request=ConversionRequest(
 				raw_text="source",
-				table_file="zh-tw.ctb",
 				output_mode="unicode",
 				width=40,
 				dictionary_path=Path("dictionary/default.csv"),

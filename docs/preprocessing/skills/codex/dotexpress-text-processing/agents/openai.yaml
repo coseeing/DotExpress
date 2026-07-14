@@ -1,0 +1,4 @@
+interface:
+  display_name: "DotExpress Text Processing"
+  short_description: "Create and review DotExpress preprocessing scripts"
+  default_prompt: "Create or review a DotExpress Text Processing script that follows the required main(text) contract."

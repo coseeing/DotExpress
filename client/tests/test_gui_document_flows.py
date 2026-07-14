@@ -507,7 +507,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._build_conversion_request = Mock(return_value=Mock())
         with patch.object(gui.wx, "CallLater", return_value=Mock()) as call_later:
             frame._start_conversion(
-                "zh-tw.ctb",
                 "source",
                 40,
                 "unicode",
@@ -516,7 +515,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
         frame._build_conversion_request.assert_called_once_with(
             "source",
-            "zh-tw.ctb",
             "unicode",
             40,
             Path("dictionary/default.csv"),

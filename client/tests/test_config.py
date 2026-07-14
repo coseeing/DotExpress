@@ -180,6 +180,21 @@ class ConfigSettingsTest(unittest.TestCase):
             "所有支援的檔案",
         )
 
+    def test_zh_tw_catalog_keeps_dictionary_entry_type_translations_active(self) -> None:
+        with open(
+            Path(__file__).resolve().parents[1]
+            / "locales"
+            / "zh_TW"
+            / "LC_MESSAGES"
+            / "dotexpress.mo",
+            "rb",
+        ) as mo_file:
+            translation = gettext.GNUTranslations(mo_file)
+
+        self.assertEqual(translation.gettext("General"), "一般")
+        self.assertEqual(translation.gettext("Bopomofo"), "注音")
+        self.assertEqual(translation.gettext("Unicode Braille"), "Unicode 點字")
+
 
 if __name__ == "__main__":
     unittest.main()

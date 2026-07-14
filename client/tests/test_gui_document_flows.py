@@ -14,8 +14,13 @@ def _install_stub_modules() -> None:
 
     class _Widget:
         def __init__(self, *args, **kwargs):
+            self.parent = args[0] if args else None
             self.label = kwargs.get("label", "")
+            self.title = kwargs.get("title", getattr(self, "title", ""))
             self.name = ""
+            self.size = kwargs.get("size")
+            self.min_size = None
+            self.sizer = None
 
         def __getattr__(self, _name):
             def _method(*args, **kwargs):
@@ -31,6 +36,18 @@ def _install_stub_modules() -> None:
 
         def GetName(self):
             return self.name
+
+        def Bind(self, _event, _handler):
+            return None
+
+        def SetSize(self, size):
+            self.size = size
+
+        def SetMinSize(self, size):
+            self.min_size = size
+
+        def SetSizer(self, sizer):
+            self.sizer = sizer
 
     class Window(_Widget):
         @staticmethod
@@ -59,6 +76,9 @@ def _install_stub_modules() -> None:
         pass
 
     class StaticText(Window):
+        pass
+
+    class Button(Window):
         pass
 
     class BoxSizer(_Widget):
@@ -156,6 +176,7 @@ def _install_stub_modules() -> None:
     wx.Menu = Menu
     wx.MenuBar = MenuBar
     wx.StaticText = StaticText
+    wx.Button = Button
     wx.BoxSizer = BoxSizer
     wx.StaticBoxSizer = StaticBoxSizer
     wx.StaticBox = StaticBox
@@ -226,11 +247,13 @@ def _install_stub_modules() -> None:
     wx.ICON_INFORMATION = 128
     wx.ICON_WARNING = 256
     wx.DEFAULT_DIALOG_STYLE = 512
+    wx.RESIZE_BORDER = 256
     wx.CLOSE_BOX = 1024
     wx.STAY_ON_TOP = 2048
     wx.VERTICAL = 4096
     wx.HORIZONTAL = 8192
     wx.ALL = 16384
+    wx.ALIGN_RIGHT = 32768
     wx.ALIGN_CENTER_HORIZONTAL = 32768
     wx.ALIGN_CENTER_VERTICAL = 65536
     wx.EXPAND = 131072
@@ -239,6 +262,9 @@ def _install_stub_modules() -> None:
     wx.BOTTOM = 1048576
     wx.TE_MULTILINE = 2097152
     wx.TE_READONLY = 4194304
+    wx.TE_RICH2 = 1 << 25
+    wx.TE_DONTWRAP = 1 << 26
+    wx.FONTFAMILY_TELETYPE = 1
     wx.FD_OPEN = 1 << 20
     wx.FD_MULTIPLE = 1 << 21
     wx.FD_SAVE = 1 << 22

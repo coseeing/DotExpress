@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dotexpress\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-14 01:40+0000\n"
+"POT-Creation-Date: 2026-07-14 01:50+0000\n"
 "PO-Revision-Date: 2026-04-20 20:20+0800\n"
 "Last-Translator: Codex <codex@example.com>\n"
 "Language-Team: Chinese (traditional)\n"
@@ -1381,23 +1381,29 @@ msgstr "ASCII 轉換失敗：{error}"
 msgid "Translation failed: {error}"
 msgstr "轉譯失敗：{error}"
 
-#~ msgid "General"
-#~ msgstr "一般"
+#: dictionaries/entries.py:27
+msgid "General"
+msgstr "一般"
 
-#~ msgid "Bopomofo"
-#~ msgstr "注音"
+#: dictionaries/entries.py:28
+msgid "Bopomofo"
+msgstr "注音"
 
-#~ msgid "Unicode Braille"
-#~ msgstr "Unicode 點字"
+#: dictionaries/entries.py:29
+msgid "Unicode Braille"
+msgstr "Unicode 點字"
 
-#~ msgid "Please enter the source text."
-#~ msgstr "請輸入來源文字。"
+#: dictionaries/entries.py:51
+msgid "Please enter the source text."
+msgstr "請輸入來源文字。"
 
-#~ msgid "Please enter the a valid Bopomofo sequence."
-#~ msgstr "請輸入有效的注音序列。"
+#: dictionaries/entries.py:56
+msgid "Please enter the a valid Bopomofo sequence."
+msgstr "請輸入有效的注音序列。"
 
-#~ msgid "Please enter the a valid Unicode Braille sequence."
-#~ msgstr "請輸入有效的 Unicode 點字序列。"
+#: dictionaries/entries.py:60
+msgid "Please enter the a valid Unicode Braille sequence."
+msgstr "請輸入有效的 Unicode 點字序列。"
 
 #~ msgid "Translation segment"
 #~ msgstr "轉譯區段"

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-14 01:40+0000\n"
+"POT-Creation-Date: 2026-07-14 01:50+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1356,4 +1356,28 @@ msgstr ""
 #: gui.py:1755
 #, python-brace-format
 msgid "Translation failed: {error}"
+msgstr ""
+
+#: dictionaries/entries.py:27
+msgid "General"
+msgstr ""
+
+#: dictionaries/entries.py:28
+msgid "Bopomofo"
+msgstr ""
+
+#: dictionaries/entries.py:29
+msgid "Unicode Braille"
+msgstr ""
+
+#: dictionaries/entries.py:51
+msgid "Please enter the source text."
+msgstr ""
+
+#: dictionaries/entries.py:56
+msgid "Please enter the a valid Bopomofo sequence."
+msgstr ""
+
+#: dictionaries/entries.py:60
+msgid "Please enter the a valid Unicode Braille sequence."
 msgstr ""

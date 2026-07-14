@@ -446,7 +446,7 @@ class TextProcessingDialogTest(unittest.TestCase):
                 "settings.dialogs.save_preprocessing_script",
                 side_effect=SyntaxError("invalid syntax"),
             ),
-            patch.object(wx, "MessageBox") as message_box,
+            patch("settings.dialogs.wx.MessageBox") as message_box,
         ):
             self.assertFalse(dialog.on_apply())
         dialog.Destroy.assert_not_called()

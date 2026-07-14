@@ -2,7 +2,7 @@
 setlocal EnableDelayedExpansion
 
 pushd "%~dp0..\client"
-set FILES=braille\tables\__tables.py
+set FILES=braille\tables\__tables.py dictionaries\entries.py
 for %%f in (*.py) do (
     set FILES=!FILES! %%f
 )

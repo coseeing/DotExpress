@@ -22,6 +22,7 @@ from conversion.service import (
 	ConversionStageError,
 	get_public_error_message,
 )
+from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.actions import is_default_dictionary
 from dictionaries.manager import (
 	create_dictionary,
@@ -120,7 +121,7 @@ from settings.view import (
 	save_view_settings,
 )
 from settings.state import DotExpressSettingsSnapshot
-from settings.dialogs import DotExpressSettingsDialog, TranslationSettingsPanel
+from settings.dialogs import DotExpressSettingsDialog, TextProcessingDialog, TranslationSettingsPanel
 
 
 VIEW_SCHEMES = {
@@ -197,6 +198,13 @@ _MENU_TRANSLATION_MARKERS = (
 	_("Convert"),
 	_("Settings"),
 	_("Dictionary Management..."),
+	_("Text Processing"),
+	_("Text Processing Python Code"),
+	_("Unable to open text processing script: {error}"),
+	_("Unable to save text processing script: {error}"),
+	_("Text processing failed: {error}"),
+	_("The script must define exactly one top-level synchronous main function."),
+	_("main must define exactly one positional parameter and no other parameters."),
 	_("Confirm Delete Dictionary"),
 	_("Do you want to delete dictionary \"{name}\"?"),
 	_("Rename Dictionary"),
@@ -407,6 +415,7 @@ class BrailleFrame(wx.Frame):
 		translation_handlers = {
 			"convert": self.on_convert,
 			"dual_view": self.on_open_dual_view,
+			"text_processing": self.on_open_text_processing,
 			"settings": self.on_open_settings,
 			"dictionaries": self.on_open_dictionary_management,
 		}
@@ -664,6 +673,20 @@ class BrailleFrame(wx.Frame):
 
 	def on_open_dual_view(self, _evt) -> None:
 		self._show_dual_view()
+
+	def on_open_text_processing(self, _event) -> None:
+		try:
+			TextProcessingDialog.show_singleton(
+				parent=self,
+				script_path=preprocessing_script_path(self.dictionary_dir),
+			)
+		except OSError as error:
+			wx.MessageBox(
+				_("Unable to open text processing script: {error}").format(error=error),
+				_("Text Processing"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
 
 	def on_frame_activate(self, event: wx.ActivateEvent) -> None:
 		viewer = self._dual_view_frame

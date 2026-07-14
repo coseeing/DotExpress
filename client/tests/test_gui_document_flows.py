@@ -15,6 +15,7 @@ def _install_stub_modules() -> None:
     class _Widget:
         def __init__(self, *args, **kwargs):
             self.label = kwargs.get("label", "")
+            self.name = ""
 
         def __getattr__(self, _name):
             def _method(*args, **kwargs):
@@ -24,6 +25,12 @@ def _install_stub_modules() -> None:
 
         def SetLabel(self, label):
             self.label = label
+
+        def SetName(self, name):
+            self.name = name
+
+        def GetName(self):
+            return self.name
 
     class Window(_Widget):
         @staticmethod
@@ -67,7 +74,15 @@ def _install_stub_modules() -> None:
         pass
 
     class TextCtrl(Window):
-        pass
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._font = Font()
+
+        def GetFont(self):
+            return self._font
+
+        def SetFont(self, font):
+            self._font = font
 
     class ListCtrl(Window):
         pass
@@ -94,7 +109,8 @@ def _install_stub_modules() -> None:
         pass
 
     class Font(_Widget):
-        pass
+        def SetFamily(self, _family):
+            return None
 
     class Colour(tuple):
         def __new__(cls, red=0, green=0, blue=0):
@@ -409,6 +425,31 @@ class GuiDocumentFlowsTest(unittest.TestCase):
 
 
 class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
+    def test_open_text_processing_uses_dictionary_directory_script(self) -> None:
+        frame = object.__new__(gui.BrailleFrame)
+        frame.dictionary_dir = Path("dictionary")
+        with patch.object(gui.TextProcessingDialog, "show_singleton") as show:
+            frame.on_open_text_processing(None)
+        show.assert_called_once_with(
+            parent=frame,
+            script_path=Path("dictionary/preprocessing.py"),
+        )
+
+    def test_open_text_processing_reports_read_error(self) -> None:
+        frame = object.__new__(gui.BrailleFrame)
+        frame.dictionary_dir = Path("dictionary")
+        with (
+            patch.object(gui.TextProcessingDialog, "show_singleton", side_effect=OSError("denied")),
+            patch.object(gui.wx, "MessageBox") as message_box,
+        ):
+            frame.on_open_text_processing(None)
+        message_box.assert_called_once_with(
+            gui._("Unable to open text processing script: {error}").format(error="denied"),
+            gui._("Text Processing"),
+            gui.wx.OK | gui.wx.ICON_ERROR,
+            parent=frame,
+        )
+
     def test_app_builds_runtime_and_passes_it_to_frame(self) -> None:
         runtime = Mock()
         frame = Mock()

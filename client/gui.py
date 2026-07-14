@@ -19,6 +19,7 @@ from conversion.jobs import (
 from conversion.service import (
 	ConversionOutput,
 	ConversionRequest,
+	ConversionStageError,
 	convert_text_for_output,
 	get_public_error_message,
 )
@@ -1742,10 +1743,18 @@ class BrailleFrame(wx.Frame):
 		self._complete_conversion(result.completion_policy, conversion_output=result.conversion_output)
 
 	def _finish_conversion_failure(self, result: ConversionJobFailure) -> None:
-		message_template = _("ASCII conversion failed: {error}") if result.error.stage == "ascii" else _("Translation failed: {error}")
+		message_templates = {
+			"ascii": _("ASCII conversion failed: {error}"),
+			"text_processing": _("Text processing failed: {error}"),
+		}
+		message_template = message_templates.get(
+			result.error.stage,
+			_("Translation failed: {error}"),
+		)
+		error_text = _(get_public_error_message(result.error.error))
 		self._complete_conversion(
 			result.completion_policy,
-			error_message=message_template.format(error=get_public_error_message(result.error.error)),
+			error_message=message_template.format(error=error_text),
 		)
 
 

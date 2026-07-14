@@ -3,8 +3,9 @@ from pathlib import Path
 from typing import Callable
 
 from adapters.translation.contracts import TranslationRuntime
+from conversion.preprocessing.user_script import preprocessing_script_path
 from conversion.text.char_maps import translate__mapping_char
-from conversion.text.pipeline import preprocess_source_text
+from conversion.text.pipeline import TextProcessingError, preprocess_source_text
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,18 @@ def convert_text_with_alignment(
     if request.raw_text == "":
         return ConversionOutput("", ())
     try:
-        text = preprocess_source_text(request.raw_text, data_dir=request.data_dir, map_char=map_char)
+        text = preprocess_source_text(
+            request.raw_text,
+            data_dir=request.data_dir,
+            preprocessing_path=preprocessing_script_path(request.dictionary_path.parent),
+            map_char=map_char,
+        )
+    except TextProcessingError as error:
+        raise ConversionStageError("text_processing", error.error) from error
+    except Exception as error:
+        raise ConversionStageError("translation", error) from error
+
+    try:
         translations = translate_segments(
             request.table_file,
             text,
@@ -91,7 +103,18 @@ def convert_text_for_output(
     if wrap_both is default_wrap_both:
         return convert_with_alignment(request, map_char=map_char, runtime=runtime).display_text
     try:
-        text = preprocess_source_text(request.raw_text, data_dir=request.data_dir, map_char=map_char)
+        text = preprocess_source_text(
+            request.raw_text,
+            data_dir=request.data_dir,
+            preprocessing_path=preprocessing_script_path(request.dictionary_path.parent),
+            map_char=map_char,
+        )
+    except TextProcessingError as error:
+        raise ConversionStageError("text_processing", error.error) from error
+    except Exception as error:
+        raise ConversionStageError("translation", error) from error
+
+    try:
         braille_wrapped, _text_wrapped = wrap_both(
             table_file=request.table_file,
             text=text,

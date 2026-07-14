@@ -8,6 +8,7 @@ from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
 from dual_view.model import DualViewSegment
 from conversion.service import (
+    ConversionOutput,
     ConversionRequest,
     ConversionStageError,
     convert_text_for_output,
@@ -184,6 +185,78 @@ class ConversionServiceTest(unittest.TestCase):
         )
 
         self.assertEqual(result, "")
+
+    def test_empty_source_does_not_read_or_execute_preprocessing_script(self) -> None:
+        dictionary_dir = self.test_dir / "dictionary"
+        dictionary_dir.mkdir()
+        dictionary_path = dictionary_dir / "default.csv"
+        self._write_csv(dictionary_path, ["text", "braille", "type"], [])
+        (dictionary_dir / "preprocessing.py").write_text(
+            "raise RuntimeError('must not run')\ndef main(text):\n    return text\n",
+            encoding="utf-8",
+        )
+        request = ConversionRequest(
+            raw_text="",
+            table_file="table.ctb",
+            output_mode="unicode",
+            width=40,
+            dictionary_path=dictionary_path,
+            data_dir=self.test_dir,
+            translation_tables={"default": "table.ctb"},
+        )
+
+        output = convert_text_with_alignment(request, runtime=self._runtime())
+
+        self.assertEqual(output, ConversionOutput("", (), ()))
+
+    def test_conversion_uses_processed_text_for_translation_and_dual_view(self) -> None:
+        dictionary_dir = self.test_dir / "dictionary"
+        dictionary_dir.mkdir()
+        dictionary_path = dictionary_dir / "default.csv"
+        self._write_csv(dictionary_path, ["text", "braille", "type"], [])
+        (dictionary_dir / "preprocessing.py").write_text(
+            "def main(text):\n    return text.replace('raw', 'processed')\n",
+            encoding="utf-8",
+        )
+        request = ConversionRequest(
+            raw_text="raw",
+            table_file="table.ctb",
+            output_mode="unicode",
+            width=40,
+            dictionary_path=dictionary_path,
+            data_dir=self.test_dir,
+            translation_tables={"default": "table.ctb"},
+        )
+        runtime = self._runtime()
+
+        output = convert_text_with_alignment(request, map_char=lambda text, **kwargs: text, runtime=runtime)
+
+        self.assertEqual(output.dual_view_segments[0].result.raw, ["processed"])
+
+    def test_conversion_reports_text_processing_stage(self) -> None:
+        dictionary_dir = self.test_dir / "dictionary"
+        dictionary_dir.mkdir(exist_ok=True)
+        dictionary_path = dictionary_dir / "default.csv"
+        self._write_csv(dictionary_path, ["text", "braille", "type"], [])
+        (dictionary_dir / "preprocessing.py").write_text(
+            "def main(text):\n    raise RuntimeError('script boom')\n",
+            encoding="utf-8",
+        )
+        request = ConversionRequest(
+            raw_text="raw",
+            table_file="table.ctb",
+            output_mode="unicode",
+            width=40,
+            dictionary_path=dictionary_path,
+            data_dir=self.test_dir,
+            translation_tables={"default": "table.ctb"},
+        )
+
+        with self.assertRaises(ConversionStageError) as context:
+            convert_text_with_alignment(request, map_char=lambda text, **kwargs: text, runtime=self._runtime())
+
+        self.assertEqual(context.exception.stage, "text_processing")
+        self.assertEqual(str(context.exception.error), "script boom")
 
     def test_convert_text_for_output_returns_unicode_braille_output(self) -> None:
         result = convert_text_for_output(

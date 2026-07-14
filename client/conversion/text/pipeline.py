@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Callable
 
 from adapters.translation.contracts import TranslationRuntime
+from conversion.preprocessing.user_script import execute_preprocessing_script
 from conversion.preprocessing.literal_braille import (
     build_literal_translation_result,
     is_unicode_braille,
@@ -10,14 +11,34 @@ from .char_maps import map_characters
 from .dictionary_rules import apply_dictionary, split_bracket_segments
 
 
+ExecuteScript = Callable[[Path, str], str]
+
+
+class TextProcessingError(Exception):
+    def __init__(self, error: Exception):
+        super().__init__(str(error))
+        self.error = error
+
+
 def preprocess_source_text(
     text: str,
     *,
     data_dir: Path,
+    preprocessing_path: Path,
+    execute_script: ExecuteScript = execute_preprocessing_script,
     map_char: Callable[..., str] = map_characters,
 ) -> str:
+    try:
+        processed_text = execute_script(preprocessing_path, text)
+    except BaseException as error:
+        normalized_error = (
+            error
+            if isinstance(error, Exception)
+            else RuntimeError(f"{type(error).__name__}: {error}")
+        )
+        raise TextProcessingError(normalized_error) from error
     return map_char(
-        text,
+        processed_text,
         dictionary_path=data_dir / "BopomofoChar2Braille.csv",
         from_field="Bopomofo",
         to_field="Braille",

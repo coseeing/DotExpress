@@ -6,7 +6,7 @@ from pathlib import Path
 from adapters.translation.contracts import TranslationRuntime
 from conversion.output import ConversionRequest, convert_text_for_output, convert_text_with_alignment
 from conversion.text.dictionary_rules import split_bracket_segments
-from conversion.text.pipeline import apply_plain_text_rules, preprocess_source_text
+from conversion.text.pipeline import TextProcessingError, apply_plain_text_rules, preprocess_source_text
 
 
 class ConversionTextPipelineTest(unittest.TestCase):
@@ -26,7 +26,7 @@ class ConversionTextPipelineTest(unittest.TestCase):
 
         return TranslationRuntime(text_translator=Translator(), math_translator=Translator())
 
-    def test_preprocess_source_text_applies_bopomofo_char_mapping(self) -> None:
+    def test_preprocess_source_text_runs_user_script_before_bopomofo_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             directory = Path(tmpdir)
             data_dir = directory / "data"
@@ -38,7 +38,63 @@ class ConversionTextPipelineTest(unittest.TestCase):
                 [{"Bopomofo": "ㄅ", "Braille": "⠃"}],
             )
 
-            self.assertEqual(preprocess_source_text("ㄅ", data_dir=data_dir), "⠃")
+            events = []
+
+            def execute_script(path: Path, text: str) -> str:
+                events.append(("script", path, text))
+                return text.replace("B", "ㄅ")
+
+            def map_char(text: str, **kwargs) -> str:
+                events.append(("map", text))
+                return "⠃"
+
+            result = preprocess_source_text(
+                "B",
+                data_dir=data_dir,
+                preprocessing_path=directory / "preprocessing.py",
+                execute_script=execute_script,
+                map_char=map_char,
+            )
+
+            self.assertEqual(result, "⠃")
+            self.assertEqual(
+                events,
+                [
+                    ("script", directory / "preprocessing.py", "B"),
+                    ("map", "ㄅ"),
+                ],
+            )
+
+    def test_preprocess_source_text_preserves_script_exception(self) -> None:
+        error = RuntimeError("script boom")
+
+        def execute_script(_path: Path, _text: str) -> str:
+            raise error
+
+        with self.assertRaises(TextProcessingError) as context:
+            preprocess_source_text(
+                "source",
+                data_dir=Path("data"),
+                preprocessing_path=Path("dictionary/preprocessing.py"),
+                execute_script=execute_script,
+            )
+
+        self.assertIs(context.exception.error, error)
+
+    def test_preprocess_source_text_normalizes_system_exit(self) -> None:
+        def execute_script(_path: Path, _text: str) -> str:
+            raise SystemExit("requested exit")
+
+        with self.assertRaises(TextProcessingError) as context:
+            preprocess_source_text(
+                "source",
+                data_dir=Path("data"),
+                preprocessing_path=Path("dictionary/preprocessing.py"),
+                execute_script=execute_script,
+            )
+
+        self.assertIsInstance(context.exception.error, RuntimeError)
+        self.assertEqual(str(context.exception.error), "SystemExit: requested exit")
 
     def test_apply_plain_text_rules_returns_bracketed_raw_and_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

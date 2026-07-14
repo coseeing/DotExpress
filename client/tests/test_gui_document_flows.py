@@ -528,6 +528,22 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         on_error.assert_called_once_with("boom")
         message_box.assert_not_called()
 
+    def test_text_processing_failure_uses_its_own_message(self) -> None:
+        frame = self._make_frame()
+        result = gui.ConversionJobFailure(
+            job_id=1,
+            error=gui.ConversionStageError("text_processing", RuntimeError("script boom")),
+            completion_policy=gui.ConversionCompletionPolicy(),
+        )
+        frame._complete_conversion = Mock()
+
+        frame._finish_conversion_failure(result)
+
+        frame._complete_conversion.assert_called_once_with(
+            result.completion_policy,
+            error_message=gui._("Text processing failed: {error}").format(error="script boom"),
+        )
+
     def test_later_job_uses_its_own_policy_after_previous_completion(self) -> None:
         frame = self._make_frame()
         first_policy = gui.ConversionCompletionPolicy(

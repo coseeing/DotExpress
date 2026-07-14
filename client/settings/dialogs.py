@@ -10,6 +10,10 @@ import wx
 from wx.lib.scrolledpanel import ScrolledPanel
 
 from braille.tables import listTables
+from conversion.preprocessing.user_script import (
+    load_preprocessing_script,
+    save_preprocessing_script,
+)
 from .state import DotExpressSettingsSnapshot
 from .translation import (
     MAX_CONVERSION_WIDTH,
@@ -118,6 +122,110 @@ class SettingsDialog(wx.Dialog):
 
     def on_apply(self, event=None) -> None:
         pass
+
+
+class TextProcessingDialog(SettingsDialog):
+    _instance: "TextProcessingDialog | None" = None
+
+    def __init__(self, parent, *, script_path: Path | str) -> None:
+        self.script_path = Path(script_path)
+        source = load_preprocessing_script(self.script_path)
+        super().__init__(parent, title=_("Text Processing"))
+        self._build_layout(source)
+        self.SetMinSize(self.MIN_SIZE)
+        self.SetSize(self.INITIAL_SIZE)
+        self.CentreOnParent()
+
+    def _build_layout(self, source: str) -> None:
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        self.editor = wx.TextCtrl(
+            self,
+            value=source,
+            style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_DONTWRAP,
+        )
+        self.editor.SetName(_("Text Processing Python Code"))
+        font = self.editor.GetFont()
+        font.SetFamily(wx.FONTFAMILY_TELETYPE)
+        self.editor.SetFont(font)
+        sizer.Add(self.editor, 1, wx.EXPAND | wx.ALL, 8)
+
+        buttons = wx.BoxSizer(wx.HORIZONTAL)
+        ok_button = wx.Button(self, wx.ID_OK, _("OK"))
+        cancel_button = wx.Button(self, wx.ID_CANCEL, _("Cancel"))
+        apply_button = wx.Button(self, wx.ID_APPLY, _("Apply"))
+        ok_button.Bind(wx.EVT_BUTTON, self.on_ok)
+        cancel_button.Bind(wx.EVT_BUTTON, self.on_cancel)
+        apply_button.Bind(wx.EVT_BUTTON, self.on_apply)
+        for button in (ok_button, cancel_button, apply_button):
+            buttons.Add(button, 0, wx.ALL, 5)
+        sizer.Add(buttons, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        self.SetSizer(sizer)
+
+    def on_apply(self, event=None) -> bool:
+        try:
+            save_preprocessing_script(self.script_path, self.editor.GetValue())
+        except (OSError, SyntaxError, ValueError) as error:
+            display_error = _(str(error)) if isinstance(error, ValueError) else error
+            wx.MessageBox(
+                _("Unable to save text processing script: {error}").format(
+                    error=display_error
+                ),
+                _("Text Processing"),
+                wx.OK | wx.ICON_ERROR,
+                parent=self,
+            )
+            self.editor.SetFocus()
+            return False
+        return True
+
+    def on_ok(self, event=None) -> None:
+        if self.on_apply():
+            self._destroy()
+
+    def on_cancel(self, event=None) -> None:
+        self._destroy()
+
+    def _destroy(self) -> None:
+        if TextProcessingDialog._instance is self:
+            TextProcessingDialog._instance = None
+        self.Destroy()
+
+    @staticmethod
+    def _is_destroyed_window_error(error: Exception) -> bool:
+        if isinstance(error, getattr(wx, "PyDeadObjectError", ())):
+            return True
+        if not isinstance(error, (ReferenceError, RuntimeError)):
+            return False
+        message = str(error).lower()
+        return (
+            "wrapped c/c++ object" in message
+            or "has been deleted" in message
+            or "already deleted" in message
+            or "destroyed" in message
+        )
+
+    @classmethod
+    def show_singleton(
+        cls,
+        *,
+        parent,
+        script_path: Path | str,
+    ) -> "TextProcessingDialog":
+        instance = cls._instance
+        if instance is not None:
+            try:
+                instance.Iconize(False)
+                instance.Raise()
+                instance.SetFocus()
+                return instance
+            except (ReferenceError, RuntimeError, wx.PyDeadObjectError) as error:
+                if not cls._is_destroyed_window_error(error):
+                    raise
+                cls._instance = None
+        instance = cls(parent, script_path=script_path)
+        cls._instance = instance
+        instance.Show()
+        return instance
 
 
 class MultiCategorySettingsDialog(SettingsDialog):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 
@@ -13,6 +14,7 @@ def _install_stub_modules() -> None:
         def __init__(self, *args, **kwargs):
             self.parent = args[0] if args else None
             self.label = kwargs.get("label", "")
+            self.title = kwargs.get("title", getattr(self, "title", ""))
             self.name = ""
             self.bound_events = {}
             self.sizer = None
@@ -110,6 +112,31 @@ def _install_stub_modules() -> None:
         def SetValue(self, value):
             self._value = value
 
+    class _Font:
+        def __init__(self):
+            self.family = None
+
+        def SetFamily(self, family):
+            self.family = family
+
+    class TextCtrl(Window):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._value = kwargs.get("value", "")
+            self._font = _Font()
+
+        def GetValue(self):
+            return self._value
+
+        def SetValue(self, value):
+            self._value = value
+
+        def GetFont(self):
+            return self._font
+
+        def SetFont(self, font):
+            self._font = font
+
     class Sizer(_Widget):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
@@ -179,6 +206,7 @@ def _install_stub_modules() -> None:
     wx.Button = Button
     wx.Choice = Choice
     wx.SpinCtrl = SpinCtrl
+    wx.TextCtrl = TextCtrl
     wx.Sizer = Sizer
     wx.BoxSizer = BoxSizer
     wx.GridBagSizer = GridBagSizer
@@ -248,6 +276,10 @@ def _install_stub_modules() -> None:
     wx.EVT_SPINCTRL = 110
     wx.EVT_TEXT = 111
     wx.WXK_TAB = 9
+    wx.TE_MULTILINE = 0x0004
+    wx.TE_RICH2 = 0x8000
+    wx.TE_DONTWRAP = 0x40000000
+    wx.FONTFAMILY_TELETYPE = 1
 
     class PyDeadObjectError(RuntimeError):
         pass
@@ -368,6 +400,109 @@ class SettingsPanelTest(unittest.TestCase):
         panel = TestPanel(None, Mock())
 
         self.assertEqual(panel.label, "Translation")
+
+
+class TextProcessingDialogTest(unittest.TestCase):
+    def make_dialog(self):
+        from settings.dialogs import TextProcessingDialog
+
+        dialog = object.__new__(TextProcessingDialog)
+        dialog.script_path = Path("dictionary/preprocessing.py")
+        dialog.editor = Mock()
+        dialog.Destroy = Mock()
+        return dialog
+
+    def test_initial_size_title_and_accessible_editor_name(self) -> None:
+        from settings.dialogs import TextProcessingDialog
+
+        with (
+            patch(
+                "settings.dialogs.load_preprocessing_script",
+                return_value="def main(text):\n    return text\n",
+            ),
+            patch("settings.dialogs._", side_effect=lambda text: text),
+        ):
+            dialog = TextProcessingDialog(
+                None,
+                script_path=Path("dictionary/preprocessing.py"),
+            )
+
+        self.assertEqual(dialog.size, (720, 440))
+        self.assertEqual(dialog.title, "Text Processing")
+        self.assertEqual(dialog.editor.GetName(), "Text Processing Python Code")
+
+    def test_apply_saves_editor_source(self) -> None:
+        dialog = self.make_dialog()
+        dialog.editor.GetValue.return_value = "def main(text):\n    return text\n"
+        with patch("settings.dialogs.save_preprocessing_script") as save:
+            self.assertTrue(dialog.on_apply())
+        save.assert_called_once_with(dialog.script_path, dialog.editor.GetValue.return_value)
+
+    def test_apply_failure_keeps_dialog_open_and_focuses_editor(self) -> None:
+        dialog = self.make_dialog()
+        dialog.editor.GetValue.return_value = "def main(:\n"
+        with (
+            patch(
+                "settings.dialogs.save_preprocessing_script",
+                side_effect=SyntaxError("invalid syntax"),
+            ),
+            patch.object(wx, "MessageBox") as message_box,
+        ):
+            self.assertFalse(dialog.on_apply())
+        dialog.Destroy.assert_not_called()
+        dialog.editor.SetFocus.assert_called_once_with()
+        message_box.assert_called_once()
+
+    def test_ok_destroys_only_after_successful_apply(self) -> None:
+        dialog = self.make_dialog()
+        dialog.on_apply = Mock(return_value=True)
+        dialog._destroy = Mock()
+        dialog.on_ok()
+        dialog._destroy.assert_called_once_with()
+
+    def test_cancel_does_not_save(self) -> None:
+        dialog = self.make_dialog()
+        dialog._destroy = Mock()
+        with patch("settings.dialogs.save_preprocessing_script") as save:
+            dialog.on_cancel()
+        save.assert_not_called()
+        dialog._destroy.assert_called_once_with()
+
+    def test_show_singleton_reuses_live_dialog(self) -> None:
+        from settings.dialogs import TextProcessingDialog
+
+        existing = Mock()
+        original = TextProcessingDialog._instance
+        TextProcessingDialog._instance = existing
+        try:
+            result = TextProcessingDialog.show_singleton(
+                parent=Mock(),
+                script_path=Path("dictionary/preprocessing.py"),
+            )
+        finally:
+            TextProcessingDialog._instance = original
+
+        self.assertIs(result, existing)
+        existing.Iconize.assert_called_once_with(False)
+        existing.Raise.assert_called_once_with()
+        existing.SetFocus.assert_called_once_with()
+
+    def test_show_singleton_reraises_unexpected_existing_dialog_error(self) -> None:
+        from settings.dialogs import TextProcessingDialog
+
+        existing = Mock()
+        existing.Iconize.side_effect = RuntimeError("unexpected")
+        original = TextProcessingDialog._instance
+        TextProcessingDialog._instance = existing
+        try:
+            with self.assertRaisesRegex(RuntimeError, "unexpected"):
+                TextProcessingDialog.show_singleton(
+                    parent=Mock(),
+                    script_path=Path("dictionary/preprocessing.py"),
+                )
+            self.assertIs(TextProcessingDialog._instance, existing)
+        finally:
+            TextProcessingDialog._instance = original
 
 
 class MultiCategorySettingsDialogTest(unittest.TestCase):

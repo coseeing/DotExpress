@@ -7,8 +7,6 @@ from dual_view.model import AlignmentItem, AlignmentSegment, DualViewModel
 def _render_item(item: AlignmentItem) -> str:
 	if item.is_newline:
 		return '<span class="line-break" role="separator"></span>'
-	if item.raw_text.isspace():
-		return ""
 
 	classes = "cell space" if item.is_space else "cell"
 	if item.source_kind == "math" and item.source_html is not None:
@@ -61,7 +59,7 @@ body {{ margin: 0; padding: 1rem; background: #f5f1e8; color: #17201d; }}
 .cell {{ display: inline-grid; grid-template-rows: auto auto; min-width: 2rem; text-align: center;
   border: 1px solid #d7cdbb; border-radius: .25rem; overflow: hidden; }}
 .source, .braille {{ padding: .25rem .4rem; }}
-.source {{ font-size: 1rem; background: #eee6d7; }}
+.source {{ font-size: 1rem; background: #eee6d7; white-space: pre-wrap; }}
 .braille {{ font-family: "SimBraille", "Noto Sans Symbols 2", sans-serif; font-size: 1.35rem; }}
 .line-break {{ flex-basis: 100%; height: 0; }}
 .empty {{ color: #777; font-size: .85rem; }}

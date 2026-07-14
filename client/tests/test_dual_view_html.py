@@ -38,10 +38,12 @@ class DualViewHtmlTest(unittest.TestCase):
 		self.assertIn("&lt;", output)
 		self.assertIn("&quot;raw_index&quot;", output)
 
-	def test_omits_non_newline_whitespace_but_keeps_newline_break(self):
+	def test_renders_non_newline_whitespace_but_keeps_newline_break(self):
 		output = self.render([" ", "  ", "\t", "\n"], "⠀⠀⠀", [0, 1, 2, 3])
 
-		self.assertNotIn('class="cell space"', output)
+		self.assertIn('class="cell space"', output)
+		self.assertIn('<span class="source">  </span>', output)
+		self.assertIn('<span class="source">\t</span>', output)
 		self.assertIn('class="line-break"', output)
 
 	def test_math_item_renders_mathml_in_source_area(self):
@@ -74,7 +76,7 @@ class DualViewHtmlTest(unittest.TestCase):
 		]))
 
 		self.assertNotIn('<section class="segment">', output)
-		self.assertEqual(output.count('class="cell"'), 2)
+		self.assertEqual(output.count('class="cell"'), 3)
 		self.assertLess(output.index('<span class="source">a</span>'), output.index('<span class="source">b</span>'))
 		self.assertIn('class="line-break"', output)
 

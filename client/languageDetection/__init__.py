@@ -242,6 +242,9 @@ class LanguageDetector(object):
 					if c.isspace():
 						sb.write(c)
 						continue
+					if "\u2800" <= c <= "\u28ff":
+						sb.write(c)
+						continue
 					if False and (c.isdigit() or (not c.isalpha() and block <= 0x8)):
 						# if config.conf["WorldVoice"]['autoLanguageSwitching']['ignoreNumbersInLanguageDetection'] and c.isdigit():
 						if c.isdigit():

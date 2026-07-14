@@ -4,6 +4,21 @@ from translate import TranslationResult
 BLANK = chr(0x2800)
 
 
+def test_bind_contracted_tokens_merges_source_characters_with_one_braille_cell() -> None:
+	result = TranslationResult(
+		list("A the test"),
+		["⠠", "⠁", BLANK, "⠮", BLANK, "⠞", "⠑", "⠌"],
+		[0, 0, 1, 2, 5, 6, 7, 8],
+		[0, 2, 3, 3, 3, 4, 5, 6, 7, 7],
+	)
+
+	result.bind_contracted_tokens()
+
+	assert result.raw == ["A", " ", "the", " ", "t", "e", "st"]
+	assert result.braille_to_raw_pos == [0, 0, 1, 2, 3, 4, 5, 6]
+	assert result.raw_to_braille_pos == [0, 2, 3, 4, 5, 6, 7]
+
+
 def test_bind_word_tokens_lead_punct() -> None:
 	"""開頭字元測試"""
 	result = TranslationResult(

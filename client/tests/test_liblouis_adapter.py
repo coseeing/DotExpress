@@ -50,6 +50,24 @@ class LiblouisTextTranslatorTest(unittest.TestCase):
         self.assertEqual(result.braille_to_raw_pos, [0, 0])
         self.assertEqual(result.raw_to_braille_pos, [0])
 
+    def test_regular_translation_binds_liblouis_contractions(self) -> None:
+        self.helper.translate = lambda _tables, _text, *, mode: (
+            [0, 1, 0, 46, 0, 30, 17, 12],
+            [0, 0, 1, 2, 5, 6, 7, 8],
+            [0, 2, 3, 3, 3, 4, 5, 6, 7, 7],
+            None,
+        )
+
+        result = self.adapter.translate(
+            "A the test",
+            table="en-ueb-g2.ctb",
+            raw="A the test",
+        )
+
+        self.assertEqual(result.raw, ["A", " ", "the", " ", "t", "e", "st"])
+        self.assertEqual(result.braille_to_raw_pos, [0, 0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(result.raw_to_braille_pos, [0, 2, 3, 4, 5, 6, 7])
+
 
 if __name__ == "__main__":
     unittest.main()

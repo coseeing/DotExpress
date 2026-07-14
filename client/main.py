@@ -21,7 +21,11 @@ def run_demo(text: str = SAMPLE_TEXT) -> None:
                 width=40,
                 dictionary_path=BASE_DIR / "dictionary" / "default.csv",
                 data_dir=BASE_DIR / "data",
-                translation_tables=DEFAULT_TRANSLATION_TABLES,
+                translation_tables={
+                    **DEFAULT_TRANSLATION_TABLES,
+                    "default": "en-ueb-g2.ctb",
+                    "en": "en-ueb-g2.ctb",
+                },
             ),
             runtime=runtime,
         )

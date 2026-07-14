@@ -59,6 +59,50 @@ class TranslationResult:
 		result &= (self.raw_to_braille_pos == other.raw_to_braille_pos)
 		return result
 
+	def bind_contracted_tokens(self):
+		"""Merge adjacent source characters that share one braille-cell start.
+
+		liblouis reports character-level source positions even when a grade-2
+		contraction maps several source characters to one braille cell. Merge
+		those source characters and rebuild both position maps at token level.
+		"""
+		if not self.raw or len(self.raw) != len(self.raw_to_braille_pos):
+			return
+
+		old_raw = self.raw
+		old_raw_to_braille = self.raw_to_braille_pos
+		old_braille_to_raw = self.braille_to_raw_pos
+		token_spans: list[tuple[int, int]] = []
+		tokens: list[str] = []
+		start = 0
+		while start < len(old_raw):
+			end = start + 1
+			while (
+				end < len(old_raw)
+				and old_raw_to_braille[end] == old_raw_to_braille[start]
+			):
+				end += 1
+			tokens.append("".join(old_raw[start:end]))
+			token_spans.append((start, end))
+			start = end
+
+		char_to_token = [0] * len(old_raw)
+		for token_index, (span_start, span_end) in enumerate(token_spans):
+			for char_index in range(span_start, span_end):
+				char_to_token[char_index] = token_index
+
+		self.raw = tokens
+		self.raw_to_braille_pos = [
+			old_raw_to_braille[span_start]
+			for span_start, _span_end in token_spans
+		]
+		self.braille_to_raw_pos = [
+			char_to_token[char_index]
+			if 0 <= char_index < len(old_raw)
+			else 0
+			for char_index in old_braille_to_raw
+		]
+
 	def bind_word_tokens(self):
 		"""
 		將 self.raw（list[str]，每個元素為單一字元）重新切成「詞級 token」，並重建對應表：

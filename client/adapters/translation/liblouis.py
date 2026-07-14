@@ -44,9 +44,11 @@ class LiblouisTextTranslator:
                 [0] * len(braille),
                 [0],
             )
-        return TranslationResult(
+        result = TranslationResult(
             list(text),
             braille,
             braille_to_raw,
             raw_to_braille,
         )
+        result.bind_contracted_tokens()
+        return result

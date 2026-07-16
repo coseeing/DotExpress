@@ -1597,3 +1597,117 @@ msgstr "請輸入有效的 Unicode 點字序列。"
 
 #~ msgid "Custom Braille"
 #~ msgstr "自訂點字"
+
+#: settings/dialogs.py:153 settings/dialogs.py:333 dialog.py:61
+msgid "OK"
+msgstr "確定"
+
+#: settings/dialogs.py:154 settings/dialogs.py:335 dialog.py:62
+msgid "Cancel"
+msgstr "取消"
+
+#: settings/dialogs.py:155 settings/dialogs.py:337 dialog.py:63
+msgid "Apply"
+msgstr "套用"
+
+#: dialog.py:64
+msgid "Close"
+msgstr "關閉"
+
+#: settings/dialogs.py:287
+msgid "&Categories:"
+msgstr "分類(&C)："
+
+#: settings/dialogs.py:308
+msgid "Categories"
+msgstr "分類"
+
+#: settings/dialogs.py:397
+msgid "Unicode"
+msgstr "Unicode"
+
+#: settings/dialogs.py:398
+msgid "ASCII"
+msgstr "ASCII"
+
+#: settings/dialogs.py:402
+msgid "Light"
+msgstr "淺色"
+
+#: settings/dialogs.py:403
+msgid "Dark"
+msgstr "深色"
+
+#: settings/dialogs.py:414
+msgid "Translation output mode, width, and dictionary options"
+msgstr "轉譯輸出模式、寬度與字典選項"
+
+#: settings/dialogs.py:424
+msgid "Braille Type"
+msgstr "點字類型"
+
+#: settings/dialogs.py:432
+msgid "Width"
+msgstr "寬度"
+
+#: settings/dialogs.py:509
+msgid "Translation Tables"
+msgstr "轉譯表"
+
+#: settings/dialogs.py:510
+msgid "Translation table mappings for different languages"
+msgstr "不同語言的轉譯表對應"
+
+#: settings/dialogs.py:515
+msgid "Default Translation Table"
+msgstr "預設轉譯表"
+
+#: settings/dialogs.py:516
+msgid "English Translation Table"
+msgstr "英文轉譯表"
+
+#: settings/dialogs.py:517
+msgid "Chinese Translation Table"
+msgstr "中文轉譯表"
+
+#: settings/dialogs.py:518
+msgid "Japanese Translation Table"
+msgstr "日文轉譯表"
+
+#: settings/dialogs.py:519
+msgid "Math Translation Table"
+msgstr "數學轉譯表"
+
+#: settings/dialogs.py:533
+msgid "None selected"
+msgstr "未選取"
+
+#: settings/dialogs.py:562
+#, python-brace-format
+msgid "Please select a value for {field}."
+msgstr "請為 {field} 選擇值。"
+
+#: settings/dialogs.py:632
+msgid "View"
+msgstr "檢視"
+
+#: settings/dialogs.py:633
+msgid "Font, font size, and color scheme for the main window input and output areas"
+msgstr "主視窗輸入與輸出區域的字型、字型大小與色彩配置"
+
+#: settings/dialogs.py:643
+msgid "Font Size"
+msgstr "字型大小"
+
+#: settings/dialogs.py:656
+msgid "Scheme"
+msgstr "色彩配置"
+
+#: settings/dialogs.py:739
+msgid "DotExpress Settings"
+msgstr "DotExpress 設定"
+
+#: settings/dialogs.py:740
+#, python-brace-format
+msgid "DotExpress Settings: {category}"
+msgstr "DotExpress 設定：{category}"

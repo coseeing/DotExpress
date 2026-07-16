@@ -55,6 +55,29 @@ def finalize_dialog_layout(dialog: wx.Dialog, sizer: wx.Sizer) -> None:
 		dialog.Centre()
 
 
+def localize_standard_buttons(
+	dialog: wx.Dialog,
+	flags: int,
+	button_sizer: wx.StdDialogButtonSizer | None = None,
+) -> None:
+	"""Apply application translations to wxPython's standard dialog buttons."""
+	button_labels = (
+		(wx.OK, wx.ID_OK, _("OK"), "GetAffirmativeButton"),
+		(wx.CANCEL, wx.ID_CANCEL, _("Cancel"), "GetCancelButton"),
+		(wx.APPLY, wx.ID_APPLY, _("Apply"), "GetApplyButton"),
+		(wx.CLOSE, wx.ID_CLOSE, _("Close"), "GetCloseButton"),
+	)
+	for flag, button_id, label, sizer_button_getter in button_labels:
+		if flags & flag:
+			button = dialog.FindWindowById(button_id)
+			if button is None and button_sizer is not None:
+				getter = getattr(button_sizer, sizer_button_getter, None)
+				if getter is not None:
+					button = getter()
+			if button is not None:
+				button.SetLabel(label)
+
+
 def _normalize_dialog_name(
 	candidate: str,
 	normalizer: Callable[[str], str],
@@ -109,10 +132,14 @@ class AddSymbolDialog(wx.Dialog):
 
 		main_sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 12)
 
-		button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
-		if button_sizer:
-			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
-			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
+		button_sizer = wx.StdDialogButtonSizer()
+		ok_button = wx.Button(self, wx.ID_OK, _("OK"))
+		cancel_button = wx.Button(self, wx.ID_CANCEL, _("Cancel"))
+		button_sizer.AddButton(ok_button)
+		button_sizer.AddButton(cancel_button)
+		button_sizer.Realize()
+		main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+		self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
 
 		finalize_dialog_layout(self, main_sizer)
 		self._apply_initial_values(entry)
@@ -199,6 +226,7 @@ class DictionaryNameDialog(wx.Dialog):
 
 		button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 		if button_sizer:
+			localize_standard_buttons(self, wx.OK | wx.CANCEL, button_sizer)
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
 
@@ -267,6 +295,7 @@ class DocumentNameDialog(wx.Dialog):
 
 		button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 		if button_sizer:
+			localize_standard_buttons(self, wx.OK | wx.CANCEL, button_sizer)
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
 
@@ -450,6 +479,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 
 		button_bar = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 		if button_bar:
+			localize_standard_buttons(self, wx.OK | wx.CANCEL, button_bar)
 			main_sizer.Add(button_bar, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
 			ok_button = self.FindWindowById(wx.ID_OK)
 			if ok_button:
@@ -704,6 +734,7 @@ class DictionaryManagementDialog(wx.Dialog):
 
 		button_bar = self.CreateButtonSizer(wx.CLOSE)
 		if button_bar:
+			localize_standard_buttons(self, wx.CLOSE, button_bar)
 			main_sizer.Add(button_bar, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 			self.Bind(wx.EVT_BUTTON, lambda _event: self.EndModal(wx.ID_CLOSE), id=wx.ID_CLOSE)
 

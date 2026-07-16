@@ -1381,3 +1381,115 @@ msgstr ""
 #: dictionaries/entries.py:60
 msgid "Please enter the a valid Unicode Braille sequence."
 msgstr ""
+
+#: settings/dialogs.py:153 settings/dialogs.py:333 dialog.py:61
+msgid "OK"
+msgstr ""
+
+#: settings/dialogs.py:154 settings/dialogs.py:335 dialog.py:62
+msgid "Cancel"
+msgstr ""
+
+#: settings/dialogs.py:155 settings/dialogs.py:337 dialog.py:63
+msgid "Apply"
+msgstr ""
+
+#: dialog.py:64
+msgid "Close"
+msgstr ""
+
+#: settings/dialogs.py:287
+msgid "&Categories:"
+msgstr ""
+
+#: settings/dialogs.py:308
+msgid "Categories"
+msgstr ""
+
+#: settings/dialogs.py:397
+msgid "Unicode"
+msgstr ""
+
+#: settings/dialogs.py:398
+msgid "ASCII"
+msgstr ""
+
+#: settings/dialogs.py:402
+msgid "Light"
+msgstr ""
+
+#: settings/dialogs.py:403
+msgid "Dark"
+msgstr ""
+
+#: settings/dialogs.py:414
+msgid "Translation output mode, width, and dictionary options"
+msgstr ""
+
+#: settings/dialogs.py:424
+msgid "Braille Type"
+msgstr ""
+
+#: settings/dialogs.py:432
+msgid "Width"
+msgstr ""
+
+#: settings/dialogs.py:509
+msgid "Translation Tables"
+msgstr ""
+
+#: settings/dialogs.py:510
+msgid "Translation table mappings for different languages"
+msgstr ""
+
+#: settings/dialogs.py:515
+msgid "Default Translation Table"
+msgstr ""
+
+#: settings/dialogs.py:516
+msgid "English Translation Table"
+msgstr ""
+
+#: settings/dialogs.py:517
+msgid "Chinese Translation Table"
+msgstr ""
+
+#: settings/dialogs.py:518
+msgid "Japanese Translation Table"
+msgstr ""
+
+#: settings/dialogs.py:519
+msgid "Math Translation Table"
+msgstr ""
+
+#: settings/dialogs.py:533
+msgid "None selected"
+msgstr ""
+
+#: settings/dialogs.py:562
+msgid "Please select a value for {field}."
+msgstr ""
+
+#: settings/dialogs.py:632
+msgid "View"
+msgstr ""
+
+#: settings/dialogs.py:633
+msgid "Font, font size, and color scheme for the main window input and output areas"
+msgstr ""
+
+#: settings/dialogs.py:643
+msgid "Font Size"
+msgstr ""
+
+#: settings/dialogs.py:656
+msgid "Scheme"
+msgstr ""
+
+#: settings/dialogs.py:739
+msgid "DotExpress Settings"
+msgstr ""
+
+#: settings/dialogs.py:740
+msgid "DotExpress Settings: {category}"
+msgstr ""

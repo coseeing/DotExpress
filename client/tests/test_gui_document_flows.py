@@ -449,6 +449,65 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         menu_items["Export"].Enable.assert_called_once_with(False)
         menu_items["Export All"].Enable.assert_called_once_with(False)
 
+    def test_open_dual_view_creates_refreshes_and_shows_viewer(self) -> None:
+        frame = self._make_frame()
+        frame._dual_view_results_by_document["alpha"] = ("segment",)
+        viewer = Mock()
+        frame._create_dual_view_frame = Mock(return_value=viewer)
+        frame._render_dual_view_for_open_document = Mock(return_value="<html>alpha</html>")
+        viewer.IsIconized.return_value = False
+
+        frame._show_dual_view()
+
+        frame._create_dual_view_frame.assert_called_once_with()
+        viewer.refresh_html.assert_called_once_with("<html>alpha</html>")
+        viewer.Show.assert_called_once_with()
+        viewer.Raise.assert_called_once_with()
+
+    def test_open_existing_dual_view_reuses_and_refreshes_it(self) -> None:
+        frame = self._make_frame()
+        viewer = Mock()
+        frame._dual_view_frame = viewer
+        frame._render_dual_view_for_open_document = Mock(return_value="<html>new</html>")
+        viewer.IsIconized.return_value = False
+
+        frame._show_dual_view()
+
+        viewer.refresh_html.assert_called_once_with("<html>new</html>")
+        viewer.Show.assert_called_once_with()
+        viewer.Raise.assert_called_once_with()
+
+    def test_dual_view_menu_opens_rendered_html_with_main_window_size(self) -> None:
+        frame = self._make_frame()
+        frame.GetSize = Mock(return_value=(1024, 768))
+        frame._render_dual_view_for_open_document = Mock(return_value="<html>dual</html>")
+        html_path = Path("C:/DotExpress/dual_view/dual-view-one.html")
+
+        with (
+            patch.object(gui, "write_dual_view_html", return_value=html_path) as write_html,
+            patch.object(gui, "open_html_in_browser") as open_browser,
+        ):
+            frame.on_open_dual_view(None)
+
+        write_html.assert_called_once_with("<html>dual</html>")
+        open_browser.assert_called_once_with(html_path, (1024, 768))
+
+    def test_dual_view_menu_reports_write_or_launch_failure(self) -> None:
+        frame = self._make_frame()
+        frame.GetSize = Mock(return_value=(900, 600))
+        frame._render_dual_view_for_open_document = Mock(return_value="<html>dual</html>")
+        frame._show_file_error = Mock()
+        error = OSError("browser failed")
+
+        with (
+            patch.object(gui, "write_dual_view_html", side_effect=error),
+            patch.object(gui.logger, "exception") as log_exception,
+        ):
+            frame.on_open_dual_view(None)
+
+        log_exception.assert_called_once_with("Failed to open dual view")
+        frame._show_file_error.assert_called_once_with(gui._("Failed to open dual view: {error}"), error)
+
 
 class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
     def test_open_text_processing_uses_dictionary_directory_script(self) -> None:
@@ -481,7 +540,12 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame = Mock()
 
         with (
-            patch.object(gui, "prepare_application_directories"),
+            patch.object(
+                gui,
+                "prepare_application_directories",
+                return_value=Mock(dual_view=Path("C:/DotExpress/dual_view")),
+            ),
+            patch.object(gui, "cleanup_dual_view_html"),
             patch.object(gui, "build_default_translation_runtime", return_value=runtime),
             patch.object(gui, "BrailleFrame", return_value=frame) as frame_class,
             patch.object(gui, "start_client_init_background"),
@@ -499,7 +563,12 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         order: list[str] = []
 
         with (
-            patch.object(gui, "prepare_application_directories", side_effect=lambda: order.append("paths")),
+            patch.object(
+                gui,
+                "prepare_application_directories",
+                side_effect=lambda: (order.append("paths"), Mock(dual_view=Path("C:/DotExpress/dual_view")))[1],
+            ),
+            patch.object(gui, "cleanup_dual_view_html"),
             patch.object(gui, "build_default_translation_runtime", side_effect=lambda: (order.append("runtime"), runtime)[1]),
             patch.object(gui, "BrailleFrame", side_effect=lambda *args, **kwargs: (order.append("frame"), frame)[1]),
             patch.object(gui, "start_client_init_background"),
@@ -536,17 +605,72 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_app_exit_without_initialized_runtime_is_safe(self) -> None:
         app = gui.BrailleApp()
+        app.translation_runtime = None
 
-        self.assertEqual(app.OnExit(), 0)
+        with patch.object(gui, "cleanup_dual_view_html"):
+            self.assertEqual(app.OnExit(), 0)
 
     def test_app_exit_closes_runtime(self) -> None:
         runtime = Mock()
         app = gui.BrailleApp()
         app.translation_runtime = runtime
 
-        result = app.OnExit()
+        with patch.object(gui, "cleanup_dual_view_html"):
+            result = app.OnExit()
 
         self.assertEqual(result, 0)
+        runtime.close.assert_called_once_with()
+
+    def test_app_cleans_stale_dual_view_html_after_path_validation(self) -> None:
+        paths = Mock()
+        paths.dual_view = Path("C:/DotExpress/dual_view")
+        runtime = Mock()
+        frame = Mock()
+
+        with (
+            patch.object(gui, "prepare_application_directories", return_value=paths),
+            patch.object(gui, "cleanup_dual_view_html") as cleanup,
+            patch.object(gui, "build_default_translation_runtime", return_value=runtime),
+            patch.object(gui, "BrailleFrame", return_value=frame),
+            patch.object(gui, "start_client_init_background"),
+        ):
+            app = gui.BrailleApp()
+            self.assertTrue(app.OnInit())
+
+        cleanup.assert_called_once_with(paths.dual_view)
+
+    def test_app_reports_startup_cleanup_failure_before_runtime(self) -> None:
+        paths = Mock()
+        paths.dual_view = Path("C:/DotExpress/dual_view")
+        cause = PermissionError("locked")
+
+        with (
+            patch.object(gui, "prepare_application_directories", return_value=paths),
+            patch.object(gui, "cleanup_dual_view_html", side_effect=cause),
+            patch.object(gui, "build_default_translation_runtime") as build_runtime,
+            patch.object(gui.wx, "MessageBox") as message_box,
+        ):
+            app = gui.BrailleApp()
+            result = app.OnInit()
+
+        self.assertFalse(result)
+        build_runtime.assert_not_called()
+        self.assertIn(str(paths.dual_view), message_box.call_args.args[0])
+
+    def test_app_exit_logs_cleanup_failure_and_still_closes_runtime(self) -> None:
+        runtime = Mock()
+        app = gui.BrailleApp()
+        app.translation_runtime = runtime
+        error = OSError("locked")
+
+        with (
+            patch.object(gui, "cleanup_dual_view_html", side_effect=error),
+            patch.object(gui.logger, "exception") as log_exception,
+        ):
+            result = app.OnExit()
+
+        self.assertEqual(result, 0)
+        log_exception.assert_called_once_with("Failed to clean up dual-view HTML")
         runtime.close.assert_called_once_with()
 
     def test_start_conversion_builds_request_and_starts_runner(self) -> None:
@@ -741,34 +865,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._show_export_all_result.assert_called_once()
         result = frame._show_export_all_result.call_args.args[0]
         self.assertTrue(result.all_succeeded)
-
-    def test_open_dual_view_creates_refreshes_and_shows_viewer(self) -> None:
-        frame = self._make_frame()
-        frame._dual_view_results_by_document["alpha"] = ("segment",)
-        viewer = Mock()
-        frame._create_dual_view_frame = Mock(return_value=viewer)
-        frame._render_dual_view_for_open_document = Mock(return_value="<html>alpha</html>")
-        viewer.IsIconized.return_value = False
-
-        frame._show_dual_view()
-
-        frame._create_dual_view_frame.assert_called_once_with()
-        viewer.refresh_html.assert_called_once_with("<html>alpha</html>")
-        viewer.Show.assert_called_once_with()
-        viewer.Raise.assert_called_once_with()
-
-    def test_open_existing_dual_view_reuses_and_refreshes_it(self) -> None:
-        frame = self._make_frame()
-        viewer = Mock()
-        frame._dual_view_frame = viewer
-        frame._render_dual_view_for_open_document = Mock(return_value="<html>new</html>")
-        viewer.IsIconized.return_value = False
-
-        frame._show_dual_view()
-
-        viewer.refresh_html.assert_called_once_with("<html>new</html>")
-        viewer.Show.assert_called_once_with()
-        viewer.Raise.assert_called_once_with()
 
     def test_successful_manual_conversion_stores_segments_and_refreshes_open_viewer(self) -> None:
         frame = self._make_frame()

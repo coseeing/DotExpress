@@ -101,7 +101,10 @@ from ui.section_navigation import (
 	get_adjacent_section,
 )
 from dual_view.html import render_dual_view_html
+from dual_view.browser import open_html_in_browser
+from dual_view.files import cleanup_dual_view_html, write_dual_view_html
 from dual_view.model import build_dual_view_model
+from log import get_logger
 from ui.dual_view import DualViewFrame
 from ui.translation_menu import get_translation_menu_items
 from client_init import start_client_init_background
@@ -169,6 +172,8 @@ _translation = gettext.translation(
 	fallback=True,
 )
 _ = _translation.gettext
+
+logger = get_logger("dotexpress.gui", "gui.log")
 
 # Keep dynamic context-menu labels discoverable to gettext extraction.
 _MENU_TRANSLATION_MARKERS = (
@@ -522,6 +527,15 @@ class BrailleFrame(wx.Frame):
 			self._dual_view_frame.Iconize(False)
 		self._dual_view_frame.Raise()
 
+	def _open_dual_view_in_browser(self) -> None:
+		try:
+			html_path = write_dual_view_html(self._render_dual_view_for_open_document())
+			width, height = self.GetSize()
+			open_html_in_browser(html_path, (width, height))
+		except Exception as error:
+			logger.exception("Failed to open dual view")
+			self._show_file_error(_("Failed to open dual view: {error}"), error)
+
 	def _rename_dual_view_result(self, old_name: str, new_name: str) -> None:
 		if old_name in self._dual_view_results_by_document:
 			self._dual_view_results_by_document[new_name] = self._dual_view_results_by_document.pop(old_name)
@@ -673,7 +687,7 @@ class BrailleFrame(wx.Frame):
 			dialog.ShowModal()
 
 	def on_open_dual_view(self, _evt) -> None:
-		self._show_dual_view()
+		self._open_dual_view_in_browser()
 
 	def on_open_text_processing(self, _event) -> None:
 		try:
@@ -1771,8 +1785,13 @@ def _show_application_data_error(error: ApplicationDataError) -> None:
 class BrailleApp(wx.App):
 	def OnInit(self):
 		try:
-			prepare_application_directories()
+			paths = prepare_application_directories()
+			cleanup_dual_view_html(paths.dual_view)
 		except ApplicationDataError as error:
+			_show_application_data_error(error)
+			return False
+		except OSError as cause:
+			error = ApplicationDataError(paths.dual_view, cause)
 			_show_application_data_error(error)
 			return False
 
@@ -1783,7 +1802,11 @@ class BrailleApp(wx.App):
 		return True
 
 	def OnExit(self):
-		runtime = self.__dict__.get("translation_runtime")
+		try:
+			cleanup_dual_view_html()
+		except OSError:
+			logger.exception("Failed to clean up dual-view HTML")
+		runtime = getattr(self, "translation_runtime", None)
 		if runtime is not None:
 			runtime.close()
 		return 0

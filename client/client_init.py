@@ -14,7 +14,7 @@ import about
 from config import get_lang, get_or_create_client_id
 from log import get_logger
 
-logger = get_logger("dotexpress.client_init", "log/init.log")
+logger = get_logger("dotexpress.client_init", "init.log")
 
 CLIENT_INIT_URL = "https://dotexpress.coseeing.org/client/init"
 

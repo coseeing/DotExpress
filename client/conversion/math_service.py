@@ -7,7 +7,7 @@ from config import DEFAULT_MATH_BRAILLE_TABLE
 from log import get_logger
 
 
-logger = get_logger("dotexpress.math", "log/math.log")
+logger = get_logger("dotexpress.math", "math.log")
 _INVALID_AMPERSAND_RE = re.compile(r'&(?!#\d+;|#x[0-9A-Fa-f]+;|[A-Za-z_:][A-Za-z0-9_.:-]*;)')
 
 

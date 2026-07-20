@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-import sys
 import zipfile
 from collections.abc import Callable
 
+from app_paths import get_workspace_directory
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_format, get_importable_formats, get_supported_import_filter_keys
 from shared.name_validation import MAX_NAME_LENGTH, normalize_base_name
 
@@ -32,18 +32,6 @@ class BatchIssue:
 
 def create_default_document() -> Document:
     return Document(name=DEFAULT_DOCUMENT_NAME, text="", braille=None)
-
-
-def get_application_directory() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
-
-
-def get_workspace_directory(base_dir: Path | None = None) -> Path:
-    if base_dir is not None:
-        return Path(base_dir)
-    return get_application_directory() / "workspace"
 
 
 def ensure_workspace_directory(workspace_dir: Path | None = None) -> Path:

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from adapters.translation.provider import build_default_translation_runtime
+from app_paths import get_dictionary_directory
 from config import DEFAULT_TRANSLATION_TABLES
 from conversion.service import ConversionRequest, convert_text_with_alignment
 
@@ -19,7 +20,7 @@ def run_demo(text: str = SAMPLE_TEXT) -> None:
                 raw_text=text,
                 output_mode="unicode",
                 width=40,
-                dictionary_path=BASE_DIR / "dictionary" / "default.csv",
+                dictionary_path=get_dictionary_directory() / "default.csv",
                 data_dir=BASE_DIR / "data",
                 translation_tables={
                     **DEFAULT_TRANSLATION_TABLES,

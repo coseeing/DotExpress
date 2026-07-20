@@ -7,6 +7,7 @@ import webbrowser
 import wx
 
 import about
+from app_paths import ApplicationDataError, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
 from conversion.jobs import (
@@ -1756,8 +1757,25 @@ class BrailleFrame(wx.Frame):
 		)
 
 
+def _show_application_data_error(error: ApplicationDataError) -> None:
+	wx.MessageBox(
+		_(
+			"DotExpress cannot write to its application data directory:\n"
+			"{path}\n\nChoose a writable installation or execution location.\n\n{error}"
+		).format(path=error.path, error=error.cause),
+		_("Startup Error"),
+		wx.OK | wx.ICON_ERROR,
+	)
+
+
 class BrailleApp(wx.App):
 	def OnInit(self):
+		try:
+			prepare_application_directories()
+		except ApplicationDataError as error:
+			_show_application_data_error(error)
+			return False
+
 		self.translation_runtime = build_default_translation_runtime()
 		self.frame = BrailleFrame(None, runtime=self.translation_runtime)
 		self.frame.Show()
@@ -1765,7 +1783,9 @@ class BrailleApp(wx.App):
 		return True
 
 	def OnExit(self):
-		self.translation_runtime.close()
+		runtime = self.__dict__.get("translation_runtime")
+		if runtime is not None:
+			runtime.close()
 		return 0
 
 

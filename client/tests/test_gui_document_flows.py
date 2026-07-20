@@ -481,6 +481,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame = Mock()
 
         with (
+            patch.object(gui, "prepare_application_directories"),
             patch.object(gui, "build_default_translation_runtime", return_value=runtime),
             patch.object(gui, "BrailleFrame", return_value=frame) as frame_class,
             patch.object(gui, "start_client_init_background"),
@@ -491,6 +492,52 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         self.assertTrue(result)
         frame_class.assert_called_once_with(None, runtime=runtime)
         frame.Show.assert_called_once_with()
+
+    def test_app_validates_application_data_before_building_runtime(self) -> None:
+        runtime = Mock()
+        frame = Mock()
+        order: list[str] = []
+
+        with (
+            patch.object(gui, "prepare_application_directories", side_effect=lambda: order.append("paths")),
+            patch.object(gui, "build_default_translation_runtime", side_effect=lambda: (order.append("runtime"), runtime)[1]),
+            patch.object(gui, "BrailleFrame", side_effect=lambda *args, **kwargs: (order.append("frame"), frame)[1]),
+            patch.object(gui, "start_client_init_background"),
+        ):
+            app = gui.BrailleApp()
+            result = app.OnInit()
+
+        self.assertTrue(result)
+        self.assertEqual(order, ["paths", "runtime", "frame"])
+
+    def test_app_reports_unwritable_path_and_stops_before_runtime(self) -> None:
+        error = gui.ApplicationDataError(Path("C:/Program Files/DotExpress/log"), PermissionError("denied"))
+
+        with (
+            patch.object(gui, "prepare_application_directories", side_effect=error),
+            patch.object(gui, "build_default_translation_runtime") as build_runtime,
+            patch.object(gui, "BrailleFrame") as frame_class,
+            patch.object(gui.wx, "MessageBox") as message_box,
+        ):
+            app = gui.BrailleApp()
+            result = app.OnInit()
+
+        self.assertFalse(result)
+        build_runtime.assert_not_called()
+        frame_class.assert_not_called()
+        message_box.assert_called_once_with(
+            gui._(
+                "DotExpress cannot write to its application data directory:\n"
+                "{path}\n\nChoose a writable installation or execution location.\n\n{error}"
+            ).format(path=error.path, error=error.cause),
+            gui._("Startup Error"),
+            gui.wx.OK | gui.wx.ICON_ERROR,
+        )
+
+    def test_app_exit_without_initialized_runtime_is_safe(self) -> None:
+        app = gui.BrailleApp()
+
+        self.assertEqual(app.OnExit(), 0)
 
     def test_app_exit_closes_runtime(self) -> None:
         runtime = Mock()

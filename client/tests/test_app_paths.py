@@ -104,6 +104,17 @@ class ApplicationPathsTest(unittest.TestCase):
         self.assertEqual(raised.exception.path, paths.config)
         self.assertIsInstance(raised.exception.cause, PermissionError)
 
+    def test_consumers_use_the_common_application_root(self) -> None:
+        import config
+        import dictionaries.manager as dictionary_manager
+        import documents.workspace as document_workspace
+
+        paths = app_paths.build_application_paths()
+
+        self.assertEqual(Path(config.CONFIG_PATH), paths.config)
+        self.assertEqual(dictionary_manager.get_dictionary_directory(), paths.dictionary)
+        self.assertEqual(document_workspace.get_workspace_directory(), paths.workspace)
+
 
 if __name__ == "__main__":
     unittest.main()

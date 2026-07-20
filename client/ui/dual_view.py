@@ -10,7 +10,7 @@ import wx.html2
 from log import get_logger
 
 
-logger = get_logger("dotexpress.dual_view", "log/dual_view.log", level=logging.DEBUG)
+logger = get_logger("dotexpress.dual_view", "dual_view.log", level=logging.DEBUG)
 
 
 def _raise_windows_without_activating(window: wx.Window) -> bool:

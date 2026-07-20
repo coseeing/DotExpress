@@ -3,25 +3,13 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 import shutil
-import sys
 
+from app_paths import get_dictionary_directory
 from shared.name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEFAULT_DICTIONARY_NAME = "default"
 DEFAULT_HEADER = ["text", "braille", "type"]
 MAX_DICTIONARY_NAME_LENGTH = MAX_NAME_LENGTH
-
-
-def get_application_directory() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parents[1]
-
-
-def get_dictionary_directory(base_dir: Path | None = None) -> Path:
-    if base_dir is not None:
-        return Path(base_dir)
-    return get_application_directory() / "dictionary"
 
 
 def dictionary_path_for_name(name: str, dictionary_dir: Path | None = None) -> Path:

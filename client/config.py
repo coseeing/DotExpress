@@ -3,10 +3,11 @@ import os
 from typing import Optional
 from uuid import uuid4
 
+from app_paths import get_config_path
 
 DEFAULT_FALLBACK = "zh_TW"
 LANG_ENV = "TEXT2BRAILLE_LANG"
-CONFIG_PATH = os.path.expanduser("~/.DotExpress/config.json")
+CONFIG_PATH = str(get_config_path())
 
 CONVERSION_SECTION = "conversion"
 VIEW_SECTION = "view"

@@ -10,7 +10,7 @@ from conversion.mathcat_adapter import MathCATError, get_shared_mathcat_adapter
 from log import get_logger
 
 
-logger = get_logger("dotexpress.translation", "log/translation.log", level=logging.WARNING)
+logger = get_logger("dotexpress.translation", "translation.log", level=logging.WARNING)
 
 
 def _close_callback(adapter) -> Callable[[], None] | None:

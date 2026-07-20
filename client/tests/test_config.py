@@ -216,6 +216,22 @@ class ConfigSettingsTest(unittest.TestCase):
             "{path}\n\n請選擇可寫入的安裝或執行位置。\n\n{error}",
         )
 
+    def test_zh_tw_catalog_contains_dual_view_browser_error(self) -> None:
+        with open(
+            Path(__file__).resolve().parents[1]
+            / "locales"
+            / "zh_TW"
+            / "LC_MESSAGES"
+            / "dotexpress.mo",
+            "rb",
+        ) as mo_file:
+            translation = gettext.GNUTranslations(mo_file)
+
+        self.assertEqual(
+            translation.gettext("Failed to open dual view: {error}"),
+            "開啟雙視圖失敗：{error}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

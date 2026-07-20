@@ -1229,6 +1229,11 @@ msgstr "檔案"
 msgid "About"
 msgstr "關於"
 
+#: gui.py:537
+#, python-brace-format
+msgid "Failed to open dual view: {error}"
+msgstr "開啟雙視圖失敗：{error}"
+
 #: gui.py:663
 #, python-brace-format
 msgid "Failed to open website: {error}"

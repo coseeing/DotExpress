@@ -195,6 +195,27 @@ class ConfigSettingsTest(unittest.TestCase):
         self.assertEqual(translation.gettext("Bopomofo"), "注音")
         self.assertEqual(translation.gettext("Unicode Braille"), "Unicode 點字")
 
+    def test_zh_tw_catalog_contains_application_data_startup_error(self) -> None:
+        with open(
+            Path(__file__).resolve().parents[1]
+            / "locales"
+            / "zh_TW"
+            / "LC_MESSAGES"
+            / "dotexpress.mo",
+            "rb",
+        ) as mo_file:
+            translation = gettext.GNUTranslations(mo_file)
+
+        self.assertEqual(translation.gettext("Startup Error"), "啟動錯誤")
+        self.assertEqual(
+            translation.gettext(
+                "DotExpress cannot write to its application data directory:\n"
+                "{path}\n\nChoose a writable installation or execution location.\n\n{error}"
+            ),
+            "DotExpress 無法寫入應用程式資料目錄：\n"
+            "{path}\n\n請選擇可寫入的安裝或執行位置。\n\n{error}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

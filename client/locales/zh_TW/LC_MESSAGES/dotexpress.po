@@ -1381,6 +1381,27 @@ msgstr "ASCII 轉換失敗：{error}"
 msgid "Translation failed: {error}"
 msgstr "轉譯失敗：{error}"
 
+#: gui.py:1762
+#, python-brace-format
+msgid ""
+"DotExpress cannot write to its application data directory:\n"
+"{path}\n"
+"\n"
+"Choose a writable installation or execution location.\n"
+"\n"
+"{error}"
+msgstr ""
+"DotExpress 無法寫入應用程式資料目錄：\n"
+"{path}\n"
+"\n"
+"請選擇可寫入的安裝或執行位置。\n"
+"\n"
+"{error}"
+
+#: gui.py:1766
+msgid "Startup Error"
+msgstr "啟動錯誤"
+
 #: dictionaries/entries.py:27
 msgid "General"
 msgstr "一般"

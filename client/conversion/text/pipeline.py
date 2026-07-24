@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Callable
 
+import config
 from adapters.translation.contracts import TranslationRuntime
 from conversion.preprocessing.user_script import execute_preprocessing_script
 from conversion.preprocessing.literal_braille import (
@@ -75,7 +76,8 @@ def translate_plain_text_segment(
     language_detector = LanguageDetector(language)
     sequence = list(language_detector.add_detected_language_commands([text]))
 
-    translate_table = translation_tables["default"]
+    default_lang = config.get_lang().replace("-", "_").split("_", 1)[0]
+    translate_table = translation_tables.get(default_lang) or translation_tables["default"]
     translations = []
     for item in sequence:
         if isinstance(item, str):

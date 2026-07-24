@@ -44,7 +44,7 @@ SINGLETONS = {
 	"Tibetan": "bo",
 	"Myanmar": "my",
 	"Georgian": "ka",
-	"Mongolian": "mn",   # ← 改成純語言碼
+	"Mongolian": "mn",
 	"Khmer": "km",
 }
 
@@ -52,12 +52,6 @@ SINGLETONS = {
 _configKeys = {'CJK Unified Ideographs': 'CJKCharactersLanguage'}
 for charset in ('Basic Latin', 'Extended Latin', 'Latin Extended-B'):
 	_configKeys[charset] = 'latinCharactersLanguage'
-
-charsetMaps = {
-	"latinCharactersLanguage": "en",
-	"CJKCharactersLanguage": "zh",
-	"arabicCharactersLanguage": "ar",
-}
 
 class LangChangeCommand:
 	"""A command to switch the language within speech."""
@@ -76,8 +70,8 @@ class LangChangeCommand:
 class LanguageDetector(object):
 	""" Provides functionality to add guessed language commands to NVDA speech sequences.
 	Unicode ranges and user configuration are used to guess the language."""
-	def __init__(self, availableLanguages, speechSymbols=None):
-		self.speechSymbols = speechSymbols
+	def __init__(self, availableLanguages, char_langinfo=None):
+		self.char_langinfo = char_langinfo or {}
 		# 保留原始語言清單（含地區碼），供輸出時還原完整語系
 		self.availableLanguagesFull = tuple(availableLanguages)
 		# 偵測時僅使用語言碼（兩碼）
@@ -165,8 +159,9 @@ class LanguageDetector(object):
 
 		# Ad singletone languages (te only language for the range)
 		for blockName, langCode in SINGLETONS.items():
-			if langCode in availableLanguagesBase:
-				languageBlocks[langCode].append(blockName)
+			langCodeBase = langCode.replace("-", "_").split("_", 1)[0]
+			if langCodeBase in availableLanguagesBase:
+				languageBlocks[langCodeBase].append(blockName)
 
 		for k, v in languageBlocks.items():
 			# Preserve order while dedup
@@ -182,14 +177,15 @@ class LanguageDetector(object):
 		self.blockLanguages = blockLanguages
 
 	def add_detected_language_commands(self, speechSequence):
-		availableLanguagesBase = frozenset(l.split("_")[0] for l in self.availableLanguagesFull)
-		yield LangChangeCommand(config.get_lang())
 		sb = StringIO()
 		charset = None
 		# defaultLang = getSynth().language
 		defaultLang = config.get_lang()
 		curLang = defaultLang
 		tmpLang = curLang.split("_")[0]
+		leading = True
+		leadingPrefix = StringIO()
+		pendingLeadingCommands = []
 		for command in speechSequence:
 			if isinstance(command, LangChangeCommand):
 				if command.lang is None:
@@ -197,15 +193,38 @@ class LanguageDetector(object):
 				else:
 					curLang = command.lang
 				tmpLang = curLang.split("_")[0]
-				yield command
 				charset = None # Whatever will come, reset the charset.
+				if leading and leadingPrefix.getvalue():
+					pendingLeadingCommands.append(command)
+					continue
+				yield command
 			elif isinstance(command, str):
 				sb = StringIO()
 				command = str(command)
 				prevInIgnore = False
 				rule = False
 				for c in command:
-					if self.speechSymbols and c in self.speechSymbols.symbols:
+					if leading and self._is_non_detecting_character(c):
+						leadingPrefix.write(c)
+						continue
+					if leading:
+						firstLang = self._find_language_for_character(c, curLang, tmpLang)
+						for pendingCommand in pendingLeadingCommands:
+							yield pendingCommand
+						pendingLeadingCommands = []
+						firstLangFirst = firstLang.split("_")[0]
+						target = self._preferred_full_lang(firstLangFirst, curLang)
+						if target != curLang:
+							yield LangChangeCommand(target)
+							curLang = target
+							tmpLang = firstLangFirst
+							charset = None
+						if leadingPrefix.getvalue():
+							yield leadingPrefix.getvalue()
+							leadingPrefix = StringIO()
+						leading = False
+
+					if c in self.char_langinfo:
 						rule = True
 						block = ord(c) >> BLOCK_RSHIFT
 						try:
@@ -213,12 +232,7 @@ class LanguageDetector(object):
 						except IndexError:
 							newCharset = None
 						charset = newCharset
-						symbol = self.speechSymbols.symbols[c]
-						c = symbol.replacement if symbol.replacement and c not in [str(i) for i in range(10)] else c
-						if symbol.mode == 1:
-							newLang = symbol.language
-						else:
-							newLang = tmpLang
+						newLang = self.char_langinfo[c]
 						newLangFirst = newLang.split("_")[0]
 						if newLangFirst == tmpLang:
 							# Same old...
@@ -307,7 +321,39 @@ class LanguageDetector(object):
 				if sb.getvalue():
 					yield sb.getvalue()
 			else:
+				if leading and leadingPrefix.getvalue():
+					yield leadingPrefix.getvalue()
+					for pendingCommand in pendingLeadingCommands:
+						yield pendingCommand
+					leadingPrefix = StringIO()
+					pendingLeadingCommands = []
+					leading = False
 				yield command
+		if leadingPrefix.getvalue():
+			yield leadingPrefix.getvalue()
+			for pendingCommand in pendingLeadingCommands:
+				yield pendingCommand
+
+	def _is_non_detecting_character(self, c):
+		if c.isspace() or "\u2800" <= c <= "\u28ff":
+			return True
+		block = ord(c) >> BLOCK_RSHIFT
+		try:
+			return BLOCKS[block] is None
+		except IndexError:
+			return True
+
+	def _find_language_for_character(self, c, curLang, tmpLang):
+		if c in self.char_langinfo:
+			return self.char_langinfo[c]
+		block = ord(c) >> BLOCK_RSHIFT
+		try:
+			charset = BLOCKS[block]
+		except IndexError:
+			charset = None
+		if charset in self.languageBlocks[tmpLang]:
+			return curLang
+		return self.find_language_for_charset(charset, curLang)
 
 	def find_language_for_charset(self, charset, curLang):
 		langs = self.blockLanguages[charset]
@@ -316,7 +362,7 @@ class LanguageDetector(object):
 		# See if we have any configured language for this charset.
 		if charset in _configKeys:
 			configKey = _configKeys[charset]
-			lang = charsetMaps[configKey]
+			lang = config.get_charset_maps()[configKey]
 			return lang
 		return langs[0]
 

@@ -1,12 +1,19 @@
 import csv
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from adapters.translation.contracts import TranslationRuntime
 from conversion.output import ConversionRequest, convert_text_with_alignment
 from conversion.text.dictionary_rules import split_bracket_segments
-from conversion.text.pipeline import TextProcessingError, apply_plain_text_rules, preprocess_source_text
+from conversion.text.pipeline import (
+    TextProcessingError,
+    apply_plain_text_rules,
+    preprocess_source_text,
+    translate_plain_text_segment,
+)
+from translate import TranslationResult
 
 
 class ConversionTextPipelineTest(unittest.TestCase):
@@ -117,6 +124,31 @@ class ConversionTextPipelineTest(unittest.TestCase):
             self.assertEqual(set(result), {"raw", "replacement"})
             self.assertEqual(split_bracket_segments(result["raw"]), [{"text": "abc", "atomic": True}])
             self.assertEqual(split_bracket_segments(result["replacement"]), [{"text": "foo", "atomic": True}])
+
+    def test_plain_text_translation_uses_current_language_when_no_language_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            directory = Path(tmpdir)
+            dictionary_path = self._write_csv(directory, "dictionary.csv", ["text", "braille", "type"], [])
+            bopomofo_path = self._write_csv(directory, "bopomofo.csv", ["Bopomofo", "Braille"], [])
+            calls = []
+
+            class Translator:
+                def translate(self, text, *, table, raw, single_token=False):
+                    calls.append(table)
+                    return TranslationResult(raw, text, list(range(len(text))), list(range(len(raw))))
+
+            runtime = TranslationRuntime(text_translator=Translator(), math_translator=Translator())
+
+            with patch("conversion.text.pipeline.config.get_lang", return_value="en"):
+                translate_plain_text_segment(
+                    "Hello",
+                    dictionary_path,
+                    {"default": "zh-tw.ctb", "en": "en-ueb-g1.ctb"},
+                    bopomofo_path,
+                    runtime=runtime,
+                )
+
+            self.assertEqual(calls, ["en-ueb-g1.ctb"])
 
     def test_atomic_flags_remain_paired_before_runtime_translation(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

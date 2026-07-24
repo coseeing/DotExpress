@@ -28,6 +28,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(
             data,
             {
+                "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
                 "view": {
                     "font_size": 18,
                     "scheme": "dark",
@@ -56,6 +57,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(
             data,
             {
+                "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
                 "conversion": {
                     "translation_tables": tables,
                     "output_mode": "ascii",
@@ -72,6 +74,33 @@ class ConfigTest(unittest.TestCase):
 
         self.assertEqual(tables["math"], "UEB")
 
+    def test_new_config_file_contains_language_detection_defaults(self) -> None:
+        config.set_output_mode("unicode")
+
+        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.assertEqual(
+            data["language_detection"]["charset_maps"],
+            config.DEFAULT_CHARSET_MAPS,
+        )
+
+    def test_charset_maps_read_from_config_with_defaults_for_missing_values(self) -> None:
+        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "language_detection": {
+                        "charset_maps": {"arabicCharactersLanguage": "fa"}
+                    }
+                },
+                f,
+            )
+
+        charset_maps = config.get_charset_maps()
+
+        self.assertEqual(charset_maps["arabicCharactersLanguage"], "fa")
+        self.assertEqual(charset_maps["CJKCharactersLanguage"], "zh")
+
     def test_selected_dictionary_roundtrip_under_conversion_section(self) -> None:
         config.set_selected_dictionary("math")
 
@@ -81,6 +110,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(
             data,
             {
+                "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
                 "conversion": {
                     "selected_dictionary": "math",
                 }
@@ -97,6 +127,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(
             data,
             {
+                "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
                 "view": {
                     "braille_font": "simbraille",
                 }
@@ -114,7 +145,13 @@ class ConfigTest(unittest.TestCase):
         with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        self.assertEqual(data, {"client": {"id": client_id}})
+        self.assertEqual(
+            data,
+            {
+                "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
+                "client": {"id": client_id},
+            },
+        )
         self.assertEqual(config.get_or_create_client_id(), client_id)
 
     def test_existing_client_id_is_reused(self) -> None:

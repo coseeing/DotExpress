@@ -35,6 +35,11 @@ DEFAULT_CONVERSION_WIDTH = 40
 DEFAULT_VIEW_FONT_SIZE = 12
 DEFAULT_VIEW_SCHEME = "light"
 DEFAULT_BRAILLE_FONT = "simbraille"
+DEFAULT_CHARSET_MAPS = {
+    "latinCharactersLanguage": "en",
+    "CJKCharactersLanguage": "zh",
+    "arabicCharactersLanguage": "ar",
+}
 
 _runtime_lang: Optional[str] = None
 
@@ -51,6 +56,13 @@ def _load_from_file() -> dict:
 
 def _save_to_file(data: dict) -> None:
     try:
+        if not os.path.exists(CONFIG_PATH):
+            data = {
+                "language_detection": {
+                    "charset_maps": DEFAULT_CHARSET_MAPS.copy(),
+                },
+                **data,
+            }
         os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -106,6 +118,14 @@ def get_lang() -> str:
     data = _load_from_file()
     lang = data.get("language")
     return lang or DEFAULT_FALLBACK
+
+
+def get_charset_maps() -> dict[str, str]:
+    return _get_dict_setting(
+        "language_detection",
+        "charset_maps",
+        DEFAULT_CHARSET_MAPS,
+    )
 
 
 def set_lang(lang: str, persist: bool = False) -> None:

@@ -554,6 +554,7 @@ def gui_frame_stubs():
     wx.ID_ANY = -1
     wx.ID_ABOUT = 1
     wx.ID_OK = 2
+    wx.ID_EDIT = 5030
     wx.OK = 4
     wx.CANCEL = 8
     wx.YES = 1
@@ -892,7 +893,13 @@ SPEECH_RESTORE_ROOTS = frozenset(
 
 
 def speech_dialog_stubs():
-    """Submodule-registering ``wx`` for ``dialog.py`` (``OK`` = 1, flags absorb ``|``)."""
+    """Submodule-registering ``wx`` for ``dialog.py`` (``OK`` = 1, flags absorb ``|``).
+
+    The message-box, file-dialog and result constants used by the dictionary
+    management view are distinct powers of two (``ID_OK``/``ID_CANCEL`` are
+    plain ids), so a test can tell ``wx.OK | wx.ICON_ERROR`` from
+    ``wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING``.
+    """
     wx = AutoSubmoduleModule("wx")
     wx.Dialog = _new_class("Dialog")
     wx.ListCtrl = _new_class("ListCtrl")
@@ -902,6 +909,17 @@ def speech_dialog_stubs():
     wx.NOT_FOUND = -1
     wx.OK = 1
     wx.ICON_ERROR = 2
+    wx.ICON_INFORMATION = 4
+    wx.ICON_WARNING = 8
+    wx.YES_NO = 16
+    wx.NO_DEFAULT = 32
+    wx.YES = 64
+    wx.NO = 128
+    wx.FD_OPEN = 256
+    wx.FD_SAVE = 512
+    wx.FD_OVERWRITE_PROMPT = 1024
+    wx.ID_OK = 5100
+    wx.ID_CANCEL = 5101
     wx.MessageBox = lambda *args, **kwargs: None
     return {"wx": wx}
 

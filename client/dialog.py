@@ -19,12 +19,13 @@ from dictionaries.entries import (
 from dictionaries.manager import (
 	DEFAULT_DICTIONARY_NAME,
 	MAX_DICTIONARY_NAME_LENGTH,
-	dictionary_path_for_name,
-	list_dictionary_names,
 	normalize_dictionary_name,
 )
+from dictionaries.presenter import DictionaryManagementActions
 from documents.workspace import normalize_document_name
 from i18n import _
+
+CSV_WILDCARD = "CSV files (*.csv)|*.csv"
 
 
 def finalize_dialog_layout(dialog: wx.Dialog, sizer: wx.Sizer) -> None:
@@ -648,34 +649,23 @@ class SpeechSymbolsDialog(wx.Dialog):
 
 
 class DictionaryManagementDialog(wx.Dialog):
-	"""Dialog that stages dictionary lifecycle actions through callbacks."""
+	"""Passive view of dictionary management: runs ``actions`` and implements ``DictionaryManagementView``."""
 
 	def __init__(
 		self,
 		parent: wx.Window | None,
-		dictionary_names: list[str],
+		actions: DictionaryManagementActions,
 		selected_name: str,
-		dictionary_dir: Path,
-		on_add: Callable[[wx.Window | None], str | None],
-		on_delete: Callable[[wx.Window | None, str], str | None],
-		on_rename: Callable[[wx.Window | None, str], str | None],
-		on_import: Callable[[wx.Window | None], str | None],
-		on_export: Callable[[wx.Window | None, str], None],
 	):
 		super().__init__(
 			parent,
 			title=_("Dictionary Management"),
 			style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
 		)
-		self.dictionary_dir = Path(dictionary_dir)
-		self._dictionary_names = list(dictionary_names)
+		self._actions = actions
+		self._dictionary_names = list(actions.dictionary_names)
 		self._selected_name = selected_name
 		self._dictionary_counts: dict[str, int] = {}
-		self._on_add = on_add
-		self._on_delete = on_delete
-		self._on_rename = on_rename
-		self._on_import = on_import
-		self._on_export = on_export
 		self.edit_dictionary_name: str | None = None
 		self._build_ui()
 		self.refresh_dictionaries(self._dictionary_names, selected_name)
@@ -738,7 +728,7 @@ class DictionaryManagementDialog(wx.Dialog):
 
 	def _load_dictionary_counts(self) -> None:
 		self._dictionary_counts = {
-			name: len(load_dictionary_entries(dictionary_path_for_name(name, self.dictionary_dir)))
+			name: len(load_dictionary_entries(self._actions.dictionary_path(name)))
 			for name in self._dictionary_names
 		}
 
@@ -800,33 +790,33 @@ class DictionaryManagementDialog(wx.Dialog):
 		event.Skip()
 
 	def _on_add_clicked(self, _event: wx.CommandEvent) -> None:
-		preferred_name = self._on_add(self)
+		preferred_name = self._actions.add(self)
 		if preferred_name is not None:
-			self._refresh_from_disk(preferred_name)
+			self._refresh_from_actions(preferred_name)
 
 	def _on_delete_clicked(self, _event: wx.CommandEvent) -> None:
 		selected = self._get_selected_name()
 		if selected is not None:
-			preferred_name = self._on_delete(self, selected)
+			preferred_name = self._actions.delete(self, selected)
 			if preferred_name is not None:
-				self._refresh_from_disk(preferred_name)
+				self._refresh_from_actions(preferred_name)
 
 	def _on_rename_clicked(self, _event: wx.CommandEvent) -> None:
 		selected = self._get_selected_name()
 		if selected is not None:
-			preferred_name = self._on_rename(self, selected)
+			preferred_name = self._actions.rename(self, selected)
 			if preferred_name is not None:
-				self._refresh_from_disk(preferred_name)
+				self._refresh_from_actions(preferred_name)
 
 	def _on_import_clicked(self, _event: wx.CommandEvent) -> None:
-		preferred_name = self._on_import(self)
+		preferred_name = self._actions.import_from_file(self)
 		if preferred_name is not None:
-			self._refresh_from_disk(preferred_name)
+			self._refresh_from_actions(preferred_name)
 
 	def _on_export_clicked(self, _event: wx.CommandEvent) -> None:
 		selected = self._get_selected_name()
 		if selected is not None:
-			self._on_export(self, selected)
+			self._actions.export_to_file(self, selected)
 
 	def _on_edit(self, _event: wx.Event) -> None:
 		selected = self._get_selected_name()
@@ -835,8 +825,47 @@ class DictionaryManagementDialog(wx.Dialog):
 		self.edit_dictionary_name = selected
 		self.EndModal(wx.ID_EDIT)
 
-	def _refresh_from_disk(self, preferred_name: str | None) -> None:
-		self.refresh_dictionaries(list_dictionary_names(self.dictionary_dir), preferred_name)
+	def _refresh_from_actions(self, preferred_name: str | None) -> None:
+		self.refresh_dictionaries(self._actions.dictionary_names, preferred_name)
+
+	def prompt_dictionary_name(self, title: str, initial_name: str) -> str | None:
+		with DictionaryNameDialog(self, initial_name=initial_name) as name_dialog:
+			name_dialog.SetTitle(title)
+			if name_dialog.ShowModal() != wx.ID_OK:
+				return None
+			return name_dialog.get_dictionary_name()
+
+	def show_info(self, message: str) -> None:
+		wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+
+	def show_error(self, message: str) -> None:
+		wx.MessageBox(message, _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
+
+	def confirm(self, message: str, caption: str) -> bool:
+		return wx.MessageBox(message, caption, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, parent=self) == wx.YES
+
+	def choose_import_path(self, title: str) -> Path | None:
+		with wx.FileDialog(
+			self,
+			title,
+			wildcard=_(CSV_WILDCARD),
+			style=wx.FD_OPEN,
+		) as file_dialog:
+			if file_dialog.ShowModal() != wx.ID_OK:
+				return None
+			return Path(file_dialog.GetPath())
+
+	def choose_export_path(self, title: str, default_file: str) -> Path | None:
+		with wx.FileDialog(
+			self,
+			title,
+			defaultFile=default_file,
+			wildcard=_(CSV_WILDCARD),
+			style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+		) as file_dialog:
+			if file_dialog.ShowModal() != wx.ID_OK:
+				return None
+			return Path(file_dialog.GetPath())
 
 	def __enter__(self) -> "DictionaryManagementDialog":
 		return self

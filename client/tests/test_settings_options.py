@@ -256,5 +256,16 @@ class OptionSourceConsumerTest(unittest.TestCase):
                 self.assertEqual(_assigned_names(tree.body), expected)
                 self.assertEqual(_string_constants(tree) & OPTION_VALUE_LITERALS, set())
 
+    def test_settings_panels_define_no_option_lists_or_option_values(self) -> None:
+        tree = _module_tree("settings/dialogs.py")
+        self.assertEqual(_assigned_names(tree.body), {"_DEAD_WINDOW_ERROR_TYPES", "CommitSettings"})
+        tables_panel = next(
+            node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "TranslationTablesPanel"
+        )
+        self.assertEqual(_assigned_names(tables_panel.body), {"title", "panel_description", "TABLE_FIELDS"})
+        table_keys = {field.key for field in TRANSLATION_TABLE_FIELDS}
+        self.assertEqual(_string_constants(tree) & (OPTION_VALUE_LITERALS | table_keys), set())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -370,13 +370,6 @@ class TranslationTablesPanelTest(unittest.TestCase):
         default_choice = Mock()
         math_choice = Mock()
         panel = object.__new__(TranslationTablesPanel)
-        panel.CHOICE_SPECS = [
-            ("default", "Default Translation Table", None),
-            ("en", "English Translation Table", "en"),
-            ("zh", "Chinese Translation Table", "zh"),
-            ("ja", "Japanese Translation Table", "ja"),
-            ("math", "Math Translation Table", None),
-        ]
         panel._choice_controls = {
             "default": default_choice,
             "math": math_choice,
@@ -429,13 +422,6 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         dialog = make_dialog_without_wx_constructor()
         default_choice = Mock()
         panel = object.__new__(TranslationTablesPanel)
-        panel.CHOICE_SPECS = [
-            ("default", "Default Translation Table", None),
-            ("en", "English Translation Table", "en"),
-            ("zh", "Chinese Translation Table", "zh"),
-            ("ja", "Japanese Translation Table", "ja"),
-            ("math", "Math Translation Table", None),
-        ]
         panel._choice_controls = {
             "default": default_choice,
             "math": Mock(),

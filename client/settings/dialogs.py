@@ -14,7 +14,17 @@ from conversion.preprocessing.user_script import (
 )
 from i18n import _
 from ui.dialog_base import SingletonDialogMixin
-from .options import CONVERSION_WIDTH_RANGE, VIEW_FONT_SIZE_RANGE
+from .options import (
+    BRAILLE_FONT_OPTIONS,
+    CONVERSION_WIDTH_RANGE,
+    OUTPUT_MODE_OPTIONS,
+    TRANSLATION_TABLE_FIELDS,
+    VIEW_FONT_SIZE_RANGE,
+    VIEW_SCHEME_OPTIONS,
+    TranslationTableField,
+    option_index,
+    option_value_at,
+)
 from .state import DotExpressSettingsSnapshot
 from .translation import TranslationSettings
 from .view import ViewSettings, normalize_view_settings
@@ -342,22 +352,6 @@ class TableOption:
     display_name: str
 
 
-_OUTPUT_MODES: list[tuple[str, str]] = [
-    ("unicode", _("Unicode")),
-    ("ascii", _("ASCII")),
-]
-
-_VIEW_SCHEME_OPTIONS: list[tuple[str, str]] = [
-    ("light", _("Light")),
-    ("dark", _("Dark")),
-]
-
-_BRAILLE_FONT_OPTIONS: list[tuple[str, str]] = [
-    ("default", _("Default")),
-    ("simbraille", _("SimBraille")),
-]
-
-
 class TranslationSettingsPanel(SettingsPanel):
     title = _("Translation")
     panel_description = _(
@@ -373,7 +367,7 @@ class TranslationSettingsPanel(SettingsPanel):
         output_label = wx.StaticText(self, label=_("Braille Type"))
         self.output_choice = wx.Choice(
             self,
-            choices=[label for _key, label in _OUTPUT_MODES],
+            choices=[_(option.label) for option in OUTPUT_MODE_OPTIONS],
         )
         grid.Add(output_label, 0, wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.output_choice, 1, wx.EXPAND)
@@ -414,10 +408,7 @@ class TranslationSettingsPanel(SettingsPanel):
         return snapshot.with_translation(value)
 
     def _selected_output_mode(self) -> str:
-        index = self.output_choice.GetSelection()
-        if index < 0 or index >= len(_OUTPUT_MODES):
-            return _OUTPUT_MODES[0][0]
-        return _OUTPUT_MODES[index][0]
+        return option_value_at(OUTPUT_MODE_OPTIONS, self.output_choice.GetSelection())
 
     def _selected_dictionary(self) -> str:
         if not self.dictionary_names:
@@ -428,11 +419,7 @@ class TranslationSettingsPanel(SettingsPanel):
         return self.dictionary_names[index]
 
     def _select_output_mode(self, output_mode: str) -> None:
-        index = next(
-            (idx for idx, (key, _label) in enumerate(_OUTPUT_MODES) if key == output_mode),
-            0,
-        )
-        self.output_choice.SetSelection(index)
+        self.output_choice.SetSelection(option_index(OUTPUT_MODE_OPTIONS, output_mode))
 
     def _select_dictionary(self, dictionary_name: str) -> None:
         if not self.dictionary_names:
@@ -452,63 +439,58 @@ class TranslationTablesPanel(SettingsPanel):
         "Translation table mappings for different languages"
     )
 
-    CHOICE_SPECS: list[tuple[str, str, str | None]] = [
-        ("default", _("Default Translation Table"), None),
-        ("en", _("English Translation Table"), "en"),
-        ("zh", _("Chinese Translation Table"), "zh"),
-        ("ja", _("Japanese Translation Table"), "ja"),
-        ("math", _("Math Translation Table"), None),
-    ]
+    TABLE_FIELDS: tuple[TranslationTableField, ...] = TRANSLATION_TABLE_FIELDS
 
     def make_settings(self) -> None:
         self.table_options = self._load_table_options()
         self._choice_controls: dict[str, wx.Choice] = {}
         self._options_by_key: dict[str, list[TableOption]] = {}
         language_map = self.owner.snapshot.translation_tables
-        grid = wx.FlexGridSizer(len(self.CHOICE_SPECS), 2, 8, 8)
+        grid = wx.FlexGridSizer(len(self.TABLE_FIELDS), 2, 8, 8)
         grid.AddGrowableCol(1, 1)
-        for key, label, lang_code in self.CHOICE_SPECS:
-            static_lbl = wx.StaticText(self, label=label)
-            options = self._options_for_key(key, lang_code)
-            if key not in {"default", "math"}:
+        for field in self.TABLE_FIELDS:
+            static_lbl = wx.StaticText(self, label=_(field.label))
+            options = self._options_for_field(field)
+            if not field.required:
                 options = [TableOption(file_name="", display_name=_("None selected"))] + options
             choice = wx.Choice(self)
             choice.AppendItems([option.display_name for option in options])
-            self._choice_controls[key] = choice
-            self._options_by_key[key] = options
+            self._choice_controls[field.key] = choice
+            self._options_by_key[field.key] = options
             grid.Add(static_lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
             grid.Add(choice, 1, wx.EXPAND)
             if not options:
                 choice.Disable()
-            self._select_choice_value(key, language_map.get(key))
+            self._select_choice_value(field.key, language_map.get(field.key))
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 12)
         self.SetSizer(sizer)
 
     def load_snapshot(self, snapshot: DotExpressSettingsSnapshot) -> None:
         language_map = snapshot.translation_tables
-        for key, _label, _lang in self.CHOICE_SPECS:
-            self._select_choice_value(key, language_map.get(key))
+        for field in self.TABLE_FIELDS:
+            self._select_choice_value(field.key, language_map.get(field.key))
 
     def is_valid(self) -> bool:
-        return bool(
-            self._selected_file_name("default")
-            and self._selected_file_name("math")
+        return all(
+            self._selected_file_name(field.key)
+            for field in self.TABLE_FIELDS
+            if field.required
         )
 
     def validation_error(self) -> tuple[str, wx.Window | None] | None:
-        for key, label, _lang in self.CHOICE_SPECS:
-            if key in {"default", "math"} and not self._selected_file_name(key):
+        for field in self.TABLE_FIELDS:
+            if field.required and not self._selected_file_name(field.key):
                 return (
-                    _("Please select a value for {field}.").format(field=label),
-                    self._choice_controls.get(key),
+                    _("Please select a value for {field}.").format(field=_(field.label)),
+                    self._choice_controls.get(field.key),
                 )
         return None
 
     def on_save(self, snapshot: DotExpressSettingsSnapshot) -> DotExpressSettingsSnapshot:
         values = {
-            key: self._selected_file_name(key)
-            for key, _label, _lang in self.CHOICE_SPECS
+            field.key: self._selected_file_name(field.key)
+            for field in self.TABLE_FIELDS
         }
         return snapshot.with_translation_tables(values)
 
@@ -552,16 +534,17 @@ class TranslationTablesPanel(SettingsPanel):
             if option.file_name.lower().startswith(prefix)
         ]
 
-    def _options_for_key(self, key: str, lang_code: str | None) -> list[TableOption]:
-        if key == "math":
-            return [
-                TableOption(file_name="UEB", display_name="UEB"),
-                TableOption(file_name="Nemeth", display_name="Nemeth"),
-            ]
-        return self._options_for_lang(lang_code)
+    def _options_for_field(self, field: TranslationTableField) -> list[TableOption]:
+        if field.fixed_choices is not None:
+            return [TableOption(file_name=value, display_name=value) for value in field.fixed_choices]
+        return self._options_for_lang(field.file_prefix)
 
     def _load_table_options(self) -> list[TableOption]:
         tables = [table for table in listTables() if getattr(table, "output", False)]
+        # _() again on purpose (P2-3 spec D6): __tables.py looks for its catalog in
+        # braille/locales, which only the packaged build has, so a source run gets
+        # English display names here. A packaged run gets them translated already,
+        # and translating them again returns them unchanged.
         options = [
             TableOption(file_name=table.fileName, display_name=_(table.displayName))
             for table in tables
@@ -594,7 +577,7 @@ class ViewSettingsPanel(SettingsPanel):
         scheme_label = wx.StaticText(self, label=_("Scheme"))
         self.scheme_choice = wx.Choice(
             self,
-            choices=[label for _key, label in _VIEW_SCHEME_OPTIONS],
+            choices=[_(option.label) for option in VIEW_SCHEME_OPTIONS],
         )
         grid.Add(scheme_label, 0, wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.scheme_choice, 1, wx.EXPAND)
@@ -602,7 +585,7 @@ class ViewSettingsPanel(SettingsPanel):
         braille_font_label = wx.StaticText(self, label=_("Braille Font"))
         self.braille_font_choice = wx.Choice(
             self,
-            choices=[label for _key, label in _BRAILLE_FONT_OPTIONS],
+            choices=[_(option.label) for option in BRAILLE_FONT_OPTIONS],
         )
         grid.Add(braille_font_label, 0, wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.braille_font_choice, 1, wx.EXPAND)
@@ -636,30 +619,16 @@ class ViewSettingsPanel(SettingsPanel):
         self.font_size_dirty = True
 
     def _selected_scheme(self) -> str:
-        index = self.scheme_choice.GetSelection()
-        if index < 0 or index >= len(_VIEW_SCHEME_OPTIONS):
-            return _VIEW_SCHEME_OPTIONS[0][0]
-        return _VIEW_SCHEME_OPTIONS[index][0]
+        return option_value_at(VIEW_SCHEME_OPTIONS, self.scheme_choice.GetSelection())
 
     def _selected_braille_font(self) -> str:
-        index = self.braille_font_choice.GetSelection()
-        if index < 0 or index >= len(_BRAILLE_FONT_OPTIONS):
-            return _BRAILLE_FONT_OPTIONS[0][0]
-        return _BRAILLE_FONT_OPTIONS[index][0]
+        return option_value_at(BRAILLE_FONT_OPTIONS, self.braille_font_choice.GetSelection())
 
     def _select_scheme(self, scheme: str) -> None:
-        index = next(
-            (idx for idx, (key, _label) in enumerate(_VIEW_SCHEME_OPTIONS) if key == scheme),
-            0,
-        )
-        self.scheme_choice.SetSelection(index)
+        self.scheme_choice.SetSelection(option_index(VIEW_SCHEME_OPTIONS, scheme))
 
     def _select_braille_font(self, braille_font: str) -> None:
-        index = next(
-            (idx for idx, (key, _label) in enumerate(_BRAILLE_FONT_OPTIONS) if key == braille_font),
-            0,
-        )
-        self.braille_font_choice.SetSelection(index)
+        self.braille_font_choice.SetSelection(option_index(BRAILLE_FONT_OPTIONS, braille_font))
 
 
 CommitSettings = Callable[

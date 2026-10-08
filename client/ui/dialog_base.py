@@ -121,6 +121,11 @@ class SingletonDialogMixin:
         instance.Show()
         return instance
 
+    @classmethod
+    def open_instance(cls):
+        """The open dialog of this class, or ``None``. Nothing is raised, focused or checked."""
+        return cls.__dict__.get("_instance")
+
     def _destroy(self) -> None:
         owner = type(self)
         if owner.__dict__.get("_instance") is self:

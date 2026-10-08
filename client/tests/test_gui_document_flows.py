@@ -3625,5 +3625,136 @@ class EditorViewSettingsCharacterizationTest(unittest.TestCase):
                 )
 
 
+
+class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
+    """P2-4 characterization: Ctrl+wheel in an editor and the open settings dialog's font size."""
+
+    FRAME_VIEW = ViewSettings(12, "dark", "default")
+    DIALOG_VIEW = ViewSettings(12, "light", "simbraille")
+
+    def make_frame(self, view=FRAME_VIEW) -> gui.BrailleFrame:
+        frame = object.__new__(gui.BrailleFrame)
+        frame.view_settings = view
+        frame._apply_editor_view_settings = Mock()
+        return frame
+
+    def make_dialog(self):
+        dialog = object.__new__(gui.DotExpressSettingsDialog)
+        dialog.snapshot = make_snapshot(view=self.DIALOG_VIEW)
+        dialog.panel_instances = {}
+        dialog.Destroy = Mock()
+        dialog.window_calls = Mock()
+        for name in ("Iconize", "Raise", "SetFocus", "Show"):
+            setattr(dialog, name, getattr(dialog.window_calls, name))
+        return dialog
+
+    @staticmethod
+    def wheel(rotation, control_down=True):
+        return SimpleNamespace(
+            GetWheelRotation=lambda: rotation,
+            ControlDown=lambda: control_down,
+            Skip=Mock(),
+        )
+
+    @staticmethod
+    def open_dialog(dialog):
+        return patch.object(gui.DotExpressSettingsDialog, "_instance", dialog)
+
+    def test_ctrl_wheel_saves_then_syncs_only_the_font_size_into_the_open_dialog(self) -> None:
+        frame = self.make_frame()
+        dialog = self.make_dialog()
+        dialog_size_when_saved = []
+        event = self.wheel(120)
+
+        with (
+            self.open_dialog(dialog),
+            patch.object(
+                gui,
+                "save_view_settings",
+                side_effect=lambda _view: dialog_size_when_saved.append(dialog.snapshot.view.font_size),
+            ) as save,
+        ):
+            frame.on_editor_mousewheel(event)
+
+        expected = ViewSettings(13, "dark", "default")
+        self.assertEqual(frame.view_settings, expected)
+        frame._apply_editor_view_settings.assert_called_once_with(expected)
+        save.assert_called_once_with(expected)
+        self.assertEqual(dialog_size_when_saved, [12])
+        self.assertEqual(dialog.snapshot, make_snapshot(view=ViewSettings(13, "light", "simbraille")))
+        self.assertEqual(dialog.window_calls.mock_calls, [])  # the editor keeps the focus
+        event.Skip.assert_not_called()
+
+    def test_a_clamped_step_still_saves_and_syncs_the_clamped_size(self) -> None:
+        for start, rotation in ((8, -120), (48, 120)):
+            with self.subTest(start=start, rotation=rotation):
+                frame = self.make_frame(ViewSettings(start, "dark", "default"))
+                dialog = self.make_dialog()
+                with self.open_dialog(dialog), patch.object(gui, "save_view_settings") as save:
+                    frame.on_editor_mousewheel(self.wheel(rotation))
+
+                # KNOWN QUIRK (P2-4 spec, 1): the size did not change, but it is saved and synced again.
+                expected = ViewSettings(start, "dark", "default")
+                self.assertEqual(frame.view_settings, expected)
+                frame._apply_editor_view_settings.assert_called_once_with(expected)
+                save.assert_called_once_with(expected)
+                self.assertEqual(dialog.snapshot.view, ViewSettings(start, "light", "simbraille"))
+
+    def test_a_wheel_without_a_step_is_skipped_and_changes_nothing(self) -> None:
+        for rotation, control_down in ((120, False), (-120, False), (0, True)):
+            with self.subTest(rotation=rotation, control_down=control_down):
+                frame = self.make_frame()
+                dialog = self.make_dialog()
+                event = self.wheel(rotation, control_down)
+                with self.open_dialog(dialog), patch.object(gui, "save_view_settings") as save:
+                    frame.on_editor_mousewheel(event)
+
+                event.Skip.assert_called_once_with()
+                self.assertEqual(frame.view_settings, self.FRAME_VIEW)
+                frame._apply_editor_view_settings.assert_not_called()
+                save.assert_not_called()
+                self.assertEqual(dialog.snapshot.view, self.DIALOG_VIEW)
+
+    def test_without_an_open_dialog_the_editors_and_the_config_still_change(self) -> None:
+        frame = self.make_frame()
+        with self.open_dialog(None), patch.object(gui, "save_view_settings") as save:
+            frame.on_editor_mousewheel(self.wheel(-120))
+
+        expected = ViewSettings(11, "dark", "default")
+        self.assertEqual(frame.view_settings, expected)
+        frame._apply_editor_view_settings.assert_called_once_with(expected)
+        save.assert_called_once_with(expected)
+
+    def test_a_cancelled_dialog_is_no_longer_synced(self) -> None:
+        frame = self.make_frame()
+        dialog = self.make_dialog()
+        with self.open_dialog(dialog), patch.object(gui, "save_view_settings") as save:
+            frame.on_editor_mousewheel(self.wheel(120))
+            dialog.on_cancel()
+            self.assertIsNone(gui.DotExpressSettingsDialog._instance)
+            frame.on_editor_mousewheel(self.wheel(120))
+
+        dialog.Destroy.assert_called_once_with()
+        self.assertEqual(frame.view_settings, ViewSettings(14, "dark", "default"))
+        self.assertEqual(
+            save.call_args_list,
+            [call(ViewSettings(13, "dark", "default")), call(ViewSettings(14, "dark", "default"))],
+        )
+        self.assertEqual(dialog.snapshot.view, ViewSettings(13, "light", "simbraille"))
+
+    def test_an_open_text_processing_dialog_is_left_alone(self) -> None:
+        frame = self.make_frame()
+        text_dialog = Mock()
+        with (
+            patch.object(gui.TextProcessingDialog, "_instance", text_dialog),
+            self.open_dialog(None),
+            patch.object(gui, "save_view_settings") as save,
+        ):
+            frame.on_editor_mousewheel(self.wheel(120))
+
+        save.assert_called_once_with(ViewSettings(13, "dark", "default"))
+        self.assertEqual(text_dialog.mock_calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

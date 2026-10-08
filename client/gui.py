@@ -555,7 +555,9 @@ class BrailleFrame(wx.Frame):
 		)
 		self._apply_editor_view_settings(self.view_settings)
 		save_view_settings(self.view_settings)
-		DotExpressSettingsDialog.sync_open_font_size(self.view_settings.font_size)
+		settings_dialog = DotExpressSettingsDialog.open_instance()
+		if settings_dialog is not None:
+			settings_dialog.sync_font_size(self.view_settings.font_size)
 
 	def _open_document_by_name(self, name: str | None) -> None:
 		document = self._document_controller.open_document(name)

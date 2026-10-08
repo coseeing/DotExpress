@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import patch
 
 import braille.tables as tables
 
@@ -12,8 +11,12 @@ class DefaultTableForLanguageTest(unittest.TestCase):
             ("ja_JP", "ja-kantenji.utb"),
             ("xx", tables.DEFAULT_TABLE),
         ):
-            with self.subTest(lang=lang), patch("braille.tables.config.get_lang", return_value=lang):
-                self.assertEqual(tables.getDefaultTableForCurLang(tables.TableType.OUTPUT), expected)
+            with self.subTest(lang=lang):
+                self.assertEqual(tables.getDefaultTableForCurLang(tables.TableType.OUTPUT, lang), expected)
+
+    def test_language_is_required(self) -> None:
+        with self.assertRaises(TypeError):
+            tables.getDefaultTableForCurLang(tables.TableType.OUTPUT)
 
 
 if __name__ == "__main__":

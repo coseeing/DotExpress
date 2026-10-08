@@ -1,3 +1,4 @@
+import ast
 import ctypes
 import importlib.util
 import json
@@ -18,6 +19,7 @@ import braille.tables as tables
 
 CLIENT_DIR = Path(__file__).resolve().parents[1]
 VENDOR_HELPER = CLIENT_DIR.parent / "vendor" / "nvda" / "liblouis" / "runtime" / "louis_helper.py"
+BRAILLE_TABLES_SOURCE = CLIENT_DIR / "braille" / "tables" / "__init__.py"
 _MISSING = object()
 
 
@@ -156,6 +158,50 @@ class BrailleGlueLoggingTest(unittest.TestCase):
         )
 
         self.assertEqual(state, {"root_handlers": 0, "root_level": "WARNING", "named_logger": True})
+
+    def test_loading_the_louis_helper_leaves_the_root_logger_alone(self) -> None:
+        state = run_fresh(
+            "import json, logging\n"
+            "from tests.test_braille_glue import exec_vendor_helper, install_fake_liblouis\n"
+            "install_fake_liblouis()\n"
+            "helper = exec_vendor_helper()\n"
+            "print(json.dumps({\n"
+            "    'root_handlers': len(logging.root.handlers),\n"
+            "    'root_level': logging.getLevelName(logging.root.level),\n"
+            "    'named_logger': helper.log is logging.getLogger('braille.louis_helper'),\n"
+            "    'debug': helper._isDebug(),\n"
+            "}))\n"
+        )
+
+        self.assertEqual(
+            state,
+            {"root_handlers": 0, "root_level": "WARNING", "named_logger": True, "debug": False},
+        )
+
+
+class GlueSourceTest(unittest.TestCase):
+    def test_glue_modules_never_call_basic_config(self) -> None:
+        for path in (BRAILLE_TABLES_SOURCE, VENDOR_HELPER):
+            with self.subTest(path=path.name):
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+                calls = [
+                    node.lineno
+                    for node in ast.walk(tree)
+                    if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "basicConfig"
+                ]
+                self.assertEqual(calls, [])
+
+    def test_louis_helper_reads_no_private_table_directories(self) -> None:
+        tree = ast.parse(VENDOR_HELPER.read_text(encoding="utf-8"))
+        accesses = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute) and node.attr == "_tablesDirs"
+        ]
+
+        self.assertEqual(accesses, [])
 
 
 class TableDirectoryTest(unittest.TestCase):

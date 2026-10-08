@@ -19,11 +19,6 @@ from braille import tables as braille_tables
 import logging
 
 log = logging.getLogger(__name__)
-logging.basicConfig(
-	level=logging.INFO,
-	format="%(asctime)s [%(levelname)s] %(message)s",
-	datefmt="%Y-%m-%d %H:%M:%S",
-)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WINFUNCTYPE = getattr(__import__("ctypes"), "WINFUNCTYPE", CFUNCTYPE)
 
@@ -62,7 +57,7 @@ def _resolveTableInner(tables: list[str], base: str | None = None) -> Generator[
 		if base is None:
 			try:
 				registeredTable = braille_tables.getTable(table)
-				path = braille_tables._tablesDirs.get(registeredTable.source)
+				path = braille_tables.get_table_directory(registeredTable.source)
 			except LookupError:
 				if _isDebug():
 					log.debug(f"Table {table!r} not registered, falling back to built-in table lookup")

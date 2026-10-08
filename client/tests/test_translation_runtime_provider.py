@@ -1,10 +1,12 @@
 import sys
 import types
 import unittest
+from contextlib import contextmanager
 from unittest.mock import patch
 
 from adapters.translation.contracts import RuntimeUnavailableError
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
+from conversion.math_service import latex_to_mathml
 from conversion.mathcat_adapter import MathCATError
 
 
@@ -48,6 +50,48 @@ class RecordingLogger:
 
     def warning(self, message, *args, **kwargs) -> None:
         self.warnings.append((message, args, kwargs))
+
+
+class RecordingMathCATAdapter:
+    def __init__(
+        self,
+        cells: str = "\u283c\u2801",
+        initialize_error: Exception | None = None,
+        events: list[str] | None = None,
+    ) -> None:
+        self.cells = cells
+        self.initialize_error = initialize_error
+        self.events = events if events is not None else []
+        self.initialize_calls = 0
+        self.close_calls = 0
+        self.braille_calls = []
+
+    def initialize(self) -> None:
+        self.initialize_calls += 1
+        self.events.append("mathcat.initialize")
+        if self.initialize_error is not None:
+            raise self.initialize_error
+
+    def get_braille_for_mathml(self, mathml_text, braille_code=None, *, language):
+        self.events.append("mathcat.translate")
+        self.braille_calls.append((mathml_text, braille_code, language))
+        return self.cells
+
+    def close(self) -> None:
+        self.close_calls += 1
+        self.events.append("mathcat.close")
+
+
+@contextmanager
+def default_math_translator(adapter):
+    """Build the default math translator for "win32" around ``adapter``."""
+    from adapters.translation import provider
+
+    with (
+        patch.object(provider, "get_shared_mathcat_adapter", return_value=adapter),
+        patch("conversion.mathcat_adapter.get_shared_mathcat_adapter", return_value=adapter),
+    ):
+        yield provider.create_default_math_translator(platform="win32")
 
 
 class ModuleBindings:
@@ -253,6 +297,20 @@ class TranslationRuntimeProviderTest(unittest.TestCase):
         with patch.object(provider, "get_shared_mathcat_adapter", return_value=failing_adapter):
             with self.assertRaisesRegex(RuntimeUnavailableError, "missing MathCAT runtime"):
                 provider.create_default_math_translator(platform="win32")
+
+    def test_default_math_translator_initializes_once_and_translates_through_the_adapter(self) -> None:
+        adapter = RecordingMathCATAdapter()
+
+        with default_math_translator(adapter) as translator:
+            self.assertEqual(adapter.events, ["mathcat.initialize"])
+            result = translator.translate("1", braille_code="Nemeth", language="en")
+
+        self.assertEqual(adapter.initialize_calls, 1)
+        self.assertEqual(adapter.braille_calls, [(latex_to_mathml("1"), "Nemeth", "en")])
+        self.assertEqual(result.raw, ["1"])
+        self.assertEqual(result.braille, ["\u283c", "\u2801"])
+        self.assertEqual(result.raw_to_braille_pos, [0])
+        self.assertEqual(result.braille_to_raw_pos, [0, 0])
 
 
 if __name__ == "__main__":

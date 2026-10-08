@@ -1,3 +1,4 @@
+import ast
 import gettext
 import os
 import subprocess
@@ -11,6 +12,13 @@ import i18n
 
 
 CLIENT_ROOT = Path(__file__).resolve().parents[1]
+LEGACY_SETUP_FUNCTIONS = {"resource_path", "_resource_path"}
+LEGACY_SETUP_GLOBALS = {"LOCALE_DOMAIN", "LOCALE_LANGUAGES", "_translation", "_"}
+
+
+def _module_tree(relative_path: str) -> ast.Module:
+    path = CLIENT_ROOT / relative_path
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
 class ResourcePathTest(unittest.TestCase):
@@ -71,6 +79,39 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "一般")
+
+
+class SharedSetupConsumerTest(unittest.TestCase):
+    def assert_uses_shared_i18n(self, relative_path: str, expected_names: set[str]) -> None:
+        tree = _module_tree(relative_path)
+        from_i18n = {
+            alias.asname or alias.name
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom) and node.module == "i18n" and node.level == 0
+            for alias in node.names
+        }
+        plain_imports = {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        functions = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+        assigned = {
+            target.id
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+
+        self.assertEqual(from_i18n, expected_names, f"{relative_path} must import {sorted(expected_names)} from i18n")
+        self.assertNotIn("gettext", plain_imports, f"{relative_path} still imports gettext")
+        self.assertEqual(functions & LEGACY_SETUP_FUNCTIONS, set(), f"{relative_path} still defines its own resource path")
+        self.assertEqual(assigned & LEGACY_SETUP_GLOBALS, set(), f"{relative_path} still builds its own catalog")
+
+    def test_dialog_uses_shared_i18n(self) -> None:
+        self.assert_uses_shared_i18n("dialog.py", {"_"})
 
 
 if __name__ == "__main__":

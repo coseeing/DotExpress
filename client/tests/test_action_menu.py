@@ -1,5 +1,6 @@
 import unittest
 
+from documents.formats import get_exportable_formats
 from ui.action_menu import (
     get_document_menu_descriptors,
     get_document_menu_enabled_state,
@@ -17,6 +18,15 @@ class ActionMenuTest(unittest.TestCase):
                 self.assertEqual(item.kind, "submenu")
                 self.assertEqual(item.action, action)
                 self.assertEqual(item.formats, expected_formats)
+
+    def test_export_submenus_follow_the_format_registry(self) -> None:
+        registry_formats = tuple((descriptor.key, descriptor.export_label) for descriptor in get_exportable_formats())
+        submenus = [item for item in get_document_menu_descriptors() if item.kind == "submenu"]
+
+        self.assertEqual([item.action for item in submenus], ["export", "export_all"])
+        for item in submenus:
+            with self.subTest(action=item.action):
+                self.assertEqual(item.formats, registry_formats)
 
     def test_document_menu_enabled_state_without_selection_or_documents(self) -> None:
         self.assertEqual(

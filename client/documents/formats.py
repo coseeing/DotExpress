@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from dual_view.html import render_dual_view_html
 from dual_view.model import build_dual_view_model
+from i18n import N_
 
 if TYPE_CHECKING:
     from documents.importers import ImportedDocument
@@ -40,6 +41,8 @@ class DocumentFormatDescriptor:
     requires_braille: bool
     importable: bool
     exportable: bool
+    export_wildcard: str | None = None
+    export_label: str | None = None
 
 
 def _load_imported_document(
@@ -114,6 +117,8 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
         requires_braille=False,
         importable=True,
         exportable=True,
+        export_wildcard=N_("DotExpress files (*.dep)|*.dep"),
+        export_label=N_("Package DEP"),
     ),
     DocumentFormatDescriptor(
         key="docx",
@@ -164,7 +169,10 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
         requires_braille=True,
         importable=False,
         exportable=True,
+        export_wildcard=N_("Braille files (*.brl)|*.brl"),
+        export_label=N_("Braille BRL"),
     ),
+    # "HTML" and the HTML save filter are not msgids; marking them would add new catalog entries.
     DocumentFormatDescriptor(
         key="html",
         extension=HTML_EXTENSION,
@@ -174,6 +182,8 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
         requires_braille=False,
         importable=False,
         exportable=True,
+        export_wildcard="HTML files (*.html)|*.html",
+        export_label=N_("Dual View HTML"),
     ),
 )
 
@@ -210,6 +220,12 @@ def build_import_wildcard(translate=lambda value: value) -> str:
     all_patterns = ";".join(f"*{descriptor.extension}" for descriptor in get_importable_formats())
     parts.extend((f"{translate('All Supported Files')} ({all_patterns})", all_patterns))
     return "|".join(parts)
+
+
+def build_export_wildcard(descriptor: DocumentFormatDescriptor, translate=lambda value: value) -> str:
+    if descriptor.export_wildcard is None:
+        raise ValueError(f'Unsupported export format: "{descriptor.key}".')
+    return translate(descriptor.export_wildcard)
 
 
 def get_import_filter_labels() -> list[str]:

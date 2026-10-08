@@ -1071,8 +1071,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         ):
             with self.subTest(frame_attribute=name):
                 self.assertFalse(hasattr(gui.BrailleFrame, name))
-        self.assertTrue(hasattr(gui, "DEP_WILDCARD"))
-        self.assertTrue(hasattr(gui.BrailleFrame, "_get_brl_wildcard"))
 
     def test_save_open_document_saves_prepared_document(self) -> None:
         frame = self._make_frame()

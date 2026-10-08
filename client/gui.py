@@ -27,7 +27,7 @@ from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
 from dictionaries.presenter import DictionaryManagementPresenter
 from documents.controller import DocumentController
-from documents.formats import ExportContext, get_format
+from documents.formats import ExportContext, build_export_wildcard, get_format
 from documents.session import (
     document_name_exists,
     get_adjacent_document_name,
@@ -122,9 +122,6 @@ VIEW_SCHEMES = {
 		"foreground": wx.Colour(255, 255, 255),
 	},
 }
-DEP_WILDCARD = "DotExpress files (*.dep)|*.dep"
-BRL_WILDCARD = "Braille files (*.brl)|*.brl"
-HTML_WILDCARD = "HTML files (*.html)|*.html"
 
 logger = get_logger("dotexpress.gui", "gui.log")
 
@@ -588,9 +585,6 @@ class BrailleFrame(wx.Frame):
 			parent=parent or self,
 		)
 
-	def _get_dep_wildcard(self) -> str:
-		return _(DEP_WILDCARD)
-
 	def _get_document_names(self) -> list[str]:
 		return self._get_document_controller().document_names
 
@@ -683,19 +677,6 @@ class BrailleFrame(wx.Frame):
 		self.input_txt.SetInsertionPoint(0)
 		self.input_txt.ShowPosition(0)
 
-	def _get_brl_wildcard(self) -> str:
-		return _(BRL_WILDCARD)
-
-	def _get_html_wildcard(self) -> str:
-		return _(HTML_WILDCARD)
-
-	def _get_export_wildcard(self, format_key: str) -> str:
-		return {
-			"dep": self._get_dep_wildcard,
-			"brl": self._get_brl_wildcard,
-			"html": self._get_html_wildcard,
-		}[format_key.casefold()]()
-
 	def _build_conversion_request(self, raw_text: str, output_mode: str, width: int, dictionary_path: Path) -> ConversionRequest:
 		return ConversionRequest(
 			raw_text=raw_text,
@@ -730,7 +711,7 @@ class BrailleFrame(wx.Frame):
 	def _export_document_with_dialog(self, document: Document, format_key: str) -> None:
 		descriptor = get_format(format_key)
 		default_file = f"{document.name}{descriptor.extension}"
-		wildcard = self._get_export_wildcard(descriptor.key)
+		wildcard = build_export_wildcard(descriptor, _)
 		with wx.FileDialog(
 			self,
 			_("Export Document"),

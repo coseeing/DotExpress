@@ -6,7 +6,9 @@ from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 from documents.formats import (
+    DOCUMENT_FORMATS,
     ExportContext,
+    build_export_wildcard,
     build_import_wildcard,
     get_exportable_formats,
     get_format,
@@ -112,6 +114,40 @@ class DocumentFormatsTest(unittest.TestCase):
                             (root / "plain" / "alpha.brl").read_bytes(),
                             (root / "context" / "alpha.brl").read_bytes(),
                         )
+
+    def test_export_fields_are_all_set_exactly_for_exportable_formats(self) -> None:
+        for descriptor in DOCUMENT_FORMATS:
+            with self.subTest(format_key=descriptor.key):
+                self.assertEqual(
+                    {
+                        descriptor.exportable,
+                        descriptor.writer is not None,
+                        descriptor.export_wildcard is not None,
+                        descriptor.export_label is not None,
+                    },
+                    {descriptor.exportable},
+                )
+
+    def test_export_labels_match_menu_text(self) -> None:
+        self.assertEqual(
+            [(descriptor.key, descriptor.export_label) for descriptor in get_exportable_formats()],
+            [("dep", "Package DEP"), ("brl", "Braille BRL"), ("html", "Dual View HTML")],
+        )
+
+    def test_export_wildcard_is_the_single_format_save_filter(self) -> None:
+        expected = {
+            "dep": "DotExpress files (*.dep)|*.dep",
+            "brl": "Braille files (*.brl)|*.brl",
+            "html": "HTML files (*.html)|*.html",
+        }
+        for key, wildcard in expected.items():
+            with self.subTest(format_key=key):
+                self.assertEqual(build_export_wildcard(get_format(key)), wildcard)
+                self.assertEqual(build_export_wildcard(get_format(key), lambda value: f"T[{value}]"), f"T[{wildcard}]")
+
+    def test_export_wildcard_rejects_non_exportable_format(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'Unsupported export format: "txt"\\.'):
+            build_export_wildcard(get_format("txt"))
 
     def test_export_context_defaults_to_no_results(self) -> None:
         self.assertEqual(ExportContext().dual_view_results, ())

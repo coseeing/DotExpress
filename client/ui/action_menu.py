@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from documents.formats import get_exportable_formats
+
 
 @dataclass(frozen=True)
 class DocumentMenuItem:
@@ -11,6 +13,10 @@ class DocumentMenuItem:
     formats: tuple[tuple[str, str], ...] = ()
 
 
+_EXPORT_FORMATS: tuple[tuple[str, str], ...] = tuple(
+    (descriptor.key, descriptor.export_label) for descriptor in get_exportable_formats()
+)
+
 DOCUMENT_MENU_ITEMS: tuple[DocumentMenuItem, ...] = (
     DocumentMenuItem("command", "Open", "open"),
     DocumentMenuItem("command", "Delete", "delete"),
@@ -18,18 +24,8 @@ DOCUMENT_MENU_ITEMS: tuple[DocumentMenuItem, ...] = (
     DocumentMenuItem("command", "Add", "add"),
     DocumentMenuItem("command", "Rename", "rename"),
     DocumentMenuItem("command", "Import", "import"),
-    DocumentMenuItem(
-        "submenu",
-        "Export",
-        "export",
-        (("dep", "Package DEP"), ("brl", "Braille BRL"), ("html", "Dual View HTML")),
-    ),
-    DocumentMenuItem(
-        "submenu",
-        "Export All",
-        "export_all",
-        (("dep", "Package DEP"), ("brl", "Braille BRL"), ("html", "Dual View HTML")),
-    ),
+    DocumentMenuItem("submenu", "Export", "export", _EXPORT_FORMATS),
+    DocumentMenuItem("submenu", "Export All", "export_all", _EXPORT_FORMATS),
 )
 
 

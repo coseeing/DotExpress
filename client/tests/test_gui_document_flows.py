@@ -31,6 +31,7 @@ from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
+from conversion.math_service import latex_to_mathml
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
 from dual_view.html import render_dual_view_html
 from dual_view.model import DualViewSegment, build_dual_view_model
@@ -1373,6 +1374,29 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             with self.assertRaises(OSError):
                 frame._export_coordinator.write_document(root / "missing" / "alpha.html", Document("alpha", "text", "b"), "html")
             self.assertFalse((root / "missing").exists())
+
+    def test_dual_view_and_html_export_render_math_with_real_mathml(self) -> None:
+        frame = self._make_export_frame()
+        results = (
+            DualViewSegment(
+                result=SimpleNamespace(raw=["x^2"], braille=["⠭", "⠘", "⠆"], braille_to_raw_pos=[0, 0, 0], raw_to_braille_pos=[0]),
+                source_kind="math",
+            ),
+        )
+        frame._document_controller.set_dual_view_results("alpha", results)
+        expected = render_dual_view_html(
+            build_dual_view_model(results, mathml_converter=latex_to_mathml),
+            empty_message=gui._("No conversion data is available for this document."),
+        )
+
+        window_html = frame._render_dual_view_for_open_document()
+
+        self.assertEqual(window_html, expected)
+        self.assertIn(latex_to_mathml("x^2"), window_html)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "alpha.html"
+            frame._export_coordinator.write_document(path, Document("alpha", "text", "b"), "html")
+            self.assertEqual(path.read_bytes(), expected.encode("utf-8"))
 
     def test_export_all_html_uses_each_document_cache(self) -> None:
         frame = self._make_export_frame()

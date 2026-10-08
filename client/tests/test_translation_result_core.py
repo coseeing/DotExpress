@@ -1,25 +1,31 @@
-import importlib
+import subprocess
 import sys
 import unittest
+
+from translate import TranslationResult
 
 
 class TranslationResultCoreTest(unittest.TestCase):
     def test_import_does_not_import_liblouis_helper(self) -> None:
-        sys.modules.pop("translate", None)
-        sys.modules.pop("braille.louis_helper", None)
-        sys.modules.pop("braille.liblouis", None)
+        script = """
+import sys
+import translate
+assert "braille.louis_helper" not in sys.modules, "braille.louis_helper was imported"
+assert "braille.liblouis" not in sys.modules, "braille.liblouis was imported"
+assert hasattr(translate, "TranslationResult")
+assert not hasattr(translate, "translate")
+assert not hasattr(translate, "translate_as_single_token")
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
 
-        module = importlib.import_module("translate")
-
-        self.assertNotIn("braille.louis_helper", sys.modules)
-        self.assertNotIn("braille.liblouis", sys.modules)
-        self.assertTrue(hasattr(module, "TranslationResult"))
-        self.assertFalse(hasattr(module, "translate"))
-        self.assertFalse(hasattr(module, "translate_as_single_token"))
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_addition_offsets_both_position_arrays(self) -> None:
-        from translate import TranslationResult
-
         left = TranslationResult(["a"], ["⠁"], [0], [0])
         right = TranslationResult(["b"], ["⠃"], [0], [0])
 
@@ -31,8 +37,6 @@ class TranslationResultCoreTest(unittest.TestCase):
         self.assertEqual(result.raw_to_braille_pos, [0, 1])
 
     def test_empty_result_has_empty_mapping(self) -> None:
-        from translate import TranslationResult
-
         result = TranslationResult([], [], [], [])
 
         self.assertEqual(result.raw, [])

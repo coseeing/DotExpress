@@ -1,59 +1,17 @@
-import types
 import unittest
 from unittest.mock import Mock, patch
 
-import sys
+from tests import wx_stub
 
-wx = sys.modules.get("wx", types.ModuleType("wx"))
+_STUBS = wx_stub.dual_view_stubs()
+_SCOPE = wx_stub.StubScope(_STUBS, isolate=("ui.dual_view",))
+wx = _STUBS["wx"]
+with _SCOPE.loading():
+	from ui.dual_view import DualViewFrame
+	import ui.dual_view as dual_view
 
-
-class _Widget:
-	def __init__(self, *args, **kwargs):
-		pass
-
-	def __getattr__(self, _name):
-		def _method(*args, **kwargs):
-			return None
-
-		return _method
-
-
-class Window(_Widget):
-	pass
-
-
-class Frame(Window):
-	def __init__(self, *args, **kwargs):
-		self.init_args = args
-		self.init_kwargs = kwargs
-
-
-class BoxSizer(_Widget):
-	pass
-
-
-wx.Window = Window
-wx.Frame = Frame
-wx.BoxSizer = BoxSizer
-wx.__path__ = []
-wx.VERTICAL = 1
-wx.EXPAND = 2
-wx.EVT_CLOSE = object()
-wx.CallAfter = lambda callback: callback()
-wx.__getattr__ = lambda name: type(name, (), {})
-
-wx_html2 = types.ModuleType("wx.html2")
-wx_html2.WebView = type(
-	"WebView",
-	(),
-	{"New": staticmethod(lambda parent: Mock())},
-)
-wx.html2 = wx_html2
-sys.modules["wx"] = wx
-sys.modules["wx.html2"] = wx_html2
-
-from ui.dual_view import DualViewFrame
-import ui.dual_view as dual_view
+setUpModule = _SCOPE.activate
+tearDownModule = _SCOPE.deactivate
 
 
 class DualViewFrameTest(unittest.TestCase):

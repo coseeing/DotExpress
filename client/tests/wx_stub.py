@@ -305,3 +305,46 @@ def dialog_validation_stubs():
     wx.Window = _new_class("Window")
     wx.CommandEvent = _new_class("CommandEvent")
     return {"wx": wx}
+
+
+# --- factory: test_dual_view_frame ------------------------------------------
+
+
+class _DualViewWidget(NoOpAttributes):
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+def dual_view_stubs():
+    """Minimal ``wx`` + ``wx.html2``: recording ``Frame``, no ``Window.FindFocus``."""
+    wx = types.ModuleType("wx")
+
+    class Window(_DualViewWidget):
+        pass
+
+    class Frame(Window):
+        def __init__(self, *args, **kwargs):
+            self.init_args = args
+            self.init_kwargs = kwargs
+
+    class BoxSizer(_DualViewWidget):
+        pass
+
+    wx.Window = Window
+    wx.Frame = Frame
+    wx.BoxSizer = BoxSizer
+    wx.__path__ = []
+    wx.VERTICAL = 1
+    wx.EXPAND = 2
+    wx.EVT_CLOSE = object()
+    wx.CallAfter = lambda callback: callback()
+    wx.__getattr__ = _new_class
+
+    wx_html2 = types.ModuleType("wx.html2")
+    wx_html2.WebView = type(
+        "WebView",
+        (),
+        {"New": staticmethod(lambda parent: Mock())},
+    )
+    wx.html2 = wx_html2
+    return {"wx": wx, "wx.html2": wx_html2}

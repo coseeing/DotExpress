@@ -204,6 +204,22 @@ class StubFactoryTest(unittest.TestCase):
         )
         self.assertFalse(hasattr(wx, "OK"))
 
+    def test_dual_view_stubs_are_fresh_with_recording_frame(self) -> None:
+        stubs = self.assert_fresh(wx_stub.dual_view_stubs, ["wx", "wx.html2"])
+        wx = stubs["wx"]
+        calls = []
+
+        frame = wx.Frame("parent", size=(1, 2))
+        wx.CallAfter(lambda: calls.append("called"))
+
+        self.assertEqual(frame.init_args, ("parent",))
+        self.assertEqual(frame.init_kwargs, {"size": (1, 2)})
+        self.assertEqual(calls, ["called"])
+        self.assertFalse(hasattr(wx.Window, "FindFocus"))
+        self.assertIs(wx.html2, stubs["wx.html2"])
+        self.assertEqual((wx.VERTICAL, wx.EXPAND), (1, 2))
+        self.assertIsNot(wx.AnyName, wx.AnyName)
+
 
 if __name__ == "__main__":
     unittest.main()

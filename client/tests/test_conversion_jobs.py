@@ -10,7 +10,7 @@ from conversion.jobs import (
 )
 from config import DEFAULT_CHARSET_MAPS
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
-from tests.conversion_harness import FakeThread
+from tests.conversion_harness import FakeThread, make_thread_factory
 
 
 class ConversionJobRunnerTest(unittest.TestCase):
@@ -145,6 +145,77 @@ class ConversionJobRunnerTest(unittest.TestCase):
 			failures,
 			[ConversionJobFailure(job_id=second_job_id, error=error, completion_policy=second_policy)],
 		)
+
+	def test_each_start_creates_and_starts_one_daemon_thread(self) -> None:
+		runner, _successes, _failures, threads = self.make_runner(
+			converter=lambda _request, *, runtime: ConversionOutput("braille", ()),
+		)
+
+		self.assertEqual(runner.active_job_id, 0)
+		self.assertFalse(runner.is_running())
+		first_job_id = runner.start(self.make_request())
+		self.assertEqual((first_job_id, runner.active_job_id, len(threads)), (1, 1, 1))
+		second_job_id = runner.start(self.make_request())
+		self.assertEqual((second_job_id, runner.active_job_id, len(threads)), (2, 2, 2))
+
+		self.assertEqual([(thread.daemon, thread.started) for thread in threads], [(True, True), (True, True)])
+		self.assertTrue(runner.is_running())
+
+	def test_is_running_is_false_inside_completion_callbacks(self) -> None:
+		seen: list[tuple[str, bool]] = []
+		outcomes = [ConversionOutput("braille", ()), ConversionStageError("translation", RuntimeError("boom"))]
+
+		def converter(_request, *, runtime):
+			outcome = outcomes.pop(0)
+			if isinstance(outcome, Exception):
+				raise outcome
+			return outcome
+
+		thread_factory = make_thread_factory()
+		runner = ConversionJobRunner(
+			runtime=object(),
+			on_success=lambda _result: seen.append(("success", runner.is_running())),
+			on_failure=lambda _result: seen.append(("failure", runner.is_running())),
+			call_after=lambda fn, *args: fn(*args),
+			converter=converter,
+			thread_factory=thread_factory,
+		)
+
+		# The synchronous call_after delivers while the worker thread is still alive.
+		runner.start(self.make_request())
+		thread_factory.threads[0].run()
+		runner.start(self.make_request())
+		thread_factory.threads[1].run()
+
+		self.assertEqual(seen, [("success", False), ("failure", False)])
+
+	def test_stale_delivery_keeps_the_current_job_running(self) -> None:
+		runner, successes, failures, threads = self.make_runner(
+			converter=lambda _request, *, runtime: ConversionOutput("braille", ()),
+		)
+
+		runner.start(self.make_request())
+		runner.start(self.make_request())
+		threads[0].run()
+
+		self.assertEqual((successes, failures), ([], []))
+		self.assertTrue(runner.is_running())
+		self.assertEqual(runner.active_job_id, 2)
+
+	def test_exception_outside_conversion_stage_error_delivers_nothing(self) -> None:
+		def converter(_request, *, runtime):
+			raise RuntimeError("unexpected")
+
+		runner, successes, failures, threads = self.make_runner(converter=converter)
+
+		runner.start(self.make_request())
+		# KNOWN BUG (P1-4 spec, defect 6): nothing is delivered, so the UI would stay busy.
+		with self.assertRaisesRegex(RuntimeError, "unexpected"):
+			threads[0].run()
+
+		self.assertEqual((successes, failures), ([], []))
+		self.assertFalse(runner.is_running())
+		self.assertEqual(runner.active_job_id, 1)
 
 
 if __name__ == "__main__":

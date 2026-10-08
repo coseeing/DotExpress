@@ -10,6 +10,6 @@ set "FILE_LIST=%TEMP%\dotexpress-xgettext-%RANDOM%.txt"
     )
 )
 
-xgettext --language=Python --keyword=_ --files-from="%FILE_LIST%" --output=locales\dotexpress.pot
+xgettext --language=Python --keyword=_ --keyword=N_ --files-from="%FILE_LIST%" --output=locales\dotexpress.pot
 del "%FILE_LIST%"
 popd

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import gettext
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-import sys
 
 import wx
 from wx.lib.scrolledpanel import ScrolledPanel
@@ -14,6 +12,7 @@ from conversion.preprocessing.user_script import (
     load_preprocessing_script,
     save_preprocessing_script,
 )
+from i18n import _
 from .state import DotExpressSettingsSnapshot
 from .translation import (
     MAX_CONVERSION_WIDTH,
@@ -26,25 +25,6 @@ from .view import (
     ViewSettings,
     normalize_view_settings,
 )
-
-
-def resource_path(relative_path: str) -> Path:
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        base_path = Path(sys._MEIPASS)
-    else:
-        base_path = Path(__file__).resolve().parents[1]
-    return base_path / relative_path
-
-
-LOCALE_DOMAIN = "dotexpress"
-LOCALE_LANGUAGES = ["zh_TW"]
-_translation = gettext.translation(
-    LOCALE_DOMAIN,
-    localedir=str(resource_path("locales")),
-    languages=LOCALE_LANGUAGES,
-    fallback=True,
-)
-_ = _translation.gettext
 
 
 class SettingsPanelAccessible(wx.Accessible):

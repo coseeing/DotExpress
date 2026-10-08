@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-import gettext
-import sys
 from typing import List
 
 import wx
@@ -26,25 +24,7 @@ from dictionaries.manager import (
 	normalize_dictionary_name,
 )
 from documents.workspace import normalize_document_name
-
-
-def resource_path(relative_path: str) -> Path:
-	if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-		base_path = Path(sys._MEIPASS)
-	else:
-		base_path = Path(__file__).resolve().parent
-	return base_path / relative_path
-
-
-LOCALE_DOMAIN = "dotexpress"
-LOCALE_LANGUAGES = ["zh_TW"]
-_translation = gettext.translation(
-	LOCALE_DOMAIN,
-	localedir=str(resource_path("locales")),
-	languages=LOCALE_LANGUAGES,
-	fallback=True,
-)
-_ = _translation.gettext
+from i18n import _
 
 
 def finalize_dialog_layout(dialog: wx.Dialog, sizer: wx.Sizer) -> None:

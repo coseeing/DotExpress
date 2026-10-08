@@ -1,12 +1,12 @@
 from dataclasses import replace
 from pathlib import Path
-import gettext
 import sys
 import webbrowser
 
 import wx
 
 import about
+from i18n import N_, _, resource_path
 from app_paths import ApplicationDataError, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
@@ -143,77 +143,58 @@ DEP_WILDCARD = "DotExpress files (*.dep)|*.dep"
 BRL_WILDCARD = "Braille files (*.brl)|*.brl"
 HTML_WILDCARD = "HTML files (*.html)|*.html"
 
-
-def resource_path(relative_path: str) -> Path:
-	if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-		base_path = Path(sys._MEIPASS)
-	else:
-		base_path = Path(__file__).resolve().parent
-	return base_path / relative_path
-
-
-LOCALE_DOMAIN = "dotexpress"
-LOCALE_LANGUAGES = ["zh_TW"]
-_translation = gettext.translation(
-	LOCALE_DOMAIN,
-	localedir=str(resource_path("locales")),
-	languages=LOCALE_LANGUAGES,
-	fallback=True,
-)
-_ = _translation.gettext
-
 logger = get_logger("dotexpress.gui", "gui.log")
 
 # Keep dynamic context-menu labels discoverable to gettext extraction.
 _MENU_TRANSLATION_MARKERS = (
-	_("Add"),
-	_("Edit"),
-	_("Delete"),
-	_("Import"),
-	_("Export"),
-	_("Open"),
-	_("Dual View"),
-	_("Rename"),
-	_("Default"),
-	_("Braille Font"),
-	_("SimBraille"),
-	_("Export All"),
-	_("DEP"),
-	_("Package DEP"),
-	_("TXT"),
-	_("PDF"),
-	_("DOCX"),
-	_("EPUB"),
-	_("BRL"),
-	_("Braille BRL"),
-	_("Dual View HTML"),
-	_("Delete All"),
-	_("Translation"),
-	_("No conversion data is available for this document."),
-	_("Convert"),
-	_("Settings"),
-	_("Dictionary Management..."),
-	_("Text Processing"),
-	_("Text Processing Python Code"),
-	_("Unable to open text processing script: {error}"),
-	_("Unable to save text processing script: {error}"),
-	_("Text processing failed: {error}"),
-	_("The script must define exactly one top-level synchronous main function."),
-	_("main must define exactly one positional parameter and no other parameters."),
-	_("Confirm Delete Dictionary"),
-	_("Do you want to delete dictionary \"{name}\"?"),
-	_("Rename Dictionary"),
-	_("Help"),
-	_("Coseeing Website"),
-	_("About DotExpress"),
-	_("CSV files (*.csv)|*.csv"),
-	_("DotExpress files (*.dep)|*.dep"),
-	_("Text files (*.txt)|*.txt"),
-	_("PDF files (*.pdf)|*.pdf"),
-	_("Word documents (*.docx)|*.docx"),
-	_("EPUB books (*.epub)|*.epub"),
-	_("Braille files (*.brl)|*.brl"),
-	_("All Supported Files"),
+	N_("Add"),
+	N_("Edit"),
+	N_("Delete"),
+	N_("Import"),
+	N_("Export"),
+	N_("Open"),
+	N_("Dual View"),
+	N_("Rename"),
+	N_("Default"),
+	N_("Braille Font"),
+	N_("SimBraille"),
+	N_("Export All"),
+	N_("DEP"),
+	N_("Package DEP"),
+	N_("TXT"),
+	N_("PDF"),
+	N_("DOCX"),
+	N_("EPUB"),
+	N_("BRL"),
+	N_("Braille BRL"),
+	N_("Dual View HTML"),
+	N_("Delete All"),
+	N_("Translation"),
+	N_("No conversion data is available for this document."),
+	N_("Convert"),
+	N_("Settings"),
+	N_("Dictionary Management..."),
+	N_("Text Processing"),
+	N_("Text Processing Python Code"),
+	N_("Unable to open text processing script: {error}"),
+	N_("Unable to save text processing script: {error}"),
+	N_("Text processing failed: {error}"),
+	N_("The script must define exactly one top-level synchronous main function."),
+	N_("main must define exactly one positional parameter and no other parameters."),
+	N_("Confirm Delete Dictionary"),
+	N_("Do you want to delete dictionary \"{name}\"?"),
+	N_("Rename Dictionary"),
+	N_("Help"),
+	N_("Coseeing Website"),
+	N_("About DotExpress"),
+	N_("CSV files (*.csv)|*.csv"),
+	N_("DotExpress files (*.dep)|*.dep"),
+	N_("Text files (*.txt)|*.txt"),
+	N_("PDF files (*.pdf)|*.pdf"),
+	N_("Word documents (*.docx)|*.docx"),
+	N_("EPUB books (*.epub)|*.epub"),
+	N_("Braille files (*.brl)|*.brl"),
+	N_("All Supported Files"),
 )
 
 

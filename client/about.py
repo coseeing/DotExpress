@@ -1,16 +1,4 @@
-import gettext
-from pathlib import Path
-
-
-LOCALE_DOMAIN = "dotexpress"
-LOCALE_LANGUAGES = ["zh_TW"]
-_translation = gettext.translation(
-	LOCALE_DOMAIN,
-	localedir=str(Path(__file__).resolve().parent / "locales"),
-	languages=LOCALE_LANGUAGES,
-	fallback=True,
-)
-_ = _translation.gettext
+from i18n import _
 
 
 copyrightYears = "2025-2026"

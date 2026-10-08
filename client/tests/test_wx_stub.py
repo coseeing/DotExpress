@@ -168,6 +168,65 @@ class StubScopeTest(_TempModulesMixin, unittest.TestCase):
         self.assertIn("_wxstub_kept", sys.modules)
         self.assertNotIn("_wxstub_evicted", sys.modules)
 
+    def test_eviction_removes_parent_attribute_of_evicted_submodule(self) -> None:
+        self.write_module("_wxstub_pkg/__init__.py", "")
+        self.write_module("_wxstub_pkg/child.py", "VALUE = 4\n")
+        import _wxstub_pkg
+
+        with wx_stub.StubScope({}, evict=wx_stub.evict_everything).loading():
+            import _wxstub_pkg.child as evicted_child
+
+        self.assertIn("_wxstub_pkg", sys.modules)
+        self.assertNotIn("_wxstub_pkg.child", sys.modules)
+        self.assertNotIn("child", vars(_wxstub_pkg))
+        from _wxstub_pkg import child as fresh_child
+        self.assertIsNot(fresh_child, evicted_child)
+        self.assertIs(fresh_child, sys.modules["_wxstub_pkg.child"])
+
+    def test_eviction_keeps_parent_attribute_that_is_not_the_evicted_module(self) -> None:
+        self.write_module("_wxstub_pkg/__init__.py", "")
+        self.write_module("_wxstub_pkg/child.py", "VALUE = 5\n")
+        import _wxstub_pkg
+
+        with wx_stub.StubScope({}, evict=wx_stub.evict_everything).loading():
+            import _wxstub_pkg.child  # noqa: F401
+            replacement = types.ModuleType("replacement")
+            _wxstub_pkg.child = replacement
+
+        self.assertNotIn("_wxstub_pkg.child", sys.modules)
+        self.assertIs(vars(_wxstub_pkg)["child"], replacement)
+
+    def test_scope_keeps_attributes_wiring_stub_modules_together(self) -> None:
+        fake_wx = types.ModuleType(_FAKE_WX)
+        fake_html2 = types.ModuleType(f"{_FAKE_WX}.html2")
+        fake_wx.html2 = fake_html2
+        scope = wx_stub.StubScope({_FAKE_WX: fake_wx, f"{_FAKE_WX}.html2": fake_html2})
+
+        with scope.loading():
+            pass
+        self.assertIs(fake_wx.html2, fake_html2)
+
+        scope.activate()
+        scope.deactivate()
+        self.assertIs(fake_wx.html2, fake_html2)
+
+    def test_deactivate_removes_parent_attribute_of_dropped_stub_child(self) -> None:
+        fake_wx = types.ModuleType(_FAKE_WX)
+        scope = wx_stub.StubScope({_FAKE_WX: fake_wx})
+        with scope.loading():
+            pass
+
+        scope.activate()
+        try:
+            child = types.ModuleType(f"{_FAKE_WX}.CreatedAtRunTime")
+            sys.modules[f"{_FAKE_WX}.CreatedAtRunTime"] = child
+            fake_wx.CreatedAtRunTime = child
+        finally:
+            scope.deactivate()
+
+        self.assertNotIn(f"{_FAKE_WX}.CreatedAtRunTime", sys.modules)
+        self.assertNotIn("CreatedAtRunTime", vars(fake_wx))
+
     def test_load_file_runs_a_private_module_and_removes_it(self) -> None:
         self.write_module("_wxstub_source.py", f"import {_FAKE_WX} as wx\nVALUE = 3\n")
         fake_wx = types.ModuleType(_FAKE_WX)

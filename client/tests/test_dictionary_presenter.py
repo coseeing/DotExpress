@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Protocol
 from unittest.mock import Mock, patch
 
-from dictionaries import presenter as presenter_module
+import dictionaries.presenter as presenter_module
 from dictionaries.presenter import DictionaryManagementPresenter
 from i18n import _
 

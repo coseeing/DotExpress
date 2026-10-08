@@ -24,18 +24,8 @@ from conversion.service import (
 	get_public_error_message,
 )
 from conversion.preprocessing.user_script import preprocessing_script_path
-from dictionaries.actions import is_default_dictionary
-from dictionaries.manager import (
-	create_dictionary,
-	delete_dictionary,
-	dictionary_path_for_name,
-	ensure_default_dictionary,
-	export_dictionary,
-	get_dictionary_directory,
-	import_dictionary,
-	list_dictionary_names,
-)
-from dictionaries.name_prompt import prompt_dictionary_name_until_success, rename_dictionary_after_name_prompt
+from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
+from dictionaries.presenter import DictionaryManagementPresenter
 from documents.controller import DocumentController
 from documents.formats import get_format
 from documents.session import (
@@ -77,12 +67,6 @@ from settings.translation import (
 	save_translation_settings,
 )
 from settings.translation_tables import load_translation_tables, save_translation_tables
-from translation.dictionary_state import (
-	plan_dictionary_state_after_add,
-	plan_dictionary_state_after_delete,
-	plan_dictionary_state_after_rename,
-	resolve_management_selection,
-)
 from ui.font_support import SIMBRAILLE_FACE_NAME, get_simbraille_font_path, register_private_font_for_windows
 from ui.shortcuts import (
 	get_font_size_step_from_wheel,
@@ -111,7 +95,6 @@ from client_init import start_client_init_background
 
 from dialog import (
 	DictionaryManagementDialog,
-	DictionaryNameDialog,
 	DocumentNameDialog,
 	FileIssuesDialog,
 	InvalidWorkspaceFilesDialog,
@@ -138,7 +121,6 @@ VIEW_SCHEMES = {
 		"foreground": wx.Colour(255, 255, 255),
 	},
 }
-CSV_WILDCARD = "CSV files (*.csv)|*.csv"
 DEP_WILDCARD = "DotExpress files (*.dep)|*.dep"
 BRL_WILDCARD = "Braille files (*.brl)|*.brl"
 HTML_WILDCARD = "HTML files (*.html)|*.html"
@@ -196,14 +178,6 @@ _MENU_TRANSLATION_MARKERS = (
 	N_("Braille files (*.brl)|*.brl"),
 	N_("All Supported Files"),
 )
-
-
-def _prompt_for_dictionary_name(parent: wx.Window | None, *, title: str, initial_name: str = "") -> str | None:
-	with DictionaryNameDialog(parent, initial_name=initial_name) as dialog:
-		dialog.SetTitle(title)
-		if dialog.ShowModal() != wx.ID_OK:
-			return None
-		return dialog.get_dictionary_name()
 
 
 class ConvertingDialog(wx.Dialog):
@@ -293,11 +267,14 @@ class BrailleFrame(wx.Frame):
 
 	def _initialize_state(self) -> ViewSettings:
 		self.dictionary_dir = get_dictionary_directory()
-		ensure_default_dictionary(self.dictionary_dir)
-		self._dictionary_names = list_dictionary_names(self.dictionary_dir)
-		self.translation_settings = load_translation_settings(self._dictionary_names)
+		self._dictionary_presenter = DictionaryManagementPresenter(
+			self.dictionary_dir,
+			get_active_name=lambda: self.translation_settings.selected_dictionary,
+			set_active_name=self._set_active_dictionary,
+		)
+		self._dictionary_presenter.refresh()
+		self.translation_settings = load_translation_settings(self._dictionary_presenter.dictionary_names)
 		self.translation_tables = load_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
-		self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
 		self.workspace_dir = get_workspace_directory()
 		self._document_controller = DocumentController()
 		self.documents = []
@@ -560,15 +537,9 @@ class BrailleFrame(wx.Frame):
 			control.Refresh()
 		self.Layout()
 
-	def _refresh_dictionary_names(self, preferred_name: str | None = None) -> str:
-		ensure_default_dictionary(self.dictionary_dir)
-		self._dictionary_names[:] = list_dictionary_names(self.dictionary_dir)
-		selected_name = resolve_management_selection(self._dictionary_names, preferred_name)
-		return selected_name
-
 	def get_dictionary_names_for_dialog(self) -> list[str]:
-		self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
-		return list(self._dictionary_names)
+		self._dictionary_presenter.refresh(self.translation_settings.selected_dictionary)
+		return self._dictionary_presenter.dictionary_names
 
 	def get_settings_snapshot(self) -> DotExpressSettingsSnapshot:
 		dictionary_names = self.get_dictionary_names_for_dialog()
@@ -607,9 +578,6 @@ class BrailleFrame(wx.Frame):
 
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
-
-	def _get_csv_wildcard(self) -> str:
-		return _(CSV_WILDCARD)
 
 	def _show_file_error(self, message: str, error: Exception, parent: wx.Window | None = None) -> None:
 		wx.MessageBox(
@@ -1232,210 +1200,16 @@ class BrailleFrame(wx.Frame):
 		self._focus_section(target_section)
 
 	def on_open_dictionary_management(self, _evt) -> None:
-		selected_name = self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
-		with DictionaryManagementDialog(
-			self,
-			self._dictionary_names,
-			selected_name,
-			self.dictionary_dir,
-			self.add_dictionary,
-			self.delete_dictionary_from_dialog,
-			self.rename_dictionary_from_dialog,
-			self.import_dictionary_from_dialog,
-			self.export_dictionary_from_dialog,
-		) as dialog:
+		selected_name = self._dictionary_presenter.refresh(self.translation_settings.selected_dictionary)
+		with DictionaryManagementDialog(self, self._dictionary_presenter, selected_name) as dialog:
 			result = dialog.ShowModal()
 			edit_name = dialog.edit_dictionary_name
 
 		if result != wx.ID_EDIT or edit_name is None:
 			return
-		dictionary_path = dictionary_path_for_name(edit_name, self.dictionary_dir)
+		dictionary_path = self._dictionary_presenter.dictionary_path(edit_name)
 		with SpeechSymbolsDialog(self, dictionary_path=dictionary_path) as editor:
 			editor.ShowModal()
-
-	def add_dictionary(self, parent: wx.Window | None) -> str | None:
-		dialog_parent = parent or self
-		try:
-			path = prompt_dictionary_name_until_success(
-				"",
-				prompt_name=lambda initial_name: _prompt_for_dictionary_name(
-					dialog_parent,
-					title=_("Add Dictionary"),
-					initial_name=initial_name,
-				),
-				on_submit=lambda dictionary_name: create_dictionary(self.dictionary_dir, dictionary_name),
-				on_duplicate=lambda dictionary_name: wx.MessageBox(
-					_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
-					_("Error"),
-					wx.OK | wx.ICON_ERROR,
-					parent=dialog_parent,
-				),
-			)
-		except ValueError as exc:
-			wx.MessageBox(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=dialog_parent)
-			return None
-		if path is None:
-			return None
-
-		update = plan_dictionary_state_after_add(
-			self.translation_settings.selected_dictionary,
-			self.get_dictionary_names_for_dialog(),
-			path.stem,
-		)
-		return update.management_selected_name
-
-	def delete_dictionary_from_dialog(self, parent: wx.Window | None, selected_name: str) -> str | None:
-		dialog_parent = parent or self
-		if is_default_dictionary(selected_name):
-			wx.MessageBox(
-				_("The default dictionary cannot be deleted."),
-				_("Info"),
-				wx.OK | wx.ICON_INFORMATION,
-				parent=dialog_parent,
-			)
-			return None
-
-		if (
-			wx.MessageBox(
-				_('Do you want to delete dictionary "{name}"?').format(name=selected_name),
-				_("Confirm Delete Dictionary"),
-				wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
-				parent=dialog_parent,
-			)
-			!= wx.YES
-		):
-			return None
-
-		previous_names = list(self._dictionary_names)
-		current_active_name = self.translation_settings.selected_dictionary
-		try:
-			delete_dictionary(self.dictionary_dir, selected_name)
-		except OSError as exc:
-			self._show_file_error(_("Failed to delete dictionary: {error}"), exc, parent=dialog_parent)
-			return None
-		self._refresh_dictionary_names(selected_name)
-		update = plan_dictionary_state_after_delete(
-			current_active_name,
-			selected_name,
-			previous_names,
-		)
-		if update.active_selected_name != current_active_name:
-			self._set_active_dictionary(update.active_selected_name)
-		return update.management_selected_name
-
-	def rename_dictionary_from_dialog(self, parent: wx.Window | None, selected_name: str) -> str | None:
-		dialog_parent = parent or self
-		if is_default_dictionary(selected_name):
-			return None
-		try:
-			path = prompt_dictionary_name_until_success(
-				selected_name,
-				prompt_name=lambda initial_name: _prompt_for_dictionary_name(
-					dialog_parent,
-					title=_("Rename Dictionary"),
-					initial_name=initial_name,
-				),
-				on_submit=lambda dictionary_name: rename_dictionary_after_name_prompt(
-					self.dictionary_dir,
-					selected_name,
-					dictionary_name,
-				),
-				on_duplicate=lambda dictionary_name: wx.MessageBox(
-					_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
-					_("Error"),
-					wx.OK | wx.ICON_ERROR,
-					parent=dialog_parent,
-				),
-			)
-		except ValueError as exc:
-			wx.MessageBox(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=dialog_parent)
-			return None
-		except OSError as exc:
-			self._show_file_error(_("Failed to save dictionary: {error}"), exc, parent=dialog_parent)
-			return None
-		if path is None:
-			return None
-
-		current_active_name = self.translation_settings.selected_dictionary
-		self._refresh_dictionary_names(path.stem)
-		update = plan_dictionary_state_after_rename(
-			current_active_name,
-			selected_name,
-			path.stem,
-			self.get_dictionary_names_for_dialog(),
-		)
-		if update.active_selected_name != current_active_name:
-			self._set_active_dictionary(update.active_selected_name)
-		return update.management_selected_name
-
-	def import_dictionary_from_dialog(self, parent: wx.Window | None) -> str | None:
-		dialog_parent = parent or self
-		with wx.FileDialog(
-			dialog_parent,
-			_("Import Dictionary"),
-			wildcard=self._get_csv_wildcard(),
-			style=wx.FD_OPEN,
-		) as file_dialog:
-			if file_dialog.ShowModal() != wx.ID_OK:
-				return None
-			source_path = Path(file_dialog.GetPath())
-
-		try:
-			path = prompt_dictionary_name_until_success(
-				source_path.stem,
-				prompt_name=lambda initial_name: _prompt_for_dictionary_name(
-					dialog_parent,
-					title=_("Add Dictionary"),
-					initial_name=initial_name,
-				),
-				on_submit=lambda dictionary_name: import_dictionary(self.dictionary_dir, source_path, dictionary_name),
-				on_duplicate=lambda dictionary_name: wx.MessageBox(
-					_('Dictionary "{name}" already exists.').format(name=dictionary_name.strip()),
-					_("Error"),
-					wx.OK | wx.ICON_ERROR,
-					parent=dialog_parent,
-				),
-			)
-		except ValueError:
-			wx.MessageBox(
-				_("Imported file must contain text, braille, and type headers."),
-				_("Error"),
-				wx.OK | wx.ICON_ERROR,
-				parent=dialog_parent,
-			)
-			return None
-		except OSError as exc:
-			self._show_file_error(_("Failed to import dictionary: {error}"), exc, parent=dialog_parent)
-			return None
-		if path is None:
-			return None
-
-		update = plan_dictionary_state_after_add(
-			self.translation_settings.selected_dictionary,
-			self.get_dictionary_names_for_dialog(),
-			path.stem,
-		)
-		return update.management_selected_name
-
-	def export_dictionary_from_dialog(self, parent: wx.Window | None, selected_name: str) -> None:
-		dialog_parent = parent or self
-		if not self._dictionary_names:
-			return
-		with wx.FileDialog(
-			dialog_parent,
-			_("Export Dictionary"),
-			defaultFile=f"{selected_name}.csv",
-			wildcard=self._get_csv_wildcard(),
-			style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
-		) as file_dialog:
-			if file_dialog.ShowModal() != wx.ID_OK:
-				return
-			destination_path = Path(file_dialog.GetPath())
-
-		try:
-			export_dictionary(self.dictionary_dir, selected_name, destination_path)
-		except OSError as exc:
-			self._show_file_error(_("Failed to export dictionary: {error}"), exc, parent=dialog_parent)
 
 	def _write_export_document(self, destination_path: Path, document: Document, format_key: str) -> None:
 		descriptor = get_format(format_key)

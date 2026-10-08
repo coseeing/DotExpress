@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -831,7 +832,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_apply_settings_from_dialog_updates_all_live_state(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
-        frame._dictionary_names = ["default", "math"]
         frame._apply_editor_view_settings = Mock()
         frame.get_dictionary_names_for_dialog = Mock(return_value=["default", "math"])
         snapshot = make_snapshot(
@@ -858,12 +858,10 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def _initialize_state_with_loaded_tables(self, loaded_tables: dict[str, str]):
         frame = object.__new__(gui.BrailleFrame)
-        frame._refresh_dictionary_names = Mock()
         frame._register_output_font = Mock(return_value=False)
         with (
             patch.object(gui, "get_dictionary_directory", return_value=Path("dictionary")),
-            patch.object(gui, "ensure_default_dictionary"),
-            patch.object(gui, "list_dictionary_names", return_value=["default"]),
+            patch.object(gui, "DictionaryManagementPresenter", return_value=Mock(dictionary_names=["default"])),
             patch.object(
                 gui,
                 "load_translation_settings",
@@ -919,7 +917,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_applied_settings_tables_reach_next_conversion_request(self) -> None:
         frame = self._make_frame()
-        frame._dictionary_names = ["default"]
         frame._apply_editor_view_settings = Mock()
         frame.get_dictionary_names_for_dialog = Mock(return_value=["default"])
         snapshot = make_snapshot(tables={"default": "test-default.ctb", "math": "test-math.ctb"})
@@ -1063,6 +1060,146 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
         show.assert_called_once()
         self.assertIs(show.call_args.kwargs["initial_category"], TranslationSettingsPanel)
+
+
+class DictionaryManagementFrameTest(unittest.TestCase):
+    def _make_frame(self, active: str = "default") -> gui.BrailleFrame:
+        frame = object.__new__(gui.BrailleFrame)
+        frame.translation_settings = TranslationSettings("unicode", 40, active)
+        frame._dictionary_presenter = Mock()
+        return frame
+
+    def _open_management(self, frame, result, edit_name):
+        with (
+            patch.object(gui, "DictionaryManagementDialog") as dialog_class,
+            patch.object(gui, "SpeechSymbolsDialog") as editor_class,
+        ):
+            dialog = dialog_class.return_value.__enter__.return_value
+            dialog.ShowModal.return_value = result
+            dialog.edit_dictionary_name = edit_name
+            frame.on_open_dictionary_management(None)
+        return dialog_class, editor_class
+
+    def test_open_management_passes_presenter_and_refreshed_selection(self) -> None:
+        frame = self._make_frame("alpha")
+        presenter = frame._dictionary_presenter
+        presenter.refresh.return_value = "alpha"
+
+        dialog_class, editor_class = self._open_management(frame, gui.wx.ID_OK, None)
+
+        presenter.refresh.assert_called_once_with("alpha")
+        dialog_class.assert_called_once_with(frame, presenter, "alpha")
+        dialog_class.return_value.__enter__.return_value.ShowModal.assert_called_once_with()
+        editor_class.assert_not_called()
+
+    def test_edit_result_opens_speech_symbols_for_presenter_path(self) -> None:
+        frame = self._make_frame()
+        presenter = frame._dictionary_presenter
+        presenter.dictionary_path.return_value = Path("dictionary/alpha.csv")
+
+        _dialog_class, editor_class = self._open_management(frame, gui.wx.ID_EDIT, "alpha")
+
+        presenter.dictionary_path.assert_called_once_with("alpha")
+        editor_class.assert_called_once_with(frame, dictionary_path=Path("dictionary/alpha.csv"))
+        editor_class.return_value.__enter__.return_value.ShowModal.assert_called_once_with()
+
+    def test_other_results_open_no_editor(self) -> None:
+        for result, edit_name in ((gui.wx.ID_OK, "alpha"), (gui.wx.ID_EDIT, None)):
+            with self.subTest(result=result, edit_name=edit_name):
+                frame = self._make_frame()
+
+                _dialog_class, editor_class = self._open_management(frame, result, edit_name)
+
+                editor_class.assert_not_called()
+                frame._dictionary_presenter.dictionary_path.assert_not_called()
+
+    def test_dictionary_names_for_dialog_refreshes_with_active_name(self) -> None:
+        frame = self._make_frame("alpha")
+        frame._dictionary_presenter.dictionary_names = ["alpha", "default"]
+
+        names = frame.get_dictionary_names_for_dialog()
+
+        self.assertEqual(names, ["alpha", "default"])
+        frame._dictionary_presenter.refresh.assert_called_once_with("alpha")
+
+    def test_initialize_state_wires_presenter_to_active_dictionary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dictionary_dir = Path(temp_dir)
+            (dictionary_dir / "alpha.csv").write_text("text,braille,type\n", encoding="utf-8")
+            frame = object.__new__(gui.BrailleFrame)
+            frame._register_output_font = Mock(return_value=False)
+            with (
+                patch.object(gui, "get_dictionary_directory", return_value=dictionary_dir),
+                patch.object(
+                    gui,
+                    "load_translation_settings",
+                    return_value=TranslationSettings("unicode", 40, "alpha"),
+                ) as load_settings,
+                patch.object(gui, "get_workspace_directory", return_value=Path("workspace")),
+                patch.object(gui, "load_view_settings", return_value=ViewSettings(40, "light", "default")),
+                patch.object(gui, "load_translation_tables", return_value={}),
+            ):
+                frame._initialize_state()
+            presenter = frame._dictionary_presenter
+            view = Mock()
+            view.confirm.return_value = True
+
+            with patch.object(gui, "set_selected_dictionary") as set_selected:
+                selected = presenter.delete(view, "alpha")
+
+            remaining = sorted(path.name for path in dictionary_dir.iterdir())
+
+        self.assertIsInstance(presenter, gui.DictionaryManagementPresenter)
+        self.assertEqual(presenter.dictionary_dir, dictionary_dir)
+        load_settings.assert_called_once_with(["alpha", "default"])
+        self.assertEqual(selected, "default")
+        self.assertEqual(remaining, ["default.csv"])
+        set_selected.assert_called_once_with("default")
+        self.assertEqual(frame.translation_settings, TranslationSettings("unicode", 40, "default"))
+
+    def test_frame_dictionary_callbacks_are_removed(self) -> None:
+        # Check the class: the wx stub makes every missing instance attribute look present.
+        for name in (
+            "_refresh_dictionary_names",
+            "add_dictionary",
+            "delete_dictionary_from_dialog",
+            "rename_dictionary_from_dialog",
+            "import_dictionary_from_dialog",
+            "export_dictionary_from_dialog",
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(gui.BrailleFrame, name))
+        self.assertTrue(hasattr(gui.BrailleFrame, "_set_active_dictionary"))
+        self.assertTrue(hasattr(gui.BrailleFrame, "get_dictionary_names_for_dialog"))
+
+    def test_dictionary_dialog_helpers_and_imports_are_removed_from_gui(self) -> None:
+        for name in (
+            "_prompt_for_dictionary_name",
+            "CSV_WILDCARD",
+            "DictionaryNameDialog",
+            "create_dictionary",
+            "delete_dictionary",
+            "ensure_default_dictionary",
+            "export_dictionary",
+            "import_dictionary",
+            "is_default_dictionary",
+            "list_dictionary_names",
+            "plan_dictionary_state_after_add",
+            "plan_dictionary_state_after_delete",
+            "plan_dictionary_state_after_rename",
+            "prompt_dictionary_name_until_success",
+            "rename_dictionary_after_name_prompt",
+            "resolve_management_selection",
+        ):
+            with self.subTest(module_attribute=name):
+                self.assertFalse(hasattr(gui, name))
+        self.assertFalse(hasattr(gui.BrailleFrame, "_get_csv_wildcard"))
+        for name in ("dictionary_path_for_name", "get_dictionary_directory", "DictionaryManagementDialog", "SpeechSymbolsDialog"):
+            with self.subTest(kept=name):
+                self.assertTrue(hasattr(gui, name))
+        for name in ("_get_selected_dictionary_path", "_show_file_error"):
+            with self.subTest(kept=name):
+                self.assertTrue(hasattr(gui.BrailleFrame, name))
 
 
 if __name__ == "__main__":

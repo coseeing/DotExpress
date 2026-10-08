@@ -845,15 +845,20 @@ def build_panel(
     tables=None,
     view=ViewSettings(12, "light", "simbraille"),
     table_list=FAKE_TABLES,
+    owner=None,
 ):
-    """Build a real settings panel with recording choices and spins and a fake ``listTables``."""
+    """Build a real settings panel with recording choices and spins and a fake ``listTables``.
+
+    ``owner`` (for example a dialog) replaces the default owner; the snapshot arguments are then unused.
+    """
     module = sys.modules["settings.dialogs"]
-    snapshot = DotExpressSettingsSnapshot.create(
-        translation=translation,
-        translation_tables={} if tables is None else tables,
-        view=view,
-    )
-    owner = SimpleNamespace(snapshot=snapshot, dictionary_names=["default", "math"])
+    if owner is None:
+        snapshot = DotExpressSettingsSnapshot.create(
+            translation=translation,
+            translation_tables={} if tables is None else tables,
+            view=view,
+        )
+        owner = SimpleNamespace(snapshot=snapshot, dictionary_names=["default", "math"])
     with (
         patch.multiple(module.wx, Choice=RecordingChoice, SpinCtrl=RecordingSpin),
         patch.object(module, "listTables", Mock(return_value=list(table_list))),
@@ -1180,6 +1185,149 @@ class TableDisplayNameGuardTest(unittest.TestCase):
 
         self.assertEqual(from_english, from_translated)
         self.assertEqual(from_english[:3], ["世界文一級", "中國通用盲文 (簡體中文字)", "中庫德文一級"])
+
+
+
+# --- P2-4 characterization: a font size changed in the main window (Ctrl+wheel)
+# reaching the open settings dialog. The View panel is the real panel, built with
+# the dialog as its owner. The dialog goes into its slot with patch.object only.
+
+
+def sync_open_dialog_font_size(dialog_class, font_size):
+    """Pass a font size to the open dialog of ``dialog_class`` the way the main window does."""
+    dialog_class.sync_open_font_size(font_size)
+
+
+class FontSizeSyncCharacterizationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        from settings.dialogs import DotExpressSettingsDialog
+
+        self.dialog_class = DotExpressSettingsDialog
+        self.dialog = make_dialog_without_wx_constructor()
+        self.dialog.snapshot = view_snapshot(12, "light", "simbraille")
+
+    def open_dialog(self):
+        return patch.object(self.dialog_class, "_instance", self.dialog)
+
+    def sync(self, font_size) -> None:
+        sync_open_dialog_font_size(self.dialog_class, font_size)
+
+    def add_view_panel(self, index=2):
+        panel = build_panel("ViewSettingsPanel", owner=self.dialog)
+        self.dialog.panel_instances[index] = panel
+        return panel
+
+    def test_without_an_open_dialog_nothing_happens(self) -> None:
+        with patch.object(self.dialog_class, "_instance", None):
+            self.sync(20)
+
+        self.assertEqual(self.dialog.snapshot, view_snapshot(12, "light", "simbraille"))
+
+    def test_without_a_view_panel_only_the_snapshot_font_size_changes(self) -> None:
+        with self.open_dialog():
+            self.sync(20)
+
+        self.assertEqual(self.dialog.snapshot, view_snapshot(20, "light", "simbraille"))
+        self.assertEqual(self.dialog.panel_instances, {})
+        panel = build_panel("ViewSettingsPanel", owner=self.dialog)
+        self.assertEqual(
+            (panel.font_size_spin.value, panel.scheme_choice.selection, panel.braille_font_choice.selection),
+            (20, 0, 1),
+        )
+
+    def test_sizes_are_clamped_to_the_spin_range(self) -> None:
+        for font_size, expected in ((99, 48), (49, 48), (48, 48), (8, 8), (7, 8), (3, 8)):
+            with self.subTest(font_size=font_size):
+                self.dialog.snapshot = view_snapshot(12, "light", "simbraille")
+                self.dialog.panel_instances = {}
+                with self.open_dialog():
+                    self.sync(font_size)
+                self.assertEqual(self.dialog.snapshot.view, ViewSettings(expected, "light", "simbraille"))
+
+                self.dialog.snapshot = view_snapshot(12, "light", "simbraille")
+                panel = self.add_view_panel()
+                with self.open_dialog():
+                    self.sync(font_size)
+                self.assertEqual((panel.font_size_spin.value, self.dialog.snapshot.view.font_size), (expected, expected))
+
+    def test_a_clean_view_panel_shows_the_size_and_keeps_the_other_drafts(self) -> None:
+        panel = self.add_view_panel()
+        panel.scheme_choice.SetSelection(1)  # a draft: Dark, not applied yet
+
+        with self.open_dialog():
+            self.sync(20)
+
+        self.assertEqual(panel.font_size_spin.value, 20)
+        self.assertFalse(panel.font_size_dirty)
+        self.assertEqual(self.dialog.snapshot, view_snapshot(20, "light", "simbraille"))
+        self.assertEqual((panel.scheme_choice.selection, panel.braille_font_choice.selection), (1, 1))
+        self.assertEqual(panel.on_save(self.dialog.snapshot).view, ViewSettings(20, "dark", "simbraille"))
+
+    def test_a_pending_edit_blocks_the_sync_until_the_snapshot_is_reloaded(self) -> None:
+        panel = self.add_view_panel()
+        panel.font_size_spin.SetValue(30)
+        panel._on_font_size_changed(None)  # bound to EVT_SPINCTRL and EVT_TEXT
+
+        with self.open_dialog():
+            self.sync(20)
+
+        # KNOWN QUIRK (P2-4 spec, 2): the pending edit wins, and the snapshot keeps 12 too.
+        self.assertEqual(panel.font_size_spin.value, 30)
+        self.assertTrue(panel.font_size_dirty)
+        self.assertEqual(self.dialog.snapshot, view_snapshot(12, "light", "simbraille"))
+
+        panel.load_snapshot(self.dialog.snapshot)  # what Apply does after the commit
+        self.assertFalse(panel.font_size_dirty)
+        with self.open_dialog():
+            self.sync(20)
+
+        self.assertEqual(panel.font_size_spin.value, 20)
+        self.assertEqual(self.dialog.snapshot, view_snapshot(20, "light", "simbraille"))
+
+    def test_a_view_panel_subclass_under_any_index_is_found(self) -> None:
+        from settings.dialogs import ViewSettingsPanel
+
+        class CustomViewPanel(ViewSettingsPanel):
+            pass
+
+        panel = object.__new__(CustomViewPanel)
+        panel.font_size_dirty = False
+        panel.font_size_spin = RecordingSpin(initial=12)
+        other = Mock()
+        self.dialog.panel_instances = {0: panel, 1: other}
+
+        with self.open_dialog():
+            self.sync(20)
+
+        self.assertEqual(panel.font_size_spin.value, 20)
+        self.assertEqual(self.dialog.snapshot.view.font_size, 20)
+        self.assertEqual(other.mock_calls, [])
+
+    def test_a_spin_that_reports_its_own_change_still_follows_the_next_step(self) -> None:
+        panel = self.add_view_panel()
+        spin = panel.font_size_spin
+
+        def set_value_and_report(value):
+            RecordingSpin.SetValue(spin, value)
+            panel._on_font_size_changed(None)  # a platform whose SetValue emits EVT_TEXT
+
+        spin.SetValue = set_value_and_report
+        with self.open_dialog():
+            self.sync(13)
+            self.sync(14)
+
+        self.assertEqual(spin.value, 14)
+        self.assertFalse(panel.font_size_dirty)
+        self.assertEqual(self.dialog.snapshot.view.font_size, 14)
+
+    def test_apply_without_visiting_the_view_panel_commits_the_synced_size(self) -> None:
+        self.dialog.commit = Mock(side_effect=lambda snapshot: snapshot)
+
+        with self.open_dialog():
+            self.sync(20)
+            self.assertTrue(self.dialog.on_apply())
+
+        self.dialog.commit.assert_called_once_with(view_snapshot(20, "light", "simbraille"))
 
 
 if __name__ == "__main__":

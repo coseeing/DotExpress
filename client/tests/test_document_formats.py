@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
+from conversion.output import DualViewSegment
 from documents.formats import (
     ALL_SUPPORTED_FILES_LABEL,
     DOCUMENT_FORMATS,
@@ -17,7 +18,6 @@ from documents.formats import (
     get_importable_formats,
 )
 from documents.workspace import Document
-from dual_view.model import DualViewSegment
 
 
 class DocumentFormatsTest(unittest.TestCase):

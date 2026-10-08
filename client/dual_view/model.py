@@ -1,13 +1,12 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Callable, Iterable
+from typing import TYPE_CHECKING, Callable, Iterable
 
 from conversion.math_service import latex_to_mathml
 
-
-@dataclass(frozen=True)
-class DualViewSegment:
-    result: object
-    source_kind: str
+if TYPE_CHECKING:
+	from conversion.output import DualViewSegment
 
 
 @dataclass(frozen=True)

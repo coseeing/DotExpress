@@ -1,8 +1,9 @@
 import unittest
 from unittest.mock import Mock
 
+from conversion.output import DualViewSegment
 from dual_view.html import render_dual_view_html
-from dual_view.model import DualViewSegment, build_dual_view_model
+from dual_view.model import build_dual_view_model
 
 
 class TranslationResult:

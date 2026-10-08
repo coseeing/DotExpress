@@ -5,6 +5,7 @@ from conversion.output import (
     ConversionOutput,
     ConversionRequest,
     ConversionStageError,
+    DualViewSegment,
     MapChar,
     convert_text_with_alignment as _convert_text_with_alignment,
 )
@@ -15,7 +16,6 @@ from conversion.wrapping import (
     merge_translation_results,
     wrap_translation_results,
 )
-from dual_view.model import DualViewSegment
 
 
 _translate_plain_text_segment = translate_plain_text_segment

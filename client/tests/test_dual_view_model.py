@@ -1,7 +1,8 @@
 import unittest
 
 from adapters.translation.fallback import FallbackTextTranslator
-from dual_view.model import DualViewSegment, build_dual_view_model
+from conversion.output import DualViewSegment
+from dual_view.model import build_dual_view_model
 
 
 class TranslationResult:

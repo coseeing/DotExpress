@@ -32,9 +32,10 @@ from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
 from conversion.math_service import latex_to_mathml
+from conversion.output import DualViewSegment
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
 from dual_view.html import render_dual_view_html
-from dual_view.model import DualViewSegment, build_dual_view_model
+from dual_view.model import build_dual_view_model
 
 
 def make_snapshot(

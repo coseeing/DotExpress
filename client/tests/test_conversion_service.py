@@ -6,7 +6,7 @@ from pathlib import Path
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
 from config import DEFAULT_CHARSET_MAPS
-from dual_view.model import DualViewSegment
+from conversion.output import DualViewSegment
 from conversion.service import (
     ConversionOutput,
     ConversionRequest,

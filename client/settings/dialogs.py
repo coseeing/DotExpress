@@ -14,18 +14,10 @@ from conversion.preprocessing.user_script import (
 )
 from i18n import _
 from ui.dialog_base import SingletonDialogMixin
+from .options import CONVERSION_WIDTH_RANGE, VIEW_FONT_SIZE_RANGE
 from .state import DotExpressSettingsSnapshot
-from .translation import (
-    MAX_CONVERSION_WIDTH,
-    MIN_CONVERSION_WIDTH,
-    TranslationSettings,
-)
-from .view import (
-    VIEW_FONT_SIZE_MAX,
-    VIEW_FONT_SIZE_MIN,
-    ViewSettings,
-    normalize_view_settings,
-)
+from .translation import TranslationSettings
+from .view import ViewSettings, normalize_view_settings
 
 
 class SettingsPanelAccessible(wx.Accessible):
@@ -389,12 +381,9 @@ class TranslationSettingsPanel(SettingsPanel):
         width_label = wx.StaticText(self, label=_("Width"))
         self.width_spin = wx.SpinCtrl(
             self,
-            min=MIN_CONVERSION_WIDTH,
-            max=MAX_CONVERSION_WIDTH,
-            initial=max(
-                MIN_CONVERSION_WIDTH,
-                min(MAX_CONVERSION_WIDTH, settings.width),
-            ),
+            min=CONVERSION_WIDTH_RANGE.minimum,
+            max=CONVERSION_WIDTH_RANGE.maximum,
+            initial=CONVERSION_WIDTH_RANGE.clamp(settings.width),
         )
         grid.Add(width_label, 0, wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.width_spin, 1, wx.EXPAND)
@@ -412,12 +401,7 @@ class TranslationSettingsPanel(SettingsPanel):
 
     def load_snapshot(self, snapshot: DotExpressSettingsSnapshot) -> None:
         settings = snapshot.translation
-        self.width_spin.SetValue(
-            max(
-                MIN_CONVERSION_WIDTH,
-                min(MAX_CONVERSION_WIDTH, settings.width),
-            )
-        )
+        self.width_spin.SetValue(CONVERSION_WIDTH_RANGE.clamp(settings.width))
         self._select_output_mode(settings.output_mode)
         self._select_dictionary(settings.selected_dictionary)
 
@@ -600,12 +584,9 @@ class ViewSettingsPanel(SettingsPanel):
         font_size_label = wx.StaticText(self, label=_("Font Size"))
         self.font_size_spin = wx.SpinCtrl(
             self,
-            min=VIEW_FONT_SIZE_MIN,
-            max=VIEW_FONT_SIZE_MAX,
-            initial=max(
-                VIEW_FONT_SIZE_MIN,
-                min(VIEW_FONT_SIZE_MAX, view.font_size),
-            ),
+            min=VIEW_FONT_SIZE_RANGE.minimum,
+            max=VIEW_FONT_SIZE_RANGE.maximum,
+            initial=VIEW_FONT_SIZE_RANGE.clamp(view.font_size),
         )
         grid.Add(font_size_label, 0, wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.font_size_spin, 1, wx.EXPAND)
@@ -636,12 +617,7 @@ class ViewSettingsPanel(SettingsPanel):
 
     def load_snapshot(self, snapshot: DotExpressSettingsSnapshot) -> None:
         view = snapshot.view
-        self.font_size_spin.SetValue(
-            max(
-                VIEW_FONT_SIZE_MIN,
-                min(VIEW_FONT_SIZE_MAX, view.font_size),
-            )
-        )
+        self.font_size_spin.SetValue(VIEW_FONT_SIZE_RANGE.clamp(view.font_size))
         self._select_scheme(view.scheme)
         self._select_braille_font(view.braille_font)
         self.font_size_dirty = False

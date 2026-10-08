@@ -221,5 +221,40 @@ class OptionsModuleGuardTest(unittest.TestCase):
         self.assertEqual(len(labels), 11)
 
 
+# Option values that only settings/options.py (and config's DEFAULT_*) may spell out.
+# "default" is left out: it is also the default dictionary's name.
+OPTION_VALUE_LITERALS = {"unicode", "ascii", "light", "dark", "simbraille", "UEB", "Nemeth"}
+
+
+def _assigned_names(body: list[ast.stmt]) -> set[str]:
+    names = set()
+    for node in body:
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        names.update(target.id for target in targets if isinstance(target, ast.Name))
+    return names
+
+
+def _string_constants(tree: ast.AST) -> set[str]:
+    return {node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)}
+
+
+class OptionSourceConsumerTest(unittest.TestCase):
+    """The consumers keep no option list, range or option value of their own (P2-3 spec D9, AC6)."""
+
+    def test_normalizers_define_no_option_lists_or_ranges(self) -> None:
+        for relative_path, expected in (
+            ("settings/translation.py", {"DEFAULT_TRANSLATION_SETTINGS"}),
+            ("settings/view.py", set()),
+        ):
+            with self.subTest(module=relative_path):
+                tree = _module_tree(relative_path)
+                self.assertEqual(_assigned_names(tree.body), expected)
+                self.assertEqual(_string_constants(tree) & OPTION_VALUE_LITERALS, set())
+
 if __name__ == "__main__":
     unittest.main()

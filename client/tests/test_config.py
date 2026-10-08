@@ -421,28 +421,12 @@ class ConfigLoadFailureLoggingTest(unittest.TestCase):
         self.assertFalse(missing_log.parent.exists())
 
 
-class _ConfigFunctionsAtPath:
-    """The module-level config functions, each run with ``config.CONFIG_PATH`` set to one path."""
-
-    def __init__(self, path: Path) -> None:
-        self.path = Path(path)
-
-    def __getattr__(self, name: str):
-        function = getattr(config, name)
-
-        def call(*args, **kwargs):
-            with patch.object(config, "CONFIG_PATH", str(self.path)):
-                return function(*args, **kwargs)
-
-        return call
-
-
 def make_store(path: Path):
     """The config API bound to ``path``.
 
-    P2-6: the module-level functions today, ``config.ConfigStore`` from step 2 on.
+    P2-6: the module-level functions in step 1, ``config.ConfigStore`` from step 2 on.
     """
-    return _ConfigFunctionsAtPath(path)
+    return config.ConfigStore(path)
 
 
 class ConfigLanguageOverrideCharacterizationTest(unittest.TestCase):
@@ -492,6 +476,96 @@ class ConfigLanguageOverrideCharacterizationTest(unittest.TestCase):
         )
         config._runtime_lang = None
         self.assertEqual(self.store.get_lang(), "en")
+
+
+class ConfigStoreTest(unittest.TestCase):
+    """P2-6 part B: ``config.ConfigStore`` owns one config file path."""
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.directory = Path(temp_dir.name)
+        config._logged_load_failures.clear()
+        self.addCleanup(config._logged_load_failures.clear)
+
+    def test_constructor_does_no_io_and_logs_nothing(self) -> None:
+        with patch.object(config, "logger") as logger:
+            config.ConfigStore(self.directory / "missing" / "config.json")
+
+        self.assertEqual(logger.mock_calls, [])
+        self.assertEqual(list(self.directory.iterdir()), [])
+
+    def test_path_is_a_path_for_str_and_path_input(self) -> None:
+        for given in (str(self.directory / "config.json"), self.directory / "config.json"):
+            with self.subTest(given=type(given).__name__):
+                store = config.ConfigStore(given)
+
+                self.assertIsInstance(store.path, Path)
+                self.assertEqual(store.path, Path(given))
+
+    def test_two_stores_on_one_corrupt_file_log_one_warning(self) -> None:
+        path = self.directory / "config.json"
+        path.write_bytes(b"{not json")
+
+        first = config.ConfigStore(path)
+        second = config.ConfigStore(str(path))
+
+        with self.assertLogs("dotexpress.config", level="WARNING") as captured:
+            first.get_output_mode()
+            second.get_conversion_width()
+
+        self.assertEqual(len(captured.records), 1)
+        self.assertIn(str(path), captured.records[0].getMessage())
+
+    def test_stores_on_two_corrupt_files_log_one_warning_each(self) -> None:
+        paths = [self.directory / "first.json", self.directory / "second.json"]
+        for path in paths:
+            path.write_bytes(b"{not json")
+
+        stores = [config.ConfigStore(path) for path in paths]
+
+        with self.assertLogs("dotexpress.config", level="WARNING") as captured:
+            for store in stores:
+                store.get_output_mode()
+                store.get_output_mode()
+
+        self.assertEqual(len(captured.records), 2)
+        for record, path in zip(captured.records, paths):
+            self.assertIn(str(path), record.getMessage())
+
+    def _apply_setters(self, target) -> None:
+        target.set_output_mode("ascii")
+        target.set_conversion_width(52)
+        target.set_selected_dictionary("點字")
+        target.set_translation_tables({"default": "en-ueb-g1.ctb"})
+        target.set_view_settings(18, "dark", "default")
+        target.set_lang("en", persist=True)
+
+    def test_store_writes_the_documented_config_bytes(self) -> None:
+        self.addCleanup(setattr, config, "_runtime_lang", config._runtime_lang)
+        store_path = self.directory / "store" / "config.json"
+        module_path = self.directory / "module" / "config.json"
+
+        self._apply_setters(config.ConfigStore(store_path))
+        with patch.object(config, "CONFIG_PATH", str(module_path)):
+            self._apply_setters(config)
+
+        expected = {
+            "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
+            "conversion": {
+                "output_mode": "ascii",
+                "width": 52,
+                "selected_dictionary": "點字",
+                "translation_tables": {"default": "en-ueb-g1.ctb"},
+            },
+            "view": {"font_size": 18, "scheme": "dark", "braille_font": "default"},
+            "language": "en",
+        }
+        self.assertEqual(
+            store_path.read_text(encoding="utf-8"),
+            json.dumps(expected, ensure_ascii=False, indent=2),
+        )
+        self.assertEqual(module_path.read_bytes(), store_path.read_bytes())
 
 
 if __name__ == "__main__":

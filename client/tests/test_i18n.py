@@ -1,6 +1,7 @@
 import ast
 import gettext
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -121,6 +122,32 @@ class SharedSetupConsumerTest(unittest.TestCase):
 
     def test_about_uses_shared_i18n(self) -> None:
         self.assert_uses_shared_i18n("about.py", {"_"})
+
+    def test_gui_uses_shared_i18n(self) -> None:
+        self.assert_uses_shared_i18n("gui.py", {"_", "resource_path"})
+
+
+class DuplicateSetupGuardTest(unittest.TestCase):
+    SETUP_PATTERN = re.compile(
+        r"gettext\.translation\(|^\s*import gettext|_MEIPASS|def _?resource_path|LOCALE_LANGUAGES",
+        re.MULTILINE,
+    )
+    SKIPPED_DIRS = {"tests", ".venv", "__pycache__"}
+    SKIPPED_FILES = {"i18n.py", "braille/tables/__tables.py"}
+
+    def test_no_module_duplicates_translation_setup(self) -> None:
+        offenders = []
+        for dirpath, dirnames, filenames in os.walk(CLIENT_ROOT):
+            dirnames[:] = sorted(name for name in dirnames if name not in self.SKIPPED_DIRS)
+            for filename in sorted(filenames):
+                path = Path(dirpath) / filename
+                relative = path.relative_to(CLIENT_ROOT).as_posix()
+                if not filename.endswith(".py") or relative in self.SKIPPED_FILES:
+                    continue
+                for match in self.SETUP_PATTERN.finditer(path.read_text(encoding="utf-8")):
+                    offenders.append(f"{relative}: {match.group(0).strip()}")
+
+        self.assertEqual(offenders, [])
 
 
 if __name__ == "__main__":

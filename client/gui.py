@@ -1,12 +1,12 @@
 from dataclasses import replace
 from pathlib import Path
-import gettext
 import sys
 import webbrowser
 
 import wx
 
 import about
+from i18n import _, resource_path
 from app_paths import ApplicationDataError, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
@@ -142,25 +142,6 @@ CSV_WILDCARD = "CSV files (*.csv)|*.csv"
 DEP_WILDCARD = "DotExpress files (*.dep)|*.dep"
 BRL_WILDCARD = "Braille files (*.brl)|*.brl"
 HTML_WILDCARD = "HTML files (*.html)|*.html"
-
-
-def resource_path(relative_path: str) -> Path:
-	if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-		base_path = Path(sys._MEIPASS)
-	else:
-		base_path = Path(__file__).resolve().parent
-	return base_path / relative_path
-
-
-LOCALE_DOMAIN = "dotexpress"
-LOCALE_LANGUAGES = ["zh_TW"]
-_translation = gettext.translation(
-	LOCALE_DOMAIN,
-	localedir=str(resource_path("locales")),
-	languages=LOCALE_LANGUAGES,
-	fallback=True,
-)
-_ = _translation.gettext
 
 logger = get_logger("dotexpress.gui", "gui.log")
 

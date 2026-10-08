@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Iterable
 
-from conversion.math_service import latex_to_mathml
-
 if TYPE_CHECKING:
 	from conversion.output import DualViewSegment
 
@@ -40,7 +38,11 @@ def _token_braille_end(raw_to_braille_pos: list[int], token_index: int, braille_
 	return braille_length
 
 
-def build_dual_view_model(segments: Iterable[DualViewSegment], *, mathml_converter: Callable[[str], str] = latex_to_mathml) -> DualViewModel:
+def build_dual_view_model(
+	segments: Iterable[DualViewSegment],
+	*,
+	mathml_converter: Callable[[str], str],
+) -> DualViewModel:
 	result_segments: list[AlignmentSegment] = []
 
 	for segment in segments:

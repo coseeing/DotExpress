@@ -5,6 +5,7 @@ from pathlib import Path
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from conversion.math_service import latex_to_mathml
 from dual_view.html import render_dual_view_html
 from dual_view.model import build_dual_view_model
 from i18n import N_
@@ -103,7 +104,7 @@ def _write_brl(path: Path | str, document: Document, context: ExportContext) -> 
 def _write_html(path: Path | str, document: Document, context: ExportContext) -> Path:
     del document
     destination = Path(path)
-    html = render_dual_view_html(build_dual_view_model(context.dual_view_results))
+    html = render_dual_view_html(build_dual_view_model(context.dual_view_results, mathml_converter=latex_to_mathml))
     destination.write_text(html, encoding="utf-8")
     return destination
 

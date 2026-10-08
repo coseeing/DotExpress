@@ -1363,12 +1363,12 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             self.assertEqual((root / "nested" / "alpha.brl").read_bytes(), "⠁⠃".encode("utf-8"))
 
             frame._export_coordinator.write_document(root / "alpha.html", Document("alpha", "text", "b"), "html")
-            cached_html = render_dual_view_html(build_dual_view_model(results))
+            cached_html = render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml))
             self.assertEqual((root / "alpha.html").read_bytes(), cached_html.encode("utf-8"))
             self.assertIn('<span class="source">a</span>', cached_html)
 
             frame._export_coordinator.write_document(root / "beta.html", Document("beta", "text", "b"), "html")
-            empty_html = render_dual_view_html(build_dual_view_model(()))
+            empty_html = render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml))
             self.assertEqual((root / "beta.html").read_bytes(), empty_html.encode("utf-8"))
             self.assertNotEqual(cached_html, empty_html)
 
@@ -1420,11 +1420,11 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
 
             self.assertEqual(
                 (root / "alpha.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model(results)),
+                render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml)),
             )
             self.assertEqual(
                 (root / "beta.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model(())),
+                render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml)),
             )
         frame.show_info.assert_called_once_with(
             gui._(ExportBatchResult().summary_template),

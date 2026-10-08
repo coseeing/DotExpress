@@ -10,6 +10,7 @@ from i18n import _, resource_path
 from app_paths import ApplicationDataError, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
+from conversion.math_service import latex_to_mathml
 from conversion.presenter import ConversionPresenter
 from conversion.service import ConversionRequest
 from conversion.preprocessing.user_script import preprocessing_script_path
@@ -329,7 +330,7 @@ class BrailleFrame(wx.Frame):
 		controller = self._document_controller
 		results = controller.get_dual_view_results(controller.open_document_name)
 		return render_dual_view_html(
-			build_dual_view_model(results),
+			build_dual_view_model(results, mathml_converter=latex_to_mathml),
 			empty_message=_("No conversion data is available for this document."),
 		)
 

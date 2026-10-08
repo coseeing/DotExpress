@@ -6,6 +6,10 @@ from dual_view.html import render_dual_view_html
 from dual_view.model import build_dual_view_model
 
 
+def reject_mathml(latex):
+	raise AssertionError(f"text items must not be converted to MathML: {latex!r}")
+
+
 class TranslationResult:
 	def __init__(self, raw, braille, braille_to_raw_pos, raw_to_braille_pos):
 		self.raw = raw
@@ -19,7 +23,7 @@ class DualViewHtmlTest(unittest.TestCase):
 		result = TranslationResult(list(raw), list(braille), [0] * len(braille), positions)
 		return render_dual_view_html(build_dual_view_model([
 			DualViewSegment(result=result, source_kind=source_kind),
-		]))
+		], mathml_converter=reject_mathml))
 
 	def test_renders_source_text_from_raw_text(self):
 		output = self.render("a", "⠁", [0])
@@ -74,7 +78,7 @@ class DualViewHtmlTest(unittest.TestCase):
 		output = render_dual_view_html(build_dual_view_model([
 			DualViewSegment(result=first, source_kind="text"),
 			DualViewSegment(result=second, source_kind="text"),
-		]))
+		], mathml_converter=reject_mathml))
 
 		self.assertNotIn('<section class="segment">', output)
 		self.assertEqual(output.count('class="cell"'), 3)
@@ -93,7 +97,7 @@ class DualViewHtmlTest(unittest.TestCase):
 
 	def test_renders_empty_state(self):
 		output = render_dual_view_html(
-			build_dual_view_model([]),
+			build_dual_view_model([], mathml_converter=reject_mathml),
 			empty_message="此文件沒有可顯示的轉換資料。",
 		)
 

@@ -37,7 +37,7 @@ class ExportView(Protocol):
 
 
 class ExportConversions(Protocol):
-    """Satisfied by ``conversion.presenter.ConversionPresenter``."""
+    """Satisfied by ``ui.conversion_presenter.ConversionPresenter``."""
 
     def missing_table_message(self) -> str | None: ...
 

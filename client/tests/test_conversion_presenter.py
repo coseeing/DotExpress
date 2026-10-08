@@ -4,7 +4,7 @@ import ast
 import unittest
 from pathlib import Path
 
-from conversion.presenter import (
+from ui.conversion_presenter import (
     CONVERTING_DIALOG_DELAY_MS,
     ConversionPresenter,
     format_conversion_error,
@@ -16,7 +16,7 @@ from documents.workspace import Document
 from i18n import _
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
 
-PRESENTER_PATH = Path(__file__).resolve().parents[1] / "conversion" / "presenter.py"
+PRESENTER_PATH = Path(__file__).resolve().parents[1] / "ui" / "conversion_presenter.py"
 
 
 class RecordingConversionView:

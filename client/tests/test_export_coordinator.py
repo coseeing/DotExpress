@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, call, patch
 
 import documents.export_coordinator as coordinator_module
-from conversion.presenter import ConversionPresenter
+from ui.conversion_presenter import ConversionPresenter
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
 from documents.controller import DocumentController
 from documents.export_coordinator import ExportCoordinator

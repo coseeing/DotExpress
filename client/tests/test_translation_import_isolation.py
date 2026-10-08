@@ -1,6 +1,11 @@
+import ast
 import subprocess
 import sys
 import unittest
+from pathlib import Path
+
+CLIENT_DIR = Path(__file__).resolve().parents[1]
+HIGHER_LAYERS = {"documents", "ui", "gui", "dialog", "settings", "dictionaries", "dual_view"}
 
 
 class TranslationImportIsolationTest(unittest.TestCase):
@@ -72,6 +77,22 @@ assert not loaded, f"dual_view modules were imported: {loaded}"
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_conversion_package_imports_no_higher_layer(self) -> None:
+        found = []
+        for path in sorted((CLIENT_DIR / "conversion").rglob("*.py")):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    names = [node.module]
+                else:
+                    continue
+                for name in names:
+                    if name.split(".")[0] in HIGHER_LAYERS:
+                        found.append(f"{path.relative_to(CLIENT_DIR).as_posix()}:{node.lineno} {name}")
+
+        self.assertEqual(found, [])
 
     def test_dual_view_does_not_import_conversion_or_config(self) -> None:
         script = """

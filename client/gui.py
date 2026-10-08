@@ -11,7 +11,6 @@ from app_paths import ApplicationDataError, ApplicationPaths, build_application_
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
 from conversion.math_service import latex_to_mathml
-from conversion.presenter import ConversionPresenter
 from conversion.service import ConversionRequest
 from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.manager import dictionary_path_for_name
@@ -31,6 +30,7 @@ from documents.workspace import (
 )
 from documents.workspace_service import DocumentWorkspaceService
 from ui.action_menu import get_document_menu_enabled_state
+from ui.conversion_presenter import ConversionPresenter
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from ui.menu_builder import apply_document_menu_state, build_document_menu
 from config import ConfigStore, DEFAULT_TRANSLATION_TABLES
@@ -968,7 +968,7 @@ class BrailleFrame(wx.Frame):
 			viewer.Destroy()
 		evt.Skip()
 
-	# --- ConversionView (conversion/presenter.py) ---------------------------
+	# --- ConversionView (ui/conversion_presenter.py) ------------------------
 
 	def get_source_text(self) -> str:
 		return self.input_txt.GetValue()

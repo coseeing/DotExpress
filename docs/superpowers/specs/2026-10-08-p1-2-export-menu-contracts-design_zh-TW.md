@@ -13,6 +13,8 @@
 
 這是保持行為不變的重構。選單順序、label、巢狀結構、啟用狀態、handler、快速鍵、對話框標題與 wildcard，以及每個匯出檔案的位元組內容都不變。沒有任何使用者可見字串改變，`client/locales/` 下也不手動修改任何檔案。
 
+本 spec 已納入實作計畫（`docs/superpowers/plans/2026-10-08-p1-2-export-menu-contracts.md` 的「Spec Corrections and Refinements」一節）的更正與細化：還有一個測試釘住標記 tuple、記錄用 fake 集中在 `tests/menu_recording.py`、特性測試共 11 個、`gui` 不再 import `get_document_menu_descriptors`、建構器的 `ValueError` 文字固定、`ExportContext` 有自己的測試，以及 zh_TW label 測試會略過註解與 obsolete 條目。
+
 ## 現況（2026-10-08 於 `refactor/p1-2-export-menu-contracts` 驗證，HEAD `029a86e`，已合併 P0-1..P0-6 與 P1-1）
 
 縮排：`gui.py` 與 `dialog.py` 用 tab（`gui.py` 的 import 區塊有幾行 4 空白的續行，維持原樣）。`documents/formats.py`、`ui/action_menu.py`、`ui/translation_menu.py`、`conversion/preprocessing/user_script.py` 以及會動到的測試用 4 空白。新增的 `ui/menu_builder.py` 與 `tests/test_menu_builder.py` 跟 `ui/` 其他檔案一樣用 4 空白。
@@ -70,6 +72,7 @@ AST 掃描工具（`p06impl/tools/msgid_scan.py`，已複製到 session scratchp
 - `tests/test_document_formats.py`：`test_html_writer_renders_cached_dual_view_results_as_utf8` 以 keyword 參數 `dual_view_results=` 呼叫 HTML writer。
 - `tests/test_gui_document_flows.py`：`test_write_export_document_uses_registry_writer`（斷言 `writer(path, document)`）、`test_write_html_export_document_passes_cached_dual_view_results`（斷言 `dual_view_results=` keyword 參數）、`test_sync_document_menu_state_before_document_list_exists`（以 label 為 key 的項目），以及 `test_dead_frame_helpers_are_removed`，其最後兩行斷言 `gui.DEP_WILDCARD` 與 `BrailleFrame._get_brl_wildcard` **仍存在**。這兩行是 P0-3 加入的「刻意保留」守門，本任務會刪除這兩個名稱。
 - `tests/test_i18n.py::SharedSetupConsumerTest`：`gui.py` 必須從 `i18n` 恰好 import `{"N_", "_", "resource_path"}`，`dialog.py` 恰好 `{"_"}`。
+- `tests/test_i18n.py::ExtractionMarkerTest::test_gui_menu_translation_markers_use_n_`（P0-5）：解析 `gui.py`，斷言 `_MENU_TRANSLATION_MARKERS` 存在，且是恰好 48 個 `N_()` 呼叫組成的 tuple。刪除這個 tuple（步驟 6）會讓它失敗，所以步驟 6 會替換它（見「更新的測試」）。
 - `tests/test_removed_dead_code.py`：要求 `action_menu.get_document_menu_descriptors`、`action_menu.get_document_menu_enabled_state`、`formats.get_exportable_formats`、`formats.get_import_filter_labels` 存在。四者都保留。
 
 ### 基線
@@ -191,7 +194,7 @@ def apply_document_menu_state(items_by_action: Mapping[str, object], enabled_by_
 
 `build_document_menu` 以相同順序做出與目前 `gui` 完全相同的呼叫：
 
-1. 若 `set(handlers)` 與 descriptor 的 action 集合不同，在碰 `menu` 之前就丟出 `ValueError`。缺少的 handler 或殘留的多餘 handler 會在建立時失敗；現在 label 打錯則會以 `KeyError` 失敗或被靜默略過。
+1. 若 `set(handlers)` 與 descriptor 的 action 集合不同，在碰 `menu` 之前就丟出 `ValueError`。訊息為 `Document menu handlers do not match the menu actions: missing [...], extra [...].`，`missing` 依 descriptor 順序，`extra` 排序過。缺少的 handler 或殘留的多餘 handler 會在建立時失敗；現在 label 打錯則會以 `KeyError` 失敗或被靜默略過。
 2. **Append 階段**，依 descriptor 順序。command 變成 `menu.Append(item_id, translate(label))`。submenu 變成 `submenu = new_menu()`，接著 `menu.AppendSubMenu(submenu, translate(label))`，再依序對每個格式 `submenu.Append(item_id, translate(format_label))`。
 3. **Bind 階段**，依 descriptor 順序，永遠綁在頂層 `menu` 上。command 變成 `menu.Bind(menu_event, handlers[action], item)`，handler 會收到 wx event。每個子選單格式項目變成 `menu.Bind(menu_event, lambda _event, key=format_key, handler=handlers[action]: handler(key), item)`，其中 `format_key` 跟現在一樣是 `format_key.casefold()`。descriptor 中所有 command 都在 submenu 之前，所以綁定順序與現在完全相同。
 4. 回傳以 action 為 key 的頂層項目（command 項目與 `AppendSubMenu` 的回傳值）。
@@ -204,7 +207,7 @@ def apply_document_menu_state(items_by_action: Mapping[str, object], enabled_by_
 
 ### `gui.py`
 
-- 刪除：`DEP_WILDCARD`、`BRL_WILDCARD`、`HTML_WILDCARD`、`_get_dep_wildcard`、`_get_brl_wildcard`、`_get_html_wildcard`、`_get_export_wildcard`、`_append_document_menu_items`、`_bind_document_menu_handlers`、`_MENU_TRANSLATION_MARKERS` 及其註解，以及 `i18n` import 中的 `N_`。
+- 刪除：`DEP_WILDCARD`、`BRL_WILDCARD`、`HTML_WILDCARD`、`_get_dep_wildcard`、`_get_brl_wildcard`、`_get_html_wildcard`、`_get_export_wildcard`、`_append_document_menu_items`、`_bind_document_menu_handlers`、`_MENU_TRANSLATION_MARKERS` 及其註解、`i18n` import 中的 `N_`，以及 `ui.action_menu` import 中的 `get_document_menu_descriptors`（步驟 5 之後只有 `ui/menu_builder.py` 讀取 descriptor；`tests/test_removed_dead_code.py` 只要求這個函式存在於 `ui.action_menu`，它仍然存在）。
 - 新增 `_document_menu_handlers()`，回傳 `{"open": self.on_open_document, "delete": self.on_delete_document, "delete_all": self.on_delete_all_documents, "add": self.on_add_document, "rename": self.on_rename_document, "import": self.on_import_document, "export": self.on_export_document, "export_all": self.on_export_all_documents}`。
 - 新增 `_append_document_menu(menu)`，回傳 `build_document_menu(menu, self._document_menu_handlers(), translate=_, new_menu=wx.Menu, menu_event=wx.EVT_MENU, item_id=wx.ID_ANY)`。
 - `_create_document_menu()` 依序執行 `menu = wx.Menu()`、`items = self._append_document_menu(menu)`、`self._sync_document_menu_state(items)`，回傳 `menu, items`。`self._document_menu_items` 現在以 action 為 key。
@@ -228,7 +231,7 @@ def apply_document_menu_state(items_by_action: Mapping[str, object], enabled_by_
 3. `refactor:` 由 registry 推導匯出 wildcard 與 Export 子選單。加入 `export_wildcard`/`export_label`（以 `N_` 標記）、`build_export_wildcard` 與 `_EXPORT_FORMATS`。刪除 `gui` 的 wildcard 常數與方法，並在同一個 commit 中移除 `test_dead_frame_helpers_are_removed` 的兩個正向斷言。`gui` 的標記還在，所以 msgid 集合不變。
 4. `refactor:` 文件選單狀態改以 action 為 key。加入 `enabled_when` 與以 action 為 key 的 `get_document_menu_enabled_state`，更新 `test_action_menu` 與 `test_sync_document_menu_state_before_document_list_exists`。`gui` 的綁定在同一個 commit 中改用 action key，所以沒有任何一步會混用 label 與 action key。
 5. `refactor:` 加入 `ui/menu_builder.py` 與 `tests/test_menu_builder.py`，讓 File 選單與右鍵選單改走它。刪除 `_append_document_menu_items` 與 `_bind_document_menu_handlers`。
-6. `refactor:` 在定義處標記可翻譯 label。在 `ui/action_menu.py`、`ui/translation_menu.py`、`documents/formats.py`（`wildcard_label`、`ALL_SUPPORTED_FILES_LABEL`）、`dialog.py`、`user_script.py` 加上 `N_()`。刪除 `_MENU_TRANSLATION_MARKERS` 與 `gui` import 中的 `N_`，並在同一個 commit 中更新 `SharedSetupConsumerTest`（`gui.py` 改為 `{"_", "resource_path"}`，`dialog.py` 改為 `{"N_", "_"}`）。
+6. `refactor:` 在定義處標記可翻譯 label。在 `ui/action_menu.py`、`ui/translation_menu.py`、`documents/formats.py`（`wildcard_label`、`ALL_SUPPORTED_FILES_LABEL`）、`dialog.py`、`user_script.py` 加上 `N_()`。刪除 `_MENU_TRANSLATION_MARKERS` 與 `gui` import 中的 `N_`，並在同一個 commit 中更新 `SharedSetupConsumerTest`（`gui.py` 改為 `{"_", "resource_path"}`，`dialog.py` 改為 `{"N_", "_"}`），以及把 `test_gui_menu_translation_markers_use_n_` 替換成 `test_former_marker_strings_are_still_extracted`。
 
 每一步完成後執行 msgid 掃描。步驟 1-5 之後為 357 個 msgid，與 `.pot` 以及 `p12/base_msgids.json` 相等。步驟 6 之後為 353 個，與兩者的差異只有 C 組那四個字串。
 
@@ -249,39 +252,42 @@ def apply_document_menu_state(items_by_action: Mapping[str, object], enabled_by_
 
 先在現有程式上寫特性測試，讓預期值來自現在的行為。這些測試在步驟 2-6 中必須維持不變地通過，只有在它們呼叫的內部名稱改名時才能調整 setup。
 
-### 特性測試（步驟 1，`tests/test_gui_document_flows.py`，新類別 `DocumentMenuAndExportCharacterizationTest`）
+### 特性測試（步驟 1，`tests/test_gui_document_flows.py`，新類別 `DocumentMenuAndExportCharacterizationTest`，11 個測試）
+
+記錄用的 fake（`MenuRecorder`、`RecordedMenu`、`RecordedItem`、`fake_translate`）、逐字寫出的預期建立紀錄 `DOCUMENT_MENU_BUILD_LOG` 與 `enable_log(...)` helper 放在新的 helper 模組 `tests/menu_recording.py`（沒有 `test_` 前綴，所以 `discover` 不會收集它；不 import wx，所以不需要 stub scope），讓 `tests/test_menu_builder.py` 與同一份字面值比對。紀錄格式：`("new", "menu0")`、`("menu0", "Append", -1, "T[Open]")`、`("menu0", "AppendSubMenu", "menu1", "T[Export]")`、`("menu0", "Bind", "EVT_MENU", "menu1:T[Package DEP]")`、`("Enable", "menu0:T[Open]", False)`、`("menu0", "Destroy")`；項目命名為 `<所屬 menu>:<label>`。
 
 這些測試使用記錄用的 `wx.Menu` fake：以 factory patch `gui.wx.Menu`，依建立順序把每個 menu 命名為 `menu0`、`menu1` 等，記錄 `Append(id, label)`、`AppendSubMenu(submenu, label)`、`Bind(event, handler, item)`，回傳的每個項目則記錄自己的 `Enable(value)` 呼叫。`gui.wx.EVT_MENU` patch 成 sentinel（`patch.object(..., create=True)`），因為在 stub 下，每次存取 wx 模組的屬性都會產生新的 class。`gui._` patch 成 `lambda s: f"T[{s}]"`，藉此證明每個 label 都經過翻譯。frame 的 handler 方法在建立選單**之前**就以 `Mock` 設在 instance 上。
 
 1. **File 選單紀錄。** `frame._create_document_menu()` 的紀錄必須恰好是：建立 `menu0`；`Append(-1, "T[Open]")`、`T[Delete]`、`T[Delete All]`、`T[Add]`、`T[Rename]`、`T[Import]`；建立 `menu1`；`menu0.AppendSubMenu(menu1, "T[Export]")`；`menu1.Append(-1, …)` 依序為 `T[Package DEP]`、`T[Braille BRL]`、`T[Dual View HTML]`；`T[Export All]` 的 `menu2` 同理；接著 12 次 `menu0.Bind(EVT_MENU, …)`，順序為 Open、Delete、Delete All、Add、Rename、Import、export dep/brl/html、export_all dep/brl/html；最後是 `Enable` 呼叫。預期紀錄在測試中逐字寫出。
 2. **Handler 分派。** 以假 event 呼叫每個記錄到的 handler，恰好呼叫一個 frame 方法：command 帶著 event 呼叫 `on_open_document(event)` 等；`export/<key>` 呼叫 `on_export_document(key)`；`export_all/<key>` 呼叫 `on_export_all_documents(key)`，key 為 `dep`、`brl`、`html`。
 3. **啟用狀態。** 兩種情況，透過 label 為 `T[...]` 的項目上記錄到的 `Enable` 呼叫檢查（不透過 dict key）。沒有 `document_list` 也沒有文件時：Open/Delete/Delete All/Rename/Export/Export All 為 `False`，Add/Import 為 `True`，順序如上。`document_list` mock 有選取且 controller 有文件時：八個全為 `True`。把回傳的項目存成 `frame._document_menu_items` 之後，也涵蓋了不帶參數的 `_sync_document_menu_state()`。
-4. **右鍵選單。** 以 mock 提供 `document_list` 的 `ScreenToClient`、`HitTest -> (0, flags)`、`GetFirstSelected`、`GetItemRect`、`GetItemCount`，`frame.on_document_context_menu(event)` 在新的 menu 上記錄到相同的 append/bind 紀錄，依「有選取且有文件」啟用項目，選取並 focus 第 0 項，呼叫 `PopupMenu(menu, (rect.x, rect.y + rect.height))`，然後 `Destroy()`。第二種情況是從鍵盤開啟（`wx.DefaultPosition`）、沒有選取項目但有文件：清除選取，Delete All、Add、Import、Export All 為 `True`，其他四項為 `False`，並在 `wx.Point(0, 0)` 彈出。
+4. **右鍵選單**（兩個測試：`test_context_menu_on_item_selects_it_and_pops_up_below_it` 與 `test_keyboard_context_menu_without_selection_clears_it`）。以 mock 提供 `document_list` 的 `ScreenToClient`、`HitTest -> (0, flags)`、`GetFirstSelected`、`GetItemRect`、`GetItemCount`，`frame.on_document_context_menu(event)` 在新的 menu 上記錄到相同的 append/bind 紀錄，依「有選取且有文件」啟用項目，選取並 focus 第 0 項，呼叫 `PopupMenu(menu, (rect.x, rect.y + rect.height))`，然後 `Destroy()`。第二種情況是從鍵盤開啟（`wx.DefaultPosition`）、沒有選取項目但有文件：清除選取，Delete All、Add、Import、Export All 為 `True`，其他四項為 `False`，並在 `wx.Point(0, 0)` 彈出。鍵盤情況會設定 `frame._document_menu_items = {}`，因為 `_clear_document_selection()` 不帶參數呼叫 `_sync_document_menu_state()`，而在 stub frame 上，不存在的屬性是一個為真的 no-op 函式（wx stub 遮蔽）。
 5. **選單列。** 記錄 `gui.wx.MenuBar`，`frame.Bind` 為 `Mock`：選單依序加入 `T[File]`、`T[Translation]`、`T[Help]`；Translation 包含 `T[Convert]`、`T[Dual View]`、`T[Text Processing]`、`T[Dictionary Management...]`、`T[Settings]`，綁到五個 frame handler；Help 包含 `T[Coseeing Website]`（`wx.ID_ANY`）與 `T[About]`（`wx.ID_ABOUT`）。
 6. **匯出對話框 wildcard。** 對 `dep`、`brl`、`html` 呼叫 `_export_document_with_dialog(Document("alpha", "t", "b"), key)`，使用會回傳取消的記錄用 `wx.FileDialog`：標題 `T[Export Document]`、`defaultFile` 為 `alpha.<ext>`、wildcard 為 `T[DotExpress files (*.dep)|*.dep]` / `T[Braille files (*.brl)|*.brl]` / `T[HTML files (*.html)|*.html]`、style 為 `FD_SAVE | FD_OVERWRITE_PROMPT`，且沒有寫出任何東西。
 7. **副檔名修正。** `brl` 的對話框回傳 `/tmp/x/out.TXT` 時寫到 `/tmp/x/out.brl`；回傳 `/tmp/x/out.BRL` 時寫到 `/tmp/x/out.BRL`。此測試中 `_write_export_document` 是 `Mock`。
-8. **匯出位元組，使用真正的 writer。** 在暫存目錄中使用真正的 registry writer 與 `_write_export_document`：`Document("alpha", "text", None)` 的 DEP 恰好有 zip 成員 `alpha.txt` = `text` 與 `alpha.brl` = `""`；`Document("alpha", "text", "⠁⠃")` 的 BRL 檔為 `⠁⠃`（UTF-8）；有 cache 結果（一小份 `DualViewSegment` 清單）的 `alpha` 的 HTML 逐位元組等於測試中直接計算的 `render_dual_view_html(build_dual_view_model(results))`；沒有 cache 的文件的 HTML 等於 `()` 的 render。另外：HTML writer 寫到不存在的目錄時丟出 `OSError`（不會建立上層目錄）。
+8. **匯出位元組，使用真正的 writer。** 在暫存目錄中使用真正的 registry writer 與 `_write_export_document`：`Document("alpha", "text", None)` 的 DEP 恰好有 zip 成員 `alpha.txt` = `text` 與 `alpha.brl` = `""`；`Document("alpha", "text", "⠁⠃")` 的 BRL 檔為 `⠁⠃`（UTF-8）；有 cache 結果（一小份 `DualViewSegment` 清單）的 `alpha` 的 HTML 逐位元組等於測試中直接計算的 `render_dual_view_html(build_dual_view_model(results))`；沒有 cache 的文件的 HTML 等於 `()` 的 render。另外：HTML writer 寫到不存在的目錄時丟出 `OSError`（不會建立上層目錄），而 BRL writer 仍會建立不存在的上層目錄。
 9. **Export All 逐文件的 cache。** 以同步的 `wx.CallAfter`、真正的 writer、只有 `alpha` 的 cache 呼叫 `_export_next_document([alpha, beta], dir, "html", ExportBatchResult())`，寫出 `alpha.html`（alpha 的 render）與 `beta.html`（空的 render）。
 10. **Ctrl+S。** `on_output_text_key_down` 在按鍵 83 且按住 Ctrl 時呼叫 `_export_document_with_dialog(open_document, "brl")`，然後呼叫 `output_txt.SetFocus()`。
 
 ### 更新的測試
 
-- `tests/test_document_formats.py`：HTML writer 測試以第三個參數傳入 `ExportContext(dual_view_results=(...))`。新增測試：以非空 context 呼叫 DEP 與 BRL writer 時，寫出的檔案與 `ExportContext()` 相同；每個 writer 恰有三個位置參數（`inspect.signature`），只給兩個參數會丟出 `TypeError`；每個 writer 回傳目的地 `Path`；registry 不變式；`build_export_wildcard` 對 dep/brl/html 給出三個字串（並套用 `translate`），對 txt 丟出 `ValueError('Unsupported export format: "txt".')`；`ALL_SUPPORTED_FILES_LABEL == "All Supported Files"`。既有的匯入 wildcard 測試保持不變。
+- `tests/test_document_formats.py`：HTML writer 測試以第三個參數傳入 `ExportContext(dual_view_results=(...))`。新增測試：以非空 context 呼叫 DEP 與 BRL writer 時，寫出的檔案與 `ExportContext()` 相同；每個 writer 恰有三個位置參數（`inspect.signature`），只給兩個參數會丟出 `TypeError`；每個 writer 回傳目的地 `Path`；registry 不變式；`build_export_wildcard` 對 dep/brl/html 給出三個字串（並套用 `translate`），對 txt 丟出 `ValueError('Unsupported export format: "txt".')`；`ALL_SUPPORTED_FILES_LABEL == "All Supported Files"`，`get_import_filter_labels()` 以 `ALL_SUPPORTED_FILES_LABEL` 結尾且完整值仍為 `["DEP", "DOCX", "EPUB", "PDF", "TXT", "All Supported Files"]`；`ExportContext()` 預設沒有結果（`test_export_context_defaults_to_no_results`）。既有的匯入 wildcard 測試保持不變。
 - `tests/test_action_menu.py`：四個啟用狀態測試改以 action 為 key，真值相同。新增測試：action 不重複；每個 `enabled_when` 都是三種規則之一；label 依序為 Open、Delete、Delete All、Add、Rename、Import、Export、Export All；子選單 `formats` 等於 `tuple((d.key, d.export_label) for d in get_exportable_formats())`，也等於字面值 `(("dep", "Package DEP"), ("brl", "Braille BRL"), ("html", "Dual View HTML"))`。既有的子選單測試保留。
 - `tests/test_gui_document_flows.py`：`test_write_export_document_uses_registry_writer` 預期 `writer(Path("/tmp/custom.dep"), document, ExportContext())`。新增一個相鄰測試，確認 `alpha` 有 cache 時 DEP writer 同樣收到 `ExportContext(dual_view_results=cached)`（統一的呼叫）。HTML 測試預期 `writer(path, document, ExportContext(dual_view_results=cached_results))`。`test_sync_document_menu_state_before_document_list_exists` 改用 action key。刪除 `test_dead_frame_helpers_are_removed` 中 `assertTrue(hasattr(gui, "DEP_WILDCARD"))`/`_get_brl_wildcard` 這兩行：本任務刻意移除了這些名稱。不新增不存在性的守門測試（P0 審查 M-2），改由下方驗收標準的 grep 負責。
 - `tests/test_i18n.py::SharedSetupConsumerTest`：`gui.py` 改為 `{"_", "resource_path"}`，`dialog.py` 改為 `{"N_", "_"}`。本任務刻意改變了這兩個模組 import 的名稱。把這個測試改成負向斷言（M-2）留給 orchestrator 的後續處理。
+- `tests/test_i18n.py::ExtractionMarkerTest`：在步驟 6 的 commit 中，以 `test_former_marker_strings_are_still_extracted` 取代 `test_gui_menu_translation_markers_use_n_`。舊 tuple 中仍會顯示的 44 個字串（48 減去 C 組四個孤立字串），每一個都必須是 `client/` 中（排除 `tests/` 與 `.venv/`，即 `generate-pot.bat` 的檔案集合）某個 `_()`/`N_()` 呼叫的字面值第一個參數。它不在乎標記放在哪裡，所以不是位置守門，但若某個定義處失去 `N_()` 就會失敗。它的註解避免出現舊常數的名稱，讓驗收 grep 2 保持沒有輸出。
 
 ### 新增的測試
 
 - `tests/test_menu_builder.py`（不用 wx、不用 stub scope，直接 import `ui.menu_builder`）：
-  - 以記錄用 fake 與 `translate=lambda s: f"T[{s}]"` 建立預設 descriptor 的選單，紀錄等於特性測試 1 的預期紀錄（不含 `Enable` 部分）。
+  - 以記錄用 fake 與 `translate=lambda s: f"T[{s}]"` 建立預設 descriptor 的選單，紀錄等於特性測試 1 的預期紀錄（不含 `Enable` 部分；使用 `tests/menu_recording.py` 中同一份 `DOCUMENT_MENU_BUILD_LOG` 字面值）。
   - command handler 照原樣綁定並收到 event；子選單 handler 收到 casefold 後的格式 key；綁定目標永遠是頂層 menu。
   - 回傳值：每個 action 一個項目，子選單 action 對應 `AppendSubMenu` 的回傳值。
   - 缺少或多出 handler 時丟出 `ValueError`，且不做任何選單呼叫。
   - 自訂 `descriptors`（一個 command 加上一個格式 key 大小寫混合的 submenu）依序建立並綁定。
   - `apply_document_menu_state` 依給定順序啟用，未知的 action 丟出 `KeyError`。
   - `ui/menu_builder.py` 沒有 import `wx`（以 AST 檢查其 import）。
-- `tests/test_action_menu.py` 的 `test_menu_labels_have_zh_tw_translations`：每個文件選單 label、每個 Export 子選單 label、每個 Translation 選單 label，在 `client/locales/zh_TW/LC_MESSAGES/dotexpress.po` 中都有 `msgstr` 非空的條目（測試內附一個小的 msgid/msgstr 解析器）。這延續了被刪除的標記 tuple 的目的：選單確實有翻譯。它檢查的是使用者看得到的翻譯，而不是 `N_()` 放在哪裡。
+- `tests/test_action_menu.py` 的 `test_menu_labels_have_zh_tw_translations`：每個文件選單 label、每個 Export 子選單 label、每個 Translation 選單 label，在 `client/locales/zh_TW/LC_MESSAGES/dotexpress.po` 中都有 `msgstr` 非空的條目（測試內附一個小的 msgid/msgstr 解析器，會略過註解與 obsolete `#~` 條目；目前 `.po` 中沒有 fuzzy 條目）。共檢查 16 個 label：8 個文件選單、3 個 Export 子選單與 5 個 Translation 選單 label。這延續了被刪除的標記 tuple 的目的：選單確實有翻譯。它檢查的是使用者看得到的翻譯，而不是 `N_()` 放在哪裡。
 
 分別單獨執行 `tests.test_menu_builder`、`tests.test_gui_document_flows`、`tests.test_action_menu`、`tests.test_document_formats`，再以數個固定 seed 打亂順序一起執行（scratchpad 的 `shuffle_harness.py`，seed 1-5）。`ui/menu_builder` 是 `gui` 在 `StubScope.loading()` 內 import 的新純模組（P0 審查備註）。
 
@@ -294,8 +300,8 @@ def apply_document_menu_state(items_by_action: Mapping[str, object], enabled_by_
 5. msgid 掃描：`python -I <scratchpad>/p12/tools/msgid_scan.py client --compare <scratchpad>/p12/base_msgids.json` 回報 353 個原始碼 msgid。它列出的差異（相對於 `.pot` 與已儲存的基線）恰好只有 C 組四個字串（"Text files (*.txt)|*.txt", "PDF files (*.pdf)|*.pdf", "Word documents (*.docx)|*.docx", "EPUB books (*.epub)|*.epub"）。因為這些預期中的差異，工具會以 1 結束。出現任何其他差異即不符合此標準。
 6. `git diff main --stat -- client/locales scripts` 為空。
 7. 聚焦驗證通過：
-   `cd client && python3 -m unittest tests.test_document_formats tests.test_action_menu tests.test_menu_builder tests.test_gui_document_flows tests.test_i18n tests.test_removed_dead_code tests.test_translation_menu tests.test_export_results tests.test_user_preprocessing_script tests.test_dictionary_management_dialog tests.test_wx_stub -v`
-8. 完整測試：`cd client && python3 -m unittest discover -s tests -p "test_*.py"` 回報 `failures=1`（只有已知的 P2-5 失敗）、`errors=0`、`skipped=7`，測試數為 575 加上新增的測試。
+   `cd client && python3 -m unittest tests.test_document_formats tests.test_action_menu tests.test_menu_builder tests.test_gui_document_flows tests.test_i18n tests.test_removed_dead_code tests.test_translation_menu tests.test_export_results tests.test_user_preprocessing_script tests.test_dictionary_management_dialog tests.test_wx_stub -v`（203 個測試，全部通過）。
+8. 完整測試：`cd client && python3 -m unittest discover -s tests -p "test_*.py"` 回報 `failures=1`（只有已知的 P2-5 失敗）、`errors=0`、`skipped=7`，測試數為 614（575 加上 40 個新的測試執行，減去被替換的一個標記測試）。
 9. 測試計畫中的打亂順序執行沒有新的失敗或錯誤。
 10. Windows 上的項目（無法在這台 Linux 主機執行，列為驗證債，見下文）。
 

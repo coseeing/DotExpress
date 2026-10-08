@@ -39,12 +39,12 @@ class TranslationFallbackTest(unittest.TestCase):
         self.assert_character_fallback(result, "原文", "⣿⣿")
 
     def test_math_uses_same_character_contract(self) -> None:
-        result = FallbackMathTranslator().translate("1 + 2", braille_code="Nemeth")
+        result = FallbackMathTranslator().translate("1 + 2", braille_code="Nemeth", language="zh_TW")
 
         self.assert_character_fallback(result, "1 + 2", "⣿⠀⣿⠀⣿")
 
     def test_empty_source_returns_empty_result(self) -> None:
-        result = FallbackMathTranslator().translate("", braille_code="Nemeth")
+        result = FallbackMathTranslator().translate("", braille_code="Nemeth", language="zh_TW")
 
         self.assert_character_fallback(result, "", "")
 

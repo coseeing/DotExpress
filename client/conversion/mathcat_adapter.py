@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import sys
 
-from config import DEFAULT_MATH_BRAILLE_TABLE, MATH_BRAILLE_TABLES, get_lang
+from conversion.math_braille_codes import DEFAULT_MATH_BRAILLE_TABLE, MATH_BRAILLE_TABLES
 
 
 class MathCATError(Exception):
@@ -68,24 +68,30 @@ class MathCATAdapter:
 			return braille_code
 		return DEFAULT_MATH_BRAILLE_TABLE
 
-	def _configure_runtime(self, libmathcat, braille_code: str | None = None) -> None:
-		language = get_lang().replace("_", "-").lower()
-		speech_style = self._resolve_speech_style(language)
+	def _configure_runtime(self, libmathcat, braille_code: str | None, language: str) -> None:
+		mathcat_language = language.replace("_", "-").lower()
+		speech_style = self._resolve_speech_style(mathcat_language)
 		selected_braille_code = self._normalize_braille_code(braille_code)
 		# Re-apply runtime configuration for each conversion. In the stripped-down
 		# embedding used by DotExpress, later SetMathML calls can fail if MathCAT
 		# keeps stale rule/preference state between requests.
 		libmathcat.SetRulesDir(str(self._rules_dir()))
-		libmathcat.SetPreference("Language", language)
+		libmathcat.SetPreference("Language", mathcat_language)
 		libmathcat.SetPreference("SpeechStyle", speech_style)
 		libmathcat.SetPreference("Verbosity", "Medium")
 		libmathcat.SetPreference("TTS", "None")
 		libmathcat.SetPreference("BrailleCode", selected_braille_code)
 
-	def get_braille_for_mathml(self, mathml_text: str, braille_code: str | None = None) -> str:
+	def get_braille_for_mathml(
+		self,
+		mathml_text: str,
+		braille_code: str | None = None,
+		*,
+		language: str,
+	) -> str:
 		try:
 			libmathcat = self._load_libmathcat()
-			self._configure_runtime(libmathcat, braille_code)
+			self._configure_runtime(libmathcat, braille_code, language)
 			libmathcat.SetMathML(mathml_text)
 			return libmathcat.GetBraille("")
 		except MathCATError:

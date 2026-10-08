@@ -36,7 +36,7 @@ class FakeMathTranslator:
         self.calls = []
         self.error = error
 
-    def translate(self, source: str, *, braille_code: str) -> TranslationResult:
+    def translate(self, source: str, *, braille_code: str, language: str) -> TranslationResult:
         self.calls.append((source, braille_code))
         if self.error is not None:
             raise self.error

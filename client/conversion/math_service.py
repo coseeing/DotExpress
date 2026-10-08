@@ -37,17 +37,31 @@ def latex_to_mathml(latex_text: str) -> str:
 	return mathml.replace("<mi>⇀</mi>", "<mo>⇀</mo>")
 
 
-def mathml_to_nemeth_braille(mathml_text: str, braille_code: str = DEFAULT_MATH_BRAILLE_TABLE) -> str:
+def mathml_to_nemeth_braille(
+	mathml_text: str,
+	braille_code: str = DEFAULT_MATH_BRAILLE_TABLE,
+	*,
+	language: str,
+) -> str:
 	from conversion.mathcat_adapter import get_shared_mathcat_adapter
 
-	return get_shared_mathcat_adapter().get_braille_for_mathml(mathml_text, braille_code=braille_code)
+	return get_shared_mathcat_adapter().get_braille_for_mathml(
+		mathml_text,
+		braille_code=braille_code,
+		language=language,
+	)
 
 
-def translate_math_segment(latex_text: str, braille_code: str = DEFAULT_MATH_BRAILLE_TABLE) -> str:
+def translate_math_segment(
+	latex_text: str,
+	braille_code: str = DEFAULT_MATH_BRAILLE_TABLE,
+	*,
+	language: str,
+) -> str:
 	mathml_text = None
 	try:
 		mathml_text = latex_to_mathml(latex_text)
-		return mathml_to_nemeth_braille(mathml_text, braille_code=braille_code)
+		return mathml_to_nemeth_braille(mathml_text, braille_code=braille_code, language=language)
 	except Exception as error:
 		logger.exception(
 			"Math conversion failed | stage=%s | latex=%r | mathml=%r",

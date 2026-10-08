@@ -43,7 +43,7 @@ class RecordingMathTranslator:
     def __init__(self) -> None:
         self.calls = []
 
-    def translate(self, source, *, braille_code):
+    def translate(self, source, *, braille_code, language):
         from translate import TranslationResult
 
         self.calls.append((source, braille_code))

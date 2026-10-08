@@ -1,5 +1,5 @@
 from adapters.translation.contracts import TranslationRuntime
-from config import DEFAULT_MATH_BRAILLE_TABLE
+from config import DEFAULT_MATH_BRAILLE_TABLE, get_lang
 from conversion.text.char_maps import translate__mapping_char
 from conversion.output import (
     ConversionOutput,
@@ -63,6 +63,7 @@ def translate_with_language_dual_view_segments(
             result = runtime.math_translator.translate(
                 segment["text"],
                 braille_code=math_braille_code,
+                language=get_lang(),
             )
             segments_records.append(DualViewSegment(result=result, source_kind="math"))
     return segments_records

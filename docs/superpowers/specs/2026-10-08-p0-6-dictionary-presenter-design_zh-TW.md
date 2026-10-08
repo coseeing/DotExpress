@@ -12,6 +12,8 @@
 
 對使用者的影響：無。每個對話框、訊息框、字串、標題、圖示、按鈕旗標、父視窗、提示與訊息的順序、檔案操作、清單選取與設定寫入都與現在完全相同。沒有 msgid 變動，因此不動 `client/locales/zh_TW/LC_MESSAGES/dotexpress.po` 與 `.mo`。版面不變，不需要截圖。
 
+修訂：依規劃結果更正（`docs/superpowers/plans/2026-10-08-p0-6-dictionary-presenter.md` 的「Spec Corrections and Refinements」）：驗收第 2、3 點依該處寫法檢查（排除 `def` 那一行、比對完整識別字）；只改大小寫的重新命名只在區分大小寫的檔案系統上會改名；commit 由三個改為八個；額外的 stub 常數（`NO`、`ID_CANCEL`、`gui_frame_stubs().ID_EDIT`）；dialog 建構子的順序；確切的測試數（presenter 43 個、dialog 26 個、frame 流程 68 個、完整測試 550 個）；`_show_file_error` 保留 `parent` 參數。
+
 ## 方法與基準（2026-10-08 於 `refactor/p0-6-dictionary-presenter`、HEAD `70aae6b` 驗證，P0-1 至 P0-5 已合併）
 
 1. 閱讀 `client/gui.py`（frame 狀態 294-300、563-609，工作流 1234-1438）、`client/dialog.py`（`DictionaryNameDialog` 191-239、`DictionaryManagementDialog` 650-845）、`client/dictionaries/` 下每個模組、`client/translation/dictionary_state.py`、`client/settings/translation.py`、`client/config.py`（`set_selected_dictionary`）、`client/shared/name_validation.py` 與 `scripts/generate-pot.bat`。
@@ -59,7 +61,7 @@
 
 **重新命名**（按鈕只在選取非預設字典時啟用）。
 1. 若 `is_default_dictionary(name)`：靜默回傳 `None`（無訊息）。
-2. 名稱迴圈：標題 `_("Rename Dictionary")`、初值為選取的名稱、送出 `rename_dictionary_after_name_prompt(dir, selected, new)`（strip 後同名：不做檔案操作，回傳既有路徑；只改大小寫：會改名）。
+2. 名稱迴圈：標題 `_("Rename Dictionary")`、初值為選取的名稱、送出 `rename_dictionary_after_name_prompt(dir, selected, new)`（strip 後同名：不做檔案操作，回傳既有路徑；只改大小寫：在區分大小寫的檔案系統上會改名；在 Windows 上 NTFS 不分大小寫，`rename_dictionary` 視目標為已存在並拋出 `FileExistsError`，因此迴圈顯示重複名稱框並再次提示）。
 3. `ValueError`：Info 框 `str(exc)`，回傳 `None`。`OSError`：Error 框 `_("Failed to save dictionary: {error}")`，回傳 `None`。（`FileExistsError` 由迴圈處理，不會到這裡。）
 4. 取消：回傳 `None`。
 5. 成功：讀取作用中名稱，以 `path.stem` refresh，以 `plan_dictionary_state_after_rename(active, selected, path.stem, names)` 規劃（舊程式碼在這裡透過 `get_dictionary_names_for_dialog` 又 refresh 一次）。若規劃出的作用中名稱不同，呼叫 `_set_active_dictionary(planned)`。回傳規劃的管理選取。
@@ -140,6 +142,7 @@ class DictionaryManagementPresenter:  # 滿足 DictionaryManagementActions
 - `refresh(preferred)`：`ensure_default_dictionary(dir)`，以 `list_dictionary_names(dir)` 取代清單，回傳 `resolve_management_selection(list, preferred)`。即今天的 `_refresh_dictionary_names`。
 - `dictionary_names` 每次回傳新 list，frame 與 dialog 都無法改動 presenter 的清單。
 - `dictionary_path(name)` 即 `dictionary_path_for_name(name, dir)`。
+- 建構子不做 I/O：第一次 `refresh()` 前清單為空；磁碟上新加入的檔案要到下一次 `refresh()` 後才會出現在 `dictionary_names`。
 - 一個私有 helper 執行名稱迴圈：`prompt_dictionary_name_until_success(initial, prompt_name=lambda n: view.prompt_dictionary_name(title, n), on_submit=submit, on_duplicate=lambda n: view.show_error(_('Dictionary "{name}" already exists.').format(name=n.strip())))`。取代各三份的 lambda。
 - 五個流程逐步依照流程清單，對應如下：Info 框對應 `view.show_info(msg)`，Error 框對應 `view.show_error(msg)`（檔案錯誤先格式化為 `_("Failed to ... {error}").format(error=exc)`），確認框對應 `view.confirm(msg, _("Confirm Delete Dictionary"))`，檔案對話框對應 `choose_import_path(_("Import Dictionary"))` 與 `choose_export_path(_("Export Dictionary"), f"{name}.csv")`，「refresh」對應 `self.refresh(...)`，「frame 的快取清單」對應 presenter 的清單，「作用中名稱」對應 `get_active_name()`，`_set_active_dictionary` 對應 `set_active_name`。
 - 流程清單中的例外特性維持原樣：新增不攔截 `OSError`；刪除不攔截 `ValueError`；匯入把所有 `ValueError` 都對應到標頭訊息；以預設名稱重新命名時無訊息回傳 `None`；新增與匯入從不改變作用中字典。每一項都由 presenter 測試釘住，並列於後續工作。
@@ -147,16 +150,16 @@ class DictionaryManagementPresenter:  # 滿足 DictionaryManagementActions
 
 ### `DictionaryManagementDialog`（`client/dialog.py`）
 
-- 建構子：`DictionaryManagementDialog(parent, actions: DictionaryManagementActions, selected_name: str)`。保存 `self._actions`，以 `self.refresh_dictionaries(actions.dictionary_names, selected_name)` 初始化清單。移除 `dictionary_dir` 與五個回呼的參數及屬性。
+- 建構子：`DictionaryManagementDialog(parent, actions: DictionaryManagementActions, selected_name: str)`。保存 `self._actions`，維持舊順序（在 `_build_ui()` 之前設定 `self._dictionary_names = list(actions.dictionary_names)`，讓建立元件時清單已存在），接著呼叫 `self.refresh_dictionaries(self._dictionary_names, selected_name)`；其值與 `refresh_dictionaries(actions.dictionary_names, selected_name)` 相同。移除 `dictionary_dir` 與五個回呼的參數及屬性。
 - `_load_dictionary_counts` 改讀 `load_dictionary_entries(self._actions.dictionary_path(name))`。項目數仍是 dialog 的職責（顯示資料，不是清單本身）。
-- dialog 繪製的清單（`self._dictionary_names`）只從 `actions.dictionary_names` 取得快照。`_refresh_from_disk` 改為呼叫 `self.refresh_dictionaries(self._actions.dictionary_names, preferred)` 的 helper。`dialog.py` 不再 import `list_dictionary_names`。
+- dialog 繪製的清單（`self._dictionary_names`）只從 `actions.dictionary_names` 取得快照。`_refresh_from_disk` 改為 `_refresh_from_actions(preferred)`，呼叫 `self.refresh_dictionaries(self._actions.dictionary_names, preferred)`。`dialog.py` 不再 import `list_dictionary_names`。
 - 按鈕 handler 以相同的選取檢查與「只有非 `None` 結果才 refresh」規則呼叫 `self._actions.add(self)`、`delete(self, selected)`、`rename(self, selected)`、`import_from_file(self)`、`export_to_file(self, selected)`。匯出從不 refresh。編輯、關閉、選取與欄寬不變。
 - dialog 以流程清單中完全相同的 wx 呼叫實作 `DictionaryManagementView`，父視窗為 `self`：
   - `prompt_dictionary_name`：搬移今天 `gui._prompt_for_dictionary_name` 的內容。
   - `show_info`、`show_error`：Info 框與 Error 框。
   - `confirm`：`wx.MessageBox(message, caption, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, parent=self) == wx.YES`。
   - `choose_import_path`、`choose_export_path`：兩個 `wx.FileDialog` 區塊，回傳 `Path(GetPath())` 或 `None`。
-- CSV 篩選字串隨檔案對話框搬移：`dialog.py` 新增 `CSV_WILDCARD = "CSV files (*.csv)|*.csv"`，並在呼叫當下翻譯，與現在的 `gui._get_csv_wildcard` 相同。msgid 仍可透過 `gui.py` 既有的 `N_("CSV files (*.csv)|*.csv")` 標記擷取；本變更不動該標記。
+- CSV 篩選字串隨檔案對話框搬移：`dialog.py` 新增 `CSV_WILDCARD = "CSV files (*.csv)|*.csv"`，並在呼叫當下翻譯（在 `choose_import_path` 與 `choose_export_path` 內執行 `_(CSV_WILDCARD)`），與現在的 `gui._get_csv_wildcard` 相同。msgid 仍可透過 `gui.py` 既有的 `N_("CSV files (*.csv)|*.csv")` 標記擷取；本變更不動該標記。
 
 ### `BrailleFrame`（`client/gui.py`）
 
@@ -164,7 +167,7 @@ class DictionaryManagementPresenter:  # 滿足 DictionaryManagementActions
 - `get_dictionary_names_for_dialog()` 保留名稱與契約：`refresh(active)` 後回傳 `dictionary_names`。呼叫端不變。
 - `on_open_dictionary_management`：`selected = self._dictionary_presenter.refresh(active)`，接著 `DictionaryManagementDialog(self, self._dictionary_presenter, selected)`。編輯分支使用 `self._dictionary_presenter.dictionary_path(edit_name)`。`SpeechSymbolsDialog` 部分不變（歸 S-4/P1）。
 - `_set_active_dictionary` 原封不動留在 frame，作為 presenter 的 `set_active_name`。
-- 移除：`_dictionary_names`、`_refresh_dictionary_names`、五個回呼、`_prompt_for_dictionary_name`、`CSV_WILDCARD`、`_get_csv_wildcard`，以及因此不再使用的 import（`create_dictionary`、`delete_dictionary`、`export_dictionary`、`import_dictionary`、`list_dictionary_names`、`ensure_default_dictionary`、`is_default_dictionary`、`prompt_dictionary_name_until_success`、`rename_dictionary_after_name_prompt`、`plan_dictionary_state_after_*`、`resolve_management_selection`、`DictionaryNameDialog`）。`self.dictionary_dir`、`_get_selected_dictionary_path` 與 `_show_file_error` 保留（其他功能使用）。
+- 移除：`_dictionary_names`、`_refresh_dictionary_names`、五個回呼、`_prompt_for_dictionary_name`、`CSV_WILDCARD`、`_get_csv_wildcard`，以及因此不再使用的 import（`create_dictionary`、`delete_dictionary`、`export_dictionary`、`import_dictionary`、`list_dictionary_names`、`ensure_default_dictionary`、`is_default_dictionary`、`prompt_dictionary_name_until_success`、`rename_dictionary_after_name_prompt`、`plan_dictionary_state_after_*`、`resolve_management_selection`、`DictionaryNameDialog`）。`self.dictionary_dir`、`_get_selected_dictionary_path` 與 `_show_file_error` 保留（其他功能使用）。`_show_file_error` 保留 `parent` 參數，即使已沒有呼叫端傳入；移除它不在範圍內。`dictionary_path_for_name`、`get_dictionary_directory` 與 `N_("CSV files (*.csv)|*.csv")` 標記也保留。
 - 不改 `_MENU_TRANSLATION_MARKERS`。
 
 ### 字串與在地化
@@ -173,11 +176,11 @@ class DictionaryManagementPresenter:  # 滿足 DictionaryManagementActions
 
 ### Commit 順序
 
-每個 commit 都讓完整測試維持基準結果，外加它新增的測試。
+每個 commit 都讓完整測試維持基準結果，外加它新增的測試。共八個 commit：
 
-1. `test:` + `feat:` 先寫測試的 presenter。逐流程撰寫 `tests/test_dictionary_presenter.py`（refresh 與名稱、新增、刪除、重新命名、匯入、匯出），每段先紅，再實作 `dictionaries/presenter.py` 對應部分。可為一或多個 commit；此時 app 尚未使用 presenter。
-2. `refactor: route dictionary management through presenter`。必須是單一 commit，因為 dialog 建構子與其唯一呼叫端要一起改：先更新或新增 dialog 測試（actions 接線、view 方法），再讓 `DictionaryManagementDialog` 改用新建構子與 view 方法，`BrailleFrame` 建立並傳入 presenter，連同下述 `test_gui_document_flows` 的修改。
-3. `refactor: remove dead dictionary callbacks from gui`。若步驟 2 尚未移除，刪除舊回呼、`_prompt_for_dictionary_name`、CSV 篩選字串 helper 與未使用的 import。不影響行為。
+1. 至 6. `feat:` 先寫測試的 presenter，每部分一個 commit，各自包含測試與程式碼，並先展示紅燈：骨架、protocol、`refresh` 與名稱清單；新增；刪除；重新命名；匯入；匯出。此時 app 尚未使用 presenter。
+7. `refactor: route dictionary management through presenter`。必須是單一 commit，因為 dialog 建構子與其唯一呼叫端要一起改：先更新或新增 dialog 測試（actions 接線、view 方法），再讓 `DictionaryManagementDialog` 改用新建構子與 view 方法，`BrailleFrame` 建立並傳入 presenter，連同下述 `test_gui_document_flows` 的修改。此 commit 也刪除五個 frame 回呼與 `_refresh_dictionary_names`，因為切換後它們會讀取已不存在的 `self._dictionary_names`。
+8. `refactor: remove dead dictionary helpers from gui`。刪除 `_prompt_for_dictionary_name`、`CSV_WILDCARD`、`_get_csv_wildcard` 與 commit 7 留下的未使用 import。不影響行為。
 
 ## 測試策略
 
@@ -185,31 +188,32 @@ class DictionaryManagementPresenter:  # 滿足 DictionaryManagementActions
 
 純 `unittest`，不用 wx、不用 stub。以真實的 `tempfile.TemporaryDirectory` 作為 `dictionary_dir`。`FakeView` 依序把每個呼叫記錄成 tuple（`("prompt", title, initial)`、`("info", msg)`、`("error", msg)`、`("confirm", msg, caption)`、`("choose_import", title)`、`("choose_export", title, default_file)`），並從預先排好的佇列回答。作用中名稱放在 `get_active_name` 背後的單元素 list；`set_active_name` 是 `Mock`。預期字串以 `i18n._` 建立（catalog 固定為 zh_TW，英文字面值不會相符）。每個測試都斷言**完整的** `view.calls`、回傳值、磁碟上的檔案、`dictionary_names` 與 `set_active_name` 的呼叫。錯誤注入使用 `patch.object(presenter_module, "<manager 函式>", side_effect=PermissionError("denied"))`。
 
-最少案例：
+共 7 個類別 43 個測試。`FakeView` 依序取出預先排好的回答（`None` 代表取消）；出現未預期的提示會拋出 `IndexError`，因此每個測試也證明沒有多餘的提示。來源檔不存在的匯入測試以 `validate_dictionary_csv` 相同的方式開啟該路徑來建立預期訊息，因此在任何平台上文字都正確。案例：
 
-- 模組：`presenter.py` 不 import `wx`（以 AST 檢查 import）。
-- `refresh`：缺少時建立 `default.csv`、以不分大小寫排序列出、回傳偏好名稱或退回 `default`；`dictionary_names` 回傳副本。
+- 模組：`presenter.py` 不 import `wx`（以 AST 檢查 import）；view 與 actions 類別是 `Protocol`；presenter 與 `DictionaryManagementActions` 提供相同的成員。
+- `refresh`：建構子不做 I/O；缺少時建立 `default.csv`、以不分大小寫排序列出、回傳偏好名稱或退回 `default`；磁碟上新加入的檔案要到下一次 `refresh` 才出現；`dictionary_names` 回傳副本。
 - `dictionary_path`。
 - 新增：成功（以 `""` 提示 `Add Dictionary`、建立檔案、回傳新名稱、清單更新、未呼叫 `set_active_name`）；取消（無檔案、無訊息）；先重複再成功（以 strip 後名稱顯示 Error 框，以輸入名稱再次提示）；`ValueError`（保留名稱：Info 框 `str(exc)`，回傳 `None`）；`create_dictionary` 的 `OSError` 會拋出。
 - 刪除：預設字典（只有 Info 框、無確認）；拒絕確認（檔案保留）；成功刪除非作用中名稱（作用中不變、未呼叫 `set_active_name`、回傳 `default`）；成功刪除作用中名稱（以規劃的退回名稱呼叫 `set_active_name`，例如從 `[alpha, beta, default]` 刪除 `beta` 會啟用 `alpha`）；`OSError`（先確認，再 Error 框 `Failed to delete dictionary: ...`，回傳 `None`，清單與作用中不變）；`" default"` 檔名的 `ValueError` 會拋出。
-- 重新命名：預設字典（無 view 呼叫、`None`）；取消；成功（非作用中）；成功（作用中，`set_active_name(new)`）；同名（不改檔、不呼叫 `set_active_name`、回傳原名）；只改大小寫（會改名）；先重複再成功；`ValueError`（Info 框 `str(exc)`）；`rename_dictionary_after_name_prompt` 的 `OSError`（Error 框 `Failed to save dictionary: ...`）。
-- 匯入：取消檔案對話框（不提示）；成功（以來源主幹提示 `Add Dictionary`、複製檔案、未呼叫 `set_active_name`）；先重複再成功；缺少標頭（標頭訊息的 Error 框）；fake view 回傳的無效名稱（同樣是標頭訊息）；來源檔不存在（`FileNotFoundError`：Error 框 `Failed to import dictionary: ...`）；取消名稱提示。
+- 刪除與重新命名遇到 `OSError` 時，作用中名稱與清單都不變。
+- 重新命名：預設字典（無 view 呼叫、`None`）；取消；成功（非作用中）；成功（作用中，`set_active_name(new)`）；同名（不改檔、不呼叫 `set_active_name`、回傳原名）；只改大小寫（會改名；在不分大小寫的檔案系統上該測試自行略過）；先重複再成功；`ValueError`（Info 框 `str(exc)`）；`rename_dictionary_after_name_prompt` 的 `OSError`（Error 框 `Failed to save dictionary: ...`）。
+- 匯入：取消檔案對話框（不提示）；成功（以來源主幹提示 `Add Dictionary`、複製檔案、未呼叫 `set_active_name`）；先重複再成功；重複名稱在驗證標頭之前回報；缺少標頭（標頭訊息的 Error 框）；fake view 回傳的無效名稱（同樣是標頭訊息）；來源檔不存在（`FileNotFoundError`：Error 框 `Failed to import dictionary: ...`）；取消名稱提示。
 - 匯出：清單為空（無 view 呼叫）；取消；成功（以 `<name>.csv` 呼叫 `choose_export`、複製檔案）；`OSError`（Error 框 `Failed to export dictionary: ...`）。
 
 ### 修改：`client/tests/test_dictionary_management_dialog.py`
 
-`_make_dialog` 改設定假的 `_actions`（名稱、`dictionary_path`、記錄動作呼叫），取代 `dictionary_dir`。既有測試保留原斷言。磁碟 refresh 測試改為「動作後的 refresh 從 `actions.dictionary_names` 取名稱，而非磁碟」（假物件回傳磁碟上不存在的名稱）。新增測試：
+`_make_dialog` 改設定假的 `_actions`（名稱、`dictionary_path`、記錄動作呼叫），取代 `dictionary_dir`。既有測試保留原斷言。磁碟 refresh 測試 `test_disk_refresh_discovers_new_dictionary_files` 改為 `test_refresh_after_action_takes_names_from_actions_not_disk`（假物件回傳磁碟上不存在的名稱）。本模組由 8 個測試增為 26 個：被取代的測試，加上 `DictionaryManagementActionsWiringTest`（8 個）與 `DictionaryManagementViewTest`（10 個）。新增測試：
 
 - 新增、刪除、重新命名、匯入各自以 `(dialog[, selected])` 呼叫動作，並以回傳名稱 refresh；`None` 結果不動清單；刪除、重新命名、匯出在沒有選取時不做事；匯出從不 refresh。
 - 每個 view 方法恰好發出流程清單中的 wx 呼叫（訊息、標題、旗標、`parent=dialog`；檔案對話框標題、篩選字串、`defaultFile`、style），並在載入的 dialog 模組上 patch `wx.MessageBox`、`wx.FileDialog` 與 `DictionaryNameDialog`。取消路徑回傳 `None` 或 `False`。
 
-本模組繼續使用 `wx_stub.load_speech_dialog()`。若旗標比較需要不同的值，plan 可以在 `speech_dialog_stubs()` 加入明確常數（`YES`、`YES_NO`、`NO_DEFAULT`、`ICON_WARNING`、`ICON_INFORMATION`、`ID_OK`、`FD_OPEN`、`FD_SAVE`、`FD_OVERWRITE_PROMPT`），前提是 `test_speech_symbols_dialog` 不改也仍通過。
+本模組繼續使用 `wx_stub.load_speech_dialog()`。`speech_dialog_stubs()` 為 `ICON_INFORMATION`、`ICON_WARNING`、`YES_NO`、`NO_DEFAULT`、`YES`、`NO`、`FD_OPEN`、`FD_SAVE`、`FD_OVERWRITE_PROMPT` 設定互不相同的 2 的冪次值，並設定一般 id `ID_OK = 5100` 與 `ID_CANCEL = 5101`（加入 `NO` 與 `ID_CANCEL`，讓取消與「否」路徑使用真實的值）。沒有這些常數時，stub 的自動子模組會把 `wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING` 折成 `wx.YES_NO`，旗標斷言就抓不到遺漏的旗標。`gui_frame_stubs()` 加入 `ID_EDIT = 5030`：該 stub 的模組 `__getattr__` 每次存取都回傳新的類別，沒有它時 `gui.wx.ID_EDIT != gui.wx.ID_EDIT`，測試無法走到 `on_open_dictionary_management` 的編輯分支。`test_speech_symbols_dialog`、`test_wx_stub`、`test_dialog_display` 與 `test_dialog_validation` 不改也通過。
 
 ### 修改：`client/tests/test_gui_document_flows.py`
 
 - `_initialize_state_with_loaded_tables` 會 patch `gui.ensure_default_dictionary` 與 `gui.list_dictionary_names`（之後 `gui` 上不再有），並 mock `_refresh_dictionary_names`。改為 patch `gui.DictionaryManagementPresenter`（`dictionary_names` 為 `["default"]` 的 mock），或 patch presenter 模組上的這兩個函式。斷言不變。
 - 移除設定 `frame._dictionary_names` 的行；這些測試本來就 mock `get_dictionary_names_for_dialog`。
-- 新增：`on_open_dictionary_management` 以 `(frame, frame._dictionary_presenter, <refresh 後的選取>)` 建立 dialog；`wx.ID_EDIT` 且有名稱時以 `presenter.dictionary_path(name)` 開啟 `SpeechSymbolsDialog`；其他結果不開任何東西。`get_dictionary_names_for_dialog` 以作用中名稱 refresh 並回傳 presenter 的名稱。`_initialize_state` 建立的 presenter 會回呼 `_set_active_dictionary`，後者恰好寫一次 `set_selected_dictionary`。
+- 新增：`on_open_dictionary_management` 以 `(frame, frame._dictionary_presenter, <refresh 後的選取>)` 建立 dialog；`wx.ID_EDIT` 且有名稱時以 `presenter.dictionary_path(name)` 開啟 `SpeechSymbolsDialog`；其他結果不開任何東西。`get_dictionary_names_for_dialog` 以作用中名稱 refresh 並回傳 presenter 的名稱。`_initialize_state` 建立的 presenter 會回呼 `_set_active_dictionary`，後者恰好寫一次 `set_selected_dictionary`（透過 frame 建立的 presenter 實際執行一次刪除）。類別上已沒有五個回呼與 `_refresh_dictionary_names`；最後一個測試（隨 commit 8）檢查 `gui` 已沒有那些無用的 helper 與 import，而 `dictionary_path_for_name`、`get_dictionary_directory`、`_get_selected_dictionary_path` 與 `_show_file_error` 仍在。所有新測試都在 `DictionaryManagementFrameTest`（7 個）；本模組由 61 個測試增為 68 個。
 
 ### 不變的安全網
 
@@ -218,13 +222,13 @@ class DictionaryManagementPresenter:  # 滿足 DictionaryManagementActions
 ## 驗收條件
 
 1. `client/dictionaries/presenter.py` 存在、不 import `wx`，並定義 `DictionaryManagementPresenter`、`DictionaryManagementView` 與 `DictionaryManagementActions`。
-2. 在 `client/` 中 `tests/` 以外：`prompt_dictionary_name_until_success(` 恰好被呼叫一次（在 presenter），msgid `Dictionary "{name}" already exists.` 恰好出現一次。
-3. `client/gui.py` 不含 `_dictionary_names`、`_refresh_dictionary_names`、`add_dictionary`、`delete_dictionary_from_dialog`、`rename_dictionary_from_dialog`、`import_dictionary_from_dialog`、`export_dictionary_from_dialog`、`_prompt_for_dictionary_name`、`_get_csv_wildcard`。
+2. 在 `client/` 中 `tests/` 以外：`prompt_dictionary_name_until_success(` 恰好被呼叫一次（在 presenter），msgid `Dictionary "{name}" already exists.` 恰好出現一次。以 grep 檢查呼叫時必須排除 `dictionaries/name_prompt.py` 中 `def prompt_dictionary_name_until_success(` 那一行，它也符合同一段文字。
+3. `client/gui.py` 不含 `_dictionary_names`、`_refresh_dictionary_names`、`add_dictionary`、`delete_dictionary_from_dialog`、`rename_dictionary_from_dialog`、`import_dictionary_from_dialog`、`export_dictionary_from_dialog`、`_prompt_for_dictionary_name`、`_get_csv_wildcard` 這些完整識別字（`grep -nwE`）。單純的子字串檢查不可能通過：`_dictionary_names` 是保留下來的 `get_dictionary_names_for_dialog` 的一部分。
 4. `DictionaryManagementDialog.__init__` 接收 `(parent, actions, selected_name)`。`client/dialog.py` 不呼叫 `list_dictionary_names`。
 5. `client/` 中 `tests/` 以外傳給 `_()`/`N_()` 的 msgid 集合前後完全相同（以 AST 掃描檢查，因為 Linux 機器沒有安裝 `xgettext`）。`.po` 與 `.mo` 不變。
-6. 於 `client/`：`python -m unittest tests.test_dictionary_presenter tests.test_dictionary_management_dialog tests.test_dictionary_manager tests.test_dictionary_actions tests.test_translation_dictionary_state tests.test_dictionary_name_prompt tests.test_gui_document_flows -v` 通過。
-7. 於 `client/` 執行 `python -m unittest discover -s tests`：482 加上新測試，`failures=1`（只有 P2-5 案例），`skipped=7`，無 error。
-8. Windows 手動檢查（Linux 機器無法執行，必須回報為未執行）：開啟字典管理，逐一操作新增（含重複名稱）、重新命名（作用中與非作用中）、刪除（作用中與非作用中，之後確認設定顯示退回的字典）、匯入（有效檔案、無標頭檔案）、匯出與編輯。每個提示、訊息與清單選取都與目前版本一致。
+6. 於 `client/`：`python -m unittest tests.test_dictionary_presenter tests.test_dictionary_management_dialog tests.test_dictionary_manager tests.test_dictionary_actions tests.test_translation_dictionary_state tests.test_dictionary_name_prompt tests.test_gui_document_flows -v` 通過：`Ran 164 tests`（43 + 26 + 11 + 6 + 6 + 4 + 68）、`OK`。
+7. 於 `client/` 執行 `python -m unittest discover -s tests`：`Ran 550 tests`（482 加上 68 個新測試），`failures=1`（只有 P2-5 案例），`skipped=7`，無 error。
+8. Windows 手動檢查（Linux 機器無法執行，必須回報為未執行）：開啟字典管理，逐一操作新增（含重複名稱）、重新命名（作用中與非作用中；在該平台上只改大小寫的重新命名會顯示重複名稱框，與現在相同）、刪除（作用中與非作用中，之後確認設定顯示退回的字典）、匯入（有效檔案、無標頭檔案）、匯出與編輯。每個提示、訊息與清單選取都與目前版本一致。
 
 ## 範圍外
 
@@ -243,6 +247,8 @@ class DictionaryManagementPresenter:  # 滿足 DictionaryManagementActions
 - 匯入對每個 `ValueError` 都顯示標頭訊息，包括名稱無效或檔案無法解碼。
 - 新增與重新命名顯示的 `normalize_base_name` 錯誤是未翻譯的英文。
 - 新增與匯入忽略規劃出的 `active_selected_name`，因此這些流程從不修正或儲存檔案已遺失的作用中字典。
+- 在 NTFS 這類不分大小寫的檔案系統上，只改大小寫的重新命名（`alpha` 改為 `Alpha`）不會改名：`rename_dictionary` 拋出 `FileExistsError`，因此名稱迴圈顯示重複名稱框並再次提示。
+- `BrailleFrame._show_file_error` 保留一個已沒有呼叫端傳入的 `parent` 參數。
 
 ## 風險
 

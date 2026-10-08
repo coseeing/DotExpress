@@ -12,6 +12,8 @@ After this change:
 
 User-visible impact: none. Every dialog, message box, string, caption, icon, button flag, parent window, ordering of prompts and messages, file operation, list selection and settings write stays exactly as it is today. No msgid changes, so `client/locales/zh_TW/LC_MESSAGES/dotexpress.po` and the `.mo` are not touched. No layout changes, so no screenshot is needed.
 
+Revision: corrected after planning (`docs/superpowers/plans/2026-10-08-p0-6-dictionary-presenter.md`, "Spec Corrections and Refinements"): acceptance criteria 2 and 3 are checked as written there (the `def` line excluded, whole identifiers), a case-only rename renames only on a case-sensitive file system, eight commits instead of three, the extra stub constants (`NO`, `ID_CANCEL`, `gui_frame_stubs().ID_EDIT`), the dialog constructor order, the exact test counts (43 presenter tests, 26 dialog tests, 68 frame-flow tests, 550 in the full suite), and `_show_file_error` keeping its `parent` parameter.
+
 ## Method and Baseline (verified 2026-10-08 on `refactor/p0-6-dictionary-presenter`, HEAD `70aae6b`, P0-1 to P0-5 merged)
 
 1. Read `client/gui.py` (frame state 294-300, 563-609, the workflow 1234-1438), `client/dialog.py` (`DictionaryNameDialog` 191-239, `DictionaryManagementDialog` 650-845), every module under `client/dictionaries/`, `client/translation/dictionary_state.py`, `client/settings/translation.py`, `client/config.py` (`set_selected_dictionary`), `client/shared/name_validation.py` and `scripts/generate-pot.bat`.
@@ -59,7 +61,7 @@ All message boxes and dialogs below are parented on the management dialog: the d
 
 **Rename** (button enabled only for a non-default selection).
 1. If `is_default_dictionary(name)`: return `None` silently (no message).
-2. Name loop: title `_("Rename Dictionary")`, initial = the selected name, submit `rename_dictionary_after_name_prompt(dir, selected, new)` (same name after strip: no file operation, returns the existing path; case-only change: renames).
+2. Name loop: title `_("Rename Dictionary")`, initial = the selected name, submit `rename_dictionary_after_name_prompt(dir, selected, new)` (same name after strip: no file operation, returns the existing path; case-only change: renames on a case-sensitive file system; on Windows, where NTFS is case-insensitive, `rename_dictionary` sees the target as existing and raises `FileExistsError`, so the loop shows the duplicate box and prompts again).
 3. `ValueError`: info box `str(exc)`, return `None`. `OSError`: error box `_("Failed to save dictionary: {error}")`, return `None`. (`FileExistsError` never gets here; the loop handles it.)
 4. Cancel: return `None`.
 5. Success: read the active name, refresh with `path.stem`, plan with `plan_dictionary_state_after_rename(active, selected, path.stem, names)` (the old code refreshes a second time here through `get_dictionary_names_for_dialog`). If the planned active name differs, `_set_active_dictionary(planned)`. Return the planned management selection.
@@ -140,6 +142,7 @@ class DictionaryManagementPresenter:  # satisfies DictionaryManagementActions
 - `refresh(preferred)`: `ensure_default_dictionary(dir)`, replace the list with `list_dictionary_names(dir)`, return `resolve_management_selection(list, preferred)`. This is today's `_refresh_dictionary_names`.
 - `dictionary_names` returns a new list each time, so neither the frame nor the dialog can mutate the presenter's list.
 - `dictionary_path(name)` is `dictionary_path_for_name(name, dir)`.
+- The constructor does no I/O: the list is empty until the first `refresh()`, and files added on disk show up in `dictionary_names` only after the next `refresh()`.
 - One private helper runs the name loop: `prompt_dictionary_name_until_success(initial, prompt_name=lambda n: view.prompt_dictionary_name(title, n), on_submit=submit, on_duplicate=lambda n: view.show_error(_('Dictionary "{name}" already exists.').format(name=n.strip())))`. This replaces the three copies of each lambda.
 - The five flows follow the flow inventory step by step, with these mappings: info box to `view.show_info(msg)`, error box to `view.show_error(msg)` (file errors pre-formatted as `_("Failed to ... {error}").format(error=exc)`), confirm box to `view.confirm(msg, _("Confirm Delete Dictionary"))`, file dialogs to `choose_import_path(_("Import Dictionary"))` and `choose_export_path(_("Export Dictionary"), f"{name}.csv")`, "refresh" to `self.refresh(...)`, "frame's cached list" to the presenter's list, "active name" to `get_active_name()`, `_set_active_dictionary` to `set_active_name`.
 - The exception quirks in the inventory stay as they are: add does not catch `OSError`; delete does not catch `ValueError`; import maps every `ValueError` to the header message; rename with the default name returns `None` without a message; add and import never change the active dictionary. Each is pinned by a presenter test and listed under follow-ups.
@@ -147,16 +150,16 @@ class DictionaryManagementPresenter:  # satisfies DictionaryManagementActions
 
 ### `DictionaryManagementDialog` (`client/dialog.py`)
 
-- Constructor: `DictionaryManagementDialog(parent, actions: DictionaryManagementActions, selected_name: str)`. It stores `self._actions` and initializes the list with `self.refresh_dictionaries(actions.dictionary_names, selected_name)`. The `dictionary_dir` and five callback parameters and attributes are removed.
+- Constructor: `DictionaryManagementDialog(parent, actions: DictionaryManagementActions, selected_name: str)`. It stores `self._actions`, keeps the old order (`self._dictionary_names = list(actions.dictionary_names)` before `_build_ui()`, so the list exists while the widgets are built), then calls `self.refresh_dictionaries(self._dictionary_names, selected_name)`; the values are the same as `refresh_dictionaries(actions.dictionary_names, selected_name)`. The `dictionary_dir` and five callback parameters and attributes are removed.
 - `_load_dictionary_counts` reads `load_dictionary_entries(self._actions.dictionary_path(name))`. Counts stay a dialog concern (display data, not the list).
-- The list the dialog renders (`self._dictionary_names`) is a snapshot it takes only from `actions.dictionary_names`. `_refresh_from_disk` is replaced by a helper that calls `self.refresh_dictionaries(self._actions.dictionary_names, preferred)`. `dialog.py` no longer imports `list_dictionary_names`.
+- The list the dialog renders (`self._dictionary_names`) is a snapshot it takes only from `actions.dictionary_names`. `_refresh_from_disk` is replaced by `_refresh_from_actions(preferred)`, which calls `self.refresh_dictionaries(self._actions.dictionary_names, preferred)`. `dialog.py` no longer imports `list_dictionary_names`.
 - Button handlers call `self._actions.add(self)`, `delete(self, selected)`, `rename(self, selected)`, `import_from_file(self)`, `export_to_file(self, selected)` with the same selection guards and the same "refresh only on a non-`None` result" rule. Export never refreshes. Edit, close, selection and column sizing are unchanged.
 - The dialog implements `DictionaryManagementView` with the exact wx calls from the inventory, parented on `self`:
   - `prompt_dictionary_name`: the body of today's `gui._prompt_for_dictionary_name`, moved here.
   - `show_info`, `show_error`: the info and error boxes.
   - `confirm`: `wx.MessageBox(message, caption, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, parent=self) == wx.YES`.
   - `choose_import_path`, `choose_export_path`: the two `wx.FileDialog` blocks, returning `Path(GetPath())` or `None`.
-- The CSV wildcard moves with the file dialogs: `dialog.py` gets `CSV_WILDCARD = "CSV files (*.csv)|*.csv"` and translates it at call time, exactly as `gui._get_csv_wildcard` does now. The msgid stays extractable through the existing `N_("CSV files (*.csv)|*.csv")` marker in `gui.py`, which this change does not touch.
+- The CSV wildcard moves with the file dialogs: `dialog.py` gets `CSV_WILDCARD = "CSV files (*.csv)|*.csv"` and translates it at call time (`_(CSV_WILDCARD)` inside `choose_import_path` and `choose_export_path`), exactly as `gui._get_csv_wildcard` does now. The msgid stays extractable through the existing `N_("CSV files (*.csv)|*.csv")` marker in `gui.py`, which this change does not touch.
 
 ### `BrailleFrame` (`client/gui.py`)
 
@@ -164,7 +167,7 @@ class DictionaryManagementPresenter:  # satisfies DictionaryManagementActions
 - `get_dictionary_names_for_dialog()` keeps its name and contract: `refresh(active)`, then return `dictionary_names`. Its callers do not change.
 - `on_open_dictionary_management`: `selected = self._dictionary_presenter.refresh(active)`, then `DictionaryManagementDialog(self, self._dictionary_presenter, selected)`. The edit branch uses `self._dictionary_presenter.dictionary_path(edit_name)`. The `SpeechSymbolsDialog` part is unchanged (S-4/P1 owns it).
 - `_set_active_dictionary` stays in the frame unchanged. It is the presenter's `set_active_name`.
-- Removed: `_dictionary_names`, `_refresh_dictionary_names`, the five callbacks, `_prompt_for_dictionary_name`, `CSV_WILDCARD`, `_get_csv_wildcard`, and imports that become unused (`create_dictionary`, `delete_dictionary`, `export_dictionary`, `import_dictionary`, `list_dictionary_names`, `ensure_default_dictionary`, `is_default_dictionary`, `prompt_dictionary_name_until_success`, `rename_dictionary_after_name_prompt`, `plan_dictionary_state_after_*`, `resolve_management_selection`, `DictionaryNameDialog`). `self.dictionary_dir`, `_get_selected_dictionary_path` and `_show_file_error` stay (other features use them).
+- Removed: `_dictionary_names`, `_refresh_dictionary_names`, the five callbacks, `_prompt_for_dictionary_name`, `CSV_WILDCARD`, `_get_csv_wildcard`, and imports that become unused (`create_dictionary`, `delete_dictionary`, `export_dictionary`, `import_dictionary`, `list_dictionary_names`, `ensure_default_dictionary`, `is_default_dictionary`, `prompt_dictionary_name_until_success`, `rename_dictionary_after_name_prompt`, `plan_dictionary_state_after_*`, `resolve_management_selection`, `DictionaryNameDialog`). `self.dictionary_dir`, `_get_selected_dictionary_path` and `_show_file_error` stay (other features use them). `_show_file_error` keeps its `parent` parameter even though no caller passes it any more; removing it is out of scope. `dictionary_path_for_name`, `get_dictionary_directory` and the `N_("CSV files (*.csv)|*.csv")` marker also stay.
 - `_MENU_TRANSLATION_MARKERS` is not changed.
 
 ### Strings and localization
@@ -173,11 +176,11 @@ Every string keeps its exact msgid and is still passed through `_()` at the mome
 
 ### Commit order
 
-Each commit leaves the full suite at the baseline result plus the tests it adds.
+Each commit leaves the full suite at the baseline result plus the tests it adds. Eight commits:
 
-1. `test:` + `feat:` presenter, test first. Write `tests/test_dictionary_presenter.py` flow by flow (refresh and names, add, delete, rename, import, export), each red first, then implement that part of `dictionaries/presenter.py`. One or several commits; the presenter is not used by the app yet.
-2. `refactor: route dictionary management through presenter`. In one commit, because the dialog constructor and its only caller must change together: dialog tests updated or added first (actions wiring, view methods), then `DictionaryManagementDialog` gets the new constructor and view methods, and `BrailleFrame` creates and passes the presenter, with the `test_gui_document_flows` changes below.
-3. `refactor: remove dead dictionary callbacks from gui`. Delete the old callbacks, `_prompt_for_dictionary_name`, the CSV wildcard helper and the unused imports, if step 2 did not already remove them. Behavior-neutral.
+1. to 6. `feat:` presenter, test first, one commit per part, each holding its tests and its code with the red run shown first: skeleton, protocols, `refresh` and the name list; add; delete; rename; import; export. The presenter is not used by the app yet.
+7. `refactor: route dictionary management through presenter`. In one commit, because the dialog constructor and its only caller must change together: dialog tests updated or added first (actions wiring, view methods), then `DictionaryManagementDialog` gets the new constructor and view methods, and `BrailleFrame` creates and passes the presenter, with the `test_gui_document_flows` changes below. This commit also deletes the five frame callbacks and `_refresh_dictionary_names`, because after the switch they would read `self._dictionary_names`, which no longer exists.
+8. `refactor: remove dead dictionary helpers from gui`. Delete `_prompt_for_dictionary_name`, `CSV_WILDCARD`, `_get_csv_wildcard` and the imports that commit 7 left unused. Behavior-neutral.
 
 ## Test Strategy
 
@@ -185,31 +188,32 @@ Each commit leaves the full suite at the baseline result plus the tests it adds.
 
 Pure `unittest`, no wx, no stubs. A real `tempfile.TemporaryDirectory` as `dictionary_dir`. A `FakeView` that records every call in order as tuples (`("prompt", title, initial)`, `("info", msg)`, `("error", msg)`, `("confirm", msg, caption)`, `("choose_import", title)`, `("choose_export", title, default_file)`) and answers from scripted queues. The active name is a one-item list behind `get_active_name`; `set_active_name` is a `Mock`. Expected strings are built with `i18n._` (the catalog is fixed to zh_TW, so English literals would not match). Each test asserts the **full** `view.calls` list, the return value, the files on disk, `dictionary_names` and the `set_active_name` calls. Fault injection uses `patch.object(presenter_module, "<manager function>", side_effect=PermissionError("denied"))`.
 
-Minimum cases:
+43 tests in 7 classes. `FakeView` pops scripted answers (`None` means Cancel); an unexpected prompt raises `IndexError`, so every test also proves that no extra prompt happens. The missing-source import test builds its expected message by opening the missing path the way `validate_dictionary_csv` does, so the text is right on any platform. Cases:
 
-- Module: `presenter.py` does not import `wx` (AST check of its imports).
-- `refresh`: creates `default.csv` when missing, lists case-insensitively sorted, returns the preferred name or falls back to `default`; `dictionary_names` returns a copy.
+- Module: `presenter.py` does not import `wx` (AST check of its imports); the view and actions classes are `Protocol`s; the presenter and `DictionaryManagementActions` expose the same members.
+- `refresh`: the constructor does no I/O; creates `default.csv` when missing, lists case-insensitively sorted, returns the preferred name or falls back to `default`; files added on disk appear only after the next `refresh`; `dictionary_names` returns a copy.
 - `dictionary_path`.
 - Add: success (prompt `Add Dictionary` with `""`, file created, returns the new name, list updated, no `set_active_name`); cancel (no file, no message); duplicate then success (error box with the stripped name, re-prompt with the typed name); `ValueError` (reserved name: info box `str(exc)`, returns `None`); `OSError` from `create_dictionary` propagates.
 - Delete: default (info box only, no confirm); confirm declined (file kept); success for a non-active name (active unchanged, no `set_active_name`, returns `default`); success for the active name (`set_active_name` with the planned fallback, for example `beta` deleted from `[alpha, beta, default]` activates `alpha`); `OSError` (confirm, then error box `Failed to delete dictionary: ...`, returns `None`, list and active unchanged); `ValueError` propagates for a `" default"` stem.
-- Rename: default (no view calls, `None`); cancel; success for a non-active name; success for the active name (`set_active_name(new)`); same name (no file change, no `set_active_name`, returns the name); case-only (renamed); duplicate then success; `ValueError` (info box `str(exc)`); `OSError` from `rename_dictionary_after_name_prompt` (error box `Failed to save dictionary: ...`).
-- Import: file dialog cancelled (no prompt); success (prompt `Add Dictionary` with the source stem, file copied, no `set_active_name`); duplicate then success; invalid headers (error box with the header message); an invalid name returned by the fake view (same header message); missing source file (`FileNotFoundError`: error box `Failed to import dictionary: ...`); prompt cancelled.
+- Delete and rename leave the active name and the list untouched on `OSError`.
+- Rename: default (no view calls, `None`); cancel; success for a non-active name; success for the active name (`set_active_name(new)`); same name (no file change, no `set_active_name`, returns the name); case-only (renamed; the test skips itself on a case-insensitive file system); duplicate then success; `ValueError` (info box `str(exc)`); `OSError` from `rename_dictionary_after_name_prompt` (error box `Failed to save dictionary: ...`).
+- Import: file dialog cancelled (no prompt); success (prompt `Add Dictionary` with the source stem, file copied, no `set_active_name`); duplicate then success; a duplicate name is reported before the headers are validated; invalid headers (error box with the header message); an invalid name returned by the fake view (same header message); missing source file (`FileNotFoundError`: error box `Failed to import dictionary: ...`); prompt cancelled.
 - Export: empty list (no view calls); cancelled; success (`choose_export` with `<name>.csv`, file copied); `OSError` (error box `Failed to export dictionary: ...`).
 
 ### Updated: `client/tests/test_dictionary_management_dialog.py`
 
-`_make_dialog` sets a fake `_actions` (names, `dictionary_path`, recorded action calls) instead of `dictionary_dir`. Existing tests keep their assertions. The disk-refresh test becomes "refresh after an action takes names from `actions.dictionary_names`, not from disk" (the fake returns names that are not on disk). New tests:
+`_make_dialog` sets a fake `_actions` (names, `dictionary_path`, recorded action calls) instead of `dictionary_dir`. Existing tests keep their assertions. The disk-refresh test `test_disk_refresh_discovers_new_dictionary_files` becomes `test_refresh_after_action_takes_names_from_actions_not_disk` (the fake returns names that are not on disk). The module goes from 8 to 26 tests: the replaced test plus `DictionaryManagementActionsWiringTest` (8 tests) and `DictionaryManagementViewTest` (10 tests). New tests:
 
 - Each of add, delete, rename and import calls the action with `(dialog[, selected])` and refreshes with the returned name; a `None` result leaves the list untouched; delete, rename and export do nothing without a selection; export never refreshes.
 - Each view method makes exactly the wx call from the inventory (message, caption, flags, `parent=dialog`; file dialog title, wildcard, `defaultFile`, style), with `wx.MessageBox`, `wx.FileDialog` and `DictionaryNameDialog` patched on the loaded dialog module. Cancel paths return `None` or `False`.
 
-The module keeps using `wx_stub.load_speech_dialog()`. If a flag comparison needs distinct values, the plan may add explicit constants (`YES`, `YES_NO`, `NO_DEFAULT`, `ICON_WARNING`, `ICON_INFORMATION`, `ID_OK`, `FD_OPEN`, `FD_SAVE`, `FD_OVERWRITE_PROMPT`) to `speech_dialog_stubs()`, provided `test_speech_symbols_dialog` still passes unchanged.
+The module keeps using `wx_stub.load_speech_dialog()`. `speech_dialog_stubs()` gets distinct power-of-two values for `ICON_INFORMATION`, `ICON_WARNING`, `YES_NO`, `NO_DEFAULT`, `YES`, `NO`, `FD_OPEN`, `FD_SAVE` and `FD_OVERWRITE_PROMPT`, and plain ids `ID_OK = 5100` and `ID_CANCEL = 5101` (`NO` and `ID_CANCEL` so the cancel and "No" paths use real values). Without them the stub's auto-submodule folds `wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING` into `wx.YES_NO`, and a flag assertion could not catch a dropped flag. `gui_frame_stubs()` gets `ID_EDIT = 5030`: that stub's module `__getattr__` returns a new class on every access, so without it `gui.wx.ID_EDIT != gui.wx.ID_EDIT` and the edit branch of `on_open_dictionary_management` cannot be reached in a test. `test_speech_symbols_dialog`, `test_wx_stub`, `test_dialog_display` and `test_dialog_validation` pass unchanged.
 
 ### Updated: `client/tests/test_gui_document_flows.py`
 
 - `_initialize_state_with_loaded_tables` patches `gui.ensure_default_dictionary` and `gui.list_dictionary_names`, which will no longer exist on `gui`, and mocks `_refresh_dictionary_names`. It switches to patching `gui.DictionaryManagementPresenter` (a mock whose `dictionary_names` is `["default"]`) or the two functions on the presenter module. Its assertions do not change.
 - Lines that set `frame._dictionary_names` are removed; the tests already mock `get_dictionary_names_for_dialog`.
-- New: `on_open_dictionary_management` constructs the dialog with `(frame, frame._dictionary_presenter, <refreshed selection>)`; `wx.ID_EDIT` with a name opens `SpeechSymbolsDialog` with `presenter.dictionary_path(name)`; any other result opens nothing. `get_dictionary_names_for_dialog` refreshes with the active name and returns the presenter's names. The presenter built by `_initialize_state` calls back into `_set_active_dictionary`, which writes `set_selected_dictionary` once.
+- New: `on_open_dictionary_management` constructs the dialog with `(frame, frame._dictionary_presenter, <refreshed selection>)`; `wx.ID_EDIT` with a name opens `SpeechSymbolsDialog` with `presenter.dictionary_path(name)`; any other result opens nothing. `get_dictionary_names_for_dialog` refreshes with the active name and returns the presenter's names. The presenter built by `_initialize_state` calls back into `_set_active_dictionary`, which writes `set_selected_dictionary` once (a real delete through the frame-built presenter). The five callbacks and `_refresh_dictionary_names` are gone from the class, and a last test (with commit 8) checks that the dead helpers and imports are gone from `gui` while `dictionary_path_for_name`, `get_dictionary_directory`, `_get_selected_dictionary_path` and `_show_file_error` stay. All new tests are in `DictionaryManagementFrameTest` (7 tests); the module goes from 61 to 68 tests.
 
 ### Unchanged safety net
 
@@ -218,13 +222,13 @@ The module keeps using `wx_stub.load_speech_dialog()`. If a flag comparison need
 ## Acceptance Criteria
 
 1. `client/dictionaries/presenter.py` exists, does not import `wx`, and defines `DictionaryManagementPresenter`, `DictionaryManagementView` and `DictionaryManagementActions`.
-2. In `client/` outside `tests/`: `prompt_dictionary_name_until_success(` is called exactly once (in the presenter), and the msgid `Dictionary "{name}" already exists.` appears exactly once.
-3. `client/gui.py` contains none of `_dictionary_names`, `_refresh_dictionary_names`, `add_dictionary`, `delete_dictionary_from_dialog`, `rename_dictionary_from_dialog`, `import_dictionary_from_dialog`, `export_dictionary_from_dialog`, `_prompt_for_dictionary_name`, `_get_csv_wildcard`.
+2. In `client/` outside `tests/`: `prompt_dictionary_name_until_success(` is called exactly once (in the presenter), and the msgid `Dictionary "{name}" already exists.` appears exactly once. The grep for the call must drop the `def prompt_dictionary_name_until_success(` line in `dictionaries/name_prompt.py`, which matches the same text.
+3. `client/gui.py` contains none of `_dictionary_names`, `_refresh_dictionary_names`, `add_dictionary`, `delete_dictionary_from_dialog`, `rename_dictionary_from_dialog`, `import_dictionary_from_dialog`, `export_dictionary_from_dialog`, `_prompt_for_dictionary_name`, `_get_csv_wildcard` as whole identifiers (`grep -nwE`). A plain substring check cannot pass: `_dictionary_names` is part of `get_dictionary_names_for_dialog`, which stays.
 4. `DictionaryManagementDialog.__init__` takes `(parent, actions, selected_name)`. `client/dialog.py` does not call `list_dictionary_names`.
 5. The set of msgids passed to `_()`/`N_()` in `client/` outside `tests/` is identical before and after (checked with an AST scan, because `xgettext` is not installed on the Linux box). The `.po` and `.mo` are unchanged.
-6. From `client/`: `python -m unittest tests.test_dictionary_presenter tests.test_dictionary_management_dialog tests.test_dictionary_manager tests.test_dictionary_actions tests.test_translation_dictionary_state tests.test_dictionary_name_prompt tests.test_gui_document_flows -v` passes.
-7. `python -m unittest discover -s tests` from `client/`: 482 plus the new tests, `failures=1` (only the P2-5 case), `skipped=7`, no errors.
-8. Manual check on Windows (not possible on the Linux box; must be reported as not run): open Dictionary Management and walk through add (including a duplicate name), rename (active and non-active), delete (active and non-active, then check Settings shows the fallback), import (valid file, file without headers), export, and edit. Each prompt, message and list selection matches the current build.
+6. From `client/`: `python -m unittest tests.test_dictionary_presenter tests.test_dictionary_management_dialog tests.test_dictionary_manager tests.test_dictionary_actions tests.test_translation_dictionary_state tests.test_dictionary_name_prompt tests.test_gui_document_flows -v` passes: `Ran 164 tests` (43 + 26 + 11 + 6 + 6 + 4 + 68), `OK`.
+7. `python -m unittest discover -s tests` from `client/`: `Ran 550 tests` (482 plus 68 new), `failures=1` (only the P2-5 case), `skipped=7`, no errors.
+8. Manual check on Windows (not possible on the Linux box; must be reported as not run): open Dictionary Management and walk through add (including a duplicate name), rename (active and non-active; a case-only rename shows the duplicate box there, as today), delete (active and non-active, then check Settings shows the fallback), import (valid file, file without headers), export, and edit. Each prompt, message and list selection matches the current build.
 
 ## Out of scope
 
@@ -243,6 +247,8 @@ Preserved on purpose here, pinned by tests so a later change is deliberate:
 - Import shows the header message for every `ValueError`, including an invalid name or an undecodable file.
 - `normalize_base_name` errors shown by add and rename are untranslated English.
 - Add and import ignore the plan's `active_selected_name`, so these flows never correct or persist an active dictionary whose file has gone missing.
+- A case-only rename (`alpha` to `Alpha`) does not rename on a case-insensitive file system such as NTFS: `rename_dictionary` raises `FileExistsError`, so the name loop shows the duplicate box and prompts again.
+- `BrailleFrame._show_file_error` keeps a `parent` parameter that no caller passes any more.
 
 ## Risks
 

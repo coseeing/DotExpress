@@ -1,8 +1,10 @@
 import json
+import logging
 import tempfile
 import unittest
 import gettext
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID
 
 import config
@@ -19,8 +21,7 @@ class ConfigTest(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_view_settings_are_persisted_under_view_section(self) -> None:
-        config.set_view_font_size(18)
-        config.set_view_scheme("dark")
+        config.set_view_settings(18, "dark", "simbraille")
 
         with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -32,11 +33,13 @@ class ConfigTest(unittest.TestCase):
                 "view": {
                     "font_size": 18,
                     "scheme": "dark",
+                    "braille_font": "simbraille",
                 }
             },
         )
         self.assertEqual(config.get_view_font_size(), 18)
         self.assertEqual(config.get_view_scheme(), "dark")
+        self.assertEqual(config.get_braille_font("default"), "simbraille")
 
     def test_conversion_settings_roundtrip_under_conversion_section(self) -> None:
         tables = {
@@ -118,8 +121,17 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertEqual(config.get_selected_dictionary("default"), "math")
 
-    def test_braille_font_setting_is_persisted_under_view_section(self) -> None:
-        config.set_braille_font("simbraille")
+    def test_view_settings_write_braille_font_and_keep_other_sections(self) -> None:
+        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "conversion": {"width": 52},
+                    "view": {"font_size": 20, "custom": "kept"},
+                },
+                f,
+            )
+
+        config.set_view_settings(14, "light", "default")
 
         with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -127,13 +139,21 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(
             data,
             {
-                "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
+                "conversion": {"width": 52},
                 "view": {
-                    "braille_font": "simbraille",
-                }
+                    "font_size": 14,
+                    "custom": "kept",
+                    "scheme": "light",
+                    "braille_font": "default",
+                },
             },
         )
-        self.assertEqual(config.get_braille_font("default"), "simbraille")
+        self.assertEqual(config.get_braille_font(), "default")
+
+    def test_unused_single_view_setters_are_removed(self) -> None:
+        for name in ("set_view_font_size", "set_view_scheme", "set_braille_font"):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(config, name))
 
     def test_braille_font_defaults_to_simbraille_when_config_is_missing(self) -> None:
         self.assertEqual(config.get_braille_font(), "simbraille")
@@ -256,6 +276,148 @@ class ConfigTest(unittest.TestCase):
             translation.gettext("Failed to open dual view: {error}"),
             "無法開啟雙視檢視：{error}",
         )
+
+
+class ConfigSaveFailureLoggingTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_config_path = config.CONFIG_PATH
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._blocker = Path(self._tmpdir.name) / "blocker"
+        self._blocker.write_text("not a directory", encoding="utf-8")
+        config.CONFIG_PATH = str(self._blocker / "nested" / "config.json")
+
+    def tearDown(self) -> None:
+        config.CONFIG_PATH = self._original_config_path
+        self._tmpdir.cleanup()
+
+    def test_save_failure_is_logged_and_not_raised(self) -> None:
+        with self.assertLogs("dotexpress.config", level="ERROR") as captured:
+            config.set_output_mode("ascii")
+
+        self.assertEqual(len(captured.records), 1)
+        record = captured.records[0]
+        self.assertEqual(record.levelno, logging.ERROR)
+        self.assertIsNotNone(record.exc_info)
+        self.assertIn(config.CONFIG_PATH, record.getMessage())
+        self.assertFalse(Path(config.CONFIG_PATH).exists())
+        self.assertTrue(self._blocker.is_file())
+
+    def test_every_save_failure_is_logged(self) -> None:
+        with self.assertLogs("dotexpress.config", level="ERROR") as captured:
+            config.set_output_mode("ascii")
+            config.set_conversion_width(52)
+
+        self.assertEqual(len(captured.records), 2)
+
+    def test_save_failure_log_does_not_contain_config_data(self) -> None:
+        with self.assertLogs("dotexpress.config", level="ERROR") as captured:
+            client_id = config.get_or_create_client_id()
+
+        UUID(client_id)
+        self.assertNotIn(client_id, "\n".join(captured.output))
+
+    def test_save_failure_does_not_raise_when_log_file_cannot_be_opened(self) -> None:
+        missing_log = Path(self._tmpdir.name) / "missing-log-dir" / "config.log"
+        handler = logging.FileHandler(missing_log, encoding="utf-8", delay=True)
+        unopenable = logging.Logger("dotexpress.config.unopenable")
+        unopenable.addHandler(handler)
+
+        try:
+            with patch.object(config, "logger", unopenable):
+                config.set_output_mode("ascii")
+        finally:
+            handler.close()
+
+        self.assertFalse(missing_log.parent.exists())
+        self.assertFalse(Path(config.CONFIG_PATH).exists())
+
+
+class ConfigLoadFailureLoggingTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_config_path = config.CONFIG_PATH
+        self._tmpdir = tempfile.TemporaryDirectory()
+        config.CONFIG_PATH = str(Path(self._tmpdir.name) / "config.json")
+        config._logged_load_failures.clear()
+
+    def tearDown(self) -> None:
+        config.CONFIG_PATH = self._original_config_path
+        config._logged_load_failures.clear()
+        self._tmpdir.cleanup()
+
+    def _write_raw(self, content: bytes) -> None:
+        with open(config.CONFIG_PATH, "wb") as f:
+            f.write(content)
+
+    def _warnings(self, captured) -> list[logging.LogRecord]:
+        return [r for r in captured.records if r.levelno == logging.WARNING]
+
+    def test_corrupt_file_is_logged_once_and_defaults_are_returned(self) -> None:
+        self._write_raw(b"{not json")
+
+        with self.assertLogs("dotexpress.config", level="WARNING") as captured:
+            output_mode = config.get_output_mode()
+            width = config.get_conversion_width()
+
+        self.assertEqual(output_mode, config.DEFAULT_OUTPUT_MODE)
+        self.assertEqual(width, config.DEFAULT_CONVERSION_WIDTH)
+        warnings = self._warnings(captured)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn(config.CONFIG_PATH, warnings[0].getMessage())
+        self.assertIn("using defaults", warnings[0].getMessage())
+        self.assertIsNotNone(warnings[0].exc_info)
+
+    def test_warning_is_emitted_again_after_recovery(self) -> None:
+        with self.assertLogs("dotexpress.config", level="WARNING") as captured:
+            self._write_raw(b"{not json")
+            config.get_output_mode()
+            self._write_raw(b'{"conversion": {"output_mode": "ascii"}}')
+            self.assertEqual(config.get_output_mode(), "ascii")
+            self._write_raw(b"{not json")
+            config.get_output_mode()
+
+        self.assertEqual(len(self._warnings(captured)), 2)
+
+    def test_different_failure_on_same_path_is_logged_again(self) -> None:
+        with self.assertLogs("dotexpress.config", level="WARNING") as captured:
+            self._write_raw(b"{not json")
+            config.get_output_mode()
+            self._write_raw(b"\xff\xfe\x00")
+            config.get_output_mode()
+
+        self.assertEqual(len(self._warnings(captured)), 2)
+
+    def test_corrupt_files_at_different_paths_are_each_logged(self) -> None:
+        other_path = str(Path(self._tmpdir.name) / "other.json")
+        with self.assertLogs("dotexpress.config", level="WARNING") as captured:
+            self._write_raw(b"{not json")
+            config.get_output_mode()
+            config.CONFIG_PATH = other_path
+            self._write_raw(b"{not json")
+            config.get_output_mode()
+
+        self.assertEqual(len(self._warnings(captured)), 2)
+
+    def test_missing_file_is_not_logged(self) -> None:
+        with patch.object(config, "logger") as logger:
+            self.assertEqual(config.get_output_mode(), config.DEFAULT_OUTPUT_MODE)
+            self.assertEqual(config.get_charset_maps(), config.DEFAULT_CHARSET_MAPS)
+
+        self.assertEqual(logger.mock_calls, [])
+
+    def test_load_failure_does_not_raise_when_log_file_cannot_be_opened(self) -> None:
+        self._write_raw(b"{not json")
+        missing_log = Path(self._tmpdir.name) / "missing-log-dir" / "config.log"
+        handler = logging.FileHandler(missing_log, encoding="utf-8", delay=True)
+        unopenable = logging.Logger("dotexpress.config.unopenable")
+        unopenable.addHandler(handler)
+
+        try:
+            with patch.object(config, "logger", unopenable):
+                self.assertEqual(config.get_output_mode(), config.DEFAULT_OUTPUT_MODE)
+        finally:
+            handler.close()
+
+        self.assertFalse(missing_log.parent.exists())
 
 
 if __name__ == "__main__":

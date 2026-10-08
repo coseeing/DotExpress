@@ -69,11 +69,12 @@ class TranslationSettingsTest(unittest.TestCase):
             self.assertEqual(
                 json.load(f),
                 {
+                    "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
                     "conversion": {
                         config.OUTPUT_MODE_KEY: "ascii",
                         config.WIDTH_KEY: 64,
                         config.SELECTED_DICTIONARY_KEY: "math",
-                    }
+                    },
                 },
             )
 

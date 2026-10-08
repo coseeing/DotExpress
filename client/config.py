@@ -1,9 +1,13 @@
 import json
+import logging
 import os
 from typing import Optional
 from uuid import uuid4
 
 from app_paths import get_config_path
+from log import get_logger
+
+logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
 
 DEFAULT_FALLBACK = "zh_TW"
 LANG_ENV = "TEXT2BRAILLE_LANG"
@@ -43,15 +47,40 @@ DEFAULT_CHARSET_MAPS = {
 
 _runtime_lang: Optional[str] = None
 
+# Config path -> signature of the last load failure that was logged for it.
+_logged_load_failures: dict[str, str] = {}
+
+
+def _log_current_exception(level: int, message: str, *args: object) -> None:
+    try:
+        logger.log(level, message, *args, exc_info=True)
+    except OSError:
+        # A delay=True FileHandler opens its file inside emit() and raises if
+        # log/ is missing or unwritable. Config I/O must never raise, so a
+        # diagnostic that cannot be written is dropped.
+        pass
+
 
 def _load_from_file() -> dict:
+    path = CONFIG_PATH
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
     except FileNotFoundError:
+        _logged_load_failures.pop(path, None)
         return {}
-    except Exception:
+    except Exception as error:
+        signature = f"{type(error).__name__}: {error}"
+        if _logged_load_failures.get(path) != signature:
+            _logged_load_failures[path] = signature
+            _log_current_exception(
+                logging.WARNING,
+                "Failed to read config file %s; using defaults",
+                path,
+            )
         return {}
+    _logged_load_failures.pop(path, None)
+    return data
 
 
 def _save_to_file(data: dict) -> None:
@@ -67,7 +96,7 @@ def _save_to_file(data: dict) -> None:
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception:
-        pass
+        _log_current_exception(logging.ERROR, "Failed to save config file %s", CONFIG_PATH)
 
 
 def _coerce_int(value: object) -> Optional[int]:
@@ -181,28 +210,16 @@ def get_view_font_size(default: int = DEFAULT_VIEW_FONT_SIZE) -> int:
     return font_size if font_size is not None else default
 
 
-def set_view_font_size(font_size: int) -> None:
-    _set_section_value(VIEW_SECTION, FONT_SIZE_KEY, font_size)
-
-
 def get_view_scheme(default: str = DEFAULT_VIEW_SCHEME) -> str:
     data = _load_from_file()
     value = _get_section(data, VIEW_SECTION).get(SCHEME_KEY)
     return value if isinstance(value, str) else default
 
 
-def set_view_scheme(scheme: str) -> None:
-    _set_section_value(VIEW_SECTION, SCHEME_KEY, scheme)
-
-
 def get_braille_font(default: str = DEFAULT_BRAILLE_FONT) -> str:
     data = _load_from_file()
     value = _get_section(data, VIEW_SECTION).get(BRAILLE_FONT_KEY)
     return value if isinstance(value, str) else default
-
-
-def set_braille_font(braille_font: str) -> None:
-    _set_section_value(VIEW_SECTION, BRAILLE_FONT_KEY, braille_font)
 
 
 def set_view_settings(font_size: int, scheme: str, braille_font: str) -> None:

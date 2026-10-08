@@ -5,6 +5,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from i18n import N_
+
 
 PREPROCESSING_FILENAME = "preprocessing.py"
 DEFAULT_PREPROCESSING_SCRIPT = "def main(input: str) -> str:\n    return input\n"
@@ -36,7 +38,7 @@ def validate_preprocessing_script(
         and node.name == "main"
     ]
     if len(main_definitions) != 1 or not isinstance(main_definitions[0], ast.FunctionDef):
-        raise ValueError("The script must define exactly one top-level synchronous main function.")
+        raise ValueError(N_("The script must define exactly one top-level synchronous main function."))
     arguments = main_definitions[0].args
     positional = [*arguments.posonlyargs, *arguments.args]
     if (
@@ -45,7 +47,7 @@ def validate_preprocessing_script(
         or arguments.vararg is not None
         or arguments.kwarg is not None
     ):
-        raise ValueError("main must define exactly one positional parameter and no other parameters.")
+        raise ValueError(N_("main must define exactly one positional parameter and no other parameters."))
 
 
 def save_preprocessing_script(path: Path | str, source: str) -> None:

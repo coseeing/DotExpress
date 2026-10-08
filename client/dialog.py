@@ -23,9 +23,9 @@ from dictionaries.manager import (
 )
 from dictionaries.presenter import DictionaryManagementActions
 from documents.workspace import normalize_document_name
-from i18n import _
+from i18n import N_, _
 
-CSV_WILDCARD = "CSV files (*.csv)|*.csv"
+CSV_WILDCARD = N_("CSV files (*.csv)|*.csv")
 
 
 def finalize_dialog_layout(dialog: wx.Dialog, sizer: wx.Sizer) -> None:

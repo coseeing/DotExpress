@@ -6,12 +6,14 @@ from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 from documents.formats import (
+    ALL_SUPPORTED_FILES_LABEL,
     DOCUMENT_FORMATS,
     ExportContext,
     build_export_wildcard,
     build_import_wildcard,
     get_exportable_formats,
     get_format,
+    get_import_filter_labels,
     get_importable_formats,
 )
 from documents.workspace import Document
@@ -165,6 +167,11 @@ class DocumentFormatsTest(unittest.TestCase):
                 "All Supported Files (*.dep;*.docx;*.epub;*.pdf;*.txt)|*.dep;*.docx;*.epub;*.pdf;*.txt"
             ),
         )
+
+    def test_all_supported_files_label_is_the_last_import_filter_label(self) -> None:
+        self.assertEqual(ALL_SUPPORTED_FILES_LABEL, "All Supported Files")
+        self.assertEqual(get_import_filter_labels()[-1], ALL_SUPPORTED_FILES_LABEL)
+        self.assertEqual(get_import_filter_labels(), ["DEP", "DOCX", "EPUB", "PDF", "TXT", "All Supported Files"])
 
     def test_export_requires_braille_policy_matches_format(self) -> None:
         self.assertFalse(get_format("dep").requires_braille)

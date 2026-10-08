@@ -6,7 +6,7 @@ import webbrowser
 import wx
 
 import about
-from i18n import N_, _, resource_path
+from i18n import _, resource_path
 from app_paths import ApplicationDataError, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
@@ -122,58 +122,6 @@ VIEW_SCHEMES = {
 }
 
 logger = get_logger("dotexpress.gui", "gui.log")
-
-# Keep dynamic context-menu labels discoverable to gettext extraction.
-_MENU_TRANSLATION_MARKERS = (
-	N_("Add"),
-	N_("Edit"),
-	N_("Delete"),
-	N_("Import"),
-	N_("Export"),
-	N_("Open"),
-	N_("Dual View"),
-	N_("Rename"),
-	N_("Default"),
-	N_("Braille Font"),
-	N_("SimBraille"),
-	N_("Export All"),
-	N_("DEP"),
-	N_("Package DEP"),
-	N_("TXT"),
-	N_("PDF"),
-	N_("DOCX"),
-	N_("EPUB"),
-	N_("BRL"),
-	N_("Braille BRL"),
-	N_("Dual View HTML"),
-	N_("Delete All"),
-	N_("Translation"),
-	N_("No conversion data is available for this document."),
-	N_("Convert"),
-	N_("Settings"),
-	N_("Dictionary Management..."),
-	N_("Text Processing"),
-	N_("Text Processing Python Code"),
-	N_("Unable to open text processing script: {error}"),
-	N_("Unable to save text processing script: {error}"),
-	N_("Text processing failed: {error}"),
-	N_("The script must define exactly one top-level synchronous main function."),
-	N_("main must define exactly one positional parameter and no other parameters."),
-	N_("Confirm Delete Dictionary"),
-	N_("Do you want to delete dictionary \"{name}\"?"),
-	N_("Rename Dictionary"),
-	N_("Help"),
-	N_("Coseeing Website"),
-	N_("About DotExpress"),
-	N_("CSV files (*.csv)|*.csv"),
-	N_("DotExpress files (*.dep)|*.dep"),
-	N_("Text files (*.txt)|*.txt"),
-	N_("PDF files (*.pdf)|*.pdf"),
-	N_("Word documents (*.docx)|*.docx"),
-	N_("EPUB books (*.epub)|*.epub"),
-	N_("Braille files (*.brl)|*.brl"),
-	N_("All Supported Files"),
-)
 
 
 class ConvertingDialog(wx.Dialog):

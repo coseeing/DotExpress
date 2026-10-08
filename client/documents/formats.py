@@ -18,6 +18,7 @@ DEP_EXTENSION = ".dep"
 BRL_EXTENSION = ".brl"
 HTML_EXTENSION = ".html"
 ALL_SUPPORTED_FILTER_KEY = "all"
+ALL_SUPPORTED_FILES_LABEL = N_("All Supported Files")
 
 
 @dataclass(frozen=True)
@@ -111,7 +112,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="dep",
         extension=DEP_EXTENSION,
-        wildcard_label="DEP",
+        wildcard_label=N_("DEP"),
         loader=_load_dep,
         writer=_write_dep,
         requires_braille=False,
@@ -123,7 +124,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="docx",
         extension=".docx",
-        wildcard_label="DOCX",
+        wildcard_label=N_("DOCX"),
         loader=_load_docx,
         writer=None,
         requires_braille=False,
@@ -133,7 +134,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="epub",
         extension=".epub",
-        wildcard_label="EPUB",
+        wildcard_label=N_("EPUB"),
         loader=_load_epub,
         writer=None,
         requires_braille=False,
@@ -143,7 +144,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="pdf",
         extension=".pdf",
-        wildcard_label="PDF",
+        wildcard_label=N_("PDF"),
         loader=_load_pdf,
         writer=None,
         requires_braille=False,
@@ -153,7 +154,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="txt",
         extension=".txt",
-        wildcard_label="TXT",
+        wildcard_label=N_("TXT"),
         loader=_load_txt,
         writer=None,
         requires_braille=False,
@@ -163,7 +164,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="brl",
         extension=BRL_EXTENSION,
-        wildcard_label="BRL",
+        wildcard_label=N_("BRL"),
         loader=None,
         writer=_write_brl,
         requires_braille=True,
@@ -218,7 +219,7 @@ def build_import_wildcard(translate=lambda value: value) -> str:
             )
         )
     all_patterns = ";".join(f"*{descriptor.extension}" for descriptor in get_importable_formats())
-    parts.extend((f"{translate('All Supported Files')} ({all_patterns})", all_patterns))
+    parts.extend((f"{translate(ALL_SUPPORTED_FILES_LABEL)} ({all_patterns})", all_patterns))
     return "|".join(parts)
 
 
@@ -229,7 +230,7 @@ def build_export_wildcard(descriptor: DocumentFormatDescriptor, translate=lambda
 
 
 def get_import_filter_labels() -> list[str]:
-    return [descriptor.wildcard_label for descriptor in get_importable_formats()] + ["All Supported Files"]
+    return [descriptor.wildcard_label for descriptor in get_importable_formats()] + [ALL_SUPPORTED_FILES_LABEL]
 
 
 def get_format_keys(importable: bool | None = None) -> tuple[str, ...]:

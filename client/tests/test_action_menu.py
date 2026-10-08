@@ -1,10 +1,39 @@
+import ast
 import unittest
+from pathlib import Path
 
 from documents.formats import get_exportable_formats
 from ui.action_menu import (
     get_document_menu_descriptors,
     get_document_menu_enabled_state,
 )
+from ui.translation_menu import get_translation_menu_items
+
+ZH_TW_PO_PATH = Path(__file__).resolve().parents[1] / "locales" / "zh_TW" / "LC_MESSAGES" / "dotexpress.po"
+
+
+def read_po_translations(path: Path) -> dict[str, str]:
+    """msgid -> msgstr for the active entries of a .po file (comments and obsolete entries skipped)."""
+    translations: dict[str, str] = {}
+    msgid = None
+    msgstr = ""
+    field = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("msgid "):
+            if msgid is not None:
+                translations[msgid] = msgstr
+            msgid, msgstr, field = ast.literal_eval(line[len("msgid "):]), "", "msgid"
+        elif line.startswith("msgstr "):
+            msgstr, field = ast.literal_eval(line[len("msgstr "):]), "msgstr"
+        elif line.startswith('"') and field == "msgid":
+            msgid += ast.literal_eval(line)
+        elif line.startswith('"') and field == "msgstr":
+            msgstr += ast.literal_eval(line)
+        else:
+            field = None
+    if msgid is not None:
+        translations[msgid] = msgstr
+    return translations
 
 
 class ActionMenuTest(unittest.TestCase):
@@ -69,6 +98,17 @@ class ActionMenuTest(unittest.TestCase):
                 with self.subTest(has_selection=has_selection, has_documents=has_documents):
                     state = get_document_menu_enabled_state(has_selection=has_selection, has_documents=has_documents)
                     self.assertEqual(list(state), [item.action for item in get_document_menu_descriptors()])
+
+    def test_menu_labels_have_zh_tw_translations(self) -> None:
+        translations = read_po_translations(ZH_TW_PO_PATH)
+        labels = [item.label for item in get_document_menu_descriptors()]
+        labels += [descriptor.export_label for descriptor in get_exportable_formats()]
+        labels += [label for _key, label in get_translation_menu_items()]
+
+        self.assertEqual(len(labels), 16)
+        for label in labels:
+            with self.subTest(label=label):
+                self.assertTrue(translations.get(label), f"{label!r} has no zh_TW translation")
 
     def test_document_menu_enabled_state_without_selection_or_documents(self) -> None:
         self.assertEqual(

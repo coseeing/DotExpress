@@ -9,9 +9,9 @@ Concretely:
 - **One writer contract (O-2, L-3, P-4).** Every export writer takes `(path, document, context: ExportContext)`. `ExportContext` carries the dual-view results. `gui._write_export_document` calls every writer the same way and no longer checks for `"html"`.
 - **Export wildcard and Export submenus come from the registry (O-2, P-4).** `DocumentFormatDescriptor` gains `export_wildcard` and `export_label`. The save dialog's wildcard comes from `formats.build_export_wildcard(descriptor, _)`. The Export and Export All submenus are built from `formats.get_exportable_formats()`. This replaces the hard-coded dict in `gui._get_export_wildcard`, the three `*_WILDCARD` constants in `gui.py`, and the two hard-coded format tuples in `ui/action_menu.py`.
 - **Menus are keyed by action (O-1).** `DocumentMenuItem` gains `enabled_when`. `get_document_menu_enabled_state` returns `{action: bool}` derived from the descriptors. A new wx-free `ui/menu_builder.py` builds and binds the document menu from the descriptors and a `{action: handler}` map. The File menu and the document-list context menu both use it. No code looks up a menu item by its English label any more.
-- **Translatable strings are marked where they are defined (M-4).** `gui._MENU_TRANSLATION_MARKERS` is deleted. Each label is wrapped in `N_()` at its definition, and the extracted msgid set stays exactly the same 357 strings.
+- **Translatable strings are marked where they are defined (M-4).** `gui._MENU_TRANSLATION_MARKERS` is deleted. Each label is wrapped in `N_()` at its definition, and the extracted msgid set loses only the four orphan import-filter strings that nothing displays (357 becomes 353).
 
-This is a behavior-preserving refactor. Menu order, labels, nesting, enabled states, handlers, shortcuts, dialog titles and wildcards, and the bytes of every exported file stay the same. No user-facing string changes, and nothing under `client/locales/` changes.
+This is a behavior-preserving refactor. Menu order, labels, nesting, enabled states, handlers, shortcuts, dialog titles and wildcards, and the bytes of every exported file stay the same. No user-facing string changes, and nothing under `client/locales/` is edited by hand.
 
 ## Current State (verified 2026-10-08 on `refactor/p1-2-export-menu-contracts`, HEAD `029a86e`, P0-1..P0-6 and P1-1 merged)
 
@@ -60,9 +60,9 @@ Indentation: `gui.py` and `dialog.py` use tabs. (`gui.py`'s import block has som
 | --- | --- | --- | --- |
 | A. Already extracted elsewhere (23) | Add, Edit, Delete, Import, Export, Dual View, Rename, Default, Braille Font, SimBraille, Translation, "No conversion data is available for this document.", Text Processing, Text Processing Python Code, "Unable to open text processing script: {error}", "Unable to save text processing script: {error}", "Text processing failed: {error}", Confirm Delete Dictionary, `Do you want to delete dictionary "{name}"?`, Rename Dictionary, Help, Coseeing Website, About DotExpress | A literal `_()` call in `dialog.py`, `settings/dialogs.py`, `dictionaries/presenter.py` or `gui.py` | Delete the marker. The msgid stays. |
 | B. Only extracted through the marker (21) | Open, Delete All, Export All (`ui/action_menu.py`); Package DEP, Braille BRL, Dual View HTML (`ui/action_menu.py` twice each, moving to `documents/formats.py`); DEP, DOCX, EPUB, PDF, TXT, BRL (`documents/formats.py` `wildcard_label`); All Supported Files (`documents/formats.py:200, 205`); Convert, Settings, Dictionary Management... (`ui/translation_menu.py`); the two `ValueError` messages in `conversion/preprocessing/user_script.py:39, 48` (shown through `settings/dialogs.py:148` `_(str(error))`); "CSV files (*.csv)\|*.csv" (`dialog.py:28` `CSV_WILDCARD`); "DotExpress files (*.dep)\|*.dep" and "Braille files (*.brl)\|*.brl" (`gui.py:125-126`, moving to `documents/formats.py`) | Only a bare string at the definition | Wrap the definition in `N_()`. |
-| C. No definition site left (4) | "Text files (*.txt)\|*.txt", "PDF files (*.pdf)\|*.pdf", "Word documents (*.docx)\|*.docx", "EPUB books (*.epub)\|*.epub" | None. These were `IMPORT_WILDCARDS`, deleted in P0-3. Nothing shows them. | See "Retired msgids" below. |
+| C. No definition site left (4) | "Text files (*.txt)\|*.txt", "PDF files (*.pdf)\|*.pdf", "Word documents (*.docx)\|*.docx", "EPUB books (*.epub)\|*.epub" | None. These were `IMPORT_WILDCARDS`, deleted in P0-3. Nothing shows them. | Drop them. See "Orphan msgids" below. |
 
-The AST scan (`p06impl/tools/msgid_scan.py`, copied to the session scratchpad as `p12/tools/msgid_scan.py`, baseline saved as `p12/base_msgids.json`) gives 357 msgids in the source and 357 in `client/locales/dotexpress.pot`, and the two sets are equal. A dry run of the marking below on a scratch copy gives 357 again, equal to the `.pot`. Without the group C strings it gives 353, and exactly those four are missing.
+The AST scan (`p06impl/tools/msgid_scan.py`, copied to the session scratchpad as `p12/tools/msgid_scan.py`, baseline saved as `p12/base_msgids.json`) gives 357 msgids in the source and 357 in `client/locales/dotexpress.pot`, and the two sets are equal. A dry run of the marking below on a scratch copy gives 353: the `.pot` has exactly the four group C strings in addition, and nothing else differs.
 
 ### Tests that pin the current shape
 
@@ -126,23 +126,14 @@ class DocumentFormatDescriptor:
 - `get_exportable_formats()` stays and now has production callers: `ui/action_menu.py` and the tests.
 - Registry invariant (tested): for every descriptor, `exportable`, `writer is not None`, `export_wildcard is not None` and `export_label is not None` are all true or all false.
 
-### Retired msgids (decision)
+### Orphan msgids (decision)
 
-The four group C strings have no definition site, because the import dialog uses the combined `build_import_wildcard` and P0-3 deleted the unused `IMPORT_WILDCARDS`. Two requirements conflict here: deleting the marker tuple, and keeping the extracted set at exactly 357. **Decision: keep them.** `documents/formats.py` keeps a clearly named four-entry tuple next to the import-filter code:
+The four group C strings have no definition site, because the import dialog uses the combined `build_import_wildcard` and P0-3 deleted the unused `IMPORT_WILDCARDS`. **Decision (orchestrator): drop them.** No replacement tuple is kept: keeping dead strings would contradict the P0-3 cleanup. The 357 count was only a proxy for "no visible string loses its translation", and these four are never displayed.
 
-```python
-# Single-format import filters used before the combined import wildcard.
-# Nothing displays them any more; they stay marked only so dotexpress.pot keeps
-# these msgids and their zh_TW translations. Drop them in a catalog update.
-_RETIRED_IMPORT_FILTER_MSGIDS = (
-    N_("Text files (*.txt)|*.txt"),
-    N_("PDF files (*.pdf)|*.pdf"),
-    N_("Word documents (*.docx)|*.docx"),
-    N_("EPUB books (*.epub)|*.epub"),
-)
-```
+Consequences:
 
-This is honest about what it is (4 dead msgids, not a disguised menu list), and it keeps the catalog unchanged. The alternative is to drop them: the set becomes 353, `generate-pot.bat` removes them from the `.pot` on its next Windows run, and the `.po` entries become obsolete. That has no visible effect, but it is a catalog change this task was told not to make. If the orchestrator prefers the alternative, it is a one-line deletion plus the expected count `353` in the acceptance criteria.
+- The source extracts 353 msgids: the 357 baseline minus exactly "Text files (*.txt)|*.txt", "PDF files (*.pdf)|*.pdf", "Word documents (*.docx)|*.docx", "EPUB books (*.epub)|*.epub". The scan must show no other difference.
+- `client/locales/dotexpress.pot`, `dotexpress.po` and the `.mo` are not hand-edited (as in P0-2 and P0-5). They keep the four entries until `scripts\generate-pot.bat` next runs on Windows. Then the `.pot` drops them, and a `msgmerge` turns the `.po` entries into obsolete (`#~`) entries. That is harmless: the strings are never looked up. This is a Windows follow-up.
 
 ### Menu descriptors (`ui/action_menu.py`)
 
@@ -237,9 +228,9 @@ One small difference, not visible to users: a submenu handler is the bound metho
 3. `refactor:` derive the export wildcard and the Export submenus from the registry. Add `export_wildcard`/`export_label` (`N_`-marked), `build_export_wildcard` and `_EXPORT_FORMATS`. Delete the `gui` wildcard constants and methods, and remove the two positive assertions in `test_dead_frame_helpers_are_removed` in the same commit. The markers in `gui` still exist, so the msgid set is unchanged.
 4. `refactor:` key the document menu state by action. Add `enabled_when` and the action-keyed `get_document_menu_enabled_state`, and update `test_action_menu` and `test_sync_document_menu_state_before_document_list_exists`. `gui` binding moves to action keys in the same commit, so no step leaves label and action keys mixed.
 5. `refactor:` add `ui/menu_builder.py` with `tests/test_menu_builder.py` and route the File and context menus through it. Delete `_append_document_menu_items` and `_bind_document_menu_handlers`.
-6. `refactor:` mark translatable labels at their definitions. Add `N_()` in `ui/action_menu.py`, `ui/translation_menu.py`, `documents/formats.py` (`wildcard_label`, `ALL_SUPPORTED_FILES_LABEL`, `_RETIRED_IMPORT_FILTER_MSGIDS`), `dialog.py` and `user_script.py`. Delete `_MENU_TRANSLATION_MARKERS` and `N_` from `gui`'s import, and update `SharedSetupConsumerTest` (`gui.py` to `{"_", "resource_path"}`, `dialog.py` to `{"N_", "_"}`) in the same commit.
+6. `refactor:` mark translatable labels at their definitions. Add `N_()` in `ui/action_menu.py`, `ui/translation_menu.py`, `documents/formats.py` (`wildcard_label`, `ALL_SUPPORTED_FILES_LABEL`), `dialog.py` and `user_script.py`. Delete `_MENU_TRANSLATION_MARKERS` and `N_` from `gui`'s import, and update `SharedSetupConsumerTest` (`gui.py` to `{"_", "resource_path"}`, `dialog.py` to `{"N_", "_"}`) in the same commit.
 
-After each step, run the msgid scan: 357 msgids, equal to the `.pot` and to `p12/base_msgids.json`.
+After each step, run the msgid scan. After steps 1-5 it gives 357 msgids, equal to the `.pot` and to `p12/base_msgids.json`. After step 6 it gives 353, and the only differences from both are the four group C strings.
 
 ## What Stays Identical
 
@@ -250,9 +241,9 @@ After each step, run the msgid scan: 357 msgids, equal to the `.pot` and to `p12
 - Exported bytes: the members and contents of the DEP zip (`<name>.txt`, `<name>.brl`, no pending-metadata member), the BRL text, and the HTML text (the same render of the same cached results, or the "No conversion data" page with its English default message when there is no cache).
 - Errors: `ValueError('Unsupported export format: "<key>".')` for non-exportable formats, and `OSError` handling with the same messages.
 - Import dialog wildcard and filter-index mapping. `formats.get_import_filter_labels` and `ui.import_dialog.*` do not change.
-- msgids: the same 357. `client/locales/` is untouched. The `.pot` `#:` references shift on the next Windows run of `generate-pot.bat`, as in P0-5.
+- msgids: every displayed string keeps its msgid and translation. The extracted set is the 357 baseline minus the four orphan import filters (353). `client/locales/` is not hand-edited. On the next Windows run of `generate-pot.bat` the `.pot` `#:` references shift (as in P0-5) and the four orphans leave the `.pot`.
 
-Intentional differences, none visible to users: writers return `Path` (the HTML writer returned an `int`); the export submenu handler is captured at build time; a missing or extra menu handler, or a state entry with no menu item, now raises instead of being skipped silently.
+Intentional differences, none visible to users: writers return `Path` (the HTML writer returned an `int`); the export submenu handler is captured at build time; a missing or extra menu handler, or a state entry with no menu item, now raises instead of being skipped silently; the four never-displayed orphan import-filter strings are no longer extracted.
 
 ## Test Plan
 
@@ -300,7 +291,7 @@ Run `tests.test_menu_builder`, `tests.test_gui_document_flows`, `tests.test_acti
 2. `grep -rnE '_MENU_TRANSLATION_MARKERS|DEP_WILDCARD|BRL_WILDCARD|HTML_WILDCARD|_get_export_wildcard|_get_(dep|brl|html)_wildcard|_append_document_menu_items|_bind_document_menu_handlers' client --include='*.py'` prints nothing.
 3. `grep -nE 'menu_items\["|"Delete All"|"Export All"' client/gui.py` prints nothing (no label-keyed lookups).
 4. `grep -nE '\bN_\b' client/gui.py` prints nothing. `grep -nE '^(import wx|from wx)' client/ui/menu_builder.py` prints nothing.
-5. msgid scan: `python -I <scratchpad>/p12/tools/msgid_scan.py client --compare <scratchpad>/p12/base_msgids.json` reports 357 source msgids, `SOURCE == POT` and `SOURCE == SAVED`.
+5. msgid scan: `python -I <scratchpad>/p12/tools/msgid_scan.py client --compare <scratchpad>/p12/base_msgids.json` reports 353 source msgids. The only differences it lists, against both the `.pot` and the saved baseline, are exactly the four group C strings ("Text files (*.txt)|*.txt", "PDF files (*.pdf)|*.pdf", "Word documents (*.docx)|*.docx", "EPUB books (*.epub)|*.epub"). The tool exits 1 because of those expected differences. Any other difference fails this criterion.
 6. `git diff main --stat -- client/locales scripts` is empty.
 7. Focused verification passes:
    `cd client && python3 -m unittest tests.test_document_formats tests.test_action_menu tests.test_menu_builder tests.test_gui_document_flows tests.test_i18n tests.test_removed_dead_code tests.test_translation_menu tests.test_export_results tests.test_user_preprocessing_script tests.test_dictionary_management_dialog tests.test_wx_stub -v`
@@ -316,14 +307,14 @@ Run `tests.test_menu_builder`, `tests.test_gui_document_flows`, `tests.test_acti
 - **Stub-scope import of a new module** (low). `ui/menu_builder` is first imported by `gui` inside the stub scope. It imports neither wx nor gui. Its test imports it directly. The shuffled runs cover module order.
 - **i18n import in domain modules** (low). `documents/formats.py`, `ui/action_menu.py`, `ui/translation_menu.py` and `conversion/preprocessing/user_script.py` now import `N_` from `i18n`, which loads the catalog once when imported. `i18n` imports only the standard library, so there is no cycle and no `config` import (`test_translation_import_isolation` still holds). These modules never call `_`.
 - **Strictness** (low). Mismatched handler maps and unknown state actions now raise errors. All callers build both from the same descriptors, and tests cover the mismatch paths.
-- **Catalog drift** (low). Marking strings with `N_` at new places changes only the `.pot` `#:` references, which refresh on Windows. The retired-msgid decision keeps the set unchanged. If the orchestrator reverses that decision, the set changes by exactly 4 strings that are never displayed.
+- **Catalog drift** (low). Marking strings with `N_` at new places changes the `.pot` `#:` references, which refresh on Windows. Dropping the four orphans removes them from the `.pot` on that run, and their `.po` entries become obsolete. Nothing displays them, so no translation the user sees is lost. The scan criterion makes sure no other msgid disappears.
 - **Overlap** (low). P1-3 owns the init-order guards in `_sync_document_menu_state`, and they are kept. P1-4 will move `_write_export_document`, `_export_next_document` and `_set_conversion_busy` into `ExportCoordinator`/`ConversionPresenter`. `ExportContext` gives it one clean writer call. D-5 (the `formats` <-> `workspace` cycle) is untouched.
 
 ## Windows verification debt
 
 - Screenshots of the File menu, the Export and Export All submenus, and the document-list context menu (on an item, and from the keyboard menu key with no item selected), before and after, in the shipped zh_TW UI. Compare them with no documents, with documents but no selection, and with a selection.
 - Manually export each format (single and Export All) from a pre-change build and a post-change build, and compare the outputs: DEP zip members and contents, BRL bytes, HTML bytes. Ctrl+S from the output editor opens the BRL save dialog.
-- Run `scripts\generate-pot.bat`, and check that the regenerated `.pot` has the same msgid set (only `#:` references and the creation date change).
+- Run `scripts\generate-pot.bat`, and check that the regenerated `.pot` has the baseline msgid set minus exactly the four orphan import filters (besides `#:` references and the creation date). Then `msgmerge` the zh_TW `.po` (the four become obsolete `#~` entries) and recompile the `.mo`.
 
 ## Out of Scope
 

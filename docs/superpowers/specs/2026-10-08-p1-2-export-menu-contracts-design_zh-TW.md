@@ -9,9 +9,9 @@
 - **單一 writer 契約（O-2、L-3、P-4）。** 每個匯出 writer 都接收 `(path, document, context: ExportContext)`。`ExportContext` 攜帶 dual-view 結果。`gui._write_export_document` 以相同方式呼叫所有 writer，不再判斷 `"html"`。
 - **匯出 wildcard 與 Export 子選單改由 registry 產生（O-2、P-4）。** `DocumentFormatDescriptor` 新增 `export_wildcard` 與 `export_label`。存檔對話框的 wildcard 來自 `formats.build_export_wildcard(descriptor, _)`。Export 與 Export All 子選單由 `formats.get_exportable_formats()` 建立。這取代了 `gui._get_export_wildcard` 的硬編碼 dict、`gui.py` 的三個 `*_WILDCARD` 常數，以及 `ui/action_menu.py` 中兩份硬編碼的格式 tuple。
 - **選單以 action 為 key（O-1）。** `DocumentMenuItem` 新增 `enabled_when`。`get_document_menu_enabled_state` 回傳由 descriptor 推導的 `{action: bool}`。新增不依賴 wx 的 `ui/menu_builder.py`，依 descriptor 與 `{action: handler}` 對照表建立並綁定文件選單，File 選單與文件清單的右鍵選單都使用它。程式不再以英文 label 查找選單項目。
-- **可翻譯字串在定義處標記（M-4）。** 刪除 `gui._MENU_TRANSLATION_MARKERS`。每個 label 在定義處以 `N_()` 包起來，擷取出的 msgid 集合維持完全相同的 357 個字串。
+- **可翻譯字串在定義處標記（M-4）。** 刪除 `gui._MENU_TRANSLATION_MARKERS`。每個 label 在定義處以 `N_()` 包起來，擷取出的 msgid 集合只少了四個沒有地方顯示的孤立匯入篩選字串（357 變成 353）。
 
-這是保持行為不變的重構。選單順序、label、巢狀結構、啟用狀態、handler、快速鍵、對話框標題與 wildcard，以及每個匯出檔案的位元組內容都不變。沒有任何使用者可見字串改變，`client/locales/` 下也沒有任何變更。
+這是保持行為不變的重構。選單順序、label、巢狀結構、啟用狀態、handler、快速鍵、對話框標題與 wildcard，以及每個匯出檔案的位元組內容都不變。沒有任何使用者可見字串改變，`client/locales/` 下也不手動修改任何檔案。
 
 ## 現況（2026-10-08 於 `refactor/p1-2-export-menu-contracts` 驗證，HEAD `029a86e`，已合併 P0-1..P0-6 與 P1-1）
 
@@ -60,9 +60,9 @@
 | --- | --- | --- | --- |
 | A. 已在別處擷取（23） | Add、Edit、Delete、Import、Export、Dual View、Rename、Default、Braille Font、SimBraille、Translation、"No conversion data is available for this document."、Text Processing、Text Processing Python Code、"Unable to open text processing script: {error}"、"Unable to save text processing script: {error}"、"Text processing failed: {error}"、Confirm Delete Dictionary、`Do you want to delete dictionary "{name}"?`、Rename Dictionary、Help、Coseeing Website、About DotExpress | `dialog.py`、`settings/dialogs.py`、`dictionaries/presenter.py` 或 `gui.py` 中的字面值 `_()` 呼叫 | 刪除標記，msgid 仍在。 |
 | B. 只靠標記擷取（21） | Open、Delete All、Export All（`ui/action_menu.py`）；Package DEP、Braille BRL、Dual View HTML（`ui/action_menu.py` 各出現兩次，改放到 `documents/formats.py`）；DEP、DOCX、EPUB、PDF、TXT、BRL（`documents/formats.py` 的 `wildcard_label`）；All Supported Files（`documents/formats.py:200, 205`）；Convert、Settings、Dictionary Management...（`ui/translation_menu.py`）；`conversion/preprocessing/user_script.py:39, 48` 的兩個 `ValueError` 訊息（經 `settings/dialogs.py:148` 的 `_(str(error))` 顯示）；"CSV files (*.csv)\|*.csv"（`dialog.py:28` `CSV_WILDCARD`）；"DotExpress files (*.dep)\|*.dep" 與 "Braille files (*.brl)\|*.brl"（`gui.py:125-126`，改放到 `documents/formats.py`） | 只有定義處的裸字串 | 在定義處以 `N_()` 包起來。 |
-| C. 已無定義處（4） | "Text files (*.txt)\|*.txt"、"PDF files (*.pdf)\|*.pdf"、"Word documents (*.docx)\|*.docx"、"EPUB books (*.epub)\|*.epub" | 無。這些原本是 P0-3 刪除的 `IMPORT_WILDCARDS`，沒有地方顯示它們。 | 見下方「退役的 msgid」。 |
+| C. 已無定義處（4） | "Text files (*.txt)\|*.txt"、"PDF files (*.pdf)\|*.pdf"、"Word documents (*.docx)\|*.docx"、"EPUB books (*.epub)\|*.epub" | 無。這些原本是 P0-3 刪除的 `IMPORT_WILDCARDS`，沒有地方顯示它們。 | 刪除。見下方「孤立的 msgid」。 |
 
-AST 掃描工具（`p06impl/tools/msgid_scan.py`，已複製到 session scratchpad 的 `p12/tools/msgid_scan.py`，基線存為 `p12/base_msgids.json`）在原始碼中找到 357 個 msgid，`client/locales/dotexpress.pot` 也是 357 個，兩個集合相等。在 scratch 複本上依下文方式標記的 dry run 仍得到 357，與 `.pot` 相等。若不保留 C 組字串則為 353，缺少的正好是那四個。
+AST 掃描工具（`p06impl/tools/msgid_scan.py`，已複製到 session scratchpad 的 `p12/tools/msgid_scan.py`，基線存為 `p12/base_msgids.json`）在原始碼中找到 357 個 msgid，`client/locales/dotexpress.pot` 也是 357 個，兩個集合相等。在 scratch 複本上依下文方式標記的 dry run 得到 353：`.pot` 只多出 C 組那四個字串，其他完全相同。
 
 ### 釘住現狀的測試
 
@@ -126,23 +126,14 @@ class DocumentFormatDescriptor:
 - `get_exportable_formats()` 保留，現在有 production 呼叫者：`ui/action_menu.py` 與測試。
 - Registry 不變式（有測試）：對每個 descriptor，`exportable`、`writer is not None`、`export_wildcard is not None`、`export_label is not None` 四者全為真或全為假。
 
-### 退役的 msgid（決策）
+### 孤立的 msgid（決策）
 
-C 組四個字串沒有定義處，因為匯入對話框使用合併的 `build_import_wildcard`，而 P0-3 刪除了沒有用到的 `IMPORT_WILDCARDS`。這裡兩個要求互相衝突：刪除標記 tuple，以及讓擷取集合維持恰好 357 個。**決策：保留它們。** `documents/formats.py` 在 import-filter 程式碼旁保留一個名稱清楚、四個項目的 tuple：
+C 組四個字串沒有定義處，因為匯入對話框使用合併的 `build_import_wildcard`，而 P0-3 刪除了沒有用到的 `IMPORT_WILDCARDS`。**決策（orchestrator）：刪除它們。** 不保留任何替代的 tuple：保留無用字串違背 P0-3 的清理。357 這個數字只是「沒有任何顯示中的字串失去翻譯」的替代指標，而這四個字串從不顯示。
 
-```python
-# Single-format import filters used before the combined import wildcard.
-# Nothing displays them any more; they stay marked only so dotexpress.pot keeps
-# these msgids and their zh_TW translations. Drop them in a catalog update.
-_RETIRED_IMPORT_FILTER_MSGIDS = (
-    N_("Text files (*.txt)|*.txt"),
-    N_("PDF files (*.pdf)|*.pdf"),
-    N_("Word documents (*.docx)|*.docx"),
-    N_("EPUB books (*.epub)|*.epub"),
-)
-```
+影響：
 
-它如實表達自己是什麼（4 個無用的 msgid，不是偽裝的選單清單），並讓 catalog 保持不變。替代方案是刪掉它們：集合變成 353，下次在 Windows 執行 `generate-pot.bat` 時會從 `.pot` 移除，`.po` 條目變成 obsolete。這沒有可見影響，但屬於本任務被要求不要做的 catalog 變更。若 orchestrator 偏好替代方案，只需刪一行，並把驗收標準中的預期數量改為 `353`。
+- 原始碼擷取出 353 個 msgid：357 個基線恰好減去 "Text files (*.txt)|*.txt", "PDF files (*.pdf)|*.pdf", "Word documents (*.docx)|*.docx", "EPUB books (*.epub)|*.epub"。掃描不得出現其他差異。
+- `client/locales/dotexpress.pot`、`dotexpress.po` 與 `.mo` 不手動修改（與 P0-2、P0-5 相同）。在下次於 Windows 執行 `scripts\generate-pot.bat` 之前，它們仍保留這四個條目。之後 `.pot` 會移除它們，`msgmerge` 會把 `.po` 中的條目變成 obsolete（`#~`）條目。這無害，因為這些字串從不被查詢。此事列為 Windows 後續工作。
 
 ### 選單 descriptor（`ui/action_menu.py`）
 
@@ -237,9 +228,9 @@ def apply_document_menu_state(items_by_action: Mapping[str, object], enabled_by_
 3. `refactor:` 由 registry 推導匯出 wildcard 與 Export 子選單。加入 `export_wildcard`/`export_label`（以 `N_` 標記）、`build_export_wildcard` 與 `_EXPORT_FORMATS`。刪除 `gui` 的 wildcard 常數與方法，並在同一個 commit 中移除 `test_dead_frame_helpers_are_removed` 的兩個正向斷言。`gui` 的標記還在，所以 msgid 集合不變。
 4. `refactor:` 文件選單狀態改以 action 為 key。加入 `enabled_when` 與以 action 為 key 的 `get_document_menu_enabled_state`，更新 `test_action_menu` 與 `test_sync_document_menu_state_before_document_list_exists`。`gui` 的綁定在同一個 commit 中改用 action key，所以沒有任何一步會混用 label 與 action key。
 5. `refactor:` 加入 `ui/menu_builder.py` 與 `tests/test_menu_builder.py`，讓 File 選單與右鍵選單改走它。刪除 `_append_document_menu_items` 與 `_bind_document_menu_handlers`。
-6. `refactor:` 在定義處標記可翻譯 label。在 `ui/action_menu.py`、`ui/translation_menu.py`、`documents/formats.py`（`wildcard_label`、`ALL_SUPPORTED_FILES_LABEL`、`_RETIRED_IMPORT_FILTER_MSGIDS`）、`dialog.py`、`user_script.py` 加上 `N_()`。刪除 `_MENU_TRANSLATION_MARKERS` 與 `gui` import 中的 `N_`，並在同一個 commit 中更新 `SharedSetupConsumerTest`（`gui.py` 改為 `{"_", "resource_path"}`，`dialog.py` 改為 `{"N_", "_"}`）。
+6. `refactor:` 在定義處標記可翻譯 label。在 `ui/action_menu.py`、`ui/translation_menu.py`、`documents/formats.py`（`wildcard_label`、`ALL_SUPPORTED_FILES_LABEL`）、`dialog.py`、`user_script.py` 加上 `N_()`。刪除 `_MENU_TRANSLATION_MARKERS` 與 `gui` import 中的 `N_`，並在同一個 commit 中更新 `SharedSetupConsumerTest`（`gui.py` 改為 `{"_", "resource_path"}`，`dialog.py` 改為 `{"N_", "_"}`）。
 
-每一步完成後執行 msgid 掃描：357 個 msgid，與 `.pot` 以及 `p12/base_msgids.json` 相等。
+每一步完成後執行 msgid 掃描。步驟 1-5 之後為 357 個 msgid，與 `.pot` 以及 `p12/base_msgids.json` 相等。步驟 6 之後為 353 個，與兩者的差異只有 C 組那四個字串。
 
 ## 保持不變的部分
 
@@ -250,9 +241,9 @@ def apply_document_menu_state(items_by_action: Mapping[str, object], enabled_by_
 - 匯出位元組：DEP zip 的成員與內容（`<name>.txt`、`<name>.brl`，沒有 pending-metadata 成員）、BRL 文字，以及 HTML 文字（對同一份 cache 結果做相同的 render；沒有 cache 時是帶英文預設訊息的「No conversion data」頁面）。
 - 錯誤：不可匯出格式的 `ValueError('Unsupported export format: "<key>".')`，以及訊息相同的 `OSError` 處理。
 - 匯入對話框的 wildcard 與 filter-index 對應。`formats.get_import_filter_labels` 與 `ui.import_dialog.*` 不變。
-- msgid：同樣的 357 個。`client/locales/` 不動。`.pot` 的 `#:` 參照會在下次於 Windows 執行 `generate-pot.bat` 時位移，與 P0-5 相同。
+- msgid：每個會顯示的字串都保留它的 msgid 與翻譯。擷取集合是 357 個基線減去四個孤立匯入篩選字串（353 個）。`client/locales/` 不手動修改。下次於 Windows 執行 `generate-pot.bat` 時，`.pot` 的 `#:` 參照會位移（與 P0-5 相同），四個孤立字串也會離開 `.pot`。
 
-刻意的差異，使用者都看不到：writer 回傳 `Path`（HTML writer 原本回傳 `int`）；匯出子選單 handler 在建立時取得；缺少或多餘的選單 handler，以及沒有對應選單項目的狀態項，現在會丟出例外而不是靜默略過。
+刻意的差異，使用者都看不到：writer 回傳 `Path`（HTML writer 原本回傳 `int`）；匯出子選單 handler 在建立時取得；缺少或多餘的選單 handler，以及沒有對應選單項目的狀態項，現在會丟出例外而不是靜默略過；四個從不顯示的孤立匯入篩選字串不再被擷取。
 
 ## 測試計畫
 
@@ -300,7 +291,7 @@ def apply_document_menu_state(items_by_action: Mapping[str, object], enabled_by_
 2. `grep -rnE '_MENU_TRANSLATION_MARKERS|DEP_WILDCARD|BRL_WILDCARD|HTML_WILDCARD|_get_export_wildcard|_get_(dep|brl|html)_wildcard|_append_document_menu_items|_bind_document_menu_handlers' client --include='*.py'` 沒有輸出。
 3. `grep -nE 'menu_items\["|"Delete All"|"Export All"' client/gui.py` 沒有輸出（沒有以 label 為 key 的查找）。
 4. `grep -nE '\bN_\b' client/gui.py` 沒有輸出。`grep -nE '^(import wx|from wx)' client/ui/menu_builder.py` 沒有輸出。
-5. msgid 掃描：`python -I <scratchpad>/p12/tools/msgid_scan.py client --compare <scratchpad>/p12/base_msgids.json` 回報 357 個原始碼 msgid、`SOURCE == POT` 與 `SOURCE == SAVED`。
+5. msgid 掃描：`python -I <scratchpad>/p12/tools/msgid_scan.py client --compare <scratchpad>/p12/base_msgids.json` 回報 353 個原始碼 msgid。它列出的差異（相對於 `.pot` 與已儲存的基線）恰好只有 C 組四個字串（"Text files (*.txt)|*.txt", "PDF files (*.pdf)|*.pdf", "Word documents (*.docx)|*.docx", "EPUB books (*.epub)|*.epub"）。因為這些預期中的差異，工具會以 1 結束。出現任何其他差異即不符合此標準。
 6. `git diff main --stat -- client/locales scripts` 為空。
 7. 聚焦驗證通過：
    `cd client && python3 -m unittest tests.test_document_formats tests.test_action_menu tests.test_menu_builder tests.test_gui_document_flows tests.test_i18n tests.test_removed_dead_code tests.test_translation_menu tests.test_export_results tests.test_user_preprocessing_script tests.test_dictionary_management_dialog tests.test_wx_stub -v`
@@ -316,14 +307,14 @@ def apply_document_menu_state(items_by_action: Mapping[str, object], enabled_by_
 - **在 stub scope 內 import 新模組**（低）。`ui/menu_builder` 第一次是由 `gui` 在 stub scope 內 import。它不 import wx 也不 import gui，它的測試直接 import 它。打亂順序的執行涵蓋了模組順序。
 - **領域模組 import i18n**（低）。`documents/formats.py`、`ui/action_menu.py`、`ui/translation_menu.py`、`conversion/preprocessing/user_script.py` 現在從 `i18n` import `N_`，import 時會載入一次 catalog。`i18n` 只 import 標準函式庫，所以沒有循環，也不會 import `config`（`test_translation_import_isolation` 仍成立）。這些模組從不呼叫 `_`。
 - **嚴格性**（低）。不一致的 handler 對照表與未知的狀態 action 現在會丟出例外。所有呼叫端都由同一組 descriptor 建立兩者，測試也涵蓋了不一致的路徑。
-- **Catalog 漂移**（低）。在新位置以 `N_` 標記只會改變 `.pot` 的 `#:` 參照，會在 Windows 上刷新。退役 msgid 的決策讓集合保持不變。若 orchestrator 推翻該決策，集合只會少 4 個從不顯示的字串。
+- **Catalog 漂移**（低）。在新位置以 `N_` 標記會改變 `.pot` 的 `#:` 參照，會在 Windows 上刷新。刪除四個孤立字串後，它們會在那次執行時離開 `.pot`，`.po` 條目變成 obsolete。沒有地方顯示它們，所以使用者看到的翻譯不會遺失。掃描標準確保沒有其他 msgid 消失。
 - **重疊**（低）。`_sync_document_menu_state` 中的 init 順序防禦屬於 P1-3，本任務保留。P1-4 會把 `_write_export_document`、`_export_next_document`、`_set_conversion_busy` 移到 `ExportCoordinator`/`ConversionPresenter`，`ExportContext` 讓它只需要一種乾淨的 writer 呼叫。D-5（`formats` <-> `workspace` 循環）不動。
 
 ## Windows 驗證債
 
 - 變更前後，在出貨的 zh_TW UI 中截圖 File 選單、Export 與 Export All 子選單，以及文件清單的右鍵選單（在項目上開啟，以及在沒有選取項目時用鍵盤選單鍵開啟），並在「沒有文件」「有文件但沒有選取」「有選取」三種狀態下比對。
 - 分別用變更前與變更後的 build 手動匯出每種格式（單一匯出與 Export All），比對輸出：DEP zip 的成員與內容、BRL 位元組、HTML 位元組。在輸出編輯區按 Ctrl+S 會開啟 BRL 存檔對話框。
-- 執行 `scripts\generate-pot.bat`，確認重新產生的 `.pot` msgid 集合相同（只有 `#:` 參照與建立日期改變）。
+- 執行 `scripts\generate-pot.bat`，確認重新產生的 `.pot` msgid 集合是基線恰好減去四個孤立匯入篩選字串（另外只有 `#:` 參照與建立日期改變）。接著對 zh_TW `.po` 執行 `msgmerge`（四個條目變成 obsolete `#~`），並重新編譯 `.mo`。
 
 ## 範圍外
 

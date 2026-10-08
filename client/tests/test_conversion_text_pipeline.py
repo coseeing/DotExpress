@@ -1,11 +1,16 @@
 import csv
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
+from unittest.mock import patch
 
 from adapters.translation.contracts import TranslationRuntime
+from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
 from config import DEFAULT_CHARSET_MAPS
+from conversion import service
 from conversion.output import ConversionRequest, convert_text_with_alignment
+from conversion.text import dictionary_rules
 from conversion.text.dictionary_rules import apply_dictionary, split_bracket_segments
 from conversion.text.pipeline import (
     TextProcessingError,
@@ -16,6 +21,11 @@ from translate import TranslationResult
 
 
 LANGUAGE_TABLES = {"default": "default.ctb", "en": "en.ctb", "zh": "zh.ctb", "ja": "ja.ctb"}
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+READ_COUNT_TABLES = {"default": "zh-tw.ctb", "en": "en-ueb-g1.ctb", "zh": "zh-tw.ctb", "math": "Nemeth"}
+# Twelve plain-text items for the language detector, around one inline math segment.
+MIXED_TEXT = "台灣 is 美麗 island, 中文 and English 混合 $x+1$ 測試 test 完成 done"
+COUNTED_FILES = ("dictionary.csv", "Bopomofo2Braille.csv", "BopomofoChar2Braille.csv", "Braille2Ascii.csv")
 
 
 class ConversionTextPipelineTest(unittest.TestCase):
@@ -269,3 +279,153 @@ class ConversionTextPipelineTest(unittest.TestCase):
                 )
 
                 self.assertEqual(calls, [("A", "en.ctb"), (" ", "en.ctb"), ("中", table)])
+
+
+class DictionaryReadCountTest(unittest.TestCase):
+    """Each rule file is opened at most once per conversion, however many items the text has."""
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.test_dir = Path(self._tmpdir.name)
+        self.dictionary_path = self.test_dir / "dictionary.csv"
+        self.dictionary_path.write_text("text,braille,type\n台灣,⠞⠺,Braille/Unicode\n", encoding="utf-8")
+
+    def _runtime(self) -> TranslationRuntime:
+        return TranslationRuntime(text_translator=FallbackTextTranslator(), math_translator=FallbackMathTranslator())
+
+    def _convert(self, raw_text: str, output_mode: str = "unicode"):
+        request = ConversionRequest(
+            raw_text=raw_text,
+            output_mode=output_mode,
+            width=40,
+            dictionary_path=self.dictionary_path,
+            data_dir=DATA_DIR,
+            translation_tables=dict(READ_COUNT_TABLES),
+            lang="zh_TW",
+            charset_maps=dict(DEFAULT_CHARSET_MAPS),
+        )
+        return service.convert_text_with_alignment(request, runtime=self._runtime())
+
+    def _opened(self, call) -> dict[str, int]:
+        """Run call() and return how often each counted file was opened through Path.open."""
+        counts: Counter[str] = Counter()
+        original_open = Path.open
+
+        def counting_open(path, *args, **kwargs):
+            counts[path.name] += 1
+            return original_open(path, *args, **kwargs)
+
+        with patch.object(Path, "open", counting_open):
+            call()
+        return {name: counts[name] for name in COUNTED_FILES}
+
+    def _count_apply(self):
+        rules_class = dictionary_rules.LoadedDictionaryRules
+        return patch.object(rules_class, "apply", autospec=True, side_effect=rules_class.apply)
+
+    def test_unicode_conversion_opens_each_rule_file_once(self) -> None:
+        with self._count_apply() as apply:
+            opened = self._opened(lambda: self._convert(MIXED_TEXT))
+
+        self.assertGreaterEqual(apply.call_count, 8)
+        self.assertEqual(
+            opened,
+            {"dictionary.csv": 1, "Bopomofo2Braille.csv": 1, "BopomofoChar2Braille.csv": 1, "Braille2Ascii.csv": 0},
+        )
+
+    def test_ascii_conversion_also_opens_the_ascii_map_once(self) -> None:
+        with self._count_apply() as apply:
+            opened = self._opened(lambda: self._convert(MIXED_TEXT, output_mode="ascii"))
+
+        self.assertGreaterEqual(apply.call_count, 8)
+        self.assertEqual(
+            opened,
+            {"dictionary.csv": 1, "Bopomofo2Braille.csv": 1, "BopomofoChar2Braille.csv": 1, "Braille2Ascii.csv": 1},
+        )
+
+    def test_conversion_parses_the_rules_once_and_builds_three_tries(self) -> None:
+        rules_class = dictionary_rules.LoadedDictionaryRules
+        with patch.object(rules_class, "from_paths", wraps=rules_class.from_paths) as from_paths, patch.object(
+            dictionary_rules, "_build_trie", wraps=dictionary_rules._build_trie
+        ) as build_trie:
+            self._convert(MIXED_TEXT)
+
+        self.assertEqual(from_paths.call_count, 1)
+        self.assertEqual(build_trie.call_count, 3)
+
+    def test_math_only_conversion_opens_no_dictionary_file(self) -> None:
+        opened = self._opened(lambda: self._convert("$x+1$"))
+
+        self.assertEqual(opened["dictionary.csv"], 0)
+        self.assertEqual(opened["Bopomofo2Braille.csv"], 0)
+
+    def test_translate_with_language_opens_each_dictionary_file_once(self) -> None:
+        opened = self._opened(
+            lambda: service.translate_with_language(
+                MIXED_TEXT,
+                self.dictionary_path,
+                dict(READ_COUNT_TABLES),
+                DATA_DIR / "Bopomofo2Braille.csv",
+                runtime=self._runtime(),
+                lang="zh_TW",
+                charset_maps=dict(DEFAULT_CHARSET_MAPS),
+            )
+        )
+
+        self.assertEqual(opened["dictionary.csv"], 1)
+        self.assertEqual(opened["Bopomofo2Braille.csv"], 1)
+
+    def test_every_conversion_reads_the_rules_again(self) -> None:
+        rules_class = dictionary_rules.LoadedDictionaryRules
+        with patch.object(rules_class, "from_paths", wraps=rules_class.from_paths) as from_paths:
+            self._convert(MIXED_TEXT)
+            self._convert(MIXED_TEXT)
+
+        self.assertEqual(from_paths.call_count, 2)
+
+    def test_standalone_plain_text_segment_opens_each_dictionary_file_once(self) -> None:
+        with self._count_apply() as apply:
+            opened = self._opened(
+                lambda: translate_plain_text_segment(
+                    "台灣 is 美麗 island, 中文 and English",
+                    self.dictionary_path,
+                    dict(READ_COUNT_TABLES),
+                    DATA_DIR / "Bopomofo2Braille.csv",
+                    runtime=self._runtime(),
+                    lang="zh_TW",
+                    charset_maps=dict(DEFAULT_CHARSET_MAPS),
+                )
+            )
+
+        self.assertGreater(apply.call_count, 1)
+        self.assertEqual(opened["dictionary.csv"], 1)
+        self.assertEqual(opened["Bopomofo2Braille.csv"], 1)
+
+    def test_plain_text_segment_uses_the_given_loader_instead_of_the_paths(self) -> None:
+        loader = dictionary_rules.DictionaryRulesLoader(
+            self.dictionary_path,
+            DATA_DIR / "Bopomofo2Braille.csv",
+            processing=lambda text: text,
+        )
+        results = []
+
+        def translate():
+            results.append(
+                translate_plain_text_segment(
+                    "台灣",
+                    self.test_dir / "missing.csv",
+                    dict(READ_COUNT_TABLES),
+                    self.test_dir / "missing-bopomofo.csv",
+                    runtime=self._runtime(),
+                    lang="zh_TW",
+                    charset_maps=dict(DEFAULT_CHARSET_MAPS),
+                    dictionary_rules=loader,
+                )
+            )
+
+        first = self._opened(translate)
+        second = self._opened(translate)
+
+        self.assertEqual([first["dictionary.csv"], second["dictionary.csv"]], [1, 0])
+        self.assertEqual(["".join(result[0].braille) for result in results], ["⠞⠺", "⠞⠺"])

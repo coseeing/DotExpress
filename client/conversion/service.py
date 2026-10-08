@@ -11,7 +11,7 @@ from conversion.output import (
 )
 from conversion.plain_text import get_public_error_message
 from conversion.text.math_segments import parse_inline_math_segments, segment_needs_boundary_space
-from conversion.text.pipeline import translate_plain_text_segment
+from conversion.text.pipeline import dictionary_rules_loader, translate_plain_text_segment
 from conversion.wrapping import (
     merge_translation_results,
     wrap_translation_results,
@@ -36,6 +36,9 @@ def translate_with_language_dual_view_segments(
     if text == "":
         return []
 
+    # One loader per call: the rule files are read at the first plain-text item
+    # (never for math-only text) and at most once for the whole conversion.
+    dictionary_rules = dictionary_rules_loader(dictionary_path, bopomofo_path)
     segments_records = []
     segments = parse_inline_math_segments(text)
     default_table = translation_tables["default"]
@@ -57,6 +60,7 @@ def translate_with_language_dual_view_segments(
                 runtime=runtime,
                 lang=lang,
                 charset_maps=charset_maps,
+                dictionary_rules=dictionary_rules,
             )
             if isinstance(plain_results, (list, tuple)):
                 for result in plain_results:

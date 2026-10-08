@@ -8,7 +8,7 @@ from conversion.preprocessing.literal_braille import (
     is_unicode_braille,
 )
 from .char_maps import map_characters
-from .dictionary_rules import apply_dictionary, split_bracket_segments
+from .dictionary_rules import DictionaryRulesLoader, split_bracket_segments
 
 
 ExecuteScript = Callable[[Path, str], str]
@@ -45,6 +45,13 @@ def preprocess_source_text(
     )
 
 
+def dictionary_rules_loader(dictionary_path: Path, bopomofo_path: Path) -> DictionaryRulesLoader:
+    """Return a loader that reads the two rule files on first use, with the zhuyin parser."""
+    from text.zhuyin import normalize_zhuyin_sequence
+
+    return DictionaryRulesLoader(dictionary_path, bopomofo_path, processing=normalize_zhuyin_sequence)
+
+
 def translate_plain_text_segment(
     text: str,
     dictionary_path: Path,
@@ -54,9 +61,12 @@ def translate_plain_text_segment(
     runtime: TranslationRuntime,
     lang: str,
     charset_maps: dict[str, str],
+    dictionary_rules: DictionaryRulesLoader | None = None,
 ):
-    from text.zhuyin import normalize_zhuyin_sequence
     from languageDetection import LangChangeCommand, LanguageDetector
+
+    if dictionary_rules is None:
+        dictionary_rules = dictionary_rules_loader(dictionary_path, bopomofo_path)
 
     language = [key for key, value in translation_tables.items() if key not in {"default", "math"} and value != ""]
     language_detector = LanguageDetector(language, default_lang=lang, charset_maps=charset_maps)
@@ -67,12 +77,7 @@ def translate_plain_text_segment(
     translations = []
     for item in sequence:
         if isinstance(item, str):
-            result = apply_dictionary(
-                item,
-                dictionary_path=dictionary_path,
-                bopomofo_path=bopomofo_path,
-                processing=normalize_zhuyin_sequence,
-            )
+            result = dictionary_rules.load().apply(item)
             raw_segments = split_bracket_segments(result["raw"])
             replacement_segments = split_bracket_segments(result["replacement"])
 

@@ -18,12 +18,12 @@ from dictionaries.entries import (
 )
 from dictionaries.manager import (
 	DEFAULT_DICTIONARY_NAME,
-	MAX_DICTIONARY_NAME_LENGTH,
 	normalize_dictionary_name,
 )
 from dictionaries.presenter import DictionaryManagementActions
 from documents.workspace import normalize_document_name
 from i18n import N_, _
+from ui.dialog_base import ContextManagedDialog, NameDialogBase, NameDialogMessages
 
 CSV_WILDCARD = N_("CSV files (*.csv)|*.csv")
 
@@ -59,34 +59,7 @@ def localize_standard_buttons(
 				button.SetLabel(label)
 
 
-def _normalize_dialog_name(
-	candidate: str,
-	normalizer: Callable[[str], str],
-	empty_message: str,
-	length_message: str,
-	invalid_message: str,
-	reserved_message: str | None = None,
-) -> tuple[str | None, str | None]:
-	if not candidate or not candidate.strip():
-		return None, empty_message
-	if any(ord(char) < 32 for char in candidate):
-		return None, invalid_message
-	if candidate.endswith((" ", ".")):
-		return None, invalid_message
-	normalized_candidate = candidate.strip()
-	if len(normalized_candidate) > MAX_DICTIONARY_NAME_LENGTH:
-		return None, length_message
-	try:
-		return normalizer(normalized_candidate), None
-	except ValueError as exc:
-		if reserved_message and normalized_candidate.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
-			return None, reserved_message
-		if "exceed" in str(exc):
-			return None, length_message
-		return None, invalid_message
-
-
-class AddSymbolDialog(wx.Dialog):
+class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
 	"""Dialog to create or edit a dictionary entry."""
 
 	def __init__(self, parent: wx.Window | None, entry: DictionaryEntry | None = None):
@@ -182,15 +155,25 @@ class AddSymbolDialog(wx.Dialog):
 
 		event.Skip()
 
-	def __enter__(self) -> "AddSymbolDialog":
-		return self
 
-	def __exit__(self, exc_type, exc, _tb) -> None:
-		self.Destroy()
+class _NameDialog(NameDialogBase, wx.Dialog):
+	"""Name dialog base: shows a name error in an information message box."""
+
+	def _show_name_error(self, message: str) -> None:
+		wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 
 
-class DictionaryNameDialog(wx.Dialog):
+class DictionaryNameDialog(_NameDialog):
 	"""Dialog for creating a new dictionary file name."""
+
+	normalize_name = staticmethod(normalize_dictionary_name)
+	name_messages = NameDialogMessages(
+		empty=N_("Please enter the dictionary name."),
+		too_long=N_("Dictionary name must be 1 to 32 characters."),
+		invalid=N_("Dictionary name is not a valid Windows file name."),
+		reserved=N_('Dictionary name "{name}" is reserved.'),
+		reserved_name=DEFAULT_DICTIONARY_NAME,
+	)
 
 	def __init__(self, parent: wx.Window | None, initial_name: str = ""):
 		super().__init__(parent, title=_("Add Dictionary"))
@@ -222,43 +205,16 @@ class DictionaryNameDialog(wx.Dialog):
 		self.name_ctrl.SetFocus()
 		self.name_ctrl.SelectAll()
 
-	def _on_ok(self, event: wx.CommandEvent) -> None:
-		candidate = self.name_ctrl.GetValue()
-		normalized_candidate, message = _normalize_dialog_name(
-			candidate,
-			normalize_dictionary_name,
-			_("Please enter the dictionary name."),
-			_("Dictionary name must be 1 to 32 characters."),
-			_("Dictionary name is not a valid Windows file name."),
-			_('Dictionary name "{name}" is reserved.').format(name=DEFAULT_DICTIONARY_NAME),
-		)
-		if message:
-			wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
-			self.name_ctrl.SetFocus()
-			return
-		self.name_ctrl.SetValue(normalized_candidate)
-		event.Skip()
 
-	def _validate_name(self, candidate: str) -> str | None:
-		_normalized, message = _normalize_dialog_name(
-			candidate,
-			normalize_dictionary_name,
-			_("Please enter the dictionary name."),
-			_("Dictionary name must be 1 to 32 characters."),
-			_("Dictionary name is not a valid Windows file name."),
-			_('Dictionary name "{name}" is reserved.').format(name=DEFAULT_DICTIONARY_NAME),
-		)
-		return message
-
-	def __enter__(self) -> "DictionaryNameDialog":
-		return self
-
-	def __exit__(self, exc_type, exc, _tb) -> None:
-		self.Destroy()
-
-
-class DocumentNameDialog(wx.Dialog):
+class DocumentNameDialog(_NameDialog):
 	"""Dialog for creating or renaming a document."""
+
+	normalize_name = staticmethod(normalize_document_name)
+	name_messages = NameDialogMessages(
+		empty=N_("Please enter the document name."),
+		too_long=N_("Document name must be 1 to 32 characters."),
+		invalid=N_("Document name is not a valid Windows file name."),
+	)
 
 	def __init__(self, parent: wx.Window | None, title: str, initial_name: str = ""):
 		super().__init__(parent, title=title)
@@ -287,40 +243,8 @@ class DocumentNameDialog(wx.Dialog):
 	def get_document_name(self) -> str:
 		return self.name_ctrl.GetValue().strip()
 
-	def _on_ok(self, event: wx.CommandEvent) -> None:
-		candidate = self.name_ctrl.GetValue()
-		normalized_candidate, message = _normalize_dialog_name(
-			candidate,
-			normalize_document_name,
-			_("Please enter the document name."),
-			_("Document name must be 1 to 32 characters."),
-			_("Document name is not a valid Windows file name."),
-		)
-		if message:
-			wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
-			self.name_ctrl.SetFocus()
-			return
-		self.name_ctrl.SetValue(normalized_candidate)
-		event.Skip()
 
-	def _validate_name(self, candidate: str) -> str | None:
-		_normalized, message = _normalize_dialog_name(
-			candidate,
-			normalize_document_name,
-			_("Please enter the document name."),
-			_("Document name must be 1 to 32 characters."),
-			_("Document name is not a valid Windows file name."),
-		)
-		return message
-
-	def __enter__(self) -> "DocumentNameDialog":
-		return self
-
-	def __exit__(self, exc_type, exc, _tb) -> None:
-		self.Destroy()
-
-
-class InvalidWorkspaceFilesDialog(wx.Dialog):
+class InvalidWorkspaceFilesDialog(ContextManagedDialog, wx.Dialog):
 	"""Dialog shown when startup finds invalid DEP files in the workspace."""
 
 	def __init__(self, parent: wx.Window | None, invalid_paths: list[Path]):
@@ -353,14 +277,8 @@ class InvalidWorkspaceFilesDialog(wx.Dialog):
 		self._delete_invalid_files = False
 		self.EndModal(wx.ID_CANCEL)
 
-	def __enter__(self) -> "InvalidWorkspaceFilesDialog":
-		return self
 
-	def __exit__(self, exc_type, exc, _tb) -> None:
-		self.Destroy()
-
-
-class FileIssuesDialog(wx.Dialog):
+class FileIssuesDialog(ContextManagedDialog, wx.Dialog):
 	"""Dialog shown when a batch operation skips one or more files."""
 
 	def __init__(self, parent: wx.Window | None, title: str, message: str, issues: list[str]):
@@ -374,12 +292,6 @@ class FileIssuesDialog(wx.Dialog):
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 		finalize_dialog_layout(self, main_sizer)
 		self.SetMinSize((520, 320))
-
-	def __enter__(self) -> "FileIssuesDialog":
-		return self
-
-	def __exit__(self, exc_type, exc, _tb) -> None:
-		self.Destroy()
 
 
 class CallbackVirtualListCtrl(wx.ListCtrl):
@@ -401,7 +313,7 @@ class CallbackVirtualListCtrl(wx.ListCtrl):
 DictionaryEntryListCtrl = CallbackVirtualListCtrl
 
 
-class SpeechSymbolsDialog(wx.Dialog):
+class SpeechSymbolsDialog(ContextManagedDialog, wx.Dialog):
 	"""Dialog for editing custom dictionary mappings stored on disk."""
 
 	def __init__(self, parent: wx.Window | None, dictionary_path: Path | None = None):
@@ -413,12 +325,6 @@ class SpeechSymbolsDialog(wx.Dialog):
 		self._build_ui()
 		self.filter_entries()
 		self._update_button_states()
-
-	def __enter__(self) -> "SpeechSymbolsDialog":
-		return self
-
-	def __exit__(self, exc_type, exc, _tb) -> None:
-		self.Destroy()
 
 	def _build_ui(self) -> None:
 		main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -648,7 +554,7 @@ class SpeechSymbolsDialog(wx.Dialog):
 		save_dictionary_entries(self.dictionary_path, self.entries)
 
 
-class DictionaryManagementDialog(wx.Dialog):
+class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 	"""Passive view of dictionary management: runs ``actions`` and implements ``DictionaryManagementView``."""
 
 	def __init__(
@@ -866,9 +772,3 @@ class DictionaryManagementDialog(wx.Dialog):
 			if file_dialog.ShowModal() != wx.ID_OK:
 				return None
 			return Path(file_dialog.GetPath())
-
-	def __enter__(self) -> "DictionaryManagementDialog":
-		return self
-
-	def __exit__(self, exc_type, exc, _tb) -> None:
-		self.Destroy()

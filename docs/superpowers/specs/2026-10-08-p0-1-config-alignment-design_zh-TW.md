@@ -138,6 +138,6 @@ logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
 
 - **與路線圖列的差異**（低）：P0-1 不移除 `storage/refactor.md` 提議移除的注入。後續任務（特別是 S-5 的 `ConfigStore` 工作）必須保留注入，而不是照原始建議處理；「決策」一節即為此紀錄。
 - **設定檔損毀時灌爆 log**（已緩解）：以路徑加簽章為鍵的節流處理。
-- **`log/` 存在前就記錄**（低）：若在 `prepare_application_directories` 執行前讀取設定失敗，`FileHandler` 無法開檔。此時標準函式庫的 `Handler.handleError` 會在 stderr（若存在）印出「Logging error」提示並繼續執行，絕不會當掉。在正常啟動順序中，`log/` 會在主視窗讀取設定前完成驗證。
+- **`log/` 存在前就記錄**（低）：若在 `prepare_application_directories` 執行前讀取或儲存設定失敗（例如 `main.py` 等非 GUI 進入點，或新 clone 在沒有 `client/log/` 的情況下執行測試），或 `log/` 無法寫入，`FileHandler` 便無法開檔。在 `delay=True` 下，`logging.FileHandler.emit` 是在其 `try`/`handleError` 區塊之外呼叫 `self._open()`，因此 `FileNotFoundError`/`PermissionError` 會從 logging 呼叫中拋出，`Handler.handleError` 不會攔下。因應方式（見 plan 的 Spec Correction）：兩處記錄都經由 `_log_current_exception`，當 logging 呼叫拋出 `OSError` 時丟棄該筆記錄，因此 `_load_from_file` 與 `_save_to_file` 仍然絕不拋出例外；此時該筆診斷資訊會遺失。在正常 GUI 啟動順序中，`log/` 會在主視窗讀取設定前完成驗證。
 - **測試寫入真實 log 目錄**（低）：只有在未來的測試觸發失敗路徑、卻沒有使用 `assertLogs` 或 patch logger 時才可能發生。測試策略要求兩者擇一。
 - **與 P0-3 重疊**（功能上無影響）：P0-3 必須略過 P0-1 已移除的三個 setter。

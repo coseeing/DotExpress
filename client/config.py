@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import uuid4
 
 from app_paths import get_config_path
+from conversion.math_braille_codes import DEFAULT_MATH_BRAILLE_TABLE, MATH_BRAILLE_TABLES  # noqa: F401  (re-exported)
 from log import get_logger
 
 logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
@@ -32,8 +33,6 @@ DEFAULT_TRANSLATION_TABLES = {
     "ja": "ja-rokutenkanji.utb",
     "math": "UEB",
 }
-MATH_BRAILLE_TABLES = ("UEB", "Nemeth")
-DEFAULT_MATH_BRAILLE_TABLE = "UEB"
 DEFAULT_OUTPUT_MODE = "unicode"
 DEFAULT_CONVERSION_WIDTH = 40
 DEFAULT_VIEW_FONT_SIZE = 12

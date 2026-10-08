@@ -14,6 +14,8 @@
 
 這是純重構。每個檔案的落點與現在相同，啟動檢查順序與錯誤對話框相同，寫入 `config.json` 的位元組相同，log 檔與訊息相同，沒有新增顯示或朗讀內容，msgid 不變（353 個，集合相同）。黃金 fixture `client/tests/fixtures/translation_golden.json`（sha256 `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`）與 `client/tests/fixtures/dictionary_entries_trace.json`（sha256 `f493da52376c8eac32a50c33b7f11870451360bed4bf26c1db339ccd2c66c2cf`）不變。不需要任何使用者可見的變更，因此沒有需要上報的決策。
 
+規劃後修正：計畫 `docs/superpowers/plans/2026-10-08-p2-6-application-paths.md`（「Spec Corrections and Refinements」一節）修正了三項事實（AC6 的 presenter grep 若不跳脫 `.`，也會匹配 `_conversion_presenter` 與 `ui.conversion_presenter`；`config` 保留 import 進來的 `get_logger`，所以形狀守門只檢查定義在 `config` 內的函式；一次轉換請求讀取 `config.json` 兩次，而不是一次），並細化了測試計畫（28 個新測試、A 部分額外的斷言、主視窗接線輔助函式使用誘餌根目錄、`gui.py` 何時停止 import `get_dictionary_directory`、以突變檢查證明一出現就綠燈的守門、位元組測試、兩個生命週期測試改用真的路徑、AC7 的應用程式資料快照）；這些變更已併入下文。
+
 ## 沿用 2026-07-20 的契約
 
 `docs/superpowers/specs/2026-07-20-external-dual-view-and-app-data-paths-design.md` 是路徑契約。本任務改變的是「誰持有路徑」，不是契約本身：
@@ -159,7 +161,7 @@ class ConfigStore:
     def get_or_create_client_id(self) -> str: ...
 ```
 
-每個方法的內容就是現有函式內容，只把 `_load_from_file()`／`_save_to_file()`／`CONFIG_PATH` 換成 `self._load()`／`self._save()`／`self._path`。`_save` 仍使用 `os.path.exists`、`os.makedirs(os.path.dirname(...), exist_ok=True)`、`json.dump(data, f, ensure_ascii=False, indent=2)`，並把 `str(self._path)` 傳給 log 呼叫，所以訊息逐字相同。類別放在 `config.py`（路線圖寫的是 `config.ConfigStore`）；`settings/options.py` 關於 `config` -> `settings` import 循環的說明仍然成立。
+每個方法的內容就是現有函式內容，只把 `_load_from_file()`／`_save_to_file()`／`CONFIG_PATH` 換成 `self._load()`／`self._save()`／`str(self._path)`。`_save` 仍使用 `os.path.exists`、`os.makedirs(os.path.dirname(...), exist_ok=True)`、`json.dump(data, f, ensure_ascii=False, indent=2)`，並把 `str(self._path)` 傳給 log 呼叫，所以訊息逐字相同。類別放在 `config.py`（路線圖寫的是 `config.ConfigStore`）；`settings/options.py` 關於 `config` -> `settings` import 循環的說明仍然成立。`config.py` 為了 `Path | str` 型別標註加上 `from __future__ import annotations`，與 `app_paths.py`、`dictionaries/manager.py`、`documents/workspace.py`、`dual_view/files.py` 的做法相同（執行時無影響）。
 
 ### `log.py`（4 空白）
 
@@ -175,7 +177,7 @@ def _log_directory() -> Path:
 
 ### `gui.py`（tab）
 
-- import：`from app_paths import ApplicationDataError, ApplicationPaths, build_application_paths, prepare_application_directories`；`from config import ConfigStore, DEFAULT_TRANSLATION_TABLES`；`from dictionaries.manager import dictionary_path_for_name`；移除 `get_workspace_directory`、`get_lang`、`get_charset_maps`、`set_selected_dictionary`；`from ui.conversion_presenter import ConversionPresenter`（步驟 5）。
+- import：`from app_paths import ApplicationDataError, ApplicationPaths, build_application_paths, prepare_application_directories`；`from config import ConfigStore, DEFAULT_TRANSLATION_TABLES`；`from dictionaries.manager import dictionary_path_for_name`；步驟 3 移除 `get_workspace_directory`、`get_lang`、`get_charset_maps`、`set_selected_dictionary`。步驟 3 不再呼叫 `get_dictionary_directory` 但仍保留其 import，因為 P0-6 守門 `test_dictionary_dialog_helpers_and_imports_are_removed_from_gui` 把它列為保留；步驟 4 一併移除該 import 與守門中的這一項；`from ui.conversion_presenter import ConversionPresenter`（步驟 5）。
 - `BrailleFrame.__init__` 依 D8。
 - `_initialize_state`：`self.dictionary_dir = self._paths.dictionary`；`load_translation_settings(self._config_store, names)`；`load_translation_tables(self._config_store)`；`DocumentWorkspaceService(self._document_controller, self._paths.workspace)`；`load_view_settings(self._config_store)`。順序與現在相同。
 - `_open_dual_view_in_browser`：`write_dual_view_html(self._render_dual_view_for_open_document(), self._paths.dual_view)`。
@@ -202,20 +204,20 @@ def _log_directory() -> Path:
 
 ### A. 對現有程式碼做特性測試（步驟 1）
 
-這些測試在現在的程式碼上就會通過。每一組都透過一個小的測試輔助函式觸及受測程式。步驟 3–4 只修改輔助函式，永不修改斷言。輔助函式把一切指向一個暫存根目錄：在現有程式碼上，patch `app_paths.get_application_root`（它會改變每次 `get_*_directory()` 呼叫，因為它們在呼叫時才解析根目錄）以及 `config.CONFIG_PATH`（import 時固定）；切換之後則建立 `build_application_paths(root)` 與 `ConfigStore(root / "config.json")` 並傳入。
+這些測試在現在的程式碼上就會通過。每一組都透過一個小的測試輔助函式觸及受測程式。步驟 3–4 只修改輔助函式，永不修改斷言。輔助函式把一切指向一個暫存根目錄：在現有程式碼上，patch `app_paths.get_application_root`（它會改變每次 `get_*_directory()` 呼叫，因為它們在呼叫時才解析根目錄）以及 `config.CONFIG_PATH`（import 時固定）；切換之後則建立 `build_application_paths(root)` 與 `ConfigStore(root / "config.json")` 並傳入。從步驟 3 起，主視窗接線輔助函式還會把 `app_paths.get_application_root`（以及在步驟 4 刪除之前的 `config.CONFIG_PATH`）指向根目錄旁一個空的誘餌資料夾：仍以隱含方式解析資料夾的回歸會落在誘餌中、讓根目錄斷言失敗，且永遠不會寫進 `client/`。client init 與 demo 的輔助函式在步驟 3 移除對 `CONFIG_PATH` 的 patch，因此退回模組函式的回歸會在那裡失敗，而不會被遮蔽。
 
 1. `tests/test_gui_document_flows.py` 新增 class `ApplicationPathsWiringCharacterizationTest`：
    - 對 `object.__new__` 建立的主視窗執行 `_initialize_state`（真的 `DictionaryManagementPresenter`、真的 settings 載入函式，`_register_output_font` 以 mock 取代）：`frame.dictionary_dir == root / "dictionary"`、`root/dictionary/default.csv` 存在、`frame._workspace_service.workspace_dir == root / "workspace"`，且預先寫入 `root/config.json` 的設定會被載入（輸出模式、寬度、選定詞典、檢視設定、翻譯表）。
-   - 在全新的根目錄上 `_set_active_dictionary("default")` 會寫出 `root/config.json`，其第一個 key 是 `language_detection`，`conversion.selected_dictionary` 為 `"default"`。
+   - 在全新的根目錄上 `_set_active_dictionary("點字")`（zh_TW 名稱）會寫出 `root/config.json`，其第一個 key 是 `language_detection`，`conversion.selected_dictionary` 為 `"點字"`；測試比對檔案的確切文字（`json.dumps(..., ensure_ascii=False, indent=2)`），因此名稱不會被跳脫。
    - patch `open_html_in_browser` 後執行 `_open_dual_view_in_browser`，會在 `root/dual_view` 下寫入一個 `dual-view-*.html`，並把該路徑傳給瀏覽器輔助函式。
-   - 從環境移除 `TEXT2BRAILLE_LANG`，在 `root/config.json` 寫入 `{"language": "en", "language_detection": {"charset_maps": {...}}}` 後執行 `_build_conversion_request`：`request.lang == "en"`，charset maps 與現在一樣合併。兩次請求會讀檔兩次（由輔助函式安裝一個只計算設定檔路徑的 `open` 計數包裝），證明沒有快取。
-2. 同一檔案，`BrailleAppLifecycleTest` 新增 `test_app_startup_runs_steps_in_contract_order`：以記錄用的假物件取代 `prepare_application_directories`、`cleanup_dual_view_html`、`build_default_translation_runtime`、`BrailleFrame`（及其 `Show`）與 `start_client_init_background`，得到 `["prepare", "cleanup", "runtime", "frame", "show", "client_init"]`。以及 `test_app_stops_before_cleanup_when_validation_fails`：遇到 `ApplicationDataError` 時不清理、不建 runtime、不建主視窗、不啟動 client init。假物件接受任何參數，因此測試在新簽章下仍成立。
-3. `tests/test_client_init.py` 新增 `ClientInitConfigCharacterizationTest`：使用同步的 `thread_factory` 與假的 `opener`，對空的根目錄啟動背景 client init 會建立 UUID client id、存入 `root/config.json` 並送出；第二次啟動送出同一個 id；檔案中的 `"language": "ja"` 以 `locale` 送出。輔助函式在現在包裝 `start_client_init_background(run_client_init=partial(run_client_init, opener=fake))`（並 patch `CONFIG_PATH`），之後改為 `start_client_init_background(ConfigStore(...), run_client_init=partial(...))`。
-4. `tests/test_log.py`：`test_default_log_directory_follows_the_application_root`：把 `app_paths.get_application_root` patch 成暫存根目錄後，新 logger 的 `baseFilename` 為 `root/log/<name>`，不會建立 `root/log`，且在同一 patch 下等於 `build_application_paths().log / <name>`。不需修改即可延續。
+   - 從環境移除 `TEXT2BRAILLE_LANG`，在 `root/config.json` 寫入 `{"language": "en", "language_detection": {"charset_maps": {...}}}` 後執行 `_build_conversion_request`：`request.lang == "en"`，charset maps 與現在一樣合併。在未設定 `TEXT2BRAILLE_LANG` 且沒有執行期覆寫時，一次請求讀檔兩次（先 `get_lang`，再 `get_charset_maps`），所以兩次請求讀檔四次（由輔助函式安裝一個只計算設定檔路徑的 `open` 計數包裝）；兩次請求之間會改寫檔案，第二次請求看到新的語言，證明沒有快取。
+2. 同一檔案，`BrailleAppLifecycleTest` 新增 `test_app_startup_runs_steps_in_contract_order`：以記錄用的假物件取代 `prepare_application_directories`、`cleanup_dual_view_html`、`build_default_translation_runtime`、`BrailleFrame`（及其 `Show`）與 `start_client_init_background`，得到 `["prepare", "cleanup", "runtime", "frame", "show", "client_init"]`，且不顯示錯誤對話框。以及 `test_app_stops_before_cleanup_when_validation_fails`：遇到 `ApplicationDataError` 時不清理、不建 runtime、不建主視窗、不啟動 client init，且錯誤對話框指出失敗的路徑。假物件接受任何參數，因此測試在新簽章下仍成立。
+3. `tests/test_client_init.py` 新增 `ClientInitConfigCharacterizationTest`：使用同步的 `thread_factory` 與假的 `opener`，對空的根目錄啟動背景 client init 會建立 UUID client id、存入 `root/config.json` 並送出；第二次啟動送出同一個 id；檔案中的 `"language": "ja"` 以 `locale` 送出；worker 執行緒是 daemon；以永不執行的執行緒啟動 client init 時不會建立 client id（`test_no_client_id_is_created_before_the_worker_runs`），因此 id 永遠不會在 UI 執行緒上建立。輔助函式在現在包裝 `start_client_init_background(run_client_init=partial(run_client_init, opener=fake))`（並 patch `CONFIG_PATH`），之後改為 `start_client_init_background(ConfigStore(...), run_client_init=partial(...))`。
+4. `tests/test_log.py`：`test_default_log_directory_follows_the_application_root`：把 `app_paths.get_application_root` patch 成暫存根目錄後，新 logger 的 `baseFilename` 為 `root/log/<name>`（測試傳入 `"nested/sample.log"`，以釘住 `Path(filename).name`），不會建立 `root/log`，且在同一 patch 下等於 `build_application_paths().log / <name>`。不需修改即可延續。
 5. `tests/test_main_demo.py`：`test_demo_reads_dictionary_and_language_from_the_application_root`：根目錄被 patch 且 `root/config.json` 含 `{"language": "en"}` 時，請求的 `dictionary_path` 為 `root/dictionary/default.csv`，`lang == "en"`。
-6. `tests/test_config.py` 新增 `ConfigLanguageOverrideCharacterizationTest`：`set_lang("ja")` 讓 `get_lang()` 回傳 `"ja"`，優先於 `TEXT2BRAILLE_LANG` 與檔案，且不寫檔；`set_lang("en", persist=True)` 寫入頂層 `"language": "en"`，並帶首次寫入注入。以 `addCleanup` 還原 `_runtime_lang`。透過 `make_store(path)` 輔助函式觸及（步驟 1：一個轉接物件，其方法在呼叫模組函式前後 patch `config.CONFIG_PATH`；步驟 2 起：`config.ConfigStore(path)`）。
+6. `tests/test_config.py` 新增 `ConfigLanguageOverrideCharacterizationTest`（3 個測試）：`get_lang()` 依序取 `TEXT2BRAILLE_LANG`、檔案的 `"language"`、`"zh_TW"`；`set_lang("ja")` 讓 `get_lang()` 回傳 `"ja"`，優先於 `TEXT2BRAILLE_LANG` 與檔案，且不寫檔；`set_lang("en", persist=True)` 寫入頂層 `"language": "en"`，並帶首次寫入注入。以 `addCleanup` 還原 `_runtime_lang`。透過 `make_store(path)` 輔助函式觸及（步驟 1：一個轉接物件，其方法在呼叫模組函式前後 patch `config.CONFIG_PATH`；步驟 2 起：`config.ConfigStore(path)`）。
 
-一個用完即丟的突變執行器（不提交）會對 `client/` 的副本套用單點破壞（主視窗詞典資料夾改由 `Path.cwd()` 取得、雙視 HTML 寫到 workspace 資料夾、在驗證前清理、在清理前建 runtime、在 UI 執行緒讀 client id、移除 `language_detection` 注入、快取 `get_lang`、logger 資料夾由 `Path.cwd()` 解析），並證明 A 部分能抓到每一個。確切的突變清單由計畫列出。
+一個用完即丟的突變執行器（不提交）會對 `client/` 的副本套用單點破壞（主視窗詞典資料夾改由 `Path.cwd()` 取得、雙視 HTML 寫到 workspace 資料夾、在驗證前清理、在清理前建 runtime、在 UI 執行緒讀 client id、移除 `language_detection` 注入、快取 `get_lang`、logger 資料夾由 `Path.cwd()` 解析），並證明 A 部分能抓到每一個：步驟 1 對現有程式碼有 26 個突變。步驟 3 再加 22 個新接線的突變（由六個受影響的模組抓到），步驟 4 加 8 個守門的突變。一出現就綠燈的守門（`test_client_init_does_not_import_config`，因為 client init 在步驟 3 就不再 import `config`；以及改寫後的 `test_consumers_use_the_common_application_root`）以突變證明會失敗（例如在 client init 加入 `import config`）。確切的突變清單由計畫列出。
 
 ### B. `ConfigStore`（步驟 2，純新增）
 
@@ -223,26 +225,26 @@ def _log_directory() -> Path:
 - 對父資料夾不存在的路徑，建構子不建立檔案或資料夾，也不記 log（`patch.object(config, "logger")`，`mock_calls == []`）。
 - 不論傳入 `str` 或 `Path`，`store.path == Path(given)`。
 - 兩個 store 指向同一個損毀檔案，總共只記一次警告；指向兩個不同損毀檔案的 store 各記一次（D3）。
-- 從不存在的檔案開始，對 store 與（步驟 2 時仍存在的）模組函式執行同一串 setter，產生的 `config.json` 位元組完全相同。
+- `test_store_writes_the_documented_config_bytes`：從不存在的檔案開始，一串 setter（包含 zh_TW 詞典名稱 `點字`）寫出的內容與預期的字面文字完全相同；模組函式仍存在時（步驟 2–3）它們也必須產生相同位元組，步驟 4 移除這一半。兩個節流測試把兩個 store 都存在變數中，因此以實例為鍵的節流不會因 `id()` 重用而通過。
 
 步驟 2 中，模組函式改為一行委派給在呼叫時建立的 `ConfigStore(CONFIG_PATH)`，因此每個既有的 `CONFIG_PATH` 測試不用改就能對 store 程式碼執行。
 
 ### C. 切換與守門（步驟 3–5）
 
-- 步驟 3 把 `tests/test_config.py`、`test_view_settings.py`、`test_translation_tables.py`、`test_translation_settings.py` 從重新指定 `CONFIG_PATH` 改為 `self.store = config.ConfigStore(tmp / "config.json")` 並呼叫 store 或 settings 函式；對檔案內容的斷言不變。`test_conversion_language_explicit.py` 改為 patch `config.ConfigStore.get_lang` 與 `config.ConfigStore.get_charset_maps` 使其 raise（同樣的守門，涵蓋任何 store）。`test_gui_document_flows.py` 的主視窗工廠設定 `frame._paths` 與 `frame._config_store`（測試會寫檔時用暫存根目錄上的真 store，其他情況用 `Mock(spec=config.ConfigStore)`）；原本指名被 patch 的模組函式的斷言，改為指名 store（例如 `save.assert_called_once_with(frame._config_store, expected)`、`frame._config_store.set_selected_dictionary.assert_called_once_with("default")`、`write_html.assert_called_once_with("<html>dual</html>", frame._paths.dual_view)`）。`BrailleAppLifecycleTest` patch `gui.build_application_paths` 回傳暫存根目錄的路徑；零參數的 `side_effect` 改為接受 `paths`；`frame_class.assert_called_once_with(None, runtime=runtime, paths=paths, config_store=ANY)`；`OnExit` 測試設定 `app.paths`。
+- 步驟 3 把 `tests/test_config.py`、`test_view_settings.py`、`test_translation_tables.py`、`test_translation_settings.py` 從重新指定 `CONFIG_PATH` 改為 `self.store = config.ConfigStore(tmp / "config.json")` 並呼叫 store 或 settings 函式；對檔案內容的斷言不變。`test_conversion_language_explicit.py` 改為 patch `config.ConfigStore.get_lang` 與 `config.ConfigStore.get_charset_maps` 使其 raise（同樣的守門，涵蓋任何 store）。`test_gui_document_flows.py` 的主視窗工廠設定 `frame._paths` 與 `frame._config_store`（測試會寫檔時用暫存根目錄上的真 store，其他情況用 `Mock(spec=config.ConfigStore)`）；原本指名被 patch 的模組函式的斷言，改為指名 store（例如 `save.assert_called_once_with(frame._config_store, expected)`、`frame._config_store.set_selected_dictionary.assert_called_once_with("default")`、`write_html.assert_called_once_with("<html>dual</html>", frame._paths.dual_view)`）。`BrailleAppLifecycleTest` patch `gui.build_application_paths` 回傳暫存根目錄的路徑；零參數的 `side_effect` 改為接受 `paths`；`frame_class.assert_called_once_with(None, runtime=runtime, paths=paths, config_store=ANY)`；`OnExit` 測試設定 `app.paths`（必要：在 wx stub 下，缺少的屬性會讀成不做事的函式）。`test_app_cleans_stale_dual_view_html_after_path_validation` 與 `test_app_reports_startup_cleanup_failure_before_runtime` 原本建立 `paths = Mock()`，而 `ConfigStore(Mock().config)` 會在 `Path()` 中 raise `TypeError`，因此改用真的 `ApplicationPaths`（`build_application_paths(Path("C:/DotExpress"))`），由被 patch 的 `gui.build_application_paths` 回傳；斷言不變。
 - 步驟 3 新增：`test_app_passes_the_validated_paths_and_one_store`：傳給 `prepare_application_directories` 的物件，就是傳給 `BrailleFrame` 並存為 `app.paths` 的那個；一個 `path == paths.config` 的 `ConfigStore` 同時到達主視窗與 `start_client_init_background`；store 在清理之後、runtime 之前建立。`test_app_exit_cleans_the_validated_dual_view_folder`。`test_frame_requires_paths_and_config_store`（以 `inspect.signature` 確認為 keyword-only 且無預設值）。
 - 步驟 4 守門，以允許清單撰寫，因此永遠不會拼出已移除的名稱（P2-4 的教訓）：
   - `tests/test_app_paths.py` `ApplicationPathsApiTest`：`app_paths` 的公開函式恰好是 `{"get_application_root", "build_application_paths", "prepare_application_directories"}`；`prepare_application_directories` 的 `paths` 沒有預設值。
   - 同一 class：對 D11 列出的每個函式，`inspect.signature` 顯示資料夾參數沒有預設值。
   - 同一 class：AST 掃描 `client/**/*.py`（排除 `tests/`、`.venv/`、`braille/liblouis/`、`__pycache__`），不帶參數呼叫 `build_application_paths` 只出現在 `gui.py`、`main.py` 與 `log.py`。
   - `test_consumers_use_the_common_application_root` 改寫為 `build_application_paths(root)`，並檢查由它建立的 store 與主視窗輔助函式。
-  - `tests/test_config.py` `ConfigModuleShapeTest`：`config` 沒有任何以 `get_` 或 `set_` 開頭的模組屬性，也沒有名稱含 `PATH` 的屬性。
+  - `tests/test_config.py` `ConfigModuleShapeTest`：定義在 `config` 內的函式（`inspect.isfunction(value) and value.__module__ == config.__name__`）沒有任何以 `get_` 或 `set_` 開頭，且沒有任何模組名稱含 `PATH`。（不是「沒有任何屬性」：`config` 從 `log` import 了 `get_logger`，這個屬性會保留。）
   - `tests/test_translation_import_isolation.py`：`test_client_init_does_not_import_config`（subprocess，與相鄰測試相同）。
   - `tests/test_gui_document_flows.py`：`"get_dictionary_directory"` 從 `test_dictionary_dialog_helpers_and_imports_are_removed_from_gui` 的「保留」清單移除（刻意的守門變更，於 commit 訊息中說明）。
   - `tests/test_log.py`：既有測試改為 patch `log._log_directory`。
 - 步驟 5（M-1）：`tests/test_conversion_presenter.py` 改從 `ui.conversion_presenter` import，其 `PRESENTER_PATH` 指向 `client/ui/conversion_presenter.py`（wx／gui／dialog 的 AST 守門保留）；`tests/test_export_coordinator.py` 更新 import。新增 `tests/test_translation_import_isolation.py::test_conversion_package_imports_no_higher_layer`：對每個 `client/conversion/**/*.py` 做 AST 掃描，每個 `import`／`from`（絕對 import，任何巢狀層級）的頂層名稱都不得屬於 `{"documents", "ui", "gui", "dialog", "settings", "dictionaries", "dual_view"}`。搬移前為紅燈（會指出 `conversion/presenter.py`），搬移後為綠燈。
 
-新測試的確切數量由計畫決定。
+新測試共 28 個（1043 -> 1071）：步驟 1 新增 14 個（`ApplicationPathsWiringCharacterizationTest` 4、`BrailleAppLifecycleTest` 2、`ClientInitConfigCharacterizationTest` 3、`test_log` 1、`test_main_demo` 1、`ConfigLanguageOverrideCharacterizationTest` 3），步驟 2 新增 5 個（`ConfigStoreTest`），步驟 3 新增 3 個，步驟 4 新增 5 個（`ApplicationPathsApiTest` 3、`ConfigModuleShapeTest` 1、`test_client_init_does_not_import_config`），步驟 5 新增 1 個。最後各模組：`test_gui_document_flows` 151 -> 160、`test_config` 25 -> 34、`test_client_init` 7 -> 10、`test_app_paths` 7 -> 10、`test_translation_import_isolation` 4 -> 6、`test_log` 1 -> 2、`test_main_demo` 2 -> 3。因此 AC1 的路線圖指令執行 204 個測試。
 
 ## 遷移步驟（每一步一個綠燈 commit）
 
@@ -255,12 +257,12 @@ def _log_directory() -> Path:
 ## 驗收條件
 
 1. Linux 上的路線圖驗證：`cd client && $PY -m unittest tests.test_app_paths tests.test_config tests.test_gui_document_flows -v` 通過。下列也須綠燈：`tests.test_log tests.test_main_demo tests.test_client_init tests.test_view_settings tests.test_translation_tables tests.test_translation_settings tests.test_conversion_language_explicit tests.test_conversion_presenter tests.test_export_coordinator tests.test_translation_import_isolation tests.test_dictionary_manager tests.test_dictionary_name_prompt tests.test_document_workspace tests.test_workspace_service tests.test_dual_view_files tests.test_removed_dead_code tests.test_i18n tests.test_wx_stub`。
-2. 全套件：`Ran` = 1043 + 新測試數，`failures=1`（僅 P2-5 案例），`errors=0`，`skipped=9`。
+2. 全套件：`Ran` = 1043 + 28 = 1071，`failures=1`（僅 P2-5 案例），`errors=0`，`skipped=9`。
 3. Shuffle harness：`cd client && for s in $(seq 0 19); do $PY $SP/shuffle_harness.py $s; done`，每個 seed 都恰好一個失敗，即 P2-5 案例。`test_config`、`test_gui_document_flows` 與 `test_app_paths` 單獨執行、以及每一對的兩種順序都通過。
 4. 從 repo 根目錄執行 msgid 掃描，回報 `source msgids: 353`，與 `main` 集合相同。`git diff main --stat -- client/locales` 為空。
 5. 上述兩個 fixture 的 sha256 不變，`git diff main -- client/tests/fixtures` 為空。
-6. grep（皆為 `--include=*.py --exclude-dir=.venv`，範圍 `client`）：`CONFIG_PATH` 無輸出；`get_config_path\|get_dictionary_directory\|get_workspace_directory\|get_log_directory\|get_dual_view_directory` 無輸出；`grep -rnE "(_dir|directory|paths): (Path|ApplicationPaths) \| None" client/app_paths.py client/dictionaries client/documents/workspace.py client/dual_view/files.py` 無輸出（唯一保留的可選根目錄 `build_application_paths(root: Path | None = None)` 不會匹配；目前此 grep 有 15 行）；`conversion.presenter\|conversion/presenter` 無輸出；`grep -rn "documents" client/conversion --include=*.py` 沒有任何 import 行；`client/conversion/presenter.py` 不存在。
-7. 跑完全套件後，`client/config.json` 與 `client/workspace/` 仍不存在。
+6. grep（皆為 `--include=*.py --exclude-dir=.venv`，範圍 `client`）：`CONFIG_PATH` 無輸出；`get_config_path\|get_dictionary_directory\|get_workspace_directory\|get_log_directory\|get_dual_view_directory` 無輸出；`grep -rnE "(_dir|directory|paths): (Path|ApplicationPaths) \| None" client/app_paths.py client/dictionaries client/documents/workspace.py client/dual_view/files.py` 無輸出（唯一保留的可選根目錄 `build_application_paths(root: Path | None = None)` 不會匹配；目前此 grep 有 15 行）；`conversion\.presenter\|conversion/presenter`（跳脫的點：不跳脫的 `.` 也會匹配 `gui.py` 中的 `_conversion_presenter`、`ui.conversion_presenter` 與 `test_conversion_presenter`）無輸出；`grep -rn "documents" client/conversion --include=*.py` 沒有任何 import 行；`client/conversion/presenter.py` 不存在。
+7. 跑完全套件後，`client/config.json` 與 `client/workspace/` 仍不存在，且沒有測試寫入真實的應用程式資料。基準套件本來就會附加寫入 `client/log/dual_view.log`、`init.log`、`math.log` 與 `translation.log`（logger 在 import 時綁定真實的 log 資料夾，D10），而 `client/dictionary/` 是 git 忽略的使用者資料，可能存在於工作目錄中，所以這項以快照而非「不存在」來檢查：在完整執行套件前後記錄 `config.json`／`workspace/` 是否存在、`dictionary/` 下每個檔案的 sha256、`dual_view/` 中非原始碼的項目，以及 `log/` 中的檔名，兩份快照必須完全相同。
 8. `git diff main --stat` 只動到本規格列出的模組、測試計畫列出的測試模組、兩份規格檔與計畫。
 
 ## 風險

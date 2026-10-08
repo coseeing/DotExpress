@@ -4,7 +4,7 @@
 
 把 `client/tests/` 中所有手寫的假 `wx` 移到同一個共用模組 `client/tests/wx_stub.py`，並讓每個 GUI 測試模組安裝 stub 的方式不會洩漏到其他測試模組。這是 roadmap 任務 P0-4（`storage/refactor.md` 第 6.1 節；問題記錄在第 5 節「wx stub 測試骨架」）。P0-5 與 P1 的 GUI 拆分都會以此為基礎。
 
-這是只動測試的重構。不改任何正式程式檔、使用者可見字串、翻譯或建置輸入。每個模組與整個測試套件的測試數量不變，每個測試的結果也不變，沒有任何斷言被放寬。
+這是只動測試的重構。不改任何正式程式檔、使用者可見字串、翻譯或建置輸入。每個模組與整個測試套件中既有測試的數量不變，每個既有測試的結果也不變，沒有任何斷言被放寬。唯一的數量變化是新增的 `client/tests/test_wx_stub.py`（16 個測試共用輔助工具的測試；見測試策略）。
 
 ## 方法與基準（2026-10-08 於 `refactor/p0-4-wx-test-stub`、HEAD `8404088` 驗證，P0-1/P0-2/P0-3 已合併）
 
@@ -57,7 +57,7 @@
 
 - `python -m unittest tests.test_gui_document_flows tests.test_dialog_validation`：`FAILED (errors=18)`（8 個測試，計入子測試）。`test_dialog_validation` import 到 G 的 `dialog` stub，所以 `DictionaryNameDialog` 是沒有 `_validate_name` 的 `_Dialog`。
 - `python -m unittest tests.test_gui_document_flows tests.test_settings_dialogs tests.test_dual_view_frame`：`FAILED (failures=1, errors=1)`。`ui.dual_view` 已經綁定 G 的 `wx`，所以 `test_initial_geometry_matches_parent` 拿到 G 的 `Frame`（沒有 `init_kwargs`，出現 `'function' object is not subscriptable`），而 `test_raise_without_activating_restores_focus_on_other_platforms` 修補的 `FindFocus` 位在 `ui.dual_view` 沒有使用的那個 `wx` 上。
-- 七個模組的 42 組有序配對中，只有上面第一組失敗。七個模組的 40 次固定種子亂序中，17 次弄壞 `test_dialog_validation`，20 次弄壞 `test_dual_view_frame`，其他五個模組從未失敗。
+- 七個模組的 42 組有序配對中有兩組失敗：上面第一組，以及 `python -m unittest tests.test_gui_document_flows tests.test_dual_view_frame`（`FAILED (errors=1)`，`test_initial_geometry_matches_parent`，原因與上面的三模組指令相同）。（更正：先前的草稿說只有第一組失敗；在 `8a89d5e` 重跑全部 42 組，結果是兩組。）七個模組的 40 次固定種子亂序中，17 次弄壞 `test_dialog_validation`，20 次弄壞 `test_dual_view_frame`，其他五個模組從未失敗。
 - 完整套件的 20 次固定種子亂序中，除了上述兩個模組，只有在 `test_translation_result_core` 先於 `test_conversion_service` 執行時，`test_conversion_service` 會失敗（8 個錯誤）。這與 wx 無關：`test_translation_result_core` 會移除並重新 import `translate`，使 `TranslationResult` 同時存在兩份（`python -m unittest tests.test_translation_result_core tests.test_conversion_service` 不涉及任何 wx 模組就能重現）。這不在本次範圍內。
 
 ### 是否有測試依賴洩漏的 stub？
@@ -97,16 +97,16 @@
 3. **`StubScope`**，唯一的安裝與還原機制：
    - 建構時傳入 stub dict、要隔離的名稱（此測試模組要重新 import 的、綁定 wx 的正式模組，例如 `("gui", "settings.dialogs", "ui.dual_view")`），以及一個可選的移除策略，處理在範圍內首次 import 的其他模組。預設策略只處理受管理的名稱（見 R1）。display 傳入「所有新模組」，speech 傳入它目前的根集合，因此兩者的行為完全不變。
    - `loading()` 是給模組層級 import 用的 context manager。它快照受管理的名稱與對應的父套件屬性，移除要隔離的名稱讓它們重新 import，安裝 stub，然後執行區塊內容。離開時記錄產生的模組物件，還原快照（`sys.modules` 條目，以及 `settings.dialogs`、`ui.dual_view` 這類父套件屬性），套用移除策略，並執行洩漏防護（R4）。
-   - 一個在 `loading()` 內以私有模組名稱載入檔案的輔助函式（即 display 與 speech 目前用 `spec_from_file_location` 做的事）。
-   - 給 `setUpModule` / `tearDownModule` 用的 `activate()` / `deactivate()`。`activate` 重新安裝記錄下來的 stub 模組、被隔離的模組及其父套件屬性。`deactivate` 還原先前的狀態，並移除任何新出現在 stub 名稱底下的 `sys.modules` 鍵（例如 `wx.ID_EDIT`）。
-   - speech 風格的 `dialog.py` 載入器（speech 的 stub、私有名稱 `_speech_symbols_dialog_under_test`、speech 的移除根集合）以單一函式放在這裡，讓 `test_speech_symbols_dialog` 與 `test_dictionary_management_dialog` 共用。它會同時交給呼叫端載入的模組與範圍物件，讓兩個模組都能以該範圍的 `activate`/`deactivate` 作為模組層級 fixture（R3 需要：`test_dictionary_management_dialog` 會在執行期建立 `wx.ID_EDIT`）。
+   - 一個在 `loading()` 內以私有模組名稱載入檔案的輔助函式（即 display 與 speech 目前用 `spec_from_file_location` 做的事）。`loading()` 離開時會再移除這些私有名稱。
+   - 給 `setUpModule` / `tearDownModule` 用的 `activate()` / `deactivate()`。`activate` 重新安裝記錄下來的 stub 模組（包括載入時出現的點號子模組，例如 speech 自動註冊的 `wx.*` 子模組）、被隔離的模組及其父套件屬性，但**不**安裝私有的受測模組名稱（`_speech_symbols_dialog_under_test`、`_dialog_display_test`）：目前測試執行期間這些名稱並不存在，而且 `DialogModuleIsolationTest` 會斷言巢狀載入後 `_MODULE_UNDER_TEST_NAME` 不在 `sys.modules` 中。`deactivate` 還原先前的狀態，並移除任何新出現在 stub 名稱底下的 `sys.modules` 鍵（例如 `wx.ID_EDIT`）。
+   - speech 風格的 `dialog.py` 載入器（speech 的 stub、私有名稱 `_speech_symbols_dialog_under_test`、speech 的移除根集合）以單一函式放在這裡，讓 `test_speech_symbols_dialog` 與 `test_dictionary_management_dialog` 共用。它會同時交給呼叫端載入的模組與範圍物件，讓兩個模組都能以該範圍的 `activate`/`deactivate` 作為模組層級 fixture（R3 需要：`test_dictionary_management_dialog` 會在執行期建立 `wx.ID_EDIT`）。display 的載入器採用相同形式：`load_display_dialog()` 同樣回傳 `(module, scope)`。
 
 ### 隔離契約
 
-- **R1，載入不留痕跡。** import 一個已遷移的測試模組後，所有受管理名稱（stub 名稱及其點號子名稱、被隔離的名稱、私有的受測模組名稱）在 `sys.modules` 中都不變，被隔離模組的父套件屬性也不變。載入期間首次 import 的純模組可以留在快取中，就像任何一般 import 之後一樣。採用 display 與 speech 的策略時，它們會像現在一樣被移除。
+- **R1，載入不留痕跡。** import 一個已遷移的測試模組後，所有受管理名稱（stub 名稱及其點號子名稱、被隔離的名稱、私有的受測模組名稱）在 `sys.modules` 中都不變，被隔離模組的父套件屬性也不變。這裡的「不變」是精確的：如果父套件在 `loading()` 之前沒有該屬性，之後會把該屬性刪除，讓 `from settings import dialogs` 不會拿到過期的副本。載入期間首次 import 的純模組可以留在快取中，就像任何一般 import 之後一樣。採用 display 與 speech 的策略時，它們會像現在一樣被移除。
 - **R2，執行期查找看到載入時的物件。** 已遷移模組的測試執行期間，測試透過 `sys.modules` 解析的每個名稱（字串形式的 `patch` 目標、函式內的 import、會讀取父套件屬性的 `import a.b as c`）都解析到該模組在模組層級載入時綁定的同一批模組物件。`test_settings_dialogs` 與 `test_dual_view_frame` 需要這一點。為求一致，七個模組都設定 `setUpModule = scope.activate` 與 `tearDownModule = scope.deactivate`，對其他模組沒有害處。
 - **R3，執行不留痕跡。** 已遷移模組的測試結束後，受管理名稱與父套件屬性都回到 `setUpModule` 之前的狀態，且 stub 名稱底下不會留下任何新的鍵。
-- **R4，洩漏防護。** `loading()` 離開時，如果有任何在範圍內首次 import、且仍留在 `sys.modules` 中的模組，其模組全域變數指向此範圍的某個 stub 模組物件，就會拋出例外並列出這些名稱。這能抓到將來某個正式模組開始 import `wx`、卻沒有加入 `isolate` 的情況。目前防護會通過：只有 `gui.py`、`dialog.py`、`settings/dialogs.py` 與 `ui/dual_view.py` import `wx`，而在模組層級 import `braille.tables` 的只有 `settings/dialogs.py`（`adapters/translation/provider.py` 是在函式內延遲 import `braille`）。
+- **R4，洩漏防護。** `loading()` 離開時，在還原與移除步驟之後，如果有任何在範圍內首次 import、且仍留在 `sys.modules` 中的模組，其模組全域變數指向此範圍的某個 stub 模組物件，就會拋出 `StubLeakError`（`AssertionError` 的子類別），並列出這些 `<模組>.<全域變數>`。這能抓到將來某個正式模組開始 import `wx`、卻沒有加入 `isolate` 的情況。目前防護會通過：只有 `gui.py`、`dialog.py`、`settings/dialogs.py` 與 `ui/dual_view.py` import `wx`，而在模組層級 import `braille.tables` 的只有 `settings/dialogs.py`（`adapters/translation/provider.py` 是在函式內延遲 import `braille`）。
 
 ### 各模組的遷移方式
 
@@ -137,15 +137,15 @@
 - `test_translation_result_core` 與 `test_conversion_service` 之間與 wx 無關的順序相依（`translate` 被重新 import）。
 - P2-5 的失敗。
 - 新增 `client/tests/__init__.py`。這會讓 `discover` 下的所有模組改名，測試 id 也會改變。
-- 新增測試模組或測試方法。測試數必須完全相同，所以共用輔助工具由已遷移的模組與下面的驗收檢查來驗證，不另寫 `test_wx_stub.py`。
+- 在七個已遷移模組中新增測試方法。（更正：先前的草稿也排除了 `test_wx_stub.py`，好讓所有數量完全相同。計畫刻意新增 `client/tests/test_wx_stub.py`，讓每個任務都從一個失敗的測試開始；見測試策略。）
 - 任何正式程式碼。
 
 ## 測試策略
 
-這次只搬移測試骨架，不新增行為，所以沒有紅綠步驟。已遷移的模組本身就是 `wx_stub.py` 的測試。安全性來自動手前先記錄基準，並在每一步之後比對：
+這次只搬移測試骨架，不新增正式程式的行為。（更正：先前的草稿說沒有紅綠步驟，也不新增測試。）`wx_stub.py` 有自己的測試 `client/tests/test_wx_stub.py`：先寫 10 個共用核心（widget 基底類別、自動模組、`StubScope`）的測試，之後每個遷移 commit 各加一個工廠測試，共 16 個，每個都先失敗。已遷移的模組仍是每個工廠重現舊 stub 的主要證據。安全性來自動手前先記錄基準，並在每一步之後比對：
 
 1. 第一個 commit 之前，記錄七個模組各自單獨執行與 `discover` 的逐測試結果（`-v` 輸出排序後），以及亂序工具在固定種子下的結果（七模組亂序與完整套件亂序）。
-2. 每個 commit 遷移一個模組，從最小的 `test_dialog_validation` 開始，接著是 `test_dual_view_frame`、`test_gui_document_flows`、`test_settings_dialogs`、一起處理的 `test_speech_symbols_dialog` 與 `test_dictionary_management_dialog`，最後是 `test_dialog_display`。`wx_stub.py` 每次只增加該 commit 的模組所需的內容。每個 commit 之後，該模組單獨執行與完整 `discover` 的結果都必須與記錄完全相同。
+2. 第一個 commit 加入共用核心（widget 基底類別、兩種自動模組類別、`StubScope`）及其測試。之後每個 commit 遷移一個模組，從最小的 `test_dialog_validation` 開始，接著是 `test_dual_view_frame`、`test_gui_document_flows`、`test_settings_dialogs`、一起處理的 `test_speech_symbols_dialog` 與 `test_dictionary_management_dialog`，最後是 `test_dialog_display`。`wx_stub.py` 每次只增加該 commit 的模組所需的內容（它的工廠）。每個 commit 之後，該模組單獨執行與完整 `discover` 的結果都必須與記錄完全相同，只多出 `test_wx_stub` 的各行。
 3. 最後一個 commit 之後，執行驗收標準中的順序檢查、綁定檢查與洩漏檢查。
 
 ## 驗收標準
@@ -153,20 +153,21 @@
 所有指令都在 `client/` 下以 venv 的 Python（`$PY`）執行。
 
 1. **每個模組結果相同。** 七個模組各自執行 `$PY -m unittest tests.<module> -v`，列出的測試 id 與結果都與基準相同，數量分別為 5 / 8 / 8 / 6 / 61 / 27 / 21，全部 `OK`。
-2. **完整套件結果相同。** `$PY -m unittest discover -s tests -v`：`Ran 450 tests`、`FAILED (failures=1, skipped=7)`。排序後的 `<test id> ... <結果>` 各行與基準完全相同。唯一的失敗是 P2-5 案例。
+2. **完整套件結果相同。** `$PY -m unittest discover -s tests -v`：`Ran 466 tests`（450 個加上 `test_wx_stub` 的 16 個）、`FAILED (failures=1, skipped=7)`。排序後的 `<test id> ... <結果>` 各行去掉含 `(test_wx_stub.` 的行之後與基準完全相同，且恰好有 16 行含 `(test_wx_stub.`，全部是 `... ok`。唯一的失敗是 P2-5 案例。（更正：先前的草稿預期 `Ran 450 tests`，當時還沒有 `test_wx_stub.py`。）
 3. **roadmap 指令。** `$PY -m unittest tests.test_gui_document_flows tests.test_settings_dialogs tests.test_speech_symbols_dialog tests.test_dictionary_management_dialog -v` 結果為 `Ran 117 tests`、`OK`。七個模組放在同一個指令中執行，結果為 `Ran 136 tests`、`OK`。
 4. **順序無關（七個模組）。** 以下指令以前會失敗，現在必須通過：
    - `$PY -m unittest tests.test_gui_document_flows tests.test_dialog_validation` 結果為 `Ran 69 tests`、`OK`。
    - `$PY -m unittest tests.test_gui_document_flows tests.test_settings_dialogs tests.test_dual_view_frame` 結果為 `Ran 94 tests`、`OK`。
+   - `$PY -m unittest tests.test_gui_document_flows tests.test_dual_view_frame` 結果為 `Ran 67 tests`、`OK`。
 
    用亂序工具執行七個模組的全部 42 組有序配對，以及至少 200 種固定種子的排列（種子 1-200），每次都是 136 個測試，沒有失敗或錯誤。跑完全部 5040 種排列為選用（依序執行約需 25 分鐘）。
-5. **順序無關（完整套件）。** 用亂序工具以種子 1-20 執行全部 64 個模組：每次都是 450 個測試，七個模組中沒有任何失敗或錯誤，其他模組的失敗與同一種子的基準完全相同。那些失敗只會是不在範圍內的 `translate` 重新 import 或 P2-5 造成的 `test_conversion_service` 案例。
-6. **無洩漏（R1/R3）。** 用一個用完即丟的探測腳本，在全新行程中單獨 import 每個已遷移模組，確認 `sys.modules` 沒有多出先前不存在的 `wx`、`wx.*`、`dialog`、`gui`、`settings.dialogs`、`ui.dual_view` 或 `braille.louis_helper` 鍵，且 `braille` 若存在就是真正的套件。執行完該模組的測試後，同樣成立。
+5. **順序無關（完整套件）。** 用亂序工具以種子 1-20 執行基準的 64 個模組（打亂前先排除 `test_wx_stub`，讓每個種子產生與基準相同的排列）：每次都是 450 個測試，七個模組中沒有任何失敗或錯誤，其他模組的失敗與同一種子的基準完全相同。那些失敗只會是不在範圍內的 `translate` 重新 import 或 P2-5 造成的 `test_conversion_service` 案例。另外以種子 1-20 執行全部 65 個模組（466 個測試），`test_wx_stub` 與七個模組都沒有任何失敗或錯誤。（更正：比對基準時排除 `test_wx_stub`，因為多一個模組會改變每個種子的排列。）
+6. **無洩漏（R1/R3）。** 用一個用完即丟的探測腳本，在全新行程中單獨 import 每個已遷移模組，確認 `sys.modules` 沒有多出先前不存在的 `wx`、`wx.*`、`dialog`、`gui`、`settings.dialogs`、`ui.dual_view` 或 `braille.louis_helper` 鍵，且 `braille` 若存在就是真正的套件。執行完該模組的測試後，同樣成立。對 `test_wx_stub` 執行同一個探測腳本，也不會回報任何變化。
 7. **綁定（R2）。** 用一個用完即丟的探測腳本，在 `discover`（先載入所有模組）下分別於 `test_settings_dialogs` 與 `test_dual_view_frame` 內執行，確認測試執行期間 `sys.modules["settings.dialogs"]`（或 `sys.modules["ui.dual_view"]`）與對應的父套件屬性，正是測試模組在載入時綁定的模組，且它的 `wx` 是該模組自己的 stub。這很重要，因為 `test_layout_uses_headerless_list_ctrl_and_explicit_categories_name` 即使面對過期的模組也可能通過。
 8. **洩漏防護有效。** 暫時從 `test_gui_document_flows` 的 `isolate` 中拿掉 `"ui.dual_view"`，它的 import 會以防護的訊息失敗。之後改回，不要 commit。
 9. **測試模組中不再有 stub 程式碼。** 在 repo 根目錄執行：`grep -nE 'class _Widget|class _AutoModule|def _install_stub_modules|def _make_wx_stub|__getattr__ = lambda|__path__ = \[\]|ModuleType\("wx' client/tests/test_*.py`。目前它在六個模組中比對到 24 行。變更後不輸出任何內容，所有建立假 `wx` 的程式碼都在 `client/tests/wx_stub.py`。這個模式不會比對到 `DialogModuleIsolationTest` 中的 `sentinel_wx = types.ModuleType('wx')`（單引號）。那一行是測試資料而不是 stub，保留不動。
-10. `git diff main --stat` 只動到 `client/tests/` 以及這些 spec/plan 文件。沒有正式程式檔，也沒有 `.po`/`.mo` 變更。
-11. 每個 commit 遷移一個模組。每個 commit 之後，已遷移的模組都符合第 1、2 條。
+10. `git diff main --stat` 只動到 `client/tests/`（七個模組、`wx_stub.py` 與 `test_wx_stub.py`）以及這些 spec/plan 文件。沒有正式程式檔，也沒有 `.po`/`.mo` 變更。
+11. 先以一個 commit 加入共用核心，之後每個 commit 遷移一個模組（speech 與 dictionary 兩個模組一起）。每個 commit 之後，已遷移的模組都符合第 1、2 條。
 
 ## 風險
 

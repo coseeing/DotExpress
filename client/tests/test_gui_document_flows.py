@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import ANY, DEFAULT, Mock, call, patch
 
 from tests import wx_stub
+from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
 from tests.menu_recording import DOCUMENT_MENU_BUILD_LOG, MenuRecorder, enable_log, fake_translate
 
 _SCOPE = wx_stub.StubScope(
@@ -31,6 +32,7 @@ from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
 from documents.formats import ExportContext, get_format
+from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
 from dual_view.html import render_dual_view_html
 from dual_view.model import DualViewSegment, build_dual_view_model
 
@@ -2729,6 +2731,906 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
                 self.assertEqual(frame._document_controller.selected_name, expected)
                 event.Skip.assert_called_once_with()
+
+
+
+def _dual_view_segment(raw: str, braille: str) -> DualViewSegment:
+    return DualViewSegment(
+        result=SimpleNamespace(raw=[raw], braille=[braille], braille_to_raw_pos=[0], raw_to_braille_pos=[0]),
+        source_kind="text",
+    )
+
+
+class _RecordingEditor(_FakeEditor):
+    def SetValue(self, value: str) -> None:
+        self.events.append(("set", self.name, value))
+        super().SetValue(value)
+
+    def Enable(self, enable: bool = True) -> None:
+        self.events.append(("enable", self.name, enable))
+
+
+class _RecordingDocumentList(_FakeDocumentList):
+    def __init__(self, events: list, names: list[str], selected_index: int):
+        super().__init__(names, selected_index)
+        self.events = events
+
+    def Enable(self, enable: bool = True) -> None:
+        self.events.append(("enable", "list", enable))
+
+
+class _RecordingMenuBar:
+    def __init__(self, events: list):
+        self.events = events
+        self.titles = [gui._("File"), gui._("Translation"), gui._("Help")]
+
+    def FindMenu(self, title: str) -> int:
+        self.events.append(("FindMenu", title))
+        return self.titles.index(title) if title in self.titles else gui.wx.NOT_FOUND
+
+    def EnableTop(self, index: int, enable: bool) -> None:
+        self.events.append(("EnableTop", index, enable))
+
+
+class _RecordingViewer:
+    """Stands for the open Dual View window."""
+
+    def __init__(self, events: list):
+        self.events = events
+        self.html = None
+
+    def refresh_html(self, html: str) -> None:
+        self.html = html
+        self.events.append(("dual_view.refresh",))
+
+    def Destroy(self) -> None:
+        self.events.append(("dual_view.Destroy",))
+
+
+class _KeyEvent:
+    def __init__(self, key_code: int, *, control: bool = True, shift: bool = False):
+        self.key_code = key_code
+        self.control = control
+        self.shift = shift
+        self.skipped = False
+
+    def GetKeyCode(self) -> int:
+        return self.key_code
+
+    def ControlDown(self) -> bool:
+        return self.control
+
+    def ShiftDown(self) -> bool:
+        return self.shift
+
+    def Skip(self) -> None:
+        self.skipped = True
+
+
+class _CloseEvent:
+    def __init__(self, events: list, can_veto: bool):
+        self.events = events
+        self.can_veto = can_veto
+
+    def CanVeto(self) -> bool:
+        return self.can_veto
+
+    def Veto(self) -> None:
+        self.events.append(("close.Veto",))
+
+    def Skip(self) -> None:
+        self.events.append(("close.Skip",))
+
+
+class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
+    """Pins today's conversion and export flows turn by turn; must pass unchanged through P1-4.
+
+    ``wx.CallAfter`` is a ``DeferredCalls`` queue, ``wx.CallLater`` a ``FakeTimers`` recorder and
+    every worker a ``FakeThread``. A test drives a public entry point (the click or menu turn),
+    then steps the worker (``thread.run()``), each later UI turn (``calls.run_next()``) and the
+    timers (``fire()``), and checks the ordered ``self.events`` log after each step.
+    Only ``_wire_conversion`` may change during P1-4.
+    """
+
+    TABLES = {"default": "zh-tw.ctb", "math": "nemeth.ctb"}
+    LANG = "zh_TW"
+    CHARSET_MAPS = {"latinCharactersLanguage": "en", "CJKCharactersLanguage": "zh"}
+    CTRL_S = 83
+    CTRL_TAB = 9
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.root = Path(temp_dir.name)
+        self.workspace = self.root / "workspace"
+        self.export_dir = self.root / "export"
+        self.export_dir.mkdir()
+        self.events: list = []
+        self.answers: list = []
+        self.export_paths: list = []
+        self.export_dirs: list = []
+        self.outputs: dict = {}
+        self.requests: list = []
+        self.runtime = object()
+        self.calls = DeferredCalls(self.events)
+        self.timers = FakeTimers(self.events)
+        self.thread_factory = make_thread_factory()
+        self.threads = self.thread_factory.threads
+        self.menu_bar = _RecordingMenuBar(self.events)
+        for patcher in (
+            patch.object(gui.wx, "MessageBox", self._message_box),
+            patch.object(gui.wx, "FileDialog", self._file_dialog_class()),
+            patch.object(gui.wx, "DirDialog", self._dir_dialog_class()),
+            patch.object(gui.wx, "CallAfter", self.calls),
+            patch.object(gui.wx, "CallLater", self.timers),
+            patch.object(gui.wx, "EVT_CLOSE", "EVT_CLOSE"),
+            patch.object(gui, "ConvertingDialog", self._converting_dialog_class()),
+            patch.object(gui, "get_lang", return_value=self.LANG),
+            patch.object(gui, "get_charset_maps", return_value=dict(self.CHARSET_MAPS)),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    # --- fakes -------------------------------------------------------------
+
+    def _message_box(self, message, caption, style, parent=None):
+        self.events.append(("MessageBox", message, caption, style, parent))
+        return self.answers.pop(0) if self.answers else gui.wx.OK
+
+    def _file_dialog_class(self):
+        test = self
+
+        class FakeExportFileDialog:
+            def __init__(self, parent, title, defaultFile="", wildcard="", style=0):
+                test.events.append(("FileDialog", parent, title, defaultFile, wildcard, style))
+                self.path = test.export_paths.pop(0)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def ShowModal(self):
+                return gui.wx.ID_OK if self.path is not None else gui.wx.CANCEL
+
+            def GetPath(self):
+                return str(self.path)
+
+        return FakeExportFileDialog
+
+    def _dir_dialog_class(self):
+        test = self
+
+        class FakeDirDialog:
+            def __init__(self, parent, title):
+                test.events.append(("DirDialog", parent, title))
+                self.path = test.export_dirs.pop(0)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def ShowModal(self):
+                return gui.wx.ID_OK if self.path is not None else gui.wx.CANCEL
+
+            def GetPath(self):
+                return str(self.path)
+
+        return FakeDirDialog
+
+    def _converting_dialog_class(self):
+        test = self
+
+        class FakeConvertingDialog:
+            def __init__(self, parent):
+                test.events.append(("ConvertingDialog", parent))
+
+            def Show(self):
+                test.events.append(("dialog.Show",))
+
+            def Raise(self):
+                test.events.append(("dialog.Raise",))
+
+            def Unbind(self, event):
+                test.events.append(("dialog.Unbind", event))
+
+            def Destroy(self):
+                test.events.append(("dialog.Destroy",))
+
+        return FakeConvertingDialog
+
+    def _convert(self, request, *, runtime):
+        self.assertIs(runtime, self.runtime)
+        self.requests.append(request)
+        self.events.append(("convert", request.raw_text))
+        outcome = self.outputs[request.raw_text]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    # --- helpers -----------------------------------------------------------
+
+    def _wire_conversion(self, frame) -> None:
+        """Today's conversion wiring with the fakes. The only helper that changes during P1-4."""
+        frame._conversion_runner = gui.ConversionJobRunner(
+            runtime=frame.translation_runtime,
+            on_success=frame._finish_conversion_success,
+            on_failure=frame._finish_conversion_failure,
+            call_after=self.calls,
+            converter=self._convert,
+            thread_factory=self.thread_factory,
+        )
+        frame._convert_dialog = None
+        frame._convert_dialog_timer = None
+
+    def _make_frame(self, documents, open_name=None, selected_name=None) -> gui.BrailleFrame:
+        frame = gui.BrailleFrame.__new__(gui.BrailleFrame)
+        documents = list(documents)
+        selected_name = selected_name or open_name
+        controller = DocumentController(documents=documents, open_name=open_name, selected_name=selected_name)
+        frame._document_controller = controller
+        frame._workspace_service = DocumentWorkspaceService(controller, self.workspace)
+        open_document = controller.get_document(open_name)
+        frame.input_txt = _RecordingEditor("input", self.events, open_document.text if open_document else "")
+        frame.output_txt = _RecordingEditor(
+            "output", self.events, (open_document.braille or "") if open_document else ""
+        )
+        names = [document.name for document in documents]
+        frame.document_list = _RecordingDocumentList(
+            self.events,
+            names,
+            names.index(selected_name) if selected_name in names else gui.wx.NOT_FOUND,
+        )
+        frame.SetTitle = lambda title: self.events.append(("title", title))
+        frame.GetMenuBar = lambda: self.menu_bar
+        frame._dual_view_frame = _RecordingViewer(self.events)
+        frame._document_menu_items = {}
+        frame.translation_runtime = self.runtime
+        frame.translation_tables = dict(self.TABLES)
+        frame.translation_settings = TranslationSettings("ascii", 32, "default")
+        frame.dictionary_dir = self.root / "dictionary"
+        self._wire_conversion(frame)
+        return frame
+
+    def _take(self) -> list:
+        taken = list(self.events)
+        self.events.clear()
+        return taken
+
+    def _busy(self, busy: bool) -> list:
+        return [
+            ("FindMenu", gui._("File")),
+            ("EnableTop", 0, not busy),
+            ("FindMenu", gui._("Translation")),
+            ("EnableTop", 1, not busy),
+            ("enable", "list", not busy),
+            ("enable", "input", not busy),
+        ]
+
+    def _box(self, frame, message: str, caption: str, flags: int) -> tuple:
+        return ("MessageBox", message, caption, flags, frame)
+
+    def _info(self, frame, message: str, caption: str | None = None) -> tuple:
+        caption = gui._("Info") if caption is None else caption
+        return self._box(frame, message, caption, gui.wx.OK | gui.wx.ICON_INFORMATION)
+
+    def _error(self, frame, message: str) -> tuple:
+        return self._box(frame, message, gui._("Error"), gui.wx.OK | gui.wx.ICON_ERROR)
+
+    def _completed(self, frame) -> tuple:
+        return self._info(frame, gui._("Conversion completed."))
+
+    def _exported(self, frame) -> tuple:
+        return self._info(frame, gui._("The document was exported successfully."), gui._("Export Complete"))
+
+    def _export_dialog(self, frame, default_file: str) -> tuple:
+        return (
+            "FileDialog",
+            frame,
+            gui._("Export Document"),
+            default_file,
+            gui._("Braille files (*.brl)|*.brl"),
+            gui.wx.FD_SAVE | gui.wx.FD_OVERWRITE_PROMPT,
+        )
+
+    def _overwrite_question(self, frame) -> tuple:
+        return self._box(
+            frame,
+            gui._(
+                "The destination folder already contains one or more files that would be overwritten. Do you want to overwrite all of them?"
+            ),
+            gui._("Confirm Overwrite"),
+            gui.wx.YES_NO | gui.wx.ICON_WARNING,
+        )
+
+    def _os_error_text(self, path: Path) -> str:
+        """``str(exc)`` of writing to ``path`` (a directory), as the BRL writer raises it."""
+        try:
+            path.write_text("", encoding="utf-8")
+        except OSError as exc:
+            return str(exc)
+        self.fail(f"{path} is writable")
+
+    def _request(self, raw_text: str) -> ConversionRequest:
+        return ConversionRequest(
+            raw_text=raw_text,
+            output_mode="ascii",
+            width=32,
+            dictionary_path=self.root / "dictionary" / "default.csv",
+            data_dir=gui.resource_path("data"),
+            translation_tables=self.TABLES,
+            lang=self.LANG,
+            charset_maps=self.CHARSET_MAPS,
+        )
+
+    # --- manual conversion ---------------------------------------------------
+
+    def test_manual_conversion_success_turn_by_turn(self) -> None:
+        segment = _dual_view_segment("a", "⠁")
+        frame = self._make_frame([Document("alpha", "old text", None), Document("beta", "b", "⠃")], "alpha")
+        frame.input_txt.value = "edited text"
+        self.outputs["edited text"] = ConversionOutput("⠑⠙", ("result",), (segment,))
+
+        frame.on_convert(None)
+
+        self.assertEqual(self._take(), self._busy(True) + [("call_later", 2000, (1,))])
+        self.assertEqual([(thread.daemon, thread.started) for thread in self.threads], [(True, True)])
+        self.assertEqual(self.requests, [])
+
+        self.threads[0].run()
+
+        self.assertEqual(self._take(), [("convert", "edited text"), ("call_after",)])
+        self.assertEqual(self.requests, [self._request("edited text")])
+        self.assertIsNot(self.requests[0].translation_tables, frame.translation_tables)
+        self.assertEqual(frame.output_txt.value, "")
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            [("timer.Stop", 1)]
+            + self._busy(False)
+            + [
+                ("set", "output", "⠑⠙"),
+                ("focus", "output"),
+                ("dual_view.refresh",),
+                self._completed(frame),
+            ],
+        )
+        controller = frame._document_controller
+        self.assertEqual(controller.documents, [Document("alpha", "edited text", "⠑⠙"), Document("beta", "b", "⠃")])
+        self.assertEqual(controller.dual_view_results_by_document, {"alpha": (segment,)})
+        self.assertIn('<span class="source">a</span>', frame._dual_view_frame.html)
+        self.assertEqual(self.calls.pending, [])
+        self.assertFalse(self.workspace.exists())
+
+    def test_manual_conversion_without_open_document_updates_output_only(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", None)], open_name=None, selected_name="alpha")
+        frame.input_txt.value = "loose text"
+        self.outputs["loose text"] = ConversionOutput("⠇", ("result",), (_dual_view_segment("l", "⠇"),))
+
+        frame.on_convert(None)
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            [("timer.Stop", 1)]
+            + self._busy(False)
+            + [("set", "output", "⠇"), ("focus", "output"), ("dual_view.refresh",), self._completed(frame)],
+        )
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "a", None)])
+        self.assertEqual(frame._document_controller.dual_view_results_by_document, {})
+
+    def test_conversion_failure_messages_by_stage_and_public_text(self) -> None:
+        cases = (
+            (ConversionStageError("ascii", RuntimeError("bad map")), gui._("ASCII conversion failed: {error}"), "bad map"),
+            (
+                ConversionStageError("text_processing", RuntimeError("script boom")),
+                gui._("Text processing failed: {error}"),
+                "script boom",
+            ),
+            (ConversionStageError("translation", RuntimeError("boom")), gui._("Translation failed: {error}"), "boom"),
+            (ConversionStageError("other", RuntimeError("odd")), gui._("Translation failed: {error}"), "odd"),
+            # KNOWN BUG (P1-4 spec, defect 4): the two public fallback texts are not msgids, so they stay English.
+            (
+                ConversionStageError("translation", RuntimeError("")),
+                gui._("Translation failed: {error}"),
+                "An unknown error occurred.",
+            ),
+            (
+                ConversionStageError("translation", RuntimeError("Can't translate: tables zh-tw.ctb inbuf=12")),
+                gui._("Translation failed: {error}"),
+                "The selected translation table could not translate this text.",
+            ),
+        )
+        for error, template, error_text in cases:
+            with self.subTest(stage=error.stage, error=str(error)):
+                self.events.clear()
+                self.threads.clear()
+                self.timers.timers.clear()
+                segment = _dual_view_segment("o", "⠕")
+                frame = self._make_frame([Document("alpha", "source", "⠕")], "alpha")
+                frame._document_controller.set_dual_view_results("alpha", (segment,))
+                self.outputs["source"] = error
+
+                frame.on_convert(None)
+                self.threads[0].run()
+                self._take()
+                self.calls.run_next()
+
+                self.assertEqual(
+                    self._take(),
+                    [("timer.Stop", 1)] + self._busy(False) + [self._error(frame, template.format(error=error_text))],
+                )
+                self.assertEqual(frame.output_txt.value, "⠕")
+                self.assertEqual(frame._document_controller.documents, [Document("alpha", "source", "⠕")])
+                self.assertEqual(frame._document_controller.dual_view_results_by_document, {"alpha": (segment,)})
+
+    def test_convert_while_running_does_nothing(self) -> None:
+        frame = self._make_frame([Document("alpha", "source", None)], "alpha")
+        self.outputs["source"] = ConversionOutput("⠎", ())
+
+        frame.on_convert(None)
+        self._take()
+        frame.on_convert(None)
+        frame.on_input_text_key_down(_KeyEvent(13))
+
+        self.assertEqual(self._take(), [])
+        self.assertEqual(len(self.threads), 1)
+        self.assertEqual(len(self.timers.timers), 1)
+
+    def test_convert_without_default_table_shows_info_only(self) -> None:
+        frame = self._make_frame([Document("alpha", "source", None)], "alpha")
+        frame.translation_tables = {"default": "", "math": "nemeth.ctb"}
+
+        frame.on_convert(None)
+
+        self.assertEqual(self._take(), [self._info(frame, gui._("Please select a translation table first."))])
+        self.assertEqual(self.threads, [])
+        self.assertEqual(self.timers.timers, [])
+
+    def test_converting_dialog_appears_once_and_closes_on_completion(self) -> None:
+        frame = self._make_frame([Document("alpha", "source", None)], "alpha")
+        self.outputs["source"] = ConversionOutput("⠎", ())
+        frame.on_convert(None)
+        self._take()
+
+        self.timers.timers[0].fire()
+        self.assertEqual(self._take(), [("ConvertingDialog", frame), ("dialog.Show",), ("dialog.Raise",)])
+        self.timers.timers[0].fire()
+        self.assertEqual(self._take(), [])
+
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+        self.assertEqual(
+            self._take(),
+            [("timer.Stop", 1), ("dialog.Unbind", "EVT_CLOSE"), ("dialog.Destroy",)]
+            + self._busy(False)
+            + [("set", "output", "⠎"), ("focus", "output"), ("dual_view.refresh",), self._completed(frame)],
+        )
+
+        self.timers.timers[0].fire()
+        self.assertEqual(self._take(), [])
+
+    def test_converting_dialog_timer_of_an_earlier_job_does_nothing(self) -> None:
+        frame = self._make_frame([Document("alpha", "source", None)], "alpha")
+        self.outputs["source"] = ConversionOutput("⠎", ())
+        frame.on_convert(None)
+        self.threads[0].run()
+        self.calls.run_next()
+        frame.on_convert(None)
+        self._take()
+
+        self.timers.timers[0].fire()
+        self.assertEqual(self._take(), [])
+        self.timers.timers[1].fire()
+        self.assertEqual(self._take(), [("ConvertingDialog", frame), ("dialog.Show",), ("dialog.Raise",)])
+
+    def test_close_while_running_vetoes_or_saves_and_closes(self) -> None:
+        frame = self._make_frame([Document("alpha", "source", None)], "alpha")
+        frame.input_txt.value = "edited"
+        self.outputs["edited"] = ConversionOutput("⠑", ())
+        frame.on_convert(None)
+        self.timers.timers[0].fire()
+        self._take()
+
+        frame._on_close(_CloseEvent(self.events, can_veto=True))
+
+        self.assertEqual(self._take(), [("close.Veto",)])
+        self.assertFalse(self.workspace.exists())
+
+        frame._on_close(_CloseEvent(self.events, can_veto=False))
+
+        self.assertEqual(
+            self._take(),
+            [("dialog.Unbind", "EVT_CLOSE"), ("dialog.Destroy",), ("dual_view.Destroy",), ("close.Skip",)],
+        )
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "edited", None))
+        self.assertIsNone(frame._dual_view_frame)
+
+    # --- single export -------------------------------------------------------
+
+    def test_single_export_with_braille_writes_and_reports(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "⠁⠃")], "alpha")
+        target = self.export_dir / "alpha.brl"
+        self.export_paths.append(target)
+
+        frame.on_export_document("brl")
+
+        self.assertEqual(self._take(), [self._export_dialog(frame, "alpha.brl"), self._exported(frame)])
+        self.assertEqual(target.read_bytes(), "⠁⠃".encode("utf-8"))
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "a", "⠁⠃"))
+        self.assertEqual(self.threads, [])
+
+    def test_single_export_write_error_and_extension_correction(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "⠁")], "alpha")
+        blocked = self.export_dir / "blocked.brl"
+        blocked.mkdir()
+        reason = self._os_error_text(blocked)
+        self.export_paths.extend([blocked, self.export_dir / "renamed.TXT"])
+
+        frame.on_export_document("brl")
+
+        self.assertEqual(
+            self._take(),
+            [
+                self._export_dialog(frame, "alpha.brl"),
+                self._error(frame, gui._("Failed to export document: {error}").format(error=reason)),
+            ],
+        )
+
+        frame.on_export_document("brl")
+
+        self.assertEqual(self._take(), [self._export_dialog(frame, "alpha.brl"), self._exported(frame)])
+        self.assertEqual((self.export_dir / "renamed.brl").read_text(encoding="utf-8"), "⠁")
+        self.assertFalse((self.export_dir / "renamed.TXT").exists())
+
+    def test_single_export_of_pending_document_converts_its_text_then_writes(self) -> None:
+        frame = self._make_frame(
+            [Document("alpha", "alpha text", "⠁"), Document("beta", "beta text", None)],
+            open_name="alpha",
+            selected_name="beta",
+        )
+        frame.input_txt.value = "alpha editor"
+        frame._document_controller.set_dual_view_results("beta", ("cached",))
+        target = self.export_dir / "beta.brl"
+        self.export_paths.append(target)
+        self.outputs["beta text"] = ConversionOutput("⠃⠃", ("result",), (_dual_view_segment("b", "⠃"),))
+
+        frame.on_export_document("brl")
+
+        self.assertEqual(
+            self._take(),
+            [self._export_dialog(frame, "beta.brl")] + self._busy(True) + [("call_later", 2000, (1,))],
+        )
+        self.assertFalse(target.exists())
+
+        self.threads[0].run()
+        self.assertEqual(self._take(), [("convert", "beta text"), ("call_after",)])
+        self.assertEqual(self.requests, [self._request("beta text")])
+
+        self.calls.run_next()
+
+        self.assertEqual(self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._exported(frame)])
+        self.assertEqual(target.read_text(encoding="utf-8"), "⠃⠃")
+        self.assertEqual(frame.output_txt.value, "⠁")
+        self.assertEqual(
+            frame._document_controller.documents,
+            [Document("alpha", "alpha editor", "⠁"), Document("beta", "beta text", None)],
+        )
+        self.assertEqual(frame._document_controller.dual_view_results_by_document, {"beta": ("cached",)})
+
+    def test_single_export_of_pending_document_reports_conversion_or_table_error(self) -> None:
+        frame = self._make_frame([Document("alpha", "alpha text", None)], "alpha")
+        target = self.export_dir / "alpha.brl"
+        self.export_paths.extend([target, target])
+        self.outputs["alpha text"] = ConversionStageError("translation", RuntimeError("boom"))
+
+        frame.on_export_document("brl")
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            [("timer.Stop", 1)]
+            + self._busy(False)
+            + [self._error(frame, gui._("Translation failed: {error}").format(error="boom"))],
+        )
+        self.assertFalse(target.exists())
+
+        frame.translation_tables = {"default": ""}
+        frame.on_export_document("brl")
+
+        self.assertEqual(
+            self._take(),
+            [self._export_dialog(frame, "alpha.brl"), self._error(frame, gui._("Please select a translation table first."))],
+        )
+        self.assertEqual(len(self.threads), 1)
+        self.assertEqual(len(self.timers.timers), 1)
+        self.assertFalse(target.exists())
+
+    # --- Export All ----------------------------------------------------------
+
+    def test_export_all_mixed_documents_turn_by_turn(self) -> None:
+        documents = [
+            Document("d1-ready", "t1", "⠁"),
+            Document("d2-pending", "t2", None),
+            Document("d3-ready", "t3", "⠉"),
+            Document("d4-write-fail", "t4", "⠙"),
+            Document("d5-convert-fail", "t5", None),
+            Document("d6-pending", "t6", None),
+        ]
+        frame = self._make_frame(documents, "d1-ready")
+        blocked = self.export_dir / "d4-write-fail.brl"
+        blocked.mkdir()
+        write_reason = self._os_error_text(blocked)
+        self.export_dirs.append(self.export_dir)
+        self.answers.append(gui.wx.YES)
+        self.outputs.update(
+            t2=ConversionOutput("⠃", ()),
+            t5=ConversionStageError("translation", RuntimeError("t5 boom")),
+            t6=ConversionOutput("⠋", ()),
+        )
+
+        def written() -> dict:
+            return {path.name: path.read_text(encoding="utf-8") for path in self.export_dir.glob("*.brl") if path.is_file()}
+
+        frame.on_export_all_documents("brl")
+
+        self.assertEqual(
+            self._take(),
+            [
+                ("DirDialog", frame, gui._("Export All Documents")),
+                self._overwrite_question(frame),
+                ("call_after",),
+            ],
+        )
+        self.assertEqual(written(), {"d1-ready.brl": "⠁"})
+
+        self.calls.run_next()
+        self.assertEqual(self._take(), self._busy(True) + [("call_later", 2000, (1,))])
+        self.threads[0].run()
+        self.assertEqual(self._take(), [("convert", "t2"), ("call_after",)])
+        self.assertEqual(written(), {"d1-ready.brl": "⠁"})
+        self.calls.run_next()
+        self.assertEqual(self._take(), [("timer.Stop", 1)] + self._busy(False) + [("call_after",)])
+        self.assertEqual(written(), {"d1-ready.brl": "⠁", "d2-pending.brl": "⠃"})
+
+        self.calls.run_next()
+        self.assertEqual(self._take(), [("call_after",)])
+        self.calls.run_next()
+        self.assertEqual(self._take(), [("call_after",)])
+        self.assertEqual(written(), {"d1-ready.brl": "⠁", "d2-pending.brl": "⠃", "d3-ready.brl": "⠉"})
+
+        self.calls.run_next()
+        self.assertEqual(self._take(), self._busy(True) + [("call_later", 2000, (2,))])
+        self.threads[1].run()
+        self.calls.run_next()
+        self.assertEqual(
+            self._take(),
+            [("convert", "t5"), ("call_after",), ("timer.Stop", 2)] + self._busy(False) + [("call_after",)],
+        )
+
+        self.calls.run_next()
+        self.assertEqual(self._take(), self._busy(True) + [("call_later", 2000, (3,))])
+        self.threads[2].run()
+        self.calls.run_next()
+        self.assertEqual(
+            self._take(),
+            [("convert", "t6"), ("call_after",), ("timer.Stop", 3)] + self._busy(False) + [("call_after",)],
+        )
+
+        self.calls.run_next()
+        # KNOWN BUG (P1-4 spec, defect 4): the partial-export summary is not translated.
+        summary = (
+            "Exported documents: 4\n"
+            "Failed documents: 2\n"
+            "\n"
+            f"d4-write-fail: {write_reason}\n"
+            f"d5-convert-fail: {gui._('Translation failed: {error}').format(error='t5 boom')}"
+        )
+        self.assertEqual(
+            self._take(),
+            [self._box(frame, summary, "Export Complete with Errors", gui.wx.OK | gui.wx.ICON_WARNING)],
+        )
+        self.assertEqual(self.calls.pending, [])
+        self.assertEqual(
+            written(),
+            {"d1-ready.brl": "⠁", "d2-pending.brl": "⠃", "d3-ready.brl": "⠉", "d6-pending.brl": "⠋"},
+        )
+        self.assertEqual(frame._document_controller.documents, documents)
+        self.assertEqual(frame._document_controller.dual_view_results_by_document, {})
+        self.assertEqual(frame.output_txt.value, "⠁")
+
+    def test_export_all_ready_documents_shows_one_information_summary(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "⠁"), Document("beta", "b", "⠃")], "alpha")
+        self.export_dirs.append(self.export_dir)
+
+        frame.on_export_all_documents("brl")
+        self.assertEqual(self._take(), [("DirDialog", frame, gui._("Export All Documents")), ("call_after",)])
+        self.calls.run_next()
+        self.assertEqual(self._take(), [("call_after",)])
+        self.calls.run_next()
+
+        # KNOWN BUG (P1-4 spec, defect 4): the message is not a msgid; only the caption is translated.
+        self.assertEqual(
+            self._take(),
+            [self._info(frame, "All documents were exported successfully.", gui._("Export Complete"))],
+        )
+        self.assertEqual(sorted(path.name for path in self.export_dir.iterdir()), ["alpha.brl", "beta.brl"])
+
+    def test_export_all_without_default_table_collects_failures_turn_by_turn(self) -> None:
+        frame = self._make_frame([Document("p1", "t1", None), Document("p2", "t2", None)], "p1")
+        frame.translation_tables = {}
+        self.export_dirs.append(self.export_dir)
+        message = gui._("Please select a translation table first.")
+
+        frame.on_export_all_documents("brl")
+        self.assertEqual(self._take(), [("DirDialog", frame, gui._("Export All Documents")), ("call_after",)])
+        self.calls.run_next()
+        self.assertEqual(self._take(), [("call_after",)])
+        self.calls.run_next()
+
+        summary = f"Exported documents: 0\nFailed documents: 2\n\np1: {message}\np2: {message}"
+        self.assertEqual(
+            self._take(),
+            [self._box(frame, summary, "Export Complete with Errors", gui.wx.OK | gui.wx.ICON_WARNING)],
+        )
+        self.assertEqual(self.threads, [])
+        self.assertEqual(list(self.export_dir.iterdir()), [])
+
+    def test_export_all_folder_and_overwrite_dialogs(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "⠁"), Document("beta", "b", "⠃")], "alpha")
+
+        self.export_dirs.append(None)
+        frame.on_export_all_documents("brl")
+        self.assertEqual(self._take(), [("DirDialog", frame, gui._("Export All Documents"))])
+
+        self.export_dirs.append(self.export_dir)
+        frame.on_export_all_documents("brl")
+        self.assertEqual(self._take(), [("DirDialog", frame, gui._("Export All Documents")), ("call_after",)])
+        self.calls.run_all()
+        self.events.clear()
+
+        (self.export_dir / "alpha.brl").write_text("old", encoding="utf-8")
+        (self.export_dir / "beta.brl").unlink()
+        self.export_dirs.append(self.export_dir)
+        self.answers.append(gui.wx.NO)
+        frame.on_export_all_documents("brl")
+        self.assertEqual(
+            self._take(),
+            [("DirDialog", frame, gui._("Export All Documents")), self._overwrite_question(frame)],
+        )
+        self.assertEqual(sorted(path.name for path in self.export_dir.iterdir()), ["alpha.brl"])
+        self.assertEqual((self.export_dir / "alpha.brl").read_text(encoding="utf-8"), "old")
+
+        self.export_dirs.append(self.export_dir)
+        self.answers.append(gui.wx.YES)
+        frame.on_export_all_documents("brl")
+        self.calls.run_all()
+        self.assertEqual(
+            self._take(),
+            [
+                ("DirDialog", frame, gui._("Export All Documents")),
+                self._overwrite_question(frame),
+                ("call_after",),
+                ("call_after",),
+                self._info(frame, "All documents were exported successfully.", gui._("Export Complete")),
+            ],
+        )
+        self.assertEqual((self.export_dir / "alpha.brl").read_text(encoding="utf-8"), "⠁")
+        self.assertEqual((self.export_dir / "beta.brl").read_text(encoding="utf-8"), "⠃")
+
+    # --- re-entrancy (known defects 1 and 2) ----------------------------------
+
+    def test_ctrl_s_during_manual_conversion_supersedes_it(self) -> None:
+        frame = self._make_frame([Document("alpha", "alpha text", None)], "alpha")
+        target = self.export_dir / "alpha.brl"
+        self.export_paths.append(target)
+        self.outputs["alpha text"] = ConversionOutput("⠁⠁", ())
+
+        frame.on_convert(None)
+        self._take()
+        event = _KeyEvent(self.CTRL_S)
+        frame.on_output_text_key_down(event)
+
+        # KNOWN BUG (P1-4 spec, defect 2): the export conversion starts without a running check.
+        self.assertEqual(
+            self._take(),
+            [self._export_dialog(frame, "alpha.brl")]
+            + self._busy(True)
+            + [("call_later", 2000, (2,)), ("focus", "output")],
+        )
+        self.assertFalse(event.skipped)
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "alpha text", None))
+
+        self.threads[0].run()
+        self.threads[1].run()
+        self.assertEqual(self._take(), [("convert", "alpha text"), ("call_after",), ("convert", "alpha text"), ("call_after",)])
+
+        self.calls.run_next()
+        self.assertEqual(self._take(), [])
+
+        self.calls.run_next()
+        self.assertEqual(self._take(), [("timer.Stop", 2)] + self._busy(False) + [self._exported(frame)])
+        self.assertEqual(target.read_text(encoding="utf-8"), "⠁⠁")
+        self.assertFalse(self.timers.timers[0].stopped)
+        self.assertEqual(frame.output_txt.value, "")
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "alpha text", None)])
+
+    def test_ctrl_tab_during_manual_conversion_sends_result_to_new_document(self) -> None:
+        segment = _dual_view_segment("a", "⠁")
+        frame = self._make_frame([Document("alpha", "alpha text", None), Document("beta", "beta text", "⠃")], "alpha")
+        self.outputs["alpha text"] = ConversionOutput("⠁⠁", ("result",), (segment,))
+
+        frame.on_convert(None)
+        self._take()
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB))
+
+        self.assertEqual(
+            self._take(),
+            [
+                ("set", "input", "beta text"),
+                ("set", "output", "⠃"),
+                ("title", gui._(gui.format_window_title("beta"))),
+                ("dual_view.refresh",),
+                ("focus", "input"),
+            ],
+        )
+        self.assertEqual(frame._document_controller.open_document_name, "beta")
+
+        self.threads[0].run()
+        self.calls.run_next()
+
+        # KNOWN BUG (P1-4 spec, defect 1): alpha's result lands in beta, the document open now.
+        self.assertEqual(
+            self._take(),
+            [("convert", "alpha text"), ("call_after",), ("timer.Stop", 1)]
+            + self._busy(False)
+            + [("set", "output", "⠁⠁"), ("focus", "output"), ("dual_view.refresh",), self._completed(frame)],
+        )
+        self.assertEqual(
+            frame._document_controller.documents,
+            [Document("alpha", "alpha text", None), Document("beta", "beta text", "⠁⠁")],
+        )
+        self.assertEqual(frame._document_controller.dual_view_results_by_document, {"beta": (segment,)})
+
+    def test_convert_between_export_all_steps_is_superseded(self) -> None:
+        frame = self._make_frame([Document("r1", "t1", "⠁"), Document("p1", "t2", None)], "r1")
+        frame.input_txt.value = "manual text"
+        self.export_dirs.append(self.export_dir)
+        self.outputs.update({"manual text": ConversionOutput("⠍", ()), "t2": ConversionOutput("⠃", ())})
+
+        frame.on_export_all_documents("brl")
+        self._take()
+        frame.on_convert(None)
+        self.assertEqual(self._take(), self._busy(True) + [("call_later", 2000, (1,))])
+
+        self.calls.run_next()
+        # KNOWN BUG (P1-4 spec, defect 2): the next pending step starts a second job; the manual one is dropped.
+        self.assertEqual(self._take(), self._busy(True) + [("call_later", 2000, (2,))])
+
+        self.threads[0].run()
+        self.threads[1].run()
+        self.assertEqual(self._take(), [("convert", "manual text"), ("call_after",), ("convert", "t2"), ("call_after",)])
+        self.calls.run_next()
+        self.assertEqual(self._take(), [])
+        self.calls.run_next()
+        self.assertEqual(self._take(), [("timer.Stop", 2)] + self._busy(False) + [("call_after",)])
+        self.calls.run_next()
+        self.assertEqual(
+            self._take(),
+            [self._info(frame, "All documents were exported successfully.", gui._("Export Complete"))],
+        )
+        self.assertEqual(frame.output_txt.value, "⠁")
+        self.assertEqual((self.export_dir / "p1.brl").read_text(encoding="utf-8"), "⠃")
 
 
 if __name__ == "__main__":

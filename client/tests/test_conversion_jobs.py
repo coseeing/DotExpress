@@ -10,28 +10,7 @@ from conversion.jobs import (
 )
 from config import DEFAULT_CHARSET_MAPS
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
-
-
-class FakeThread:
-	def __init__(self, *, target, args=(), daemon=None):
-		self._target = target
-		self._args = args
-		self.daemon = daemon
-		self.started = False
-		self._alive = False
-
-	def start(self) -> None:
-		self.started = True
-		self._alive = True
-
-	def is_alive(self) -> bool:
-		return self._alive
-
-	def run(self) -> None:
-		try:
-			self._target(*self._args)
-		finally:
-			self._alive = False
+from tests.conversion_harness import FakeThread
 
 
 class ConversionJobRunnerTest(unittest.TestCase):

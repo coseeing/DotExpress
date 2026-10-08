@@ -159,5 +159,83 @@ class PresenterRefreshTest(PresenterTestCase):
 		self.set_active_name.assert_not_called()
 
 
+class PresenterAddTest(PresenterTestCase):
+	def test_add_creates_dictionary_and_selects_it(self):
+		presenter = self.make_presenter()
+		view = FakeView(names=["alpha"])
+
+		result = presenter.add(view)
+
+		self.assertEqual(result, "alpha")
+		self.assertEqual(view.calls, [("prompt", _("Add Dictionary"), "")])
+		self.assertEqual(self.files(), ["alpha", "default"])
+		self.assertEqual((self.dictionary_dir / "alpha.csv").read_text(encoding="utf-8").splitlines(), ["text,braille,type"])
+		self.assertEqual(presenter.dictionary_names, ["alpha", "default"])
+		self.set_active_name.assert_not_called()
+
+	def test_add_cancel_creates_nothing(self):
+		presenter = self.make_presenter()
+		view = FakeView(names=[None])
+
+		result = presenter.add(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [("prompt", _("Add Dictionary"), "")])
+		self.assertEqual(self.files(), ["default"])
+		self.assertEqual(presenter.dictionary_names, ["default"])
+
+	def test_add_duplicate_shows_error_and_prompts_again_with_typed_name(self):
+		presenter = self.make_presenter("alpha")
+		view = FakeView(names=[" alpha", "beta"])
+
+		result = presenter.add(view)
+
+		self.assertEqual(result, "beta")
+		self.assertEqual(
+			view.calls,
+			[
+				("prompt", _("Add Dictionary"), ""),
+				("error", _('Dictionary "{name}" already exists.').format(name="alpha")),
+				("prompt", _("Add Dictionary"), " alpha"),
+			],
+		)
+		self.assertEqual(self.files(), ["alpha", "beta", "default"])
+		self.assertEqual(presenter.dictionary_names, ["alpha", "beta", "default"])
+
+	def test_add_invalid_name_shows_untranslated_info(self):
+		presenter = self.make_presenter()
+		view = FakeView(names=["Default"])
+
+		result = presenter.add(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[("prompt", _("Add Dictionary"), ""), ("info", "Name 'Default' is reserved.")],
+		)
+		self.assertEqual(self.files(), ["default"])
+
+	def test_add_does_not_catch_os_error(self):
+		presenter = self.make_presenter()
+		view = FakeView(names=["alpha"])
+
+		with patch.object(presenter_module, "create_dictionary", side_effect=PermissionError("denied")):
+			with self.assertRaises(PermissionError):
+				presenter.add(view)
+
+		self.assertEqual(view.calls, [("prompt", _("Add Dictionary"), "")])
+		self.assertEqual(presenter.dictionary_names, ["default"])
+
+	def test_add_never_changes_active_dictionary(self):
+		presenter = self.make_presenter(active="missing")
+		view = FakeView(names=["alpha"])
+
+		result = presenter.add(view)
+
+		self.assertEqual(result, "alpha")
+		self.assertEqual(self.active, ["missing"])
+		self.set_active_name.assert_not_called()
+
+
 if __name__ == "__main__":
 	unittest.main()

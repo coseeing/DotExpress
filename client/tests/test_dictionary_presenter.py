@@ -438,5 +438,144 @@ class PresenterRenameTest(PresenterTestCase):
 		self.set_active_name.assert_not_called()
 
 
+class PresenterImportTest(PresenterTestCase):
+	HEADER_ERROR = "Imported file must contain text, braille, and type headers."
+
+	def write_source(self, name, content=HEADER + "Alpha,\u2801,General\n"):
+		source_dir = self.root / "source"
+		source_dir.mkdir(exist_ok=True)
+		path = source_dir / f"{name}.csv"
+		path.write_text(content, encoding="utf-8")
+		return path
+
+	def choose_call(self):
+		return ("choose_import", _("Import Dictionary"))
+
+	def prompt_call(self, initial_name):
+		return ("prompt", _("Add Dictionary"), initial_name)
+
+	def test_import_cancelled_file_dialog_does_not_prompt(self):
+		presenter = self.make_presenter()
+		view = FakeView(import_path=None)
+
+		result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.choose_call()])
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_copies_source_under_prompted_name(self):
+		source = self.write_source("words")
+		presenter = self.make_presenter(active="missing")
+		view = FakeView(names=["words"], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertEqual(result, "words")
+		self.assertEqual(view.calls, [self.choose_call(), self.prompt_call("words")])
+		self.assertEqual(self.files(), ["default", "words"])
+		self.assertEqual((self.dictionary_dir / "words.csv").read_bytes(), source.read_bytes())
+		self.assertEqual(presenter.dictionary_names, ["default", "words"])
+		self.assertEqual(self.active, ["missing"])
+		self.set_active_name.assert_not_called()
+
+	def test_import_duplicate_shows_error_and_prompts_again_with_typed_name(self):
+		source = self.write_source("alpha")
+		presenter = self.make_presenter("alpha")
+		view = FakeView(names=["alpha", "beta"], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertEqual(result, "beta")
+		self.assertEqual(
+			view.calls,
+			[
+				self.choose_call(),
+				self.prompt_call("alpha"),
+				("error", _('Dictionary "{name}" already exists.').format(name="alpha")),
+				self.prompt_call("alpha"),
+			],
+		)
+		self.assertEqual(self.files(), ["alpha", "beta", "default"])
+
+	def test_import_reports_duplicate_name_before_checking_headers(self):
+		source = self.write_source("alpha", content="a,b\n")
+		presenter = self.make_presenter("alpha")
+		view = FakeView(names=["alpha", None], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[
+				self.choose_call(),
+				self.prompt_call("alpha"),
+				("error", _('Dictionary "{name}" already exists.').format(name="alpha")),
+				self.prompt_call("alpha"),
+			],
+		)
+		self.assertEqual(self.files(), ["alpha", "default"])
+
+	def test_import_without_headers_shows_header_error(self):
+		source = self.write_source("bad", content="a,b\n")
+		presenter = self.make_presenter()
+		view = FakeView(names=["bad"], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[self.choose_call(), self.prompt_call("bad"), ("error", _(self.HEADER_ERROR))],
+		)
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_invalid_name_shows_header_error(self):
+		source = self.write_source("words")
+		presenter = self.make_presenter()
+		view = FakeView(names=["bad|name"], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[self.choose_call(), self.prompt_call("words"), ("error", _(self.HEADER_ERROR))],
+		)
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_missing_source_shows_import_error(self):
+		source = self.root / "source" / "gone.csv"
+		with self.assertRaises(FileNotFoundError) as missing:
+			source.open("r", newline="", encoding="utf-8")
+		presenter = self.make_presenter()
+		view = FakeView(names=["gone"], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[
+				self.choose_call(),
+				self.prompt_call("gone"),
+				("error", _("Failed to import dictionary: {error}").format(error=missing.exception)),
+			],
+		)
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_cancelled_name_prompt_imports_nothing(self):
+		source = self.write_source("words")
+		presenter = self.make_presenter()
+		view = FakeView(names=[None], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.choose_call(), self.prompt_call("words")])
+		self.assertEqual(self.files(), ["default"])
+
+
 if __name__ == "__main__":
 	unittest.main()

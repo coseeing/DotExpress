@@ -18,6 +18,7 @@ from dictionaries.manager import (
 	delete_dictionary,
 	dictionary_path_for_name,
 	ensure_default_dictionary,
+	import_dictionary,
 	list_dictionary_names,
 )
 from dictionaries.name_prompt import prompt_dictionary_name_until_success, rename_dictionary_after_name_prompt
@@ -159,6 +160,27 @@ class DictionaryManagementPresenter:
 		if update.active_selected_name != active_name:
 			self._set_active_name(update.active_selected_name)
 		return update.management_selected_name
+
+	def import_from_file(self, view: DictionaryManagementView) -> str | None:
+		source_path = view.choose_import_path(_("Import Dictionary"))
+		if source_path is None:
+			return None
+		try:
+			path = self._prompt_name_until_success(
+				view,
+				_("Add Dictionary"),
+				source_path.stem,
+				lambda dictionary_name: import_dictionary(self._dictionary_dir, source_path, dictionary_name),
+			)
+		except ValueError:
+			view.show_error(_("Imported file must contain text, braille, and type headers."))
+			return None
+		except OSError as exc:
+			view.show_error(_("Failed to import dictionary: {error}").format(error=exc))
+			return None
+		if path is None:
+			return None
+		return self._selection_after_add(path.stem)
 
 	def _prompt_name_until_success(
 		self,

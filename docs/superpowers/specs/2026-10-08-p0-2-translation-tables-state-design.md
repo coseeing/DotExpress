@@ -118,7 +118,7 @@ No other test file changes. `tests/test_settings_dialogs.py`, `tests/test_settin
 
 ## Acceptance Criteria
 
-1. `grep -rn "language_map_translate_table" client --include=*.py` returns nothing.
+1. `grep -rn "language_map_translate_table" client --include=*.py` returns exactly one line: the guard test `self.assertFalse(hasattr(gui, "language_map_translate_table"))` in `client/tests/test_gui_document_flows.py` (the test must name the attribute). `grep -rn "language_map_translate_table" client --include=*.py | grep -v "^client/tests/"` returns nothing.
 2. `grep -n 'Please select a translation table first' client/gui.py` returns exactly one line, inside `_missing_default_table_message`.
 3. `BrailleFrame` reads and replaces `self.translation_tables` only; no code calls `clear()`/`update()` or otherwise mutates it in place.
 4. Focused verification passes with 0 failures and 0 errors:
@@ -129,7 +129,7 @@ No other test file changes. `tests/test_settings_dialogs.py`, `tests/test_settin
 
 ## Risks
 
-- **A path reads `self.translation_tables` before `_initialize_state` sets it** (low): `__init__` runs `_initialize_state` before layout, conversion state and event binding, so no handler can fire earlier. Tests that bypass `__init__` get the attribute from `_make_frame` or set it explicitly; a missing one fails loudly with `AttributeError`.
+- **A path reads `self.translation_tables` before `_initialize_state` sets it** (low): `__init__` runs `_initialize_state` before layout, conversion state and event binding, so no handler can fire earlier. Tests that bypass `__init__` get the attribute from `_make_frame` or set it explicitly. On a real wxPython frame a missing attribute raises a plain `AttributeError`. Under the test wx stubs it does not: the stub `wx._Widget.__getattr__` returns a no-op function for any missing attribute, so the failure surfaces one step later (`AttributeError: 'function' object has no attribute ...` from `.get`/`.copy`, `TypeError` from `dict(function)` in `DotExpressSettingsSnapshot.create`, or a silent `None` from calling a not-yet-defined method). The tests in this spec still fail loudly in every case they rely on, but expected pre-implementation failures are assertion failures rather than `AttributeError`s.
 - **Thread safety** (unchanged): the worker receives a copy built on the UI thread, and the frame attribute is only replaced on the UI thread.
 - **Hidden external users of the global** (none found): grep shows no import or patch outside `gui.py` and `test_gui_document_flows.py`.
 - **Overlap with later tasks** (low): P0-3 and later `gui.py` tasks must use `self.translation_tables`. P0-4 moves the wx stubs out of `test_gui_document_flows.py` but keeps `_make_frame`, so the attribute default set there survives. P0-5 moves `_`/gettext into `i18n.py`; only the import of `_` changes, the helper keeps its direct `_()` call. P2-6 (`ApplicationPaths` injection) may later move the loader call; the ownership decided here stays valid.

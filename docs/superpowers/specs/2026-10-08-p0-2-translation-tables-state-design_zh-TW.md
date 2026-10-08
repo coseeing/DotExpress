@@ -118,7 +118,7 @@ Patch 點從模組全域變數改為 frame 屬性：
 
 ## 驗收條件
 
-1. `grep -rn "language_map_translate_table" client --include=*.py` 沒有任何結果。
+1. `grep -rn "language_map_translate_table" client --include=*.py` 恰好只回傳一行：`client/tests/test_gui_document_flows.py` 中的防護測試 `self.assertFalse(hasattr(gui, "language_map_translate_table"))`（該測試必須寫出屬性名稱）。`grep -rn "language_map_translate_table" client --include=*.py | grep -v "^client/tests/"` 沒有任何結果。
 2. `grep -n 'Please select a translation table first' client/gui.py` 恰好回傳一行，位於 `_missing_default_table_message` 內。
 3. `BrailleFrame` 只讀取與替換 `self.translation_tables`；沒有任何程式呼叫 `clear()`/`update()` 或以其他方式就地修改它。
 4. 聚焦驗證以 0 failures、0 errors 通過：
@@ -129,7 +129,7 @@ Patch 點從模組全域變數改為 frame 屬性：
 
 ## 風險
 
-- **有路徑在 `_initialize_state` 設定前就讀取 `self.translation_tables`**（低）：`__init__` 在建立版面、轉換狀態與事件繫結之前就執行 `_initialize_state`，所以不會有處理器更早觸發。繞過 `__init__` 的測試由 `_make_frame` 取得此屬性或自行設定；若漏設，會以 `AttributeError` 明確失敗。
+- **有路徑在 `_initialize_state` 設定前就讀取 `self.translation_tables`**（低）：`__init__` 在建立版面、轉換狀態與事件繫結之前就執行 `_initialize_state`，所以不會有處理器更早觸發。繞過 `__init__` 的測試由 `_make_frame` 取得此屬性或自行設定。在真正的 wxPython frame 上，缺少屬性會直接引發 `AttributeError`；但在測試用的 wx stub 下不會：stub 的 `wx._Widget.__getattr__` 對任何不存在的屬性都回傳一個空操作函式，因此錯誤會晚一步才出現（`.get`/`.copy` 引發 `AttributeError: 'function' object has no attribute ...`、`DotExpressSettingsSnapshot.create` 中的 `dict(function)` 引發 `TypeError`，或呼叫尚未定義的方法時靜默回傳 `None`）。本規格中的測試在其依賴的每種情況下仍會明確失敗，只是實作前預期的失敗是斷言失敗，而非 `AttributeError`。
 - **執行緒安全**（不變）：工作執行緒拿到的是在 UI 執行緒建立的副本，frame 屬性也只在 UI 執行緒上被替換。
 - **全域變數的隱藏外部使用者**（未發現）：grep 顯示 `gui.py` 與 `test_gui_document_flows.py` 以外沒有任何 import 或 patch。
 - **與後續任務重疊**（低）：P0-3 及之後修改 `gui.py` 的任務都必須使用 `self.translation_tables`。P0-4 會把 wx stub 移出 `test_gui_document_flows.py`，但保留 `_make_frame`，因此在那裡設定的屬性預設值會延續。P0-5 會把 `_`/gettext 移到 `i18n.py`；只有 `_` 的 import 改變，輔助方法仍直接呼叫 `_()`。P2-6（注入 `ApplicationPaths`）之後可能會移動載入呼叫的位置；本文決定的擁有權仍然成立。

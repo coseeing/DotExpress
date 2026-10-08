@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 
 from conversion.wrapping import merge_translation_results
 from languageDetection.unicode_blocks import build_language_blocks
@@ -96,6 +97,26 @@ assert not hasattr(translate, "translate_as_single_token")
             {language: list(blocks) for language, blocks in result.lang_blocks.items()},
             build_language_blocks({"ja", "zh", "ko"}),
         )
+
+
+class SharedConstantsTest(unittest.TestCase):
+    def test_instance_holds_only_its_data_fields(self) -> None:
+        result = TranslationResult([], [], [], [])
+
+        self.assertEqual(sorted(vars(result)), sorted(FIELDS))
+
+    def test_construction_does_not_build_language_blocks(self) -> None:
+        with patch("translate.build_language_blocks", side_effect=AssertionError("built per instance")) as build:
+            TranslationResult([], [], [], [])
+
+        build.assert_not_called()
+
+    def test_shared_constants_are_immutable(self) -> None:
+        for name in PUNCTUATION:
+            with self.subTest(name=name):
+                self.assertIsInstance(getattr(TranslationResult, name), frozenset)
+        with self.assertRaises(TypeError):
+            TranslationResult.lang_blocks["ja"] = ()
 
 
 class MergeTranslationResultsTest(unittest.TestCase):

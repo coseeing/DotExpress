@@ -375,12 +375,12 @@ def dual_view_stubs():
 
 _GUI_DIALOG_NAMES = (
     "ConvertingDialog",
+    "DictionaryEntriesDialog",
     "DictionaryManagementDialog",
     "DictionaryNameDialog",
     "DocumentNameDialog",
     "FileIssuesDialog",
     "InvalidWorkspaceFilesDialog",
-    "SpeechSymbolsDialog",
     "TranslationSettingsDialog",
     "TranslationTableDialog",
 )
@@ -887,7 +887,7 @@ def settings_dialog_stubs():
     }
 
 
-# --- factory and loader: test_speech_symbols_dialog, test_dictionary_management_dialog
+# --- factory and loader: test_dictionary_entries_dialog, test_dictionary_management_dialog
 
 
 SPEECH_DIALOG_MODULE_NAME = "_speech_symbols_dialog_under_test"

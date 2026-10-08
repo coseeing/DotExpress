@@ -13,12 +13,12 @@ with _SCOPE.loading():
     import dialog as dialog_module
     from dialog import (
         AddSymbolDialog,
+        DictionaryEntriesDialog,
         DictionaryManagementDialog,
         DictionaryNameDialog,
         DocumentNameDialog,
         FileIssuesDialog,
         InvalidWorkspaceFilesDialog,
-        SpeechSymbolsDialog,
     )
 
 setUpModule = _SCOPE.activate
@@ -42,7 +42,7 @@ CONTEXT_MANAGED_DIALOGS = (
     DocumentNameDialog,
     InvalidWorkspaceFilesDialog,
     FileIssuesDialog,
-    SpeechSymbolsDialog,
+    DictionaryEntriesDialog,
     DictionaryManagementDialog,
 )
 

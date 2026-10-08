@@ -16,6 +16,8 @@ class ConversionRequest:
     dictionary_path: Path
     data_dir: Path
     translation_tables: dict[str, str]
+    lang: str
+    charset_maps: dict[str, str]
 
 
 @dataclass(frozen=True)

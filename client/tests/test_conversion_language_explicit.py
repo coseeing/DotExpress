@@ -69,7 +69,7 @@ class ConversionLanguageTest(unittest.TestCase):
         with path.open("w", newline="", encoding="utf-8") as f:
             csv.DictWriter(f, fieldnames=fieldnames).writeheader()
 
-    def _convert(self, raw_text: str):
+    def _convert(self, raw_text: str, *, lang: str):
         text_translator = RecordingTextTranslator()
         math_translator = RecordingMathTranslator()
         request = ConversionRequest(
@@ -79,6 +79,8 @@ class ConversionLanguageTest(unittest.TestCase):
             dictionary_path=self.dictionary_path,
             data_dir=self.data_dir,
             translation_tables=dict(TABLES),
+            lang=lang,
+            charset_maps=dict(config.DEFAULT_CHARSET_MAPS),
         )
         output = convert_text_with_alignment(
             request,
@@ -91,7 +93,7 @@ class ConversionLanguageTest(unittest.TestCase):
         with patch.object(config, "get_lang", return_value="en"), patch.object(
             config, "get_charset_maps", return_value=dict(config.DEFAULT_CHARSET_MAPS)
         ):
-            output, text_calls, math_calls = self._convert(MIXED_TEXT)
+            output, text_calls, math_calls = self._convert(MIXED_TEXT, lang="en")
 
         self.assertEqual(output.display_text.rstrip("\u2800"), MIXED_TEXT_BRAILLE)
         self.assertEqual(text_calls, MIXED_TEXT_CALLS)
@@ -101,7 +103,7 @@ class ConversionLanguageTest(unittest.TestCase):
         for lang, table in (("en", "en.ctb"), ("zh_TW", "zh.ctb")):
             with self.subTest(lang=lang):
                 with patch.object(config, "get_lang", return_value=lang):
-                    _output, text_calls, _math_calls = self._convert("\u2192")
+                    _output, text_calls, _math_calls = self._convert("\u2192", lang=lang)
 
                 self.assertEqual(text_calls, [("\u2192", table)])
 

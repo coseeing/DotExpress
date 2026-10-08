@@ -5,6 +5,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 from adapters.translation.contracts import TranslationRuntime
+from config import DEFAULT_CHARSET_MAPS
 from conversion.output import ConversionRequest, convert_text_with_alignment
 from conversion.text.dictionary_rules import apply_dictionary, split_bracket_segments
 from conversion.text.pipeline import (
@@ -212,6 +213,8 @@ class ConversionTextPipelineTest(unittest.TestCase):
                 dictionary_path=dictionary_path,
                 data_dir=data_dir,
                 translation_tables={"default": "table.ctb"},
+                lang="en",
+                charset_maps=dict(DEFAULT_CHARSET_MAPS),
             )
 
             translated_texts = []

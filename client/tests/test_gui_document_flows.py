@@ -907,7 +907,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame = self._make_frame()
         frame.translation_tables = {"default": "test-default.ctb", "math": "test-math.ctb"}
 
-        request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
+        with patch.object(gui, "get_lang", return_value="zh_TW"), \
+             patch.object(gui, "get_charset_maps", return_value={"CJKCharactersLanguage": "zh"}):
+            request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
 
         self.assertEqual(
             request.translation_tables,
@@ -925,9 +927,27 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
              patch.object(gui, "save_translation_tables"), \
              patch.object(gui, "save_view_settings"):
             frame.apply_settings_from_dialog(snapshot)
-        request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
+        with patch.object(gui, "get_lang", return_value="zh_TW"), \
+             patch.object(gui, "get_charset_maps", return_value={"CJKCharactersLanguage": "zh"}):
+            request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
 
         self.assertEqual(request.translation_tables, snapshot.translation_tables)
+
+    def test_conversion_request_reads_language_settings_per_request(self) -> None:
+        frame = self._make_frame()
+        frame.translation_tables = {"default": "test-default.ctb"}
+        first_maps = {"latinCharactersLanguage": "en", "CJKCharactersLanguage": "zh"}
+        second_maps = {"latinCharactersLanguage": "en", "CJKCharactersLanguage": "ja"}
+
+        with patch.object(gui, "get_lang", side_effect=["en", "zh_TW"]) as get_lang, \
+             patch.object(gui, "get_charset_maps", side_effect=[first_maps, second_maps]) as get_charset_maps:
+            first = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
+            second = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
+
+        self.assertEqual((first.lang, first.charset_maps), ("en", first_maps))
+        self.assertEqual((second.lang, second.charset_maps), ("zh_TW", second_maps))
+        self.assertEqual(get_lang.call_count, 2)
+        self.assertEqual(get_charset_maps.call_count, 2)
 
     def test_convert_without_default_table_shows_info_and_does_not_convert(self) -> None:
         frame = self._make_frame()

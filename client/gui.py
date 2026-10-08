@@ -57,6 +57,8 @@ from ui.action_menu import (
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from config import (
 	DEFAULT_TRANSLATION_TABLES,
+	get_charset_maps,
+	get_lang,
 	set_selected_dictionary,
 )
 from settings.translation import (
@@ -702,6 +704,8 @@ class BrailleFrame(wx.Frame):
 			dictionary_path=dictionary_path,
 			data_dir=resource_path("data"),
 			translation_tables=self.translation_tables.copy(),
+			lang=get_lang(),
+			charset_maps=get_charset_maps(),
 		)
 
 	def _format_batch_issue_lines(self, issues: list[BatchIssue]) -> list[str]:

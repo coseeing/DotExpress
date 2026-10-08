@@ -2,7 +2,7 @@ from pathlib import Path
 
 from adapters.translation.provider import build_default_translation_runtime
 from app_paths import get_dictionary_directory
-from config import DEFAULT_TRANSLATION_TABLES
+from config import DEFAULT_TRANSLATION_TABLES, get_charset_maps, get_lang
 from conversion.service import ConversionRequest, convert_text_with_alignment
 
 
@@ -27,6 +27,8 @@ def run_demo(text: str = SAMPLE_TEXT) -> None:
                     "default": "en-ueb-g2.ctb",
                     "en": "en-ueb-g2.ctb",
                 },
+                lang=get_lang(),
+                charset_maps=get_charset_maps(),
             ),
             runtime=runtime,
         )

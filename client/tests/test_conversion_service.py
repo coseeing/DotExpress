@@ -6,6 +6,7 @@ from types import ModuleType
 
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
+from config import DEFAULT_CHARSET_MAPS
 from dual_view.model import DualViewSegment
 from conversion.service import (
     ConversionOutput,
@@ -17,6 +18,10 @@ from conversion.service import (
     translate_with_language_segments,
 )
 from translate import TranslationResult
+
+
+LANG = "zh_TW"
+CHARSET_MAPS = dict(DEFAULT_CHARSET_MAPS)
 
 
 class FakeTextTranslator:
@@ -62,6 +67,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=Path("dictionary/default.csv"),
             data_dir=Path("data"),
             translation_tables={"default": "zh-tw.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
     def _write_csv(self, path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -174,6 +181,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "table.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         output = convert_text_with_alignment(request, runtime=self._runtime())
@@ -196,6 +205,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "table.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         runtime = self._runtime()
 
@@ -219,6 +230,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "table.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         with self.assertRaises(ConversionStageError) as context:
@@ -383,6 +396,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=self.dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "zh-tw.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -398,6 +413,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=self.dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -414,6 +431,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=self.dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -443,6 +462,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=self.dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "zh-tw.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 

@@ -27,6 +27,26 @@ class MainDemoTest(unittest.TestCase):
         print_mock.assert_called_once_with("braille")
         runtime.close.assert_called_once_with()
 
+    def test_demo_request_carries_language_settings(self) -> None:
+        runtime = Mock()
+        charset_maps = {"latinCharactersLanguage": "en", "CJKCharactersLanguage": "ja"}
+        with (
+            patch.object(main, "build_default_translation_runtime", return_value=runtime),
+            patch.object(main, "convert_text_with_alignment", return_value=ConversionOutput("braille", (), ())) as convert,
+            patch.object(main, "get_lang", return_value="en") as get_lang,
+            patch.object(main, "get_charset_maps", return_value=charset_maps) as get_charset_maps,
+            patch("builtins.print") as print_mock,
+        ):
+            main.run_demo("x")
+
+        request = convert.call_args.args[0]
+        self.assertEqual(request.lang, "en")
+        self.assertEqual(request.charset_maps, charset_maps)
+        get_lang.assert_called_once_with()
+        get_charset_maps.assert_called_once_with()
+        print_mock.assert_called_once_with("braille")
+        runtime.close.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()

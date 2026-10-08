@@ -47,6 +47,9 @@ DEFAULT_CHARSET_MAPS = {
 
 _runtime_lang: Optional[str] = None
 
+# Config path -> signature of the last load failure that was logged for it.
+_logged_load_failures: dict[str, str] = {}
+
 
 def _log_current_exception(level: int, message: str, *args: object) -> None:
     try:
@@ -59,13 +62,25 @@ def _log_current_exception(level: int, message: str, *args: object) -> None:
 
 
 def _load_from_file() -> dict:
+    path = CONFIG_PATH
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
     except FileNotFoundError:
+        _logged_load_failures.pop(path, None)
         return {}
-    except Exception:
+    except Exception as error:
+        signature = f"{type(error).__name__}: {error}"
+        if _logged_load_failures.get(path) != signature:
+            _logged_load_failures[path] = signature
+            _log_current_exception(
+                logging.WARNING,
+                "Failed to read config file %s; using defaults",
+                path,
+            )
         return {}
+    _logged_load_failures.pop(path, None)
+    return data
 
 
 def _save_to_file(data: dict) -> None:

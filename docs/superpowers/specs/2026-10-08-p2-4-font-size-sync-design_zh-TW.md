@@ -11,6 +11,8 @@
 
 不新增 event bus 或 `Signal`（決策 D1）。此重構不改變行為：相同的字體大小在相同情況下送到相同的控制項，沒有新增任何顯示或朗讀內容，msgid 不變（353，集合相同）。黃金 fixture `client/tests/fixtures/translation_golden.json`（sha256 `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`）與 `client/tests/fixtures/dictionary_entries_trace.json`（sha256 `f493da52376c8eac32a50c33b7f11870451360bed4bf26c1db339ccd2c66c2cf`）不變。
 
+規劃後修正：plan `docs/superpowers/plans/2026-10-08-p2-4-font-size-sync.md`（「Spec Corrections and Refinements」一節）修正了兩項事實（AC6 對 `gui.py` 的一般 `_instance` grep 會比對到 `open_instance()`；C 部分的不存在斷言會寫出被移除的名稱，而 AC6 第一個 grep 不得找到它），並細化了測試計畫（新增 20 個測試、子類別案例、兩個舊測試改用 `patch.object`、stub 如何遮蔽缺少的 `font_size_dirty`）；以下已併入這些變更。
+
 ## 現況（2026-10-08 於 `refactor/p2-4-font-size-sync` 驗證，HEAD `6dd65e3`，已合併 P0-*、P1-*、P2-1、P2-2、P2-3）
 
 縮排：`settings/dialogs.py`、`ui/dialog_base.py` 與所有會動到的測試模組使用 4 個空白；`gui.py` 使用 tab。
@@ -82,7 +84,7 @@ slot：`DotExpressSettingsDialog._instance`（648）宣告在類別本身。P2-1
 | D4 | 對話框以同樣的 `isinstance` 掃描 `panel_instances` 尋找 View 面板，改放在對話框的私有輔助方法 `_view_panel()`。 | 語意與現在相同，包含 `ViewSettingsPanel` 的子類別，以及把面板放在任意索引的測試對話框。改用 `category_classes.index(ViewSettingsPanel)` 的索引查找，會對未註冊該面板的對話框拋出例外。對話框掃描自己的面板是正常的擁有關係，不是探針。 |
 | D5 | dirty 規則與 spin 移入 `ViewSettingsPanel.sync_font_size(font_size) -> bool`。 | 只有面板知道 `font_size_dirty` 與 `font_size_spin`；對話框只知道「接受與否」。 |
 | D6 | 對話框先正規化，再詢問面板，最後替換快照。 | 現在是先替換快照再 `SetValue`，新順序是先設 spin。差異無法觀察：`normalize_view_settings` 是純函式、`with_view` 不會失敗，而 `SetValue`（以及它可能送出的 `EVT_TEXT`）從不讀取快照。面板為 dirty 時提早返回，仍不動快照。 |
-| D7 | 刪除 `sync_open_font_size`，不留別名。 | 本 repo 內只有一個呼叫端。`tests/test_settings_dialogs.py` 中加一行不存在檢查記錄此移除。 |
+| D7 | 刪除 `sync_open_font_size`，不留別名。 | 本 repo 內只有一個呼叫端。`tests/test_settings_dialogs.py` 中以允許清單式的守護測試記錄此移除，且不寫出被移除的名稱（見 C 部分）。 |
 
 ### `ui/dialog_base.py`（4 個空白）
 
@@ -163,19 +165,25 @@ import 不變（`ViewSettings` 與 `normalize_view_settings` 已匯入）。沒�
 
 這些測試在目前程式碼上就會通過。框架層測試之後永不修改。對話框層測試透過 `tests/test_settings_dialogs.py` 中的一個模組輔助函式 `sync_open_dialog_font_size(dialog_class, font_size)` 觸發同步：步驟 1 中它呼叫 `dialog_class.sync_open_font_size(font_size)`，步驟 3 中改為 `dialog = dialog_class.open_instance()`，非 `None` 時呼叫 `dialog.sync_font_size(font_size)`。這是 A 部分唯一的修改。開啟的對話框一律以 `patch.object(dialog_class, "_instance", dialog)` 放入 slot，絕不直接指定，避免在模組之間洩漏。
 
-1. `tests/test_gui_document_flows.py` 新類別 `ViewFontSizeSyncCharacterizationTest`（gui stub scope；使用 `gui.DotExpressSettingsDialog`，即在該 scope 下載入的真實類別）。框架為 `object.__new__(gui.BrailleFrame)`，帶 `view_settings`、`Mock` 的 `_apply_editor_view_settings`，並 patch `gui.save_view_settings`。開啟的對話框為 `object.__new__(gui.DotExpressSettingsDialog)`，帶 `snapshot`、`panel_instances = {}` 與 `Mock` 的 `Destroy`。事件為具 `GetWheelRotation`、`ControlDown`、`Skip` 的 `SimpleNamespace`。
-   - 框架檢視 `ViewSettings(12, "dark", "default")`、對話框檢視 `ViewSettings(12, "light", "simbraille")` 時 Ctrl+滾輪向上：框架變為 `(13, "dark", "default")`，編輯區與 `save_view_settings` 收到它，對話框變為 `(13, "light", "simbraille")`（只有大小會傳過去）。`save_view_settings` 的 side effect 記錄儲存當下對話框的大小：仍為 12，因此對話框是在儲存之後才同步。
-   - 從 8 向下與從 48 向上的 Ctrl+滾輪：大小維持夾住的值，仍會儲存，且對話框（快照原為 12）被設為夾住後的大小。
-   - 未按 Ctrl 的滾輪：呼叫 `Skip`，不套用、不儲存、不同步。
+A 部分共 14 個測試（框架層 6 個、對話框層 8 個）。由於它在目前程式碼上必然通過，一個用完即丟的 mutant 執行器（不提交）在 `client/` 的副本上套用 15 個對目前程式碼的單一修改破壞（不同步、儲存前同步、未變更時返回、滾輪未 Skip、探針 raise 對話框、忽略待套用的編輯、`SetValue` 後保留 dirty 旗標、未正規化大小、覆寫點字字型、有編輯時仍寫入快照、要求精確的面板型別、固定面板索引、未設定 spin、未寫入快照、`_destroy` 保留 slot），並證明每一個都會讓 A 部分失敗。步驟 3 之後，第二組 13 個針對新程式碼的 mutant 都會被三個受影響模組抓到。
+
+1. `tests/test_gui_document_flows.py` 新類別 `ViewFontSizeSyncCharacterizationTest`（gui stub scope；使用 `gui.DotExpressSettingsDialog` 與 `gui.TextProcessingDialog`，即在該 scope 下載入的真實類別）。框架為 `object.__new__(gui.BrailleFrame)`，帶 `view_settings`、`Mock` 的 `_apply_editor_view_settings`，並 patch `gui.save_view_settings`。開啟的對話框為 `object.__new__(gui.DotExpressSettingsDialog)`，帶 `snapshot`、`panel_instances = {}`、`Mock` 的 `Destroy`，以及記錄用的 `Iconize`/`Raise`/`SetFocus`/`Show`。事件為具 `GetWheelRotation`、`ControlDown`、`Skip` 的 `SimpleNamespace`。
+   - 框架檢視 `ViewSettings(12, "dark", "default")`、對話框檢視 `ViewSettings(12, "light", "simbraille")` 時 Ctrl+滾輪向上：框架變為 `(13, "dark", "default")`，編輯區與 `save_view_settings` 收到它，對話框變為 `(13, "light", "simbraille")`（只有大小會傳過去）。`save_view_settings` 的 side effect 記錄儲存當下對話框的大小：仍為 12，因此對話框是在儲存之後才同步。對話框沒有被最小化/還原、拉到前景、聚焦或顯示（焦點留在編輯區），事件也沒有被 Skip。
+   - 從 8 向下與從 48 向上的 Ctrl+滾輪：大小維持夾住的值，仍會儲存，且對話框（快照原為 12）被設為夾住後的大小。標記為 `# KNOWN QUIRK (P2-4 spec, 1)`。
+   - 未按 Ctrl 的滾輪（向上與向下），以及按 Ctrl 但旋轉量為 0：呼叫 `Skip`，不套用、不儲存、不同步。
    - 沒有開啟的對話框：編輯區更新與儲存照常執行，不拋例外。
-   - 先以 `dialog.on_cancel()` 關閉對話框：slot 為空，之後的 Ctrl+滾輪不動該對話框的快照。
-2. `tests/test_settings_dialogs.py` 新類別 `FontSizeSyncCharacterizationTest`。對話框為 `make_dialog_without_wx_constructor()`。View 面板是以該對話框為 owner 建立的**真實** `ViewSettingsPanel`，透過 `build_panel` 新增的 `owner=` 關鍵字（預設為目前的 `SimpleNamespace`），並使用記錄用的 `wx.Choice`/`wx.SpinCtrl`。面板放在 `dialog.panel_instances[2]`。
+   - 滾輪、`dialog.on_cancel()`、再滾輪：第一次步進會同步，取消清空 slot 並只銷毀對話框一次，第二次步進只改變並儲存編輯區，已關閉的對話框保留第一次的值。
+   - 開啟中的文字處理對話框（有自己的 slot）既不被碰觸，也不會被誤認為設定對話框。
+2. `tests/test_settings_dialogs.py` 新類別 `FontSizeSyncCharacterizationTest`。對話框為 `make_dialog_without_wx_constructor()`。View 面板是以該對話框為 owner 建立的**真實** `ViewSettingsPanel`，透過 `build_panel` 新增的 `owner=` 關鍵字（預設為目前的 `SimpleNamespace`；指定 owner 時快照相關的關鍵字參數不再使用），並使用記錄用的 `wx.Choice`/`wx.SpinCtrl`。面板放在 `dialog.panel_instances[2]`。
    - slot 中沒有對話框：不拋例外。
-   - 尚無 View 面板：快照大小變成 20，配色與點字字型不變。之後以該對話框為 owner 建立的 View 面板，其 spin 顯示 20。99 變成 48，3 變成 8。
-   - 已建立且乾淨的面板，配色選項切到深色（草稿）：spin 為 20、`font_size_dirty` 為 false、快照為 20，配色選項仍為深色，快照的配色不變。
-   - 待套用的編輯（spin 設為 30 並呼叫 `panel._on_font_size_changed(None)`，即綁到 `EVT_SPINCTRL`/`EVT_TEXT` 的處理器）：spin 維持 30、快照維持 12。接著 `panel.load_snapshot(dialog.snapshot)`（套用時所做的事）：下一次同步又會生效。
-   - 面板放在其他索引（0）以及 `ViewSettingsPanel` 的子類別：仍會被找到（D4）。
-3. 493-525 的兩個現有測試保留，於步驟 3 改用輔助函式（更名為 `test_sync_font_size_...`）。`test_view_panel_tracks_font_size_dirty_state` 保留。
+   - 尚無 View 面板：快照大小變成 20，配色與點字字型不變。之後以該對話框為 owner 建立的 View 面板，其 spin 顯示 20。
+   - 夾值，獨立成一個測試：99、49、48、8、7、3 分別變成 48、48、48、8、8、8，在沒有 View 面板（快照）與已建立面板（spin 與快照）兩種情況下皆然。
+   - 已建立且乾淨的面板，配色選項切到深色（草稿）：spin 為 20、`font_size_dirty` 為 false、快照為 20，配色選項仍為深色，快照的配色不變；`on_save` 得到 `(20, "dark", "simbraille")`。
+   - 待套用的編輯（spin 設為 30 並呼叫 `panel._on_font_size_changed(None)`，即綁到 `EVT_SPINCTRL`/`EVT_TEXT` 的處理器）：spin 維持 30、快照維持 12（標記為 `# KNOWN QUIRK (P2-4 spec, 2)`）。接著 `panel.load_snapshot(dialog.snapshot)`（套用時所做的事）：下一次同步又會生效。
+   - 放在其他索引（0）的 `ViewSettingsPanel` 子類別：仍會被找到（D4）。`build_panel` 依名稱從模組建立面板，因此子類別面板以 `object.__new__` 建立（設定 `font_size_dirty = False` 與記錄用 spin），旁邊在索引 1 放一個 `Mock` 面板，其 `mock_calls` 必須保持為空（同步只碰 View 面板）。
+   - `SetValue` 會像 `EVT_TEXT` 一樣回報變更的 spin（它會呼叫 `_on_font_size_changed`）：兩次同步 13 然後 14 都會到達 spin，旗標最後為清除狀態，因此同步絕不把自己的寫入當成使用者編輯。
+   - 同步之後完全沒造訪 View 面板就套用，會提交同步後的大小（情況 2）。
+3. 493-525 的兩個現有測試保留，於步驟 3 改用輔助函式，更名為 `test_sync_font_size_updates_snapshot_before_view_panel_exists` 與 `test_sync_font_size_keeps_dirty_view_panel_draft`。它們的 `try`/`finally` slot 指定改為 `patch.object`（效果相同，與新測試同一規則）；斷言不變。`test_view_panel_tracks_font_size_dirty_state` 保留。
 
 ### B. 新 API（步驟 2，純新增）
 
@@ -184,11 +192,11 @@ import 不變（`ViewSettings` 與 `normalize_view_settings` 已匯入）。沒�
 - 父類別有對話框時，沒有自己 slot 的子類別得到 `None`（與 `_raise_existing` 相同的 `cls.__dict__` 規則）。
 - `_destroy` 之後 `open_instance()` 回傳 `None`。
 
-`tests/test_settings_dialogs.py` 新增 `ViewSettingsPanel.sync_font_size` 測試（乾淨時回傳 `True` 並設定 spin；dirty 時回傳 `False` 且不動 spin），針對步驟 2 新增的方法。守護測試 `MixinShapeTest` 不需修改即通過。
+`tests/test_settings_dialogs.py` 的 `ViewSettingsPanelTest` 新增兩個 `ViewSettingsPanel.sync_font_size` 測試（乾淨：回傳 `True`、spin 為 20、旗標清除；dirty：回傳 `False`、spin 維持 30、旗標仍設定），針對步驟 2 新增的方法。守護測試 `MixinShapeTest` 不需修改即通過。B 部分共 5 個測試（3 + 2）。
 
 ### C. 切換（步驟 3）
 
-A 部分只改輔助函式即通過。新增一個斷言：`"sync_open_font_size" not in vars(DotExpressSettingsDialog)`。既有的 singleton 特徵測試（P2-1）不需修改即通過。
+A 部分只改輔助函式即通過。新增一個守護測試，寫成允許清單，因此絕不寫出被移除的名稱（若以不存在斷言寫出該名稱，AC6 第一個 grep 就會印出一行）：`DotExpressSettingsDialogFlowTest.test_font_size_sync_is_one_instance_method` 斷言 `vars(DotExpressSettingsDialog)` 中唯一含有 `font_size` 的名稱是 `sync_font_size`，且它是一般函式（實例方法，不是 `classmethod`）。它在舊程式碼上為紅（`['sync_open_font_size'] != ['sync_font_size']`）。既有的 singleton 特徵測試（P2-1）不需修改即通過。
 
 ## 遷移步驟（每步一個綠色 commit）
 
@@ -198,12 +206,12 @@ A 部分只改輔助函式即通過。新增一個斷言：`"sync_open_font_size
 
 ## 驗收標準
 
-1. Linux 上的路線圖驗證：`cd client && $PY -m unittest tests.test_settings_dialogs -v` 通過。以下也須為綠：`tests.test_dialog_base tests.test_gui_document_flows tests.test_view_settings tests.test_input_shortcuts tests.test_wx_stub tests.test_removed_dead_code tests.test_i18n`。
-2. 全套件（`$PY -m unittest discover -s tests`）：`Ran 1023 + N`（N 為新增的測試數，由 plan 確定）、`failures=1`（僅 P2-5 那一個）、`errors=0`、`skipped=9`。
+1. Linux 上的路線圖驗證：`cd client && $PY -m unittest tests.test_settings_dialogs -v` 通過（78 個測試，全部 `ok`）。以下也須為綠：`tests.test_dialog_base tests.test_gui_document_flows tests.test_view_settings tests.test_input_shortcuts tests.test_wx_stub tests.test_removed_dead_code tests.test_i18n`。
+2. 全套件（`$PY -m unittest discover -s tests`）：`Ran 1043`（1023 + 20：A 部分 14 個、B 部分 5 個、C 部分 1 個；各模組 `test_settings_dialogs` 67 -> 78、`test_gui_document_flows` 145 -> 151、`test_dialog_base` 23 -> 26）、`failures=1`（僅 P2-5 那一個）、`errors=0`、`skipped=9`。
 3. shuffle harness：`cd client && for s in $(seq 0 19); do $PY $SP/shuffle_harness.py $s; done`，20 個種子都恰好只有一個失敗，即 P2-5 那一個。`test_settings_dialogs`、`test_dialog_base` 與 `test_gui_document_flows` 單獨執行及兩兩以兩種順序執行皆通過。
 4. 從 repo 根目錄執行 msgid 掃描回報 `source msgids: 353`，集合與 `main` 相同。`git diff main --stat -- client/locales` 為空。
 5. 上述兩個 fixture 的 sha256 不變，`git diff main -- client/tests/fixtures` 為空。
-6. `grep -rn "sync_open_font_size" client --include=*.py --exclude-dir=.venv` 無輸出。`grep -n "_instance" client/gui.py` 無輸出。`grep -n "isinstance(panel, ViewSettingsPanel)" client/settings/dialogs.py` 只列出 `_view_panel` 中那一行。`grep -n "font_size_dirty\|font_size_spin" client/settings/dialogs.py` 只列出 `ViewSettingsPanel` 內的行。
+6. `grep -rn "sync_open_font_size" client --include=*.py --exclude-dir=.venv` 無輸出。`gui.py` 從不碰觸 slot 屬性：`grep -nw "_instance" client/gui.py`（整字比對）無輸出，而一般的 `grep -n "_instance" client/gui.py` 只列出 `DotExpressSettingsDialog.open_instance()` 那一行（`open_instance` 含有該子字串）。`grep -n "isinstance(panel, ViewSettingsPanel)" client/settings/dialogs.py` 只列出 `_view_panel` 中那一行。`grep -n "font_size_dirty\|font_size_spin" client/settings/dialogs.py` 只列出 `ViewSettingsPanel` 內的行。
 7. `git diff main --stat` 只動到 `client/gui.py`、`client/settings/dialogs.py`、`client/ui/dialog_base.py`、三個測試模組與文件。
 
 ## 風險
@@ -211,18 +219,18 @@ A 部分只改輔助函式即通過。新增一個斷言：`"sync_open_font_size
 - **測試模組間的 slot 洩漏。** 所有新測試都以 `patch.object` 設定 slot。由 shuffle 涵蓋。
 - **stub scope 的類別同一性。** `test_gui_document_flows` 必須使用 `gui.DotExpressSettingsDialog`（在 gui scope 下載入、有自己 slot 的類別），絕不在其 scope 外 import `settings.dialogs`。`test_settings_dialogs` 使用自己 scope 中的類別。
 - **`SetValue` 與快照寫入的順序（D6）。** 以 stub 無法觀察；依處理器程式碼判讀，真實 wx 亦然。
-- **直接讀取 `font_size_dirty`。** 手動建立而缺少此屬性的面板，現在會拋 `AttributeError`，而不是被視為乾淨。所有真實面板都在 `make_settings` 中設定它，以 `object.__new__` 建立面板的測試也都有設定。
+- **直接讀取 `font_size_dirty`。** 手動建立而缺少此屬性的面板，現在會拋 `AttributeError`，而不是被視為乾淨。所有真實面板都在 `make_settings` 中設定它，以 `object.__new__` 建立面板的測試也都有設定。這只對真實 wx 成立：在 `tests/wx_stub.py` 下，每個 widget 都以一個 no-op 函式遮蔽缺少的屬性，而該函式為真值，因此舊的 `getattr(..., False)` 與新的直接讀取都把這種面板視為 dirty。沒有測試依賴其中任何一種。同樣的遮蔽也使步驟 2 與 3 的紅燈表現為斷言失敗（`None is not True`、`12 != 20`），而非實例上的 `AttributeError`。
 - **真實 wx。** 此處一切都只以 stub 檢查（見 Windows 驗證待辦）。
 
 ## 保留的已知怪異行為（以測試釘住，不修正）
 
-1. 已在 8 或 48 時的 Ctrl+滾輪仍會儲存並同步對話框。由 A 部分第 1 項釘住。
-2. View 面板中有待套用的字體大小編輯時，同步連快照也不改，因此套用會提交使用者的編輯，從對話框角度看滾輪的變更被捨棄（編輯區在套用前維持滾輪設定的大小）。由 A 部分第 2 項釘住。
+1. 已在 8 或 48 時的 Ctrl+滾輪仍會儲存並同步對話框。由 A 部分第 1 項釘住（`test_a_clamped_step_still_saves_and_syncs_the_clamped_size`，標記為 `# KNOWN QUIRK (P2-4 spec, 1)`）。
+2. View 面板中有待套用的字體大小編輯時，同步連快照也不改，因此套用會提交使用者的編輯，從對話框角度看滾輪的變更被捨棄（編輯區在套用前維持滾輪設定的大小）。由 A 部分第 2 項釘住（`test_a_pending_edit_blocks_the_sync_until_the_snapshot_is_reloaded`，標記為 `# KNOWN QUIRK (P2-4 spec, 2)`）。
 3. 沒有死視窗處理（情況 6）。目前無法到達，不釘住。
 
 ## Windows 驗證待辦
 
-Windows 上的真實 wxPython 搭配 NVDA（此 Linux 環境無法執行）：開啟 設定 > 檢視，在編輯區按 Ctrl+滾輪，字體大小 spin 跟著變。在 spin 中輸入大小後 Ctrl+滾輪，spin 保留輸入的值。套用後再 Ctrl+滾輪，spin 又會跟著變。在「轉譯」類別開啟設定，Ctrl+滾輪後切到「檢視」：顯示新的大小。關閉對話框（確定、取消、關閉鈕、Escape）後 Ctrl+滾輪：不出錯。
+Windows 上的真實 wxPython 搭配 NVDA（此 Linux 環境無法執行）：開啟 設定 > 檢視，在編輯區按 Ctrl+滾輪，字體大小 spin 跟著變。在 spin 中輸入大小後 Ctrl+滾輪，spin 保留輸入的值。套用後再 Ctrl+滾輪，spin 又會跟著變。在「轉譯」類別開啟設定，Ctrl+滾輪後切到「檢視」：顯示新的大小。關閉對話框（確定、取消、關閉鈕、Escape）後 Ctrl+滾輪：不出錯。另外確認對話框開啟時 Ctrl+滾輪會讓焦點留在編輯區，以及真實的 `wx.SpinCtrl.SetValue` 是否送出 `EVT_TEXT`（程式碼兩種情況都能處理）。
 
 ## 不在範圍內
 

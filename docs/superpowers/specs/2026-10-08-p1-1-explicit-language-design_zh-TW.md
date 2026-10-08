@@ -14,9 +14,11 @@
 
 這是保持行為不變的重構。在相同的 `config.json`、`TEXT2BRAILLE_LANG` 與輸入文字下，程式產生的點字與先前相同。使用者可見字串不變。
 
+實作計畫（`docs/superpowers/plans/2026-10-08-p1-1-explicit-language.md`，「Spec Corrections and Refinements」一節）決定的更正與細化已直接套用在本文件中。
+
 ## 現況（2026-10-08 於 `refactor/p1-1-explicit-language`、HEAD `7f0d127` 驗證，P0-1..P0-6 已合併）
 
-縮排：`languageDetection/__init__.py`、`conversion/mathcat_adapter.py`、`conversion/math_service.py`、`braille/tables/__init__.py`、`gui.py` 使用 tab。`conversion/text/pipeline.py`、`conversion/output.py`、`conversion/service.py`、`adapters/translation/*.py`、`main.py` 與大多數測試使用 4 個空白。僅限 Windows 的測試 `test_language_detection_translation.py` 與 `test_translation_language_result.py` 使用 tab。
+縮排：`languageDetection/__init__.py`、`conversion/mathcat_adapter.py`、`conversion/math_service.py`、`braille/tables/__init__.py`、`gui.py` 使用 tab。`conversion/text/pipeline.py`、`conversion/output.py`、`conversion/service.py`、`adapters/translation/*.py`、`main.py` 與大多數測試使用 4 個空白。僅限 Windows 的測試 `test_language_detection_translation.py`、`test_translation_language_result.py`，以及 `tests/test_conversion_jobs.py` 使用 tab。`braille/tables/__init__.py`（與 `braille/__init__.py`、`braille/tables/__tables.py` 相同，`client/` 中沒有其他 `.py` 檔如此）使用 CRLF 換行；編輯時必須逐位元組保留 CRLF（以文字模式重寫會讓整個檔案變成 251 行的 diff）。
 
 ### 值如何產生（`client/config.py`）
 
@@ -181,12 +183,12 @@ def __init__(self, availableLanguages, *, default_lang: str, charset_maps: Mappi
 ```
 
 - `add_detected_language_commands`：`defaultLang = self.default_lang`。保留 NVDA 風格、已註解掉的 `# defaultLang = getSynth().language`。
-- `find_language_for_charset`：`lang = self.charset_maps.get(configKey)`；若為 truthy 就回傳，否則繼續走到 `return langs[0]`。目前 `config.get_charset_maps()` 一定包含所有鍵，`[configKey]` 不會拋錯。改為注入之後，呼叫者可能傳入不完整的對應表；把缺少的項目視為「沒有設定語言」並走既有路徑，是最自然的解讀，也避免在偵測深處拋出 `KeyError`。正式行為不變，因為程式一定傳入完整合併後的對應表。
+- `find_language_for_charset`：`if configKey in self.charset_maps: return self.charset_maps[configKey]`，否則繼續走到 `return langs[0]`。目前 `config.get_charset_maps()` 一定包含所有鍵，`[configKey]` 不會拋錯。改為注入之後，呼叫者可能傳入不完整的對應表；把缺少的項目視為「沒有設定語言」並走既有路徑，是最自然的解讀，也避免在偵測深處拋出 `KeyError`。存在的鍵一律原樣回傳，即使值是空字串：`config._get_dict_setting` 接受任何字串，所以手動在 `config.json` 寫入 `"CJKCharactersLanguage": ""` 時，這個值目前就會傳到偵測器，偵測器會產生 `LangChangeCommand("")`（偵測器 `["en", "zh_TW"]`、語言 `en`、文字 `"A中"` 得到 `["A", "", "中"]`；pipeline 接著退回預設翻譯表）。若改用 truthy 判斷（`.get(configKey)` 且只在 truthy 時回傳），此處會改為產生 `zh_TW`，改變行為，因此不採用。正式行為不變，因為程式一定傳入完整合併後的對應表。
 - `_preferred_full_lang`：第 2 步改用 `pref = self.default_lang`，並移除 `try/except Exception`（它原本保護的是設定檔 I/O，現在這裡已不做 I/O）。更新 docstring 中提到 `config.get_lang()` 的那一行。
-- 移除 `import config`（第 6 行）。第 10 行的 NVDA 註解 `# import config` 可以保留；驗收檢查只看真正的 import 敘述。
+- 移除 `import config`（第 6 行）。第 8 行的 NVDA 註解 `# import config` 可以保留；驗收檢查只看真正的 import 敘述。
 - 其他維持原狀：camelCase 命名、NVDA 註解與演算法（refactor.md 第 7 節第 1 點）。在 `typing` import 中加入 `Mapping`。
 
-`default_lang` 與 `charset_maps` 是僅限關鍵字參數，所以既有的位置參數 `availableLanguages` 與選用的 `char_langinfo` 意義不變。
+`default_lang` 與 `charset_maps` 是僅限關鍵字參數，所以既有的位置參數 `availableLanguages` 意義不變。選用的 `char_langinfo` 位於新的 `*` 之後，因此也變成僅限關鍵字參數；沒有呼叫者以位置方式傳入它（兩處使用都在測試中，且都以關鍵字傳入）。
 
 ### 數學鏈
 
@@ -208,7 +210,7 @@ def __init__(self, availableLanguages, *, default_lang: str, charset_maps: Mappi
   DEFAULT_MATH_BRAILLE_TABLE = "UEB"
   ```
 
-  `mathcat_adapter.py` 從這裡 import 兩者。`config.py` 把原本兩行常數定義改成 `from conversion.math_braille_codes import DEFAULT_MATH_BRAILLE_TABLE, MATH_BRAILLE_TABLES  # noqa: F401  (re-exported)`，因此 `config.MATH_BRAILLE_TABLES`、`config.DEFAULT_MATH_BRAILLE_TABLE`，以及 `service.py`、`math_service.py` 現有的 `from config import DEFAULT_MATH_BRAILLE_TABLE` 都繼續運作，值相同。`conversion/__init__.py` 是空的，所以 `config` import 這個葉模組不會帶來 import 副作用，也不會形成循環。P2-3 之後可以再決定設定選項從哪裡讀這些常數。
+  `mathcat_adapter.py` 從這裡 import 兩者。`config.py` 移除原本兩行常數定義，改以 `from conversion.math_braille_codes import DEFAULT_MATH_BRAILLE_TABLE, MATH_BRAILLE_TABLES  # noqa: F401  (re-exported)` 重新匯出兩者，放在檔案開頭的 import 區塊（而非原本定義的位置），因此 `config.MATH_BRAILLE_TABLES`、`config.DEFAULT_MATH_BRAILLE_TABLE`，以及 `service.py`、`math_service.py` 現有的 `from config import DEFAULT_MATH_BRAILLE_TABLE` 都繼續運作，值相同。`conversion/__init__.py` 是空的，所以 `config` import 這個葉模組不會帶來 import 副作用，也不會形成循環。P2-3 之後可以再決定設定選項從哪裡讀這些常數。
 
   已排除的替代方案：常數留在 `config`（`mathcat_adapter` 仍得 import `config`）；搬進 `mathcat_adapter.py`（`config` 就得 import MathCAT 膠水模組）；複製一份（兩個真相來源）。
 
@@ -222,7 +224,7 @@ def getDefaultTableForCurLang(tableType: TableType, lang: str) -> str:
 	"""
 ```
 
-函式本體把 `lang = config.get_lang()` 換成參數，其餘不變（先完全比對，再比對 `_` 之前的基本語言碼，最後回傳 `DEFAULT_TABLE`）。保留 NVDA 的函式名稱，方便與上游比對；docstring 說明差異。此函式在程式中仍然沒有呼叫者。移除 `import config`（第 25 行）。第 18 行上游留下的註解 `# import config` 保留。`logging.basicConfig` 與其他膠水留給 P2-7。
+函式本體把 `lang = config.get_lang()` 換成參數，其餘不變（先完全比對，再比對 `_` 之前的基本語言碼，最後回傳 `DEFAULT_TABLE`）。保留 NVDA 的函式名稱，方便與上游比對；docstring 說明差異。此函式在程式中仍然沒有呼叫者。移除 `import config`（第 25 行）。第 17 行上游留下的註解 `# import config` 保留。`logging.basicConfig` 與其他膠水留給 P2-7。
 
 ### 需要更新的呼叫者
 
@@ -248,12 +250,16 @@ def getDefaultTableForCurLang(tableType: TableType, lang: str) -> str:
 刻意的差異（正常使用下都看不出來）：
 
 - 一次轉換內的所有片段使用同一份語言快照（現在若在工作執行中編輯 `config.json`，可能影響後面的片段）。
-- `LanguageDetector` 收到不完整的 `charset_maps` 時，會退回該區塊的第一個語言，而不是拋出 `KeyError`（程式中不會走到）。
+- `LanguageDetector` 收到不完整的 `charset_maps` 時，會退回該區塊的第一個語言，而不是拋出 `KeyError`（程式中不會走到）。存在的鍵（即使值為空字串）與現在完全相同地使用。
 - import `braille.tables`、`languageDetection`、`conversion.text.pipeline`、`conversion.output` 或 `conversion.mathcat_adapter` 不再連帶 import `config`（因此也不再建立它的 logger）。
 
 ## 測試計畫
 
 先在現有程式碼上寫特性測試（characterization tests），讓預期值來自目前的行為。接著修改程式碼，測試只更新呼叫形式。
+
+本節描述最終狀態。實作計畫以多個小而全綠的 commit 達成：一次轉換一個使用端（數學點字碼葉模組、`getDefaultTableForCurLang`、MathCAT 鏈、`LanguageDetector`），每個 commit 中 config 的讀取正好往上移一層，移到該使用端的直接呼叫者（暫時由 `conversion/service.py` 對每個數學片段傳入 `language=get_lang()`，`conversion/text/pipeline.py` 對偵測器傳入 `default_lang=config.get_lang(), charset_maps=config.get_charset_maps()`）。接著 `ConversionRequest` 加上兩個欄位，最後一個 commit 把它們經由 `conversion.output`、`conversion.service` 與 pipeline 往下傳，並刪除兩個暫時的讀取。
+
+特性測試（共 10 個，最先加入，在未修改的程式碼上即通過）涵蓋：偵測器（由目前語言決定偏好的完整語系；`"Hello 中文 "` 在 `en` 與 `zh_TW` 下；空的對應值）、pipeline（`"→"` 箭頭在 `en`/`zh_TW` 下；`"A中"` 搭配 `CJKCharactersLanguage` `zh`/`ja`）、MathCAT（`en_US` 得到 `en-us`；兩次呼叫各自設定語言）、預設翻譯表，以及端對端（混合文字 `"Hello 中文 $1$"`；箭頭）。後續 commit 把每個測試改為明確傳參，預期值不變。
 
 ### 更新的測試
 
@@ -270,18 +276,19 @@ def getDefaultTableForCurLang(tableType: TableType, lang: str) -> str:
 
 ### 新增的測試
 
-1. **相同 request、不同環境**（新檔 `tests/test_conversion_language_explicit.py`）：建立一個 `ConversionRequest(lang="en", charset_maps=<預設對應表>, ...)`，內容為混合文字與行內數學（例如 `"Hello 中文 $1$"`）。以會記錄呼叫的假文字與數學翻譯器、注入的 `map_char`、暫存的資料與字典檔（與 `test_conversion_service.py` 相同的設定）執行 `conversion.service.convert_text_with_alignment`。執行兩次：一次 `TEXT2BRAILLE_LANG=zh_TW`、一次 `TEXT2BRAILLE_LANG=ja`（`patch.dict(os.environ, ...)`，並把 `config._runtime_lang` 設為第三個值，結束後還原）。兩次都以 `side_effect=AssertionError` patch `config.get_lang` 與 `config.get_charset_maps`。斷言：`display_text` 相同、記錄的文字翻譯器 `(text, table)` 呼叫相同、數學呼叫相同，且每個數學呼叫的 `language == "en"`。
-2. **使用 request 的語言**（同一檔案）：在翻譯表 `{"default": ..., "en": ..., "zh": ..., "ja": ...}` 下，文字 `"→"`（它的區塊在 `languageDetection.blocks.BLOCKS` 中對應到 `None`，屬於不參與偵測的字元，因此偵測器不產生語言切換；它不是 Unicode 點字，所以仍會交給 runtime 翻譯器）在 `lang="en"` 時用 `en` 翻譯表、在 `lang="zh_TW"` 時用 `zh` 翻譯表。數字與 ASCII 標點不適用：在 `zh_TW` 下它們會切換到 `en`。在現有程式碼上的特性結果（patch `config.get_lang` 的偵測器）：`"→"` 在 `en` 與 `zh_TW` 下都得到 `["→"]`；`"1+1"` 在 `en` 下得到 `["1+1"]`，在 `zh_TW` 下得到 `["en", "1+1"]`。
+1. **相同 request、不同環境**（新檔 `tests/test_conversion_language_explicit.py`，`test_same_request_gives_same_output_in_any_environment`）：建立一個 `ConversionRequest(lang="en", charset_maps=<預設對應表>, ...)`，內容為混合文字與行內數學（例如 `"Hello 中文 $1$"`）。以會記錄呼叫的假文字與數學翻譯器、注入的 `map_char`、暫存的資料與字典檔（與 `test_conversion_service.py` 相同的設定）執行 `conversion.service.convert_text_with_alignment`。執行兩次：一次 `TEXT2BRAILLE_LANG=zh_TW`、一次 `TEXT2BRAILLE_LANG=ja`（`patch.dict(os.environ, ...)`，並把 `config._runtime_lang` 設為第三個值，結束後還原）。兩次都以 `side_effect=AssertionError` patch `config.get_lang` 與 `config.get_charset_maps`。斷言：`display_text` 相同、記錄的文字翻譯器 `(text, table)` 呼叫相同、數學呼叫相同，且每個數學呼叫的 `language == "en"`。假翻譯器在每次呼叫時才 import `TranslationResult`：`tests/test_translation_result_core.py` 會重新 import `translate`，之後 `conversion.wrapping` 會拒絕以舊類別建立的結果（`TypeError: not TranslateResult object`）。這在基準上已讓 8 個 `test_conversion_service` 測試在某些模組順序下出錯（既有問題，不在範圍內）；新的假物件避開了這個問題。
+2. **使用 request 的語言**（同一檔案，`test_non_detecting_text_follows_request_language`）：在翻譯表 `{"default": ..., "en": ..., "zh": ..., "ja": ...}` 下，文字 `"→"`（它的區塊在 `languageDetection.blocks.BLOCKS` 中對應到 `None`，屬於不參與偵測的字元，因此偵測器不產生語言切換；它不是 Unicode 點字，所以仍會交給 runtime 翻譯器）在 `lang="en"` 時用 `en` 翻譯表、在 `lang="zh_TW"` 時用 `zh` 翻譯表。數字與 ASCII 標點不適用：在 `zh_TW` 下它們會切換到 `en`。在現有程式碼上的特性結果（patch `config.get_lang` 的偵測器）：`"→"` 在 `en` 與 `zh_TW` 下都得到 `["→"]`；`"1+1"` 在 `en` 下得到 `["1+1"]`，在 `zh_TW` 下得到 `["en", "1+1"]`。
 3. **使用 request 的 `charset_maps`**（`tests/test_conversion_text_pipeline.py`）：翻譯表 `{"default": ..., "en": ..., "zh": ..., "ja": ...}`、`lang="en"`、文字 `"A中"`：`CJKCharactersLanguage: "zh"` 時 `中` 用 `zh` 翻譯表；`CJKCharactersLanguage: "ja"` 時用 `ja` 翻譯表。
 4. **偵測器以 `default_lang` 決定偏好的完整語系**（`tests/test_language_detection_char_langinfo.py`）：`LanguageDetector(["en", "zh"], default_lang="zh_HK", charset_maps=<預設對應表>)` 處理 `[LangChangeCommand("en"), "中"]` 時產生 `["en", "zh_HK", "中"]`（`_preferred_full_lang` 的第 2 步；已在現有程式碼上以 `config.get_lang` patch 成 `"zh_HK"` 確認）。另外：`LanguageDetector(["en", "zh", "ja"], ...)` 處理 `"Hello 中文 "`，在 `default_lang="en"` 時產生 `["Hello ", "zh", "中文 "]`，在 `default_lang="zh_TW"` 時產生 `["en", "Hello ", "zh_TW", "中文 "]`（同樣已在現有程式碼上確認）。
-5. **偵測器收到不完整的對應表**（同一檔案）：`charset_maps={}`、`default_lang="zh_TW"`、可用語言 `["en", "zh_TW"]`，文字 `"中A"` 不會拋錯，並產生 `["中", "en", "A"]`（Basic Latin 的第一個語言；目前使用完整預設對應表也得到相同序列）。此案例不要用 CJK 字元：CJK 區塊的 `blockLanguages` 是迭代 `set` 建立的，`langs[0]` 取決於 hash 隨機化。
+5. **偵測器收到不完整的對應表**（同一檔案）：`charset_maps={}`、`default_lang="zh_TW"`、可用語言 `["en", "zh_TW"]`，文字 `"中A"` 不會拋錯，並產生 `["中", "en", "A"]`（Basic Latin 的第一個語言；目前使用完整預設對應表也得到相同序列）。此案例不要用 CJK 字元：CJK 區塊的 `blockLanguages` 是迭代 `set` 建立的，`langs[0]` 取決於 hash 隨機化。另外（`test_empty_charset_map_value_is_used_as_is`，在現有程式碼上取得特性結果）：`charset_maps` 中 `CJKCharactersLanguage: ""`、`default_lang="en"`、可用語言 `["en", "zh_TW"]`，文字 `"A中"` 產生 `["A", "", "中"]`（存在的空值原樣使用）。以及偵測器保有自己的對應表副本（`test_detector_keeps_its_own_copy_of_charset_maps`）。
 6. **偵測器建構子必須明確傳值**（同一檔案）：`LanguageDetector(["en"])` 拋出 `TypeError`。
 7. **MathCAT 語言逐次指定**（`tests/test_mathcat_adapter.py`）：`get_braille_for_mathml(..., language="en_US")` 設定 `("SetPreference", "Language", "en-us")`；同一個 adapter 先後以 `"zh_TW"`、`"en"` 呼叫兩次，各自套用自己的語言。不傳 `language` 的 `get_braille_for_mathml("<math/>")` 拋出 `TypeError`。
 8. **數學 service 往下傳語言**（`tests/test_math_service.py`）：把 `conversion.mathcat_adapter.get_shared_mathcat_adapter` patch 成會記錄呼叫的假物件後，`translate_math_segment("1", braille_code="Nemeth", language="en")` 會呼叫 `get_braille_for_mathml(<mathml>, braille_code="Nemeth", language="en")`。
-9. **`getDefaultTableForCurLang` 接收 `lang`**（新檔 `tests/test_braille_tables_default_lang.py`）：`TableType.OUTPUT` 下，`"zh_TW"` -> `"zh-tw.ctb"`、`"ja_JP"` -> `"ja-kantenji.utb"`（退回基本語言碼）、`"xx"` -> `DEFAULT_TABLE`。這些值來自 `__tables.py` 的註冊表（已在 Linux 上確認）。若上游註冊表改變，測試應改從 `_outputTableForLangs` 讀取預期值，而不是寫死。
+9. **`getDefaultTableForCurLang` 接收 `lang`**（新檔 `tests/test_braille_tables_default_lang.py`）：`TableType.OUTPUT` 下，`"zh_TW"` -> `"zh-tw.ctb"`、`"ja_JP"` -> `"ja-kantenji.utb"`（退回基本語言碼）、`"xx"` -> `DEFAULT_TABLE`。這些值來自 `__tables.py` 的註冊表（已在 Linux 上確認）。若上游註冊表改變，測試應改從 `_outputTableForLangs` 讀取預期值，而不是寫死。不傳 `lang` 呼叫時拋出 `TypeError`。
 10. **清理後的模組不 import `config`**（`tests/test_translation_import_isolation.py`，在既有類別中新增測試）：以子行程執行 `import languageDetection, conversion.text.pipeline, conversion.output, conversion.mathcat_adapter, braille.tables`，並斷言 `"config" not in sys.modules`。這同時能抓到直接與間接 import。
-11. **Frame 每個 request 讀取語言**（`tests/test_gui_document_flows.py`）：`gui.get_lang` 回傳 `"en"`、`gui.get_charset_maps` 回傳某個對應表時，`_build_conversion_request(...)` 帶有這兩個值。patch 的回傳值改變後建立的第二個 request 帶有新值（執行期間的變更會影響下一次轉換）。兩個 request 不共用同一個 `charset_maps` 物件。
-12. **CLI 示範讀取一次語言**（新增小型測試，例如 `tests/test_main_demo.py`）：patch `main.build_default_translation_runtime`、`main.convert_text_with_alignment`、`main.get_lang` 與 `main.get_charset_maps` 後，`run_demo("x")` 建立的 request 帶有 patch 的 `lang`/`charset_maps`，印出輸出並關閉 runtime。
+11. **Frame 每個 request 讀取語言**（`tests/test_gui_document_flows.py`）：`gui.get_lang` 回傳 `"en"`、`gui.get_charset_maps` 回傳某個對應表時，`_build_conversion_request(...)` 帶有這兩個值。patch 的回傳值改變後建立的第二個 request 帶有新值（執行期間的變更會影響下一次轉換），且每個 request 對每個值正好讀取一次（`test_conversion_request_reads_language_settings_per_request`）。不做共用參考的斷言：`_build_conversion_request` 直接傳遞 `get_charset_maps()` 的回傳值（不複製），在 patch `gui.get_charset_maps` 的情況下 `assertIsNot` 只是在測 mock；實際上兩個 request 不會共用對應表，因為 `config.get_charset_maps()` 每次呼叫都建立新的 dict。
+12. **CLI 示範讀取一次語言**（`tests/test_main_demo.py` 已存在且有一個測試；在其中新增 `test_demo_request_carries_language_settings`）：patch `main.build_default_translation_runtime`、`main.convert_text_with_alignment`、`main.get_lang` 與 `main.get_charset_maps` 後，`run_demo("x")` 建立的 request 帶有 patch 的 `lang`/`charset_maps`，印出輸出並關閉 runtime。
+13. **數學點字碼葉模組**（新檔 `tests/test_math_braille_codes.py`）：`conversion.math_braille_codes` 定義 `MATH_BRAILLE_TABLES == ("UEB", "Nemeth")` 與 `DEFAULT_MATH_BRAILLE_TABLE == "UEB"`，且 `config` 重新匯出的是同一組物件（`assertIs`）。
 
 新測試不得依賴開發者的 `config.json` 或環境。
 
@@ -293,7 +300,7 @@ def getDefaultTableForCurLang(tableType: TableType, lang: str) -> str:
 4. `git diff main --stat -- client/braille/tables/__tables.py client/braille/liblouis` 為空。
 5. 聚焦驗證（Linux；排除兩個在 Linux 上以名稱載入會中止執行的 Windows 專用模組）只剩已知的 P2-5 失敗：
    `cd client && python3 -m unittest tests.test_conversion_text_pipeline tests.test_language_detection_char_langinfo tests.test_language_detection_unicode_braille tests.test_mathcat_adapter tests.test_conversion_service tests.test_translation_import_isolation tests.test_math_service tests.test_math_translation_adapter tests.test_translation_fallback tests.test_conversion_jobs tests.test_translation_runtime_provider tests.test_conversion_language_explicit tests.test_braille_tables_default_lang tests.test_main_demo tests.test_gui_document_flows -v`
-6. 完整測試：`cd client && python3 -m unittest discover -s tests -p "test_*.py"` 回報 `failures=1`（只有已知的 P2-5 失敗）、`errors=0`、`skipped=7`，測試數為 554 加上新增的測試。
+6. 完整測試：`cd client && python3 -m unittest discover -s tests -p "test_*.py"` 回報 `failures=1`（只有已知的 P2-5 失敗）、`errors=0`、`skipped=7`，測試數為 575（554 加上 21 個新測試）。
 7. `client/locales/` 下沒有變更。
 8. Windows 上（無法在這台 Linux 主機執行；列為驗證待辦）：路線圖指令 `python -m unittest tests.test_conversion_text_pipeline tests.test_language_detection_char_langinfo tests.test_language_detection_translation tests.test_language_detection_unicode_braille tests.test_mathcat_adapter tests.test_conversion_service tests.test_translation_import_isolation -v`，加上 `tests.test_translation_language_result`、`tests.test_liblouis_runtime` 與 `tests.test_translation_runtime_provider`；並手動確認在程式中轉換中英數學混排文字，於 `TEXT2BRAILLE_LANG` 未設定與 `TEXT2BRAILLE_LANG=en` 兩種情況下，點字都與變更前相同。
 

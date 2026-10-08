@@ -19,18 +19,23 @@ from conversion.service import translate_with_language
 BASE_DIR = Path(__file__).resolve().parents[1]
 
 
-def test_add_blank_between_language_change() -> None:
-	runtime = build_default_translation_runtime()
-	try:
-		result = translate_with_language(
-			"嶼我I起",
-			BASE_DIR / "dictionary" / "default.csv",
-			DEFAULT_TRANSLATION_TABLES,
-			BASE_DIR / "data" / "Bopomofo2Braille.csv",
-			runtime=runtime,
-			lang="zh_TW",
-			charset_maps=DEFAULT_CHARSET_MAPS,
-		)
-	finally:
-		runtime.close()
-	assert "".join(result.raw) == "嶼我 I 起"
+class TranslationLanguageResultTest(unittest.TestCase):
+	def test_add_blank_between_language_change(self) -> None:
+		runtime = build_default_translation_runtime()
+		try:
+			result = translate_with_language(
+				"嶼我I起",
+				BASE_DIR / "dictionary" / "default.csv",
+				DEFAULT_TRANSLATION_TABLES,
+				BASE_DIR / "data" / "Bopomofo2Braille.csv",
+				runtime=runtime,
+				lang="zh_TW",
+				charset_maps=DEFAULT_CHARSET_MAPS,
+			)
+		finally:
+			runtime.close()
+		self.assertEqual("".join(result.raw), "嶼我 I 起")
+
+
+if __name__ == "__main__":
+	unittest.main()

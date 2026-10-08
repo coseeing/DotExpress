@@ -1,9 +1,10 @@
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from conversion.math_service import (
     MathConversionError,
     latex_to_mathml,
+    mathml_to_nemeth_braille,
     translate_math_segment,
 )
 
@@ -22,20 +23,32 @@ class MathServiceTest(unittest.TestCase):
 
     def test_translate_math_segment_raises_math_conversion_error_for_latex_failure(self) -> None:
         with self.assertRaises(MathConversionError):
-            translate_math_segment(r"\frac{2}{", language="zh_TW")
+            translate_math_segment(r"\frac{2}{", language="zh_TW", mathcat=Mock())
 
     def test_translate_math_segment_forwards_language_to_mathcat(self) -> None:
         adapter = Mock()
         adapter.get_braille_for_mathml.return_value = "\u283c\u2801"
 
-        with patch("conversion.mathcat_adapter.get_shared_mathcat_adapter", return_value=adapter):
-            braille = translate_math_segment("1", braille_code="Nemeth", language="en")
+        braille = translate_math_segment("1", braille_code="Nemeth", language="en", mathcat=adapter)
 
         self.assertEqual(braille, "\u283c\u2801")
         adapter.get_braille_for_mathml.assert_called_once_with(
             latex_to_mathml("1"),
             braille_code="Nemeth",
             language="en",
+        )
+
+    def test_mathml_to_nemeth_braille_uses_the_given_adapter(self) -> None:
+        adapter = Mock()
+        adapter.get_braille_for_mathml.return_value = "\u283c\u2803"
+
+        braille = mathml_to_nemeth_braille("<math/>", braille_code="UEB", language="zh_TW", mathcat=adapter)
+
+        self.assertEqual(braille, "\u283c\u2803")
+        adapter.get_braille_for_mathml.assert_called_once_with(
+            "<math/>",
+            braille_code="UEB",
+            language="zh_TW",
         )
 
 

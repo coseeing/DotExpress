@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 import sys
 from collections.abc import Callable
+from functools import partial
 
 from adapters.translation.contracts import RuntimeUnavailableError, TranslationRuntime
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
-from conversion.mathcat_adapter import MathCATError, get_shared_mathcat_adapter
+from conversion.mathcat_adapter import MathCATAdapter, MathCATError, get_default_mathcat_resource_root
 from log import get_logger
 
 
@@ -82,9 +83,14 @@ def create_default_text_translator(
     )
 
 
+def _create_mathcat_adapter() -> MathCATAdapter:
+    return MathCATAdapter(resource_root=get_default_mathcat_resource_root())
+
+
 def create_default_math_translator(
     *,
     platform: str | None = None,
+    adapter_factory: Callable[[], MathCATAdapter] | None = None,
 ):
     if (platform or sys.platform) != "win32":
         raise RuntimeUnavailableError("bundled MathCAT requires Windows")
@@ -93,11 +99,19 @@ def create_default_math_translator(
         from adapters.translation.mathcat import MathCATMathTranslator
         from conversion.math_service import translate_math_segment
 
-        get_shared_mathcat_adapter().initialize()
+        adapter = (adapter_factory or _create_mathcat_adapter)()
+        try:
+            adapter.initialize()
+        except BaseException:
+            adapter.close()
+            raise
     except (ImportError, OSError, MathCATError) as error:
         raise RuntimeUnavailableError(str(error)) from error
 
-    return MathCATMathTranslator(translate_math=translate_math_segment)
+    return MathCATMathTranslator(
+        translate_math=partial(translate_math_segment, mathcat=adapter),
+        close=adapter.close,
+    )
 
 
 def build_default_translation_runtime() -> TranslationRuntime:

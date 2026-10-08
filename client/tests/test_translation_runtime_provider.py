@@ -2,6 +2,7 @@ import sys
 import types
 import unittest
 from contextlib import contextmanager
+from functools import partial
 from unittest.mock import patch
 
 from adapters.translation.contracts import RuntimeUnavailableError
@@ -87,11 +88,7 @@ def default_math_translator(adapter):
     """Build the default math translator for "win32" around ``adapter``."""
     from adapters.translation import provider
 
-    with (
-        patch.object(provider, "get_shared_mathcat_adapter", return_value=adapter),
-        patch("conversion.mathcat_adapter.get_shared_mathcat_adapter", return_value=adapter),
-    ):
-        yield provider.create_default_math_translator(platform="win32")
+    yield provider.create_default_math_translator(platform="win32", adapter_factory=lambda: adapter)
 
 
 class ModuleBindings:
@@ -292,11 +289,12 @@ class TranslationRuntimeProviderTest(unittest.TestCase):
     def test_default_math_factory_normalizes_native_runtime_errors(self) -> None:
         from adapters.translation import provider
 
-        failing_adapter = InitializerModule("mathcat_adapter", error=MathCATError("missing MathCAT runtime"))
+        failing_adapter = RecordingMathCATAdapter(initialize_error=MathCATError("missing MathCAT runtime"))
 
-        with patch.object(provider, "get_shared_mathcat_adapter", return_value=failing_adapter):
-            with self.assertRaisesRegex(RuntimeUnavailableError, "missing MathCAT runtime"):
-                provider.create_default_math_translator(platform="win32")
+        with self.assertRaisesRegex(RuntimeUnavailableError, "missing MathCAT runtime"):
+            provider.create_default_math_translator(platform="win32", adapter_factory=lambda: failing_adapter)
+
+        self.assertEqual(failing_adapter.close_calls, 1)
 
     def test_default_math_translator_initializes_once_and_translates_through_the_adapter(self) -> None:
         adapter = RecordingMathCATAdapter()
@@ -311,6 +309,78 @@ class TranslationRuntimeProviderTest(unittest.TestCase):
         self.assertEqual(result.braille, ["\u283c", "\u2801"])
         self.assertEqual(result.raw_to_braille_pos, [0])
         self.assertEqual(result.braille_to_raw_pos, [0, 0])
+
+    def test_unexpected_math_initialize_error_closes_the_adapter_and_propagates(self) -> None:
+        from adapters.translation import provider
+
+        adapter = RecordingMathCATAdapter(initialize_error=ValueError("defect"))
+
+        with self.assertRaisesRegex(ValueError, "defect"):
+            provider.create_default_math_translator(platform="win32", adapter_factory=lambda: adapter)
+
+        self.assertEqual(adapter.close_calls, 1)
+
+    def test_each_default_math_translator_gets_its_own_adapter(self) -> None:
+        from adapters.translation import provider
+
+        adapters = [RecordingMathCATAdapter("\u2801"), RecordingMathCATAdapter("\u2803")]
+        factory = iter(adapters).__next__
+
+        first = provider.create_default_math_translator(platform="win32", adapter_factory=factory)
+        second = provider.create_default_math_translator(platform="win32", adapter_factory=factory)
+
+        self.assertEqual(first.translate("1", braille_code="UEB", language="en").braille, ["\u2801"])
+        self.assertEqual(second.translate("1", braille_code="UEB", language="en").braille, ["\u2803"])
+        first.close()
+        self.assertEqual([adapter.initialize_calls for adapter in adapters], [1, 1])
+        self.assertEqual([adapter.close_calls for adapter in adapters], [1, 0])
+
+    def test_default_adapter_factory_builds_a_fresh_bundled_adapter(self) -> None:
+        from adapters.translation import provider
+        from conversion.mathcat_adapter import MathCATAdapter, get_default_mathcat_resource_root
+
+        first = provider._create_mathcat_adapter()
+        second = provider._create_mathcat_adapter()
+        recorded = RecordingMathCATAdapter()
+        with patch.object(provider, "_create_mathcat_adapter", return_value=recorded):
+            provider.create_default_math_translator(platform="win32")
+
+        self.assertIsInstance(first, MathCATAdapter)
+        self.assertEqual(first.resource_root, get_default_mathcat_resource_root())
+        self.assertIsNot(first, second)
+        self.assertEqual(recorded.initialize_calls, 1)
+
+    def test_runtime_close_closes_mathcat_before_liblouis(self) -> None:
+        from adapters.translation import provider
+
+        events = []
+        adapter = RecordingMathCATAdapter(events=events)
+        louis_helper = InitializerModule("braille.louis_helper")
+        louis_helper.terminate = lambda: events.append("louis.terminate")
+        tables_module = types.ModuleType("braille.tables")
+        tables_module.TABLES_DIR = "/tables"
+
+        with ModuleBindings(
+            {
+                "braille": types.ModuleType("braille"),
+                "braille.louis_helper": louis_helper,
+                "braille.tables": tables_module,
+            }
+        ):
+            runtime = provider.build_translation_runtime(
+                text_factory=partial(provider.create_default_text_translator, platform="win32"),
+                math_factory=partial(
+                    provider.create_default_math_translator,
+                    platform="win32",
+                    adapter_factory=lambda: adapter,
+                ),
+            )
+        runtime.close()
+        runtime.close()
+
+        self.assertEqual(events, ["mathcat.initialize", "mathcat.close", "louis.terminate"])
+        self.assertEqual(adapter.close_calls, 1)
+        self.assertEqual(louis_helper.calls, 1)
 
 
 if __name__ == "__main__":

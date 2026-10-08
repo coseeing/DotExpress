@@ -26,6 +26,14 @@ class FakeLib:
         return self.braille
 
 
+class RecordingHandle:
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
+
+
 class TestMathCATAdapter(MathCATAdapter):
     def __init__(self, *, fake_lib=None, load_error: Exception | None = None) -> None:
         super().__init__(resource_root=Path("mathcat/assets"))
@@ -114,6 +122,38 @@ class MathCATAdapterTest(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             adapter.get_braille_for_mathml("<math/>")
+
+    def test_close_releases_the_dll_directory_once(self) -> None:
+        adapter = TestMathCATAdapter()
+        handle = RecordingHandle()
+        adapter._dll_directory_handle = handle
+        adapter._libmathcat = FakeLib()
+
+        adapter.close()
+        adapter.close()
+
+        self.assertEqual(handle.close_calls, 1)
+        self.assertIsNone(adapter._dll_directory_handle)
+        self.assertIsNone(adapter._libmathcat)
+
+    def test_closed_adapter_refuses_to_load(self) -> None:
+        adapter = TestMathCATAdapter()
+
+        adapter.close()
+
+        with self.assertRaisesRegex(MathCATError, "MathCAT adapter is closed"):
+            adapter.initialize()
+        with self.assertRaisesRegex(MathCATError, "MathCAT adapter is closed"):
+            adapter.get_braille_for_mathml("<math/>", language="zh_TW")
+        self.assertEqual(adapter.load_calls, 0)
+
+    def test_close_without_initialize_is_harmless(self) -> None:
+        adapter = MathCATAdapter(resource_root=Path("mathcat/assets"))
+
+        adapter.close()
+
+        self.assertIsNone(adapter._dll_directory_handle)
+        self.assertIsNone(adapter._libmathcat)
 
 
 if __name__ == "__main__":

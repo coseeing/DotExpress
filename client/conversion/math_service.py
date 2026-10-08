@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import html
 import re
+from typing import TYPE_CHECKING
 
 from config import DEFAULT_MATH_BRAILLE_TABLE
 from log import get_logger
+
+if TYPE_CHECKING:
+	from conversion.mathcat_adapter import MathCATAdapter
 
 
 logger = get_logger("dotexpress.math", "math.log")
@@ -42,10 +46,9 @@ def mathml_to_nemeth_braille(
 	braille_code: str = DEFAULT_MATH_BRAILLE_TABLE,
 	*,
 	language: str,
+	mathcat: MathCATAdapter,
 ) -> str:
-	from conversion.mathcat_adapter import get_shared_mathcat_adapter
-
-	return get_shared_mathcat_adapter().get_braille_for_mathml(
+	return mathcat.get_braille_for_mathml(
 		mathml_text,
 		braille_code=braille_code,
 		language=language,
@@ -57,11 +60,17 @@ def translate_math_segment(
 	braille_code: str = DEFAULT_MATH_BRAILLE_TABLE,
 	*,
 	language: str,
+	mathcat: MathCATAdapter,
 ) -> str:
 	mathml_text = None
 	try:
 		mathml_text = latex_to_mathml(latex_text)
-		return mathml_to_nemeth_braille(mathml_text, braille_code=braille_code, language=language)
+		return mathml_to_nemeth_braille(
+			mathml_text,
+			braille_code=braille_code,
+			language=language,
+			mathcat=mathcat,
+		)
 	except Exception as error:
 		logger.exception(
 			"Math conversion failed | stage=%s | latex=%r | mathml=%r",

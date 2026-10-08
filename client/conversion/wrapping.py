@@ -1,12 +1,8 @@
-def merge_translation_results(translations):
-    from translate import TranslationResult
+from translate import TranslationResult
 
-    if not translations:
-        return TranslationResult([], [], [], [])
-    merged = TranslationResult([], [], [], [])
-    for segment in translations:
-        merged = merged + segment
-    return merged
+
+def merge_translation_results(translations):
+    return TranslationResult.concat(translations or ())
 
 
 def wrap_translation_results(translations, width: int) -> tuple[str, str]:

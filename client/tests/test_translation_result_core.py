@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import time
 import unittest
 from unittest.mock import patch
 
@@ -209,6 +210,62 @@ class MergeTranslationResultsTest(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "^not TranslateResult object$"):
             merge_translation_results(results)
 
+
+class LinearMergeTest(unittest.TestCase):
+    def results(self, count: int, tokens: int) -> list[TranslationResult]:
+        return [
+            TranslationResult(
+                [f"t{index * tokens + offset}" for offset in range(tokens)],
+                ["⠁", "⠀"] * tokens,
+                [offset for offset in range(tokens) for _cell in range(2)],
+                [2 * offset for offset in range(tokens)],
+            )
+            for index in range(count)
+        ]
+
+    def test_merge_builds_exactly_one_result(self) -> None:
+        results = self.results(500, 1)
+        original_init = TranslationResult.__init__
+        constructed = []
+
+        def counting_init(result, *args, **kwargs):
+            constructed.append(result)
+            original_init(result, *args, **kwargs)
+
+        with patch.object(TranslationResult, "__init__", counting_init):
+            merged = merge_translation_results(results)
+
+        self.assertEqual(len(constructed), 1)
+        self.assertIs(constructed[0], merged)
+        self.assertEqual(len(merged.raw), 500)
+
+    def test_merge_never_adds_pairwise(self) -> None:
+        results = self.results(500, 1)
+
+        with patch.object(TranslationResult, "__add__", side_effect=AssertionError("pairwise merge")) as add:
+            merged = merge_translation_results(results)
+
+        add.assert_not_called()
+        self.assertEqual(len(merged.raw), 500)
+
+    def test_merging_twenty_thousand_results_takes_linear_time(self) -> None:
+        results = self.results(20_000, 10)
+        total = 20_000 * 10
+
+        started = time.perf_counter()
+        merged = merge_translation_results(results)
+        elapsed = time.perf_counter() - started
+
+        self.assertEqual(
+            lists_of(merged),
+            (
+                [f"t{index}" for index in range(total)],
+                ["⠁", "⠀"] * total,
+                [index for index in range(total) for _cell in range(2)],
+                [2 * index for index in range(total)],
+            ),
+        )
+        self.assertLess(elapsed, 5.0)
 
 if __name__ == "__main__":
     unittest.main()

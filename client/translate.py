@@ -40,25 +40,24 @@ class TranslationResult:
 		self.braille_to_raw_pos = braille_to_raw_pos
 		self.raw_to_braille_pos = raw_to_braille_pos
 
+	@classmethod
+	def concat(cls, results):
+		raw, braille, braille_to_raw_pos, raw_to_braille_pos = [], [], [], []
+		for result in results:
+			if not isinstance(result, TranslationResult):
+				raise TypeError("not TranslateResult object")
+			raw_offset = len(raw)
+			braille_offset = len(braille)
+			raw.extend(result.raw)
+			braille.extend(result.braille)
+			braille_to_raw_pos.extend(pos + raw_offset for pos in result.braille_to_raw_pos)
+			raw_to_braille_pos.extend(pos + braille_offset for pos in result.raw_to_braille_pos)
+		return cls(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
+
 	def __add__(self, other):
 		if not isinstance(other, TranslationResult):
 			raise TypeError("not TranslateResult object")
-
-		raw_offset = len(self.raw)
-		braille_offset = len(self.braille)
-
-		raw = self.raw + other.raw
-		braille = self.braille + other.braille
-		braille_to_raw_pos = (
-			list(self.braille_to_raw_pos)
-			+ [pos + raw_offset for pos in other.braille_to_raw_pos]
-		)
-		raw_to_braille_pos = (
-			list(self.raw_to_braille_pos)
-			+ [pos + braille_offset for pos in other.raw_to_braille_pos]
-		)
-
-		return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
+		return TranslationResult.concat((self, other))
 
 	def __eq__(self, other):
 		if not isinstance(other, TranslationResult):

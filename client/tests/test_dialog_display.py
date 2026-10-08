@@ -1,51 +1,12 @@
-import importlib.util
-import sys
-import types
 import unittest
-from pathlib import Path
 from unittest.mock import Mock
 
-
-class _AutoModule(types.ModuleType):
-	def __getattr__(self, name):
-		if name.startswith("__") and name.endswith("__"):
-			raise AttributeError(name)
-		value = type(name, (), {})
-		setattr(self, name, value)
-		return value
+from tests import wx_stub
 
 
-def _load_dialog_module():
-	dialog_path = Path(__file__).resolve().parents[1] / "dialog.py"
-	previous = dict(sys.modules)
-	try:
-		wx = _AutoModule("wx")
-		wx.Dialog = type("Dialog", (), {})
-		wx.ListCtrl = type("ListCtrl", (), {})
-		wx.Window = type("Window", (), {})
-		wx.NOT_FOUND = -1
-		wx.ID_OK = 1
-		wx.ID_CANCEL = 2
-		wx.ID_APPLY = 3
-		wx.ID_CLOSE = 4
-		wx.OK = 4
-		wx.CANCEL = 8
-		wx.APPLY = 16
-		wx.CLOSE = 32
-		sys.modules["wx"] = wx
-		spec = importlib.util.spec_from_file_location("_dialog_display_test", dialog_path)
-		module = importlib.util.module_from_spec(spec)
-		sys.modules[spec.name] = module
-		spec.loader.exec_module(module)
-		return module
-	finally:
-		for name in list(sys.modules):
-			if name not in previous:
-				del sys.modules[name]
-		sys.modules.update(previous)
-
-
-dialog_module = _load_dialog_module()
+dialog_module, _DIALOG_SCOPE = wx_stub.load_display_dialog()
+setUpModule = _DIALOG_SCOPE.activate
+tearDownModule = _DIALOG_SCOPE.deactivate
 
 
 class FinalizeDialogLayoutTest(unittest.TestCase):

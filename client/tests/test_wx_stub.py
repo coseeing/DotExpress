@@ -257,6 +257,13 @@ class StubFactoryTest(unittest.TestCase):
         self.assertEqual((wx.NOT_FOUND, wx.OK, wx.ICON_ERROR), (-1, 1, 2))
         self.assertIsNone(wx.MessageBox("text"))
 
+    def test_dialog_display_stubs_are_fresh_class_caching_modules(self) -> None:
+        wx = self.assert_fresh(wx_stub.dialog_display_stubs, ["wx"])["wx"]
+
+        self.assertIsInstance(wx, wx_stub.AutoClassModule)
+        self.assertEqual((wx.ID_OK, wx.ID_CLOSE, wx.OK, wx.CLOSE), (1, 4, 4, 32))
+        self.assertIs(wx.AnyName, wx.AnyName)
+
 
 if __name__ == "__main__":
     unittest.main()

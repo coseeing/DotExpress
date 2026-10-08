@@ -916,3 +916,35 @@ def load_speech_dialog():
     with scope.loading():
         module = scope.load_file(SPEECH_DIALOG_MODULE_NAME, DIALOG_PATH)
     return module, scope
+
+
+# --- factory and loader: test_dialog_display --------------------------------
+
+
+DISPLAY_DIALOG_MODULE_NAME = "_dialog_display_test"
+
+
+def dialog_display_stubs():
+    """Class-caching ``wx`` for ``dialog.py`` (``OK`` = 4, ``ID_OK`` = 1)."""
+    wx = AutoClassModule("wx")
+    wx.Dialog = _new_class("Dialog")
+    wx.ListCtrl = _new_class("ListCtrl")
+    wx.Window = _new_class("Window")
+    wx.NOT_FOUND = -1
+    wx.ID_OK = 1
+    wx.ID_CANCEL = 2
+    wx.ID_APPLY = 3
+    wx.ID_CLOSE = 4
+    wx.OK = 4
+    wx.CANCEL = 8
+    wx.APPLY = 16
+    wx.CLOSE = 32
+    return {"wx": wx}
+
+
+def load_display_dialog():
+    """Load ``dialog.py`` as ``DISPLAY_DIALOG_MODULE_NAME``; return ``(module, scope)``."""
+    scope = StubScope(dialog_display_stubs(), evict=evict_everything)
+    with scope.loading():
+        module = scope.load_file(DISPLAY_DIALOG_MODULE_NAME, DIALOG_PATH)
+    return module, scope

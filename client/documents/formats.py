@@ -205,10 +205,6 @@ def get_import_filter_labels() -> list[str]:
     return [descriptor.wildcard_label for descriptor in get_importable_formats()] + ["All Supported Files"]
 
 
-def get_import_wildcard_text() -> str:
-    return build_import_wildcard()
-
-
 def get_format_keys(importable: bool | None = None) -> tuple[str, ...]:
     if importable is None:
         return tuple(descriptor.key for descriptor in DOCUMENT_FORMATS)

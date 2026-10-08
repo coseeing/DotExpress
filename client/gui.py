@@ -852,7 +852,7 @@ class BrailleFrame(wx.Frame):
 		document = self._get_document_by_name(self._open_document_name)
 		if document is None:
 			return
-		updated_document, _ = prepare_document_for_save(
+		updated_document = prepare_document_for_save(
 			document,
 			text=self.input_txt.GetValue(),
 			braille=self.output_txt.GetValue(),

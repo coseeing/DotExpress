@@ -1,7 +1,9 @@
 import importlib.util
+import inspect
 import unittest
 
 from conversion.text import char_maps, dictionary_rules, pipeline
+from documents import formats, workspace
 from languageDetection import LanguageDetector
 from ui import action_menu, import_dialog
 
@@ -56,6 +58,18 @@ class RemovedDeadCodeTest(unittest.TestCase):
         ):
             with self.subTest(live=f"{module.__name__}.{name}"):
                 self.assertTrue(hasattr(module, name))
+
+    def test_dead_document_helpers_are_removed(self) -> None:
+        for module, name in (
+            (workspace, "list_document_names"),
+            (workspace, "batch_export_documents_to_folder"),
+            (formats, "get_import_wildcard_text"),
+        ):
+            with self.subTest(name=f"{module.__name__}.{name}"):
+                self.assertFalse(hasattr(module, name))
+        self.assertNotIn("auto_convert", inspect.signature(workspace.prepare_document_for_save).parameters)
+        self.assertTrue(hasattr(formats, "get_exportable_formats"))
+        self.assertTrue(hasattr(formats, "get_import_filter_labels"))
 
 
 if __name__ == "__main__":

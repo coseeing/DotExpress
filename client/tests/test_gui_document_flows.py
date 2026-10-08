@@ -1338,6 +1338,23 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         self.assertTrue(hasattr(gui, "DEP_WILDCARD"))
         self.assertTrue(hasattr(gui.BrailleFrame, "_get_brl_wildcard"))
 
+    def test_save_open_document_saves_prepared_document(self) -> None:
+        frame = self._make_frame()
+        frame._documents_by_name = {"alpha": Document("alpha", "source", "old braille")}
+        frame.workspace_dir = Path("workspace")
+        frame.input_txt.GetValue.return_value = "edited"
+        frame.output_txt.GetValue.return_value = "edited braille"
+
+        with patch.object(gui, "save_document_package") as save_package:
+            frame._save_open_document()
+
+        expected = Document("alpha", "edited", "edited braille")
+        self.assertEqual(frame._documents_by_name["alpha"], expected)
+        save_package.assert_called_once_with(
+            gui.document_package_path_for_name("alpha", Path("workspace")),
+            expected,
+        )
+
     def test_open_settings_uses_singleton_dialog(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
         frame.get_settings_snapshot = Mock(return_value=make_snapshot())

@@ -7,7 +7,7 @@ import zipfile
 from collections.abc import Callable
 
 from app_paths import get_workspace_directory
-from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_format, get_importable_formats, get_supported_import_filter_keys
+from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
 from shared.name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEP_EXTENSION = ".dep"
@@ -124,18 +124,9 @@ def prepare_document_for_save(
     *,
     text: str,
     braille: str,
-    auto_convert=None,
-) -> tuple[Document, Exception | None]:
+) -> Document:
     saved_braille = None if document.braille is None else braille
-    return Document(name=document.name, text=text, braille=saved_braille), None
-
-
-def list_document_names(workspace_dir: Path | None = None) -> list[str]:
-    directory = get_workspace_directory(workspace_dir)
-    if not directory.exists():
-        return []
-    names = [path.stem for path in directory.glob(f"*{DEP_EXTENSION}") if path.is_file()]
-    return sorted(names, key=lambda name: (name.casefold(), name))
+    return Document(name=document.name, text=text, braille=saved_braille)
 
 
 def load_workspace_documents(workspace_dir: Path | None = None) -> tuple[list[Document], list[Path]]:
@@ -179,28 +170,6 @@ def batch_import_documents(
         seen_names.add(document.name.casefold())
         documents.append(document)
     return documents, issues
-
-
-def batch_export_documents_to_folder(
-    directory: Path | str,
-    documents: list[Document],
-    *,
-    format_key: str,
-    overwrite: bool,
-) -> list[Path]:
-    folder = Path(directory)
-    folder.mkdir(parents=True, exist_ok=True)
-    descriptor = get_format(format_key)
-    if not descriptor.exportable or descriptor.writer is None:
-        raise ValueError(f'Unsupported export format: "{format_key}".')
-    suffix = descriptor.extension
-    conflicts = [folder / f"{document.name}{suffix}" for document in documents if (folder / f"{document.name}{suffix}").exists()]
-    if conflicts and not overwrite:
-        return conflicts
-    for document in documents:
-        destination_path = folder / f"{document.name}{suffix}"
-        descriptor.writer(destination_path, document)
-    return []
 
 
 def choose_selection_after_delete(names: list[str], deleted_name: str) -> str | None:

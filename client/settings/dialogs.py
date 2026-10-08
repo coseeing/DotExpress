@@ -13,6 +13,7 @@ from conversion.preprocessing.user_script import (
     save_preprocessing_script,
 )
 from i18n import _
+from ui.dialog_base import SingletonDialogMixin
 from .state import DotExpressSettingsSnapshot
 from .translation import (
     MAX_CONVERSION_WIDTH,
@@ -104,8 +105,14 @@ class SettingsDialog(wx.Dialog):
         pass
 
 
-class TextProcessingDialog(SettingsDialog):
+_DEAD_WINDOW_ERROR_TYPES = tuple(
+    error_type for error_type in (getattr(wx, "PyDeadObjectError", None),) if error_type is not None
+)
+
+
+class TextProcessingDialog(SingletonDialogMixin, SettingsDialog):
     _instance: "TextProcessingDialog | None" = None
+    dead_window_error_types = _DEAD_WINDOW_ERROR_TYPES
 
     def __init__(self, parent, *, script_path: Path | str) -> None:
         self.script_path = Path(script_path)
@@ -165,25 +172,6 @@ class TextProcessingDialog(SettingsDialog):
     def on_cancel(self, event=None) -> None:
         self._destroy()
 
-    def _destroy(self) -> None:
-        if TextProcessingDialog._instance is self:
-            TextProcessingDialog._instance = None
-        self.Destroy()
-
-    @staticmethod
-    def _is_destroyed_window_error(error: Exception) -> bool:
-        if isinstance(error, getattr(wx, "PyDeadObjectError", ())):
-            return True
-        if not isinstance(error, (ReferenceError, RuntimeError)):
-            return False
-        message = str(error).lower()
-        return (
-            "wrapped c/c++ object" in message
-            or "has been deleted" in message
-            or "already deleted" in message
-            or "destroyed" in message
-        )
-
     @classmethod
     def show_singleton(
         cls,
@@ -191,21 +179,10 @@ class TextProcessingDialog(SettingsDialog):
         parent,
         script_path: Path | str,
     ) -> "TextProcessingDialog":
-        instance = cls._instance
-        if instance is not None:
-            try:
-                instance.Iconize(False)
-                instance.Raise()
-                instance.SetFocus()
-                return instance
-            except (ReferenceError, RuntimeError, wx.PyDeadObjectError) as error:
-                if not cls._is_destroyed_window_error(error):
-                    raise
-                cls._instance = None
-        instance = cls(parent, script_path=script_path)
-        cls._instance = instance
-        instance.Show()
-        return instance
+        existing = cls._raise_existing()
+        if existing is not None:
+            return existing
+        return cls._show_new(cls(parent, script_path=script_path))
 
 
 class MultiCategorySettingsDialog(SettingsDialog):
@@ -715,7 +692,7 @@ CommitSettings = Callable[
 ]
 
 
-class DotExpressSettingsDialog(MultiCategorySettingsDialog):
+class DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog):
     base_title = _("DotExpress Settings")
     title_template = _("DotExpress Settings: {category}")
     category_classes = [
@@ -724,6 +701,7 @@ class DotExpressSettingsDialog(MultiCategorySettingsDialog):
         ViewSettingsPanel,
     ]
     _instance: "DotExpressSettingsDialog | None" = None
+    dead_window_error_types = _DEAD_WINDOW_ERROR_TYPES
 
     def __init__(
         self,
@@ -790,30 +768,11 @@ class DotExpressSettingsDialog(MultiCategorySettingsDialog):
             panel.on_discard()
         self._destroy()
 
-    def _destroy(self) -> None:
-        if DotExpressSettingsDialog._instance is self:
-            DotExpressSettingsDialog._instance = None
-        self.Destroy()
-
     def select_category(self, category_class) -> None:
         index = self.category_classes.index(category_class)
         self.category_list.Select(index)
         self.category_list.Focus(index)
         self._change_category(index)
-
-    @staticmethod
-    def _is_destroyed_window_error(error: Exception) -> bool:
-        if isinstance(error, getattr(wx, "PyDeadObjectError", ())):
-            return True
-        if not isinstance(error, (ReferenceError, RuntimeError)):
-            return False
-        message = str(error).lower()
-        return (
-            "wrapped c/c++ object" in message
-            or "has been deleted" in message
-            or "already deleted" in message
-            or "destroyed" in message
-        )
 
     @classmethod
     def show_singleton(
@@ -827,29 +786,22 @@ class DotExpressSettingsDialog(MultiCategorySettingsDialog):
     ) -> "DotExpressSettingsDialog":
         if initial_category is not None and initial_category not in cls.category_classes:
             raise ValueError("initial_category is not registered")
-        instance = cls._instance
-        if instance is not None:
-            try:
-                instance.Iconize(False)
-                if initial_category is not None:
-                    instance.select_category(initial_category)
-                instance.Raise()
-                instance.SetFocus()
-                return instance
-            except (ReferenceError, RuntimeError, wx.PyDeadObjectError) as error:
-                if not cls._is_destroyed_window_error(error):
-                    raise
-                cls._instance = None
-        instance = cls(
-            parent,
-            snapshot=snapshot,
-            dictionary_names=dictionary_names,
-            commit=commit,
-            initial_category=initial_category,
+        existing = cls._raise_existing(
+            None
+            if initial_category is None
+            else lambda instance: instance.select_category(initial_category)
         )
-        cls._instance = instance
-        instance.Show()
-        return instance
+        if existing is not None:
+            return existing
+        return cls._show_new(
+            cls(
+                parent,
+                snapshot=snapshot,
+                dictionary_names=dictionary_names,
+                commit=commit,
+                initial_category=initial_category,
+            )
+        )
 
     @classmethod
     def sync_open_font_size(cls, font_size: int) -> None:

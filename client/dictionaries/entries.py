@@ -2,25 +2,10 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
-import gettext
 from pathlib import Path
 
+from i18n import _
 from text.zhuyin import normalize_zhuyin_sequence
-
-
-def _resource_path(relative_path: str) -> Path:
-	return Path(__file__).resolve().parents[1] / relative_path
-
-
-LOCALE_DOMAIN = "dotexpress"
-LOCALE_LANGUAGES = ["zh_TW"]
-_translation = gettext.translation(
-	LOCALE_DOMAIN,
-	localedir=str(_resource_path("locales")),
-	languages=LOCALE_LANGUAGES,
-	fallback=True,
-)
-_ = _translation.gettext
 
 
 ENTRY_TYPE_OPTIONS: list[tuple[str, str]] = [

@@ -17,7 +17,6 @@ from typing import Protocol
 from adapters.translation.contracts import TranslationRuntime
 from conversion.jobs import (
     ConversionJobFailure,
-    ConversionJobRequest,
     ConversionJobRunner,
     ConversionJobSuccess,
     ThreadFactory,
@@ -149,7 +148,7 @@ class ConversionPresenter:
         self._view.set_conversion_busy(True)
         self._view.close_converting_dialog()
         request = self._build_request(raw_text)
-        job_id = self._runner.start(ConversionJobRequest(conversion_request=request))
+        job_id = self._runner.start(request)
         self._active = _ActiveJob(job_id, export)
         self._timer = self._call_later(CONVERTING_DIALOG_DELAY_MS, self._show_converting_dialog, job_id)
 

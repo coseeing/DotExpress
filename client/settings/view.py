@@ -9,11 +9,12 @@ from config import (
     get_view_scheme,
     set_view_settings,
 )
-
-VIEW_FONT_SIZE_MIN = 8
-VIEW_FONT_SIZE_MAX = 48
-VIEW_SCHEME_KEYS = ("light", "dark")
-BRAILLE_FONT_KEYS = ("default", "simbraille")
+from .options import (
+    BRAILLE_FONT_OPTIONS,
+    VIEW_FONT_SIZE_RANGE,
+    VIEW_SCHEME_OPTIONS,
+    normalize_option_value,
+)
 
 
 @dataclass(frozen=True)
@@ -25,12 +26,12 @@ class ViewSettings:
 
 def normalize_view_settings(settings: ViewSettings) -> ViewSettings:
     return ViewSettings(
-        font_size=max(VIEW_FONT_SIZE_MIN, min(VIEW_FONT_SIZE_MAX, settings.font_size)),
-        scheme=settings.scheme if settings.scheme in VIEW_SCHEME_KEYS else DEFAULT_VIEW_SCHEME,
-        braille_font=(
-            settings.braille_font
-            if settings.braille_font in BRAILLE_FONT_KEYS
-            else DEFAULT_BRAILLE_FONT
+        font_size=VIEW_FONT_SIZE_RANGE.clamp(settings.font_size),
+        scheme=normalize_option_value(VIEW_SCHEME_OPTIONS, settings.scheme, DEFAULT_VIEW_SCHEME),
+        braille_font=normalize_option_value(
+            BRAILLE_FONT_OPTIONS,
+            settings.braille_font,
+            DEFAULT_BRAILLE_FONT,
         ),
     )
 

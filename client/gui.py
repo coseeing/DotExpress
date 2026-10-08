@@ -89,17 +89,15 @@ from settings.view import (
 )
 from settings.state import DotExpressSettingsSnapshot
 from settings.dialogs import DotExpressSettingsDialog, TextProcessingDialog, TranslationSettingsPanel
+from settings.options import BRAILLE_FONT_SIMBRAILLE, VIEW_SCHEME_OPTIONS
 
 
 VIEW_SCHEMES = {
-	"light": {
-		"background": wx.Colour(255, 255, 255),
-		"foreground": wx.Colour(0, 0, 0),
-	},
-	"dark": {
-		"background": wx.Colour(0, 0, 0),
-		"foreground": wx.Colour(255, 255, 255),
-	},
+	option.value: {
+		"background": wx.Colour(*option.background),
+		"foreground": wx.Colour(*option.foreground),
+	}
+	for option in VIEW_SCHEME_OPTIONS
 }
 
 logger = get_logger("dotexpress.gui", "gui.log")
@@ -382,7 +380,7 @@ class BrailleFrame(wx.Frame):
 		output_font = wx.Font(self._default_output_font)
 		output_font.SetPointSize(settings.font_size)
 		if (
-			settings.braille_font == "simbraille"
+			settings.braille_font == BRAILLE_FONT_SIMBRAILLE
 			and (self._simbraille_font_available or sys.platform == "win32")
 		):
 			output_font.SetFaceName(SIMBRAILLE_FACE_NAME)

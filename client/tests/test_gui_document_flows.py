@@ -3546,5 +3546,84 @@ class FrameExportViewMethodsTest(unittest.TestCase):
         )
 
 
+class _RecordingFont:
+    """``wx.Font`` stand-in: the font it copies and the calls made on it."""
+
+    def __init__(self, base):
+        self.base = base
+        self.calls = []
+
+    def SetPointSize(self, size):
+        self.calls.append(("SetPointSize", size))
+
+    def SetFaceName(self, name):
+        self.calls.append(("SetFaceName", name))
+
+
+class EditorViewSettingsCharacterizationTest(unittest.TestCase):
+    """P2-3 characterization: the editor colours of each scheme and the SimBraille face rule."""
+
+    LIGHT = ((255, 255, 255), (0, 0, 0))
+    DARK = ((0, 0, 0), (255, 255, 255))
+
+    def test_view_schemes_give_each_scheme_its_editor_colours(self) -> None:
+        self.assertEqual(
+            gui.VIEW_SCHEMES,
+            {
+                "light": {"background": (255, 255, 255), "foreground": (0, 0, 0)},
+                "dark": {"background": (0, 0, 0), "foreground": (255, 255, 255)},
+            },
+        )
+        self.assertEqual(list(gui.VIEW_SCHEMES), ["light", "dark"])
+        for colours in gui.VIEW_SCHEMES.values():
+            self.assertEqual(list(colours), ["background", "foreground"])
+            for colour in colours.values():
+                self.assertIsInstance(colour, gui.wx.Colour)
+
+    def test_apply_editor_view_settings_sets_size_colours_and_the_simbraille_face(self) -> None:
+        cases = (
+            # settings, font registered, platform, expected size, colours, SimBraille face
+            (ViewSettings(14, "light", "simbraille"), True, "linux", 14, self.LIGHT, True),
+            (ViewSettings(14, "dark", "simbraille"), False, "linux", 14, self.DARK, False),
+            (ViewSettings(14, "dark", "simbraille"), False, "win32", 14, self.DARK, True),
+            (ViewSettings(20, "light", "default"), True, "win32", 20, self.LIGHT, False),
+            (ViewSettings(99, "sepia", "serif"), True, "linux", 48, self.LIGHT, True),
+        )
+        for settings, registered, platform, size, (background, foreground), face in cases:
+            with self.subTest(settings=settings, registered=registered, platform=platform):
+                frame = object.__new__(gui.BrailleFrame)
+                frame.steps = Mock()
+                frame.input_txt = frame.steps.input_txt
+                frame.output_txt = frame.steps.output_txt
+                frame.Layout = frame.steps.Layout
+                frame._default_output_font = "default-output-font"
+                frame._simbraille_font_available = registered
+                with (
+                    patch.object(gui.wx, "Font", _RecordingFont),
+                    patch.object(gui, "sys", SimpleNamespace(platform=platform)),
+                ):
+                    frame._apply_editor_view_settings(settings)
+
+                output_font = frame.output_txt.SetFont.call_args.args[0]
+                self.assertEqual(output_font.base, "default-output-font")
+                self.assertEqual(
+                    output_font.calls,
+                    [("SetPointSize", size)] + ([("SetFaceName", "SimBraille")] if face else []),
+                )
+                frame.input_txt.GetFont.return_value.SetPointSize.assert_called_once_with(size)
+                self.assertEqual(
+                    [entry for entry in frame.steps.mock_calls if entry[0].endswith(("Colour", "Refresh", "Layout"))],
+                    [
+                        call.input_txt.SetBackgroundColour(background),
+                        call.input_txt.SetForegroundColour(foreground),
+                        call.input_txt.Refresh(),
+                        call.output_txt.SetBackgroundColour(background),
+                        call.output_txt.SetForegroundColour(foreground),
+                        call.output_txt.Refresh(),
+                        call.Layout(),
+                    ],
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

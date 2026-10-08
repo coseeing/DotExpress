@@ -13,11 +13,7 @@ from config import (
     set_selected_dictionary,
 )
 from dictionaries.actions import resolve_dictionary_selection
-
-
-MIN_CONVERSION_WIDTH = 10
-MAX_CONVERSION_WIDTH = 200
-SUPPORTED_OUTPUT_MODES = ("unicode", "ascii")
+from .options import CONVERSION_WIDTH_RANGE, OUTPUT_MODE_OPTIONS, normalize_option_value
 
 
 @dataclass(frozen=True)
@@ -35,13 +31,15 @@ DEFAULT_TRANSLATION_SETTINGS = TranslationSettings(
 
 
 def _normalize_output_mode(output_mode: str) -> str:
-    if output_mode in SUPPORTED_OUTPUT_MODES:
-        return output_mode
-    return DEFAULT_TRANSLATION_SETTINGS.output_mode
+    return normalize_option_value(
+        OUTPUT_MODE_OPTIONS,
+        output_mode,
+        DEFAULT_TRANSLATION_SETTINGS.output_mode,
+    )
 
 
 def _normalize_width(width: int) -> int:
-    return max(MIN_CONVERSION_WIDTH, min(MAX_CONVERSION_WIDTH, width))
+    return CONVERSION_WIDTH_RANGE.clamp(width)
 
 
 def normalize_translation_settings(

@@ -348,3 +348,281 @@ def dual_view_stubs():
     )
     wx.html2 = wx_html2
     return {"wx": wx, "wx.html2": wx_html2}
+
+
+# --- factory: test_gui_document_flows ---------------------------------------
+
+
+_GUI_DIALOG_NAMES = (
+    "DictionaryManagementDialog",
+    "DictionaryNameDialog",
+    "DocumentNameDialog",
+    "FileIssuesDialog",
+    "InvalidWorkspaceFilesDialog",
+    "SpeechSymbolsDialog",
+    "TranslationSettingsDialog",
+    "TranslationTableDialog",
+)
+
+
+def gui_frame_stubs():
+    """Full widget set for ``gui``: ``wx``, ``wx.html2``, ``wx.lib``, ``dialog``, ``braille.louis_helper``."""
+    wx = types.ModuleType("wx")
+
+    class Window(Widget):
+        @staticmethod
+        def FindFocus():
+            return None
+
+    class Frame(Window):
+        pass
+
+    class Panel(Window):
+        pass
+
+    class Dialog(Window):
+        pass
+
+    class Accessible(Widget):
+        pass
+
+    class App(Widget):
+        pass
+
+    class Menu(Widget):
+        pass
+
+    class MenuBar(Widget):
+        pass
+
+    class StaticText(Window):
+        pass
+
+    class Button(Window):
+        pass
+
+    class BoxSizer(Widget):
+        pass
+
+    class StaticBoxSizer(Widget):
+        pass
+
+    class StaticBox(Widget):
+        pass
+
+    class Choice(Window):
+        pass
+
+    class TextCtrl(Window):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._font = Font()
+
+        def GetFont(self):
+            return self._font
+
+        def SetFont(self, font):
+            self._font = font
+
+    class ListCtrl(Window):
+        pass
+
+    class SpinCtrl(Window):
+        pass
+
+    class CommandEvent(Widget):
+        pass
+
+    class CloseEvent(Widget):
+        pass
+
+    class KeyEvent(Widget):
+        pass
+
+    class MouseEvent(Widget):
+        pass
+
+    class ListEvent(Widget):
+        pass
+
+    class ContextMenuEvent(Widget):
+        pass
+
+    class Font(Widget):
+        def SetFamily(self, _family):
+            return None
+
+    class Colour(tuple):
+        def __new__(cls, red=0, green=0, blue=0):
+            return tuple.__new__(cls, (red, green, blue))
+
+    class Point(tuple):
+        def __new__(cls, x=0, y=0):
+            return tuple.__new__(cls, (x, y))
+
+    class _Timer:
+        def __init__(self, *_args, **_kwargs):
+            self.stopped = False
+
+        def Stop(self):
+            self.stopped = True
+
+    class _FileDialog(Dialog):
+        def GetPaths(self):
+            return []
+
+        def GetPath(self):
+            return ""
+
+        def SetFilterIndex(self, _index):
+            return None
+
+        def GetFilterIndex(self):
+            return 0
+
+    class _DirDialog(Dialog):
+        def GetPath(self):
+            return ""
+
+    class _MessageDialog(Dialog):
+        pass
+
+    wx.Window = Window
+    wx.Frame = Frame
+    wx.Panel = Panel
+    wx.Dialog = Dialog
+    wx.Accessible = Accessible
+    wx.App = App
+    wx.Menu = Menu
+    wx.MenuBar = MenuBar
+    wx.StaticText = StaticText
+    wx.Button = Button
+    wx.BoxSizer = BoxSizer
+    wx.StaticBoxSizer = StaticBoxSizer
+    wx.StaticBox = StaticBox
+    wx.Choice = Choice
+    wx.TextCtrl = TextCtrl
+    wx.ListCtrl = ListCtrl
+    wx.SpinCtrl = SpinCtrl
+    wx.CommandEvent = CommandEvent
+    wx.CloseEvent = CloseEvent
+    wx.KeyEvent = KeyEvent
+    wx.MouseEvent = MouseEvent
+    wx.ListEvent = ListEvent
+    wx.ContextMenuEvent = ContextMenuEvent
+    wx.Font = Font
+    wx.Colour = Colour
+    wx.Point = Point
+    wx.FileDialog = _FileDialog
+    wx.DirDialog = _DirDialog
+    wx.MessageDialog = _MessageDialog
+    wx.CallAfter = lambda fn, *args, **kwargs: fn(*args, **kwargs)
+    wx.CallLater = lambda *_args, **_kwargs: _Timer()
+    wx.MessageBox = lambda *args, **kwargs: wx.OK
+    wx.DefaultPosition = Point()
+    wx.DefaultSize = Point()
+    wx.__path__ = []
+    wx.__getattr__ = _new_class
+    wx_html2 = types.ModuleType("wx.html2")
+    wx_html2.WebView = type(
+        "WebView",
+        (),
+        {"New": staticmethod(lambda parent: Mock())},
+    )
+    wx.html2 = wx_html2
+
+    wx_lib = types.ModuleType("wx.lib")
+    wx_lib_scrolledpanel = types.ModuleType("wx.lib.scrolledpanel")
+
+    class _ScrolledPanel(Window):
+        def SetupScrolling(self, *args, **kwargs):
+            pass
+
+        def SetSizer(self, *args, **kwargs):
+            pass
+
+        def Fit(self):
+            pass
+
+        def Layout(self):
+            pass
+
+    wx_lib_scrolledpanel.ScrolledPanel = _ScrolledPanel
+    wx_lib.ScrolledPanel = _ScrolledPanel
+    wx.lib = wx_lib
+
+    wx.ID_ANY = -1
+    wx.ID_ABOUT = 1
+    wx.ID_OK = 2
+    wx.OK = 4
+    wx.CANCEL = 8
+    wx.YES = 1
+    wx.NO = 0
+    wx.YES_NO = 16
+    wx.NO_DEFAULT = 32
+    wx.ICON_ERROR = 512
+    wx.ICON_INFORMATION = 128
+    wx.ICON_WARNING = 256
+    wx.DEFAULT_DIALOG_STYLE = 512
+    wx.RESIZE_BORDER = 256
+    wx.CLOSE_BOX = 1024
+    wx.STAY_ON_TOP = 2048
+    wx.VERTICAL = 4096
+    wx.HORIZONTAL = 8192
+    wx.ALL = 16384
+    wx.ALIGN_RIGHT = 32768
+    wx.ALIGN_CENTER_HORIZONTAL = 32768
+    wx.ALIGN_CENTER_VERTICAL = 65536
+    wx.EXPAND = 131072
+    wx.LEFT = 262144
+    wx.RIGHT = 524288
+    wx.BOTTOM = 1048576
+    wx.TE_MULTILINE = 2097152
+    wx.TE_READONLY = 4194304
+    wx.TE_RICH2 = 1 << 25
+    wx.TE_DONTWRAP = 1 << 26
+    wx.FONTFAMILY_TELETYPE = 1
+    wx.FD_OPEN = 1 << 20
+    wx.FD_MULTIPLE = 1 << 21
+    wx.FD_SAVE = 1 << 22
+    wx.FD_OVERWRITE_PROMPT = 1 << 23
+    wx.NOT_FOUND = -1
+    wx.ACC_OK = 0
+    wx.ROLE_SYSTEM_PROPERTYPAGE = 38
+
+    class PyDeadObjectError(RuntimeError):
+        pass
+
+    wx.PyDeadObjectError = PyDeadObjectError
+
+    dialog = types.ModuleType("dialog")
+
+    class _Dialog:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def ShowModal(self):
+            return 0
+
+    for name in _GUI_DIALOG_NAMES:
+        setattr(dialog, name, _Dialog)
+    dialog.finalize_dialog_layout = lambda *args, **kwargs: None
+
+    louis_helper = types.ModuleType("braille.louis_helper")
+    louis_helper.initialize = lambda: None
+    louis_helper.terminate = lambda: None
+
+    return {
+        "wx": wx,
+        "wx.html2": wx_html2,
+        "wx.lib": wx_lib,
+        "wx.lib.scrolledpanel": wx_lib_scrolledpanel,
+        "dialog": dialog,
+        "braille.louis_helper": louis_helper,
+    }

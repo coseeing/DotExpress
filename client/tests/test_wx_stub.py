@@ -220,6 +220,23 @@ class StubFactoryTest(unittest.TestCase):
         self.assertEqual((wx.VERTICAL, wx.EXPAND), (1, 2))
         self.assertIsNot(wx.AnyName, wx.AnyName)
 
+    def test_gui_frame_stubs_are_fresh_with_ignoring_widgets(self) -> None:
+        stubs = self.assert_fresh(
+            wx_stub.gui_frame_stubs,
+            ["braille.louis_helper", "dialog", "wx", "wx.html2", "wx.lib", "wx.lib.scrolledpanel"],
+        )
+        wx = stubs["wx"]
+
+        self.assertTrue(issubclass(wx.Window, wx_stub.Widget))
+        self.assertFalse(issubclass(wx.Window, wx_stub.RecordingWidget))
+        self.assertEqual((wx.ID_OK, wx.OK, wx.VERTICAL), (2, 4, 4096))
+        self.assertEqual(wx.MessageBox("text"), wx.OK)
+        self.assertIs(wx.lib, stubs["wx.lib"])
+        self.assertIs(stubs["wx.lib.scrolledpanel"].ScrolledPanel, wx.lib.ScrolledPanel)
+        self.assertIsNot(wx.EVT_CLOSE, wx.EVT_CLOSE)
+        self.assertEqual(stubs["dialog"].DictionaryNameDialog().ShowModal(), 0)
+        self.assertIsNone(stubs["braille.louis_helper"].initialize())
+
 
 if __name__ == "__main__":
     unittest.main()

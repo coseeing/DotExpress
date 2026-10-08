@@ -13,6 +13,8 @@
 
 這是保持行為不變的重構。每個流程的效果順序**包含非同步順序**（點擊當下的 UI 回合、worker、之後每一個 `CallAfter`/`CallLater` 回合各發生什麼）、訊息、標題與圖示、忙碌狀態切換、快取寫入，以及重入行為（包含下方列出的既有缺陷）都不變。沒有任何使用者可見字串改變；不新增也不刪除 msgid；`client/locales/` 下不修改任何檔案。
 
+本規格已納入實作計畫（`docs/superpowers/plans/2026-10-08-p1-4-export-conversion-presenters.md` 的「Spec Corrections and Refinements」一節）的修正與細化：被搬移的 GUI 測試分屬兩個類別，消失的測試行是 27 行（第 4 步 12 行、第 7 步 15 行），不是 22 個；搬移後的全部匯出 registry 測試斷言 `get_format` 被讀取三次；驗收條件 6 以 AST 比對檢查，而不是 `git diff`；驗收條件 10 的固定 seed 打亂執行要與基準已知的順序失敗比對；特性測試案例 9 拆成兩個測試（共 19 個），案例 10 匯出的是未開啟的文件；事件記錄不帶函式名稱；預期字串都經過 `_`；第 4 步暫時的 `_start_export_conversion` 以模組函式 `missing_default_table_message` 檢查點字表；`test_export_conversion_with_default_table_starts_background_conversion` 在第 4 步刪除；每個重構步驟都先有紅燈測試；每個 import 在不再使用它的那一步離開 `gui`；harness 細節；以及「保持不變的部分」中的三項內部行為說明。
+
 ## 現況（2026-10-08 於 `refactor/p1-4-export-conversion-presenters` 驗證，HEAD `d6e4663`，已合併 P0-1..P0-6 與 P1-1..P1-3）
 
 基準：`cd client && python -m unittest discover -s tests -p "test_*.py"` 執行 696 個測試，`failures=1`（已知的 P2-5 測試），`skipped=9`。`tests.test_conversion_jobs tests.test_gui_document_flows` 執行 133 個測試，`OK (skipped=2)`。以 AST 掃描 `client/`（排除 tests）中 `_()`/`N_()` 的字串常值，共 353 個 msgid。
@@ -75,7 +77,7 @@
 ### 目前涉及的測試
 
 - `tests/test_conversion_jobs.py`（4 個測試）：成功、stage 失敗、過期成功與過期失敗，使用 `FakeThread`（記錄 target 與 args；`start()` 只標記為存活；由測試呼叫 `run()`）與同步的 `call_after`。
-- `tests/test_gui_document_flows.py` 的 `GuiDocumentFlowsTest`：22 個測試以 `Mock` runner 與 `Mock` 的忙碌／對話框方法驅動 frame 內部：`_write_export_document`（4）、`_export_next_document`（5，把 `gui.wx.CallAfter` patch 成同步執行）、`_start_conversion`（1）、`_complete_conversion` / `_finish_conversion_*`（7）、`on_convert`（2）、`_start_export_conversion`（1）、`_missing_default_table_message`（1）、缺少點字表時的 `_export_document_with_dialog`（1）。`DocumentMenuAndExportCharacterizationTest`（P1-2）有 5 個匯出測試：對話框標題／wildcard（patch `gui._`）、副檔名修正、真實 writer 的位元組、全部匯出 HTML 快取、Ctrl+S。`DocumentWorkspaceFlowsCharacterizationTest._make_workspace_frame` 為 `_on_close` 設定 `_conversion_runner` 與 `_close_converting_dialog` 的 mock。
+- `tests/test_gui_document_flows.py` 的 `GuiDocumentFlowsTest` 與其子類別 `BrailleAppLifecycleTest`：22 個測試以 `Mock` runner 與 `Mock` 的忙碌／對話框方法驅動 frame 內部：`_write_export_document`（4）、`_export_next_document`（5，把 `gui.wx.CallAfter` patch 成同步執行）、`_start_conversion`（1）、`_complete_conversion` / `_finish_conversion_*`（7）、`on_convert`（2）、`_start_export_conversion`（1）、`_missing_default_table_message`（1）、缺少點字表時的 `_export_document_with_dialog`（1）。其中只有五個定義在 `GuiDocumentFlowsTest`（`test_write_export_document_*` 三個、`test_write_html_export_document_passes_cached_dual_view_results`、`test_export_next_document_uses_registry_extension`）；`BrailleAppLifecycleTest` 繼承它，所以這五個會跑兩次，其餘 17 個定義在 `BrailleAppLifecycleTest`。搬移它們會移除 27 個測試行：第 4 步 12 行、第 7 步 15 行。`DocumentMenuAndExportCharacterizationTest`（P1-2）有 5 個匯出測試：對話框標題／wildcard（patch `gui._`）、副檔名修正、真實 writer 的位元組、全部匯出 HTML 快取、Ctrl+S。`DocumentWorkspaceFlowsCharacterizationTest._make_workspace_frame` 為 `_on_close` 設定 `_conversion_runner` 與 `_close_converting_dialog` 的 mock。
 - **目前沒有涵蓋：** 真正的 runner 接到 frame；轉換中對話框與其計時器；忙碌狀態的控制項呼叫；全部匯出鏈的非同步順序（所有測試都同步執行 `CallAfter`，看不到每一步的回合邊界）；全部匯出的衝突確認與資料夾取消；上表的重入情境；`ascii` 與未知 stage 的錯誤訊息對應，以及公開錯誤文字。
 - wx stub 遮蔽（`tests/wx_stub.py`）：在 stub frame 上，任何不存在的實例屬性都是 no-op 函式，因此測試必須明確設定 presenter 與 coordinator。
 
@@ -205,16 +207,16 @@ msgid 隨呼叫點移動：`Please select a translation table first.`、`Convers
 
 ### 遷移步驟（每一步是一個全綠的 commit；細節由 plan 說明）
 
-1. `test:` 新增 `tests/conversion_harness.py`（`FakeThread` 從 `test_conversion_jobs.py` 移來、`DeferredCalls`、`FakeTimers`）與 frame 層級的特性測試類別（測試計畫 A 部分）。在今日程式碼上通過，由一個 fixture helper 把真正的 runner 接到 frame。
-2. `test:` 在 `tests/test_conversion_jobs.py` 新增 runner 契約測試（B 部分）。在今日程式碼上通過。
+1. `test:` 新增 `tests/conversion_harness.py`（`FakeThread` 從 `test_conversion_jobs.py` 移來、`DeferredCalls`、`FakeTimers`）與 frame 層級的特性測試類別（測試計畫 A 部分）。在今日程式碼上通過，由一個 fixture helper 把真正的 runner 接到 frame。以一個突變步驟證明新測試在刻意弄壞的 `gui.py`（全部匯出鏈直接呼叫下一步而不經 `wx.CallAfter`；轉換中對話框的計時器從不停止）上會失敗，之後還原。
+2. `test:` 在 `tests/test_conversion_jobs.py` 新增 runner 契約測試（B 部分）。在今日程式碼上通過。一個突變步驟（非 daemon 執行緒；在回呼之後才清除執行緒）證明它們有效。
 3. `refactor:` 先寫測試，新增 `conversion/presenter.py` 與 `tests/test_conversion_presenter.py`（C 部分）。此時仍呼叫 `runner.start(ConversionJobRequest(conversion_request=request))`，使用預設（未使用的）policy。`gui` 尚未使用它。
-4. `refactor:` 讓轉換經過 presenter：接線、`on_convert`、`_on_close`、view 方法，以及一個暫時的 `_start_export_conversion`（檢查點字表後呼叫 `convert_for_export`）。從 frame 刪除轉換狀態機。搬移 `GuiDocumentFlowsTest` 的轉換測試（E 部分），並把特性測試的 helper 換成 presenter。
-5. `refactor:` 讓完成狀態不再進入轉換 job（I-3）：刪除 `ConversionCompletionPolicy` 與 `ConversionJobRequest`，更新 `tests/test_conversion_jobs.py` 與 presenter。
+4. `refactor:` 讓轉換經過 presenter：接線、`on_convert`、`_on_close`、view 方法，以及一個暫時的 `_start_export_conversion`：以模組函式 `missing_default_table_message(self.translation_tables)`（本步 import，第 7 步移除）檢查點字表，再呼叫 `self._conversion_presenter.convert_for_export(...)`。frame helper 使用 `Mock(spec=ConversionPresenter)`，若改用 presenter 檢查點字表會拿到一個 `Mock`；這個函式讀取的是同一份即時的 `translation_tables`。從 frame 刪除轉換狀態機，並移除 `conversion.jobs`、`ConversionOutput` 與 `get_public_error_message` 的 import。搬移 `BrailleAppLifecycleTest` 的 12 個轉換測試（E 部分），包括 mock 了已刪除之 `_start_conversion` 的 `test_export_conversion_with_default_table_starts_background_conversion`，並把特性測試的 helper 換成 presenter。先寫紅燈測試：`FrameConversionDelegationTest`（以 `wx.CallAfter`/`wx.CallLater`、frame 作為 view、即時點字表接線；`_build_conversion_request_for_text`；轉換與 Ctrl+Enter 的委派；關閉時先詢問 presenter 再儲存）與 `FrameViewMethodsTest`（轉換的 view 方法）。
+5. `refactor:` 讓完成狀態不再進入轉換 job（I-3）：刪除 `ConversionCompletionPolicy` 與 `ConversionJobRequest`，更新 `tests/test_conversion_jobs.py` 與 presenter。先寫紅燈測試：`test_results_carry_only_the_job_id_and_the_outcome`（在 runner 修改之前，既有的四個 runner 測試也會因新的 `start(ConversionRequest)` 呼叫而失敗）。
 6. `refactor:` 先寫測試，新增 `documents/export_coordinator.py` 與 `tests/test_export_coordinator.py`（D 部分）。`gui` 尚未使用它。
-7. `refactor:` 讓匯出經過 coordinator：接線、三個進入點、匯出 view 方法；從 frame 刪除匯出鏈；搬移匯出測試（E 部分）；切換特性測試的 helper。
-8. `refactor:` 移除不再使用的 import、M-9、最後的 grep 檢查與 msgid 掃描。
+7. `refactor:` 讓匯出經過 coordinator：接線、三個進入點、匯出 view 方法；從 frame 刪除匯出鏈；搬移匯出測試（E 部分，15 個測試行）；切換特性測試的 helper。移除 `ExportContext`、`ExportBatchResult` 與暫時的 `missing_default_table_message` import；`gui` 新增 `DocumentFormatDescriptor` 作為 `choose_export_path` 的型別標註；`tests/test_gui_document_flows.py` 移除只有被搬移測試使用的 `dataclasses.replace`、`ExportContext` 與 `get_format`。先寫紅燈測試：`FrameExportDelegationTest` 與 `FrameExportViewMethodsTest`。
+8. `refactor:` 移除早已未使用的 `ConversionStageError` import、M-9（先寫紅燈測試：檢查簽章的 `test_show_file_error_formats_the_error_for_the_frame`）、最後的 grep 檢查與 msgid 掃描。
 
-第 1 步的特性測試在每一步之後都必須以**不變的測試本體與預期記錄**通過。只有它們的 fixture helper 會改變（第 4 步：改建 `ConversionPresenter` 而非 runner；第 7 步：再加建 `ExportCoordinator`）。
+第 1 步的特性測試在每一步之後都必須以**不變的測試本體與預期記錄**通過。只有它們的 fixture helper `_wire_conversion` 會改變（第 4 步：改建 `ConversionPresenter` 而非 runner；第 7 步：再加建 `ExportCoordinator`）。驗收條件 6 以 AST 檢查這一點。
 
 ## 保持不變的部分
 
@@ -224,15 +226,17 @@ msgid 隨呼叫點移動：`Please select a translation table first.`、`Convers
 - runner：id、過期過濾、完成回呼內 `is_running()` 為假、daemon 執行緒、非 `ConversionStageError` 例外不遞送。
 - msgid（353 個，集合相同）；不動 `client/locales/` 與 `scripts/`；P1-2 的「檔案」選單建構記錄；P1-3 的文件流程。
 
-刻意的內部差異（使用者都看不到）：翻譯設定與字典路徑改在 `build_request` 內讀取（設忙碌之後），而不是在 `on_convert` 內（設忙碌之前）；兩者之間沒有任何可觀察的事。`_start_export_conversion` 未使用的 `destination_path`/`format_key` 參數與 `bool` 回傳值消失。`_complete_conversion` 只給測試用的 `display_text=` 路徑消失。
+刻意的內部差異（使用者都看不到）：翻譯設定與字典路徑改在 `build_request` 內讀取（設忙碌之後），而不是在 `on_convert` 內（設忙碌之前）；兩者之間沒有任何可觀察的事。`_start_export_conversion` 未使用的 `destination_path`/`format_key` 參數與 `bool` 回傳值消失。`_complete_conversion` 只給測試用的 `display_text=` 路徑消失。`_on_job_failure` 在結束 job 之前先格式化訊息（格式化沒有副作用）。`confirm_overwrite_all` 保留 `if not conflicts: return True`，雖然 coordinator 只在有衝突時呼叫它。
 
 ## 測試計畫
 
 ### 共用 harness（`tests/conversion_harness.py`，新檔，沒有 `test_` 前綴）
 
-- `FakeThread`：原封不動從 `tests/test_conversion_jobs.py` 移來；`make_thread_factory()` 回傳一個會記錄每條執行緒的 factory。
-- `DeferredCalls`：把 `(fn, args, kwargs)` 排入佇列的 `call_after`；提供 `run_next()`、`run_all()`（執行到佇列為空，包含新排入的呼叫）與 `pending`。
-- `FakeTimers`：記錄 `(ms, fn, args)` 的 `call_later(ms, fn, *args)`，回傳具有 `Stop()`（記錄 `stopped`）與 `fire()`（呼叫 `fn(*args)`）的 `FakeTimer`。
+- `FakeThread`：從 `tests/test_conversion_jobs.py` 移來，除縮排外不變；`make_thread_factory()` 回傳 `thread_factory(*, target, args=(), daemon=None)`，其 `threads` 清單屬性記錄每條執行緒。
+- `DeferredCalls(events=None)`：把 `(fn, args, kwargs)` 排入佇列並記錄 `("call_after",)` 的 `call_after`；提供 `run_next()`、`run_all()`（執行到佇列為空，包含新排入的呼叫）與 `pending`。
+- `FakeTimers(events=None)`：記錄 `("call_later", ms, args)` 的 `call_later(ms, fn, *args)`，回傳具有 `number`（從 1 起算）、`stopped`、`Stop()`（設定 `stopped` 並記錄 `("timer.Stop", number)`）與 `fire()`（呼叫 `fn(*args)`，即使已 `Stop()` 也會呼叫，因此「遞送後觸發的計時器什麼都不做」是以 presenter 自己的防護來檢查）的 `FakeTimer`。
+
+記錄項目不帶函式名稱：排入呼叫的程式碼會從 frame 移到 presenter 與 coordinator，而記錄不可以改變。
 
 把它們放在 helper 模組，可以避免從一個測試模組 import 另一個 `TestCase` 模組（那會讓其測試跑兩次）。
 
@@ -240,7 +244,9 @@ msgid 隨呼叫點移動：`Please select a translation table first.`、`Convers
 
 每個測試以 `object.__new__` 建立 frame，使用真的 `DocumentController`、在暫存工作區上的 `DocumentWorkspaceService`、記錄用編輯器（值、`SetValue`、`SetFocus`、`Enable`）、記錄用文件清單（`Enable`）、回傳記錄用選單列（依標籤 `FindMenu`、`EnableTop`）的 `GetMenuBar`，以及在 `gui` 上 patch 的記錄用假物件：`wx.MessageBox`（排好的回答）、`wx.FileDialog`、`wx.DirDialog` 與 `ConvertingDialog`；`gui.get_lang`/`gui.get_charset_maps` 回傳常數。所有假物件都寫入同一份有序的 `self.events` 記錄。一個 fixture helper 用腳本化的假 converter（依原文：輸出或 `ConversionStageError`）、`FakeThread`、作為 `gui.wx.CallAfter` 的 `DeferredCalls` 與作為 `gui.wx.CallLater` 的 `FakeTimers` 接好轉換堆疊。測試只驅動 public 進入點（`on_convert`、`on_export_document`、`on_export_all_documents`、`on_output_text_key_down`、`on_char_hook`、`_on_close`），並明確推進 worker（`thread.run()`）、佇列（`run_next()`）與計時器（`fire()`），每一步之後檢查事件記錄。
 
-案例：
+忙碌切換也會記錄 `FindMenu(<翻譯後標題>)`，藉此釘住既有缺陷 5。`gui_frame_stubs()` 經由 stub 模組的 `__getattr__` 解析 `wx.EVT_CLOSE`，每次存取都回傳新的類別，因此測試把 `gui.wx.EVT_CLOSE` patch 成字串 `"EVT_CLOSE"` 以比對 `Unbind` 的參數。預期字串都經過 `_`：`i18n` 一律載入內建的 zh_TW 目錄，所以測試中 `gui._("Info")` 是 `資訊`，預期訊息以相同的 `_` 建立（frame 測試用 `gui._`，新模組的測試用 `from i18n import _`）。不是 msgid 的文字（全部匯出的摘要與訊息、公開的後備文字）以英文撰寫並加上 `KNOWN BUG (... defect 4)` 註解，因為使用者今天看到的就是英文。每個釘住既有缺陷的測試都帶有 `# KNOWN BUG (P1-4 spec, defect N)`。
+
+案例（共 19 個測試；案例 9 是兩個測試）：
 
 1. 手動成功：點擊回合（依序設忙碌、輸出不變、請求欄位：原文、寬度、模式、字典路徑、點字表副本、常數語言與對應；計時器 2000 ms）；worker 排入一個呼叫，其他都不變；遞送回合（停止計時器、解除忙碌、先設輸出再取得焦點、以原文與點字取代文件、設快取、重新整理 Dual View、"Conversion completed." / "Info" / 資訊圖示）。
 2. 沒有開啟文件時手動成功：設輸出並取得焦點，文件與快取不變，重新整理 Dual View，顯示完成訊息框。
@@ -250,8 +256,8 @@ msgid 隨呼叫點移動：`Please select a translation table first.`、`Convers
 6. 轉換中對話框：執行中觸發計時器會顯示一個對話框（parent 為 frame、`Show`、`Raise`）；再次觸發不會建立第二個；遞送時先停止計時器並關閉對話框（`Unbind(EVT_CLOSE)`、`Destroy`），再解除忙碌。遞送後觸發的計時器什麼都不做。
 7. 過期計時器：job 2 執行中觸發 job 1 的計時器，什麼都不做。
 8. 執行中關閉：`Veto`、不儲存、不關閉對話框；`CanVeto()` 為假時：儲存、關閉對話框、`Skip`。
-9. 已有點字的單一匯出：檔案對話框參數、寫出的位元組、"Export Complete" 訊息框；`OSError`（目標位置是資料夾）顯示 "Failed to export document" 錯誤框且沒有成功訊息框；錯誤的副檔名會被修正。
-10. pending 文件的單一匯出：設忙碌、轉換 `document.text`（不是編輯器文字）；遞送：解除忙碌、以轉換後的點字寫檔、"Export Complete"；輸出編輯器、快取與 Dual View 都不變；沒有 "Conversion completed." 訊息框。
+9. 已有點字的單一匯出，兩個測試：(a) `test_single_export_with_braille_writes_and_reports`：檔案對話框參數、寫出的位元組、"Export Complete" 訊息框；(b) `test_single_export_write_error_and_extension_correction`：`OSError`（目標位置是資料夾）顯示 "Failed to export document" 錯誤框且沒有成功訊息框；錯誤的副檔名會被修正。
+10. pending 文件的單一匯出：測試開啟一份文件、匯出另一份（已選取、pending）文件，因為先儲存會把編輯器文字複製到*開啟中*的文件，只有未開啟的文件才能證明匯出轉換的是 `document.text` 而不是編輯器文字。設忙碌、轉換 `document.text`（不是編輯器文字）；遞送：解除忙碌、以轉換後的點字寫檔、"Export Complete"；輸出編輯器、快取與 Dual View 都不變；沒有 "Conversion completed." 訊息框。
 11. pending 文件的單一匯出：轉換失敗顯示一個 stage 錯誤框（"Error"），不寫檔；缺少點字表顯示一個 "Error" 訊息框，不設忙碌，不開執行緒。
 12. 全部匯出，混合清單 `[ready, pending, ready-2, write-fail(資料夾), convert-fail, pending-ok]`：回合邊界（第一步在選單回合；之後每一步只有在 `run_next()` 之後才執行；pending 那一步只啟動轉換；它的遞送才寫檔並排入下一步）、只在每次轉換前後切換忙碌，以及最後一個帶有正確失敗行的警告摘要。
 13. 全部匯出，全部已有點字：一個資訊摘要；沒有忙碌呼叫。
@@ -267,25 +273,27 @@ msgid 隨呼叫點移動：`Please select a translation table first.`、`Convers
 
 ### C. `tests/test_conversion_presenter.py`（新檔，第 3 步，不用 wx 也不用 stub scope）
 
-一個記錄用 view（實作 `ConversionView`，一份有序記錄）、真的 `DocumentController`、harness 的 `FakeThread`/`DeferredCalls`/`FakeTimers`，以及假 converter。涵蓋 presenter 設計的每一點：`missing_default_table_message` 對 `{}`、`{"default": ""}`、`{"default": None}` 與已設定的點字表；`format_conversion_error` 對每個 stage 與公開文字；`convert()` 的防護順序（執行中、點字表、再讀原文）；`_start` 的順序；計時器回呼的檢查；手動成功（有／沒有開啟文件，以及開啟名稱不在清單中時仍寫入快取）；手動失敗；匯出成功與失敗（只有回呼，不動輸出、快取，也沒有訊息框）；前一個 job 完成後的下一個 job 使用自己的完成處理；被取代的 job 不遞送任何東西；`is_running()` 與 `missing_table_message()` 讀取即時狀態。這些是 E 部分從 frame 搬來之測試的 presenter 版本。
+一個記錄用 view（實作 `ConversionView`，一份有序記錄）、真的 `DocumentController`、harness 的 `FakeThread`/`DeferredCalls`/`FakeTimers`，以及假 converter。涵蓋 presenter 設計的每一點：`missing_default_table_message` 對 `{}`、`{"default": ""}`、`{"default": None}` 與已設定的點字表；`format_conversion_error` 對每個 stage 與公開文字；`convert()` 的防護順序（執行中、點字表、再讀原文）；`_start` 的順序；計時器回呼的檢查；手動成功（有／沒有開啟文件，以及開啟名稱不在清單中時仍寫入快取）；手動失敗；匯出成功與失敗（只有回呼，不動輸出、快取，也沒有訊息框）；前一個 job 完成後的下一個 job 使用自己的完成處理；被取代的 job 不遞送任何東西；`is_running()` 與 `missing_table_message()` 讀取即時狀態；模組既不 import `wx` 也不 import `gui`（AST 檢查，與 `test_workspace_service.py` 相同）。這些是 E 部分從 frame 搬來之測試的 presenter 版本。
 
 ### D. `tests/test_export_coordinator.py`（新檔，第 6 步，不用 wx 也不用 stub scope）
 
-一個記錄用 view、真的 `DocumentController`、假的 `ExportConversions`（腳本化：啟動後由測試呼叫存下的回呼）、`DeferredCalls`、使用真實 registry writer 的暫存資料夾，以及用 `import documents.export_coordinator as coordinator_module` 來 patch `get_format`（P0 審查 I-1 建議的 import 寫法）。案例：`write_document`（每種格式的 registry writer 與 `ExportContext`、每份文件的快取、不可匯出的 `ValueError`）；`export_document`（傳給 view 的預設檔名與 descriptor、取消、副檔名修正、已有點字、`OSError`、pending 成功與失敗、缺少點字表）；`export_all`（取消資料夾、對話框之後才取快照、只在需要時詢問衝突及其回答、以 `DeferredCalls` 檢查回合邊界、每步一次 `get_format`、成功／部分失敗摘要的文字、標題與種類、逐份文件的缺少點字表、`ValueError` 會中斷鏈）。一個整合測試在 coordinator 後面接真的 `ConversionPresenter`（記錄用 view、`FakeThread`）執行混合的全部匯出。
+一個記錄用 view、真的 `DocumentController`、假的 `ExportConversions`（腳本化：啟動後由測試呼叫存下的回呼）、`DeferredCalls`、使用真實 registry writer 的暫存資料夾，以及用 `import documents.export_coordinator as coordinator_module` 來 patch `get_format`（P0 審查 I-1 建議的 import 寫法）。案例：`write_document`（每種格式的 registry writer 與 `ExportContext`、每份文件的快取、不可匯出的 `ValueError`）；`export_document`（傳給 view 的預設檔名與 descriptor、取消、副檔名修正、已有點字、`OSError`、pending 成功與失敗、缺少點字表）；`export_all`（取消資料夾、對話框之後才取快照、只在需要時詢問衝突及其回答、以 `DeferredCalls` 檢查回合邊界、`get_format` 在衝突檢查、每一步與每次 `write_document` 時讀取、成功／部分失敗摘要的文字、標題與種類、逐份文件的缺少點字表、`ValueError` 會中斷鏈）。一個整合測試在 coordinator 後面接真的 `ConversionPresenter`（記錄用 view、`FakeThread`）執行混合的全部匯出。模組既不 import `wx` 也不 import `gui`（AST 檢查）。
 
 ### E. 更新與搬移的測試（`tests/test_gui_document_flows.py`）
 
 | 今日 | 之後 |
 | --- | --- |
-| `test_write_export_document_*`（4）、`test_export_next_document_uses_registry_extension`、`test_export_all_*`（4）、`test_single_pending_export_missing_table_*` | 相同斷言移到 D 部分（第 7 步）。 |
+| `test_write_export_document_*`（3）與 `test_write_html_export_document_passes_cached_dual_view_results`、`test_export_next_document_uses_registry_extension`、`test_export_all_*`（4）、`test_single_pending_export_missing_table_*` | 相同斷言移到 D 部分（第 7 步；15 個測試行，因為前五個也在 `BrailleAppLifecycleTest` 中執行）。例外一個：`test_export_next_document_uses_registry_extension` 以假 writer 取代真的 writer，並斷言 `get_format` 只被呼叫一次。經由 coordinator 的 public `export_all`，`get_format` 會在衝突檢查、該步與 `write_document` 中被讀取，因此 `test_export_all_reads_the_format_for_conflicts_each_step_and_each_write` 斷言三次呼叫，以及寫出檔名中被 patch 的副檔名。 |
 | `test_start_conversion_builds_request_and_starts_runner`、`test_manual_conversion_updates_output_focus_and_shows_completion`、`test_export_conversion_calls_success_callback_without_manual_message`、`test_export_conversion_calls_error_callback_without_showing_worker_error`、`test_export_conversion_does_not_replace_dual_view_cache`、`test_text_processing_failure_uses_its_own_message`、`test_later_job_uses_its_own_policy_after_previous_completion`、`test_successful_manual_conversion_stores_segments_and_refreshes_open_viewer`、`test_missing_default_table_message_reports_only_unset_default` | 相同斷言移到 C 部分（第 4 步）。 |
 | `test_convert_without_default_table_*`、`test_convert_with_default_table_*` | C 部分，另加一個 frame 委派測試：`on_convert` 呼叫 `presenter.convert()`。 |
-| `test_export_conversion_with_default_table_starts_background_conversion` | C 部分（`convert_for_export` 的請求內容），以及一個 `_build_conversion_request_for_text` 的 frame 測試。 |
+| `test_export_conversion_with_default_table_starts_background_conversion` | 在第 4 步刪除（它 mock 了第 4 步刪除的 `_start_conversion`）。由 `test_convert_for_export_converts_given_text_without_checks`（C 部分）與 frame 測試 `test_build_conversion_request_for_text_reads_current_settings` 涵蓋；暫時的 `_start_export_conversion` 在第 7 步刪除之前，由特性測試案例 10-12、14、16 與 18 端到端執行。 |
 | P1-2 的 `test_export_dialog_title_default_file_wildcard_and_style`、`test_export_dialog_corrects_only_a_wrong_extension`、`test_real_writers_produce_today_bytes`、`test_export_all_html_uses_each_document_cache` | 斷言不變，改由以 frame 為 view 建立的 `frame._export_coordinator` 進入（第 7 步）。`gui._` 的 patch 仍作用在對話框標題與 wildcard 上。 |
 | `test_ctrl_s_in_output_editor_exports_open_document_as_brl` | 預期在儲存與 `SetFocus` 之間出現 `call.coordinator.export_document(<開啟的文件>, "brl")`。 |
 | `_make_frame`、`_make_workspace_frame` | 改設 `_conversion_presenter` / `_export_coordinator`（mock），不再設 `_conversion_runner`、`_convert_dialog_timer`、`_set_conversion_busy`、`_close_converting_dialog`、`_show_export_all_result`；`test_close_vetoes_when_save_fails` 改檢查 `close_converting_dialog`。 |
 
-新的 frame 測試（第 4 與第 7 步先紅後綠）：`FrameConversionDelegationTest`（`_initialize_conversion_state` 以 `wx.CallAfter`/`wx.CallLater`、frame 作為 view 及其 controller 接線；`on_convert`、Ctrl+Enter、`_on_close` 的委派）與 `FrameExportDelegationTest`（接線；三個進入點保留防護與先儲存，然後呼叫 coordinator）。frame view 方法的測試：`set_conversion_busy`（FindMenu/EnableTop/Enable 呼叫、選單列為 `None`、找不到標籤）、`show_converting_dialog` 的重複呼叫、`close_converting_dialog`、`show_conversion_output`、`show_info`/`show_warning`/`show_error` 的參數、`choose_export_directory`、`confirm_overwrite_all`。
+第 4 步的各列（9 + 2 + 1 個測試，全部定義在 `BrailleAppLifecycleTest`）移除 12 個測試行。
+
+新的 frame 測試（第 4、7 與 8 步先紅後綠）：`FrameConversionDelegationTest`（`_initialize_conversion_state` 以 `wx.CallAfter`/`wx.CallLater`、frame 作為 view 及其 controller 接線；`on_convert`、Ctrl+Enter、`_on_close` 的委派）與 `FrameExportDelegationTest`（接線；三個進入點保留防護與先儲存，然後呼叫 coordinator）。frame view 方法的測試（第 4 步的 `FrameViewMethodsTest`、第 7 步的 `FrameExportViewMethodsTest`）：`set_conversion_busy`（FindMenu/EnableTop/Enable 呼叫、選單列為 `None`、找不到標籤）、`show_converting_dialog` 的重複呼叫、`close_converting_dialog`、`show_conversion_output`、`show_info`/`show_warning`/`show_error` 的參數、`choose_export_path`、`choose_export_directory`、`confirm_overwrite_all`；以及第 8 步的 `test_show_file_error_formats_the_error_for_the_frame`（M-9）。
 
 ## 驗收條件
 
@@ -294,11 +302,11 @@ msgid 隨呼叫點移動：`Please select a translation table first.`、`Convers
 3. `grep -nE "^(import wx|from wx)|^(import|from) gui" client/conversion/presenter.py client/documents/export_coordinator.py client/conversion/jobs.py` 沒有輸出。
 4. `grep -n "wx.CallAfter\|wx.CallLater" client/gui.py` 只輸出 `_initialize_conversion_state` 中的行。
 5. `grep -nE "\b(ConversionStageError|ConversionOutput|get_public_error_message|ExportContext|ExportBatchResult)\b|conversion\.jobs" client/gui.py` 沒有輸出，且 `grep -n "parent: wx.Window | None = None" client/gui.py` 不會比對到 `_show_file_error`。
-6. 第 1 步的特性測試類別除了 fixture helper 之外沒有改變（`git diff <第 1 步 commit> -- client/tests/test_gui_document_flows.py` 在其測試方法內沒有變更）。
+6. 第 1 步的特性測試類別除了 fixture helper 之外沒有改變：在第 1 步 commit 與工作目錄之間，以 AST（忽略行號）比對 `ConversionExportFlowsCharacterizationTest` 的每個成員及其模組層級假物件，只回報 `_wire_conversion` 有變更。（`git diff` 無法判斷變更是否位於測試方法內。）
 7. `git diff main --stat -- client/locales scripts` 為空；msgid 掃描回報相同的 353 個 msgid。
 8. 路線圖驗證通過：`cd client && python3 -m unittest tests.test_conversion_jobs tests.test_export_coordinator tests.test_conversion_presenter tests.test_gui_document_flows -v`。另外 `tests.test_i18n tests.test_wx_stub tests.test_removed_dead_code tests.test_menu_builder tests.test_workspace_service` 也通過。
-9. 全套件：`failures=1`（只有 P2-5）、`errors=0`，Linux 上 `skipped=9`。
-10. stub scope 順序：`tests.test_conversion_presenter` 與 `tests.test_export_coordinator` 單獨執行通過，`tests.test_gui_document_flows tests.test_conversion_presenter tests.test_export_coordinator` 以兩種順序執行都通過；全套件以固定 seed 打亂順序執行，沒有新的失敗。
+9. 全套件：754 個測試（696 - 搬移的 27 + 新增的 85）、`failures=1`（只有 P2-5）、`errors=0`，Linux 上 `skipped=9`。
+10. stub scope 順序：`tests.test_conversion_presenter` 與 `tests.test_export_coordinator` 單獨執行通過，`tests.test_gui_document_flows tests.test_conversion_presenter tests.test_export_coordinator` 以兩種順序執行都通過；全套件以固定 seed（1-10）打亂順序執行，沒有出現基準已知集合以外的失敗或錯誤行。基準上某些 seed 本來就會在 `test_conversion_service` 出現 8 個錯誤（P1-1 plan 細化第 8 點所述的 `translate` 重新 import 污染，其中包含 P2-5 測試）；新模組會改變打亂結果，所以會碰到它的 seed 也會改變。
 
 ## 風險
 
@@ -308,7 +316,7 @@ msgid 隨呼叫點移動：`Please select a translation table first.`、`Convers
 - **frame 上的 view 方法**（低）。`wx.Frame` 子類別上的新 public 名稱可能與 wx 名稱衝突。選用的名稱全為小寫 `snake_case`；wxPython 使用 `CamelCase`。patch `frame._refresh_dual_view` 的測試仍有效，因為 `refresh_dual_view` 委派給它。
 - **翻譯綁定**（低）。presenter 與 coordinator 的字串使用它們各自模組的 `_`。patch `gui._` 的測試（只有 P1-2 的對話框測試）仍作用在留在 `gui.py` 的字串上。
 - **stub scope 下 import 新模組**（低）。兩個模組都會先由 `gui` 在 stub scope 內 import。緩解：驗收條件 10 的順序檢查（P0 審查 I-1）。
-- **測試異動**（中）。約 25 個 GUI 測試要搬移。緩解：E 部分的表逐一對應；plan 在刪除 frame 方法的同一個 commit 搬移它們。
+- **測試異動**（中）。22 個 GUI 測試要搬移（27 個測試行，因為其中五個也在子類別中執行），另有四個 P1-2 測試改經 coordinator 進入。緩解：E 部分的表逐一對應；plan 在刪除 frame 方法的同一個 commit 搬移它們。
 - **只能在 Windows 驗證的行為**（中，此處無法驗證）。真實執行緒、`wx.CallAfter`、`wx.CallLater`、`ConvertingDialog`、`EnableTop` 與訊息框只在打包後的 app 中執行。見 Windows 驗證債。
 
 ## 調查中發現的既有缺陷（本任務不修）

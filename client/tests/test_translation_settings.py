@@ -15,16 +15,14 @@ from settings.translation import (
 
 class TranslationSettingsTest(unittest.TestCase):
     def setUp(self) -> None:
-        self._original_config_path = config.CONFIG_PATH
         self._tmpdir = tempfile.TemporaryDirectory()
-        config.CONFIG_PATH = str(Path(self._tmpdir.name) / "config.json")
+        self.store = config.ConfigStore(Path(self._tmpdir.name) / "config.json")
 
     def tearDown(self) -> None:
-        config.CONFIG_PATH = self._original_config_path
         self._tmpdir.cleanup()
 
     def _write_config(self, conversion: dict[str, object]) -> None:
-        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+        with open(self.store.path, "w", encoding="utf-8") as f:
             json.dump({"conversion": conversion}, f)
 
     def test_load_normalizes_invalid_config(self) -> None:
@@ -36,7 +34,7 @@ class TranslationSettingsTest(unittest.TestCase):
             }
         )
 
-        settings = load_translation_settings(["default", "math"])
+        settings = load_translation_settings(self.store, ["default", "math"])
 
         self.assertEqual(
             settings,
@@ -57,16 +55,16 @@ class TranslationSettingsTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            load_translation_settings(["default", "math"]),
+            load_translation_settings(self.store, ["default", "math"]),
             TranslationSettings("ascii", 52, "math"),
         )
 
     def test_save_persists_one_complete_settings_value(self) -> None:
         settings = TranslationSettings("ascii", 64, "math")
 
-        save_translation_settings(settings)
+        save_translation_settings(self.store, settings)
 
-        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(self.store.path, "r", encoding="utf-8") as f:
             self.assertEqual(
                 json.load(f),
                 {

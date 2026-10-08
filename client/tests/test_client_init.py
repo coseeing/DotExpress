@@ -249,12 +249,12 @@ class ClientInitConfigCharacterizationTest(unittest.TestCase):
         return _Response(self.RESPONSE)
 
     def start(self, thread_factory=_InlineThread):
-        """Start background client init against ``self.config_path`` (today: the module-level config path)."""
-        with patch.object(config, "CONFIG_PATH", str(self.config_path)):
-            return client_init.start_client_init_background(
-                run_client_init=partial(client_init.run_client_init, opener=self.opener),
-                thread_factory=thread_factory,
-            )
+        """Start background client init with a config store for ``self.config_path``."""
+        return client_init.start_client_init_background(
+            config.ConfigStore(self.config_path),
+            run_client_init=partial(client_init.run_client_init, opener=self.opener),
+            thread_factory=thread_factory,
+        )
 
     def test_first_start_creates_saves_and_sends_one_client_id(self) -> None:
         thread = self.start()

@@ -1,13 +1,10 @@
 from dataclasses import dataclass
 
 from config import (
+    ConfigStore,
     DEFAULT_BRAILLE_FONT,
     DEFAULT_VIEW_FONT_SIZE,
     DEFAULT_VIEW_SCHEME,
-    get_braille_font,
-    get_view_font_size,
-    get_view_scheme,
-    set_view_settings,
 )
 from .options import (
     BRAILLE_FONT_OPTIONS,
@@ -36,19 +33,19 @@ def normalize_view_settings(settings: ViewSettings) -> ViewSettings:
     )
 
 
-def load_view_settings() -> ViewSettings:
+def load_view_settings(store: ConfigStore) -> ViewSettings:
     return normalize_view_settings(
         ViewSettings(
-            get_view_font_size(DEFAULT_VIEW_FONT_SIZE),
-            get_view_scheme(DEFAULT_VIEW_SCHEME),
-            get_braille_font(DEFAULT_BRAILLE_FONT),
+            store.get_view_font_size(DEFAULT_VIEW_FONT_SIZE),
+            store.get_view_scheme(DEFAULT_VIEW_SCHEME),
+            store.get_braille_font(DEFAULT_BRAILLE_FONT),
         )
     )
 
 
-def save_view_settings(settings: ViewSettings) -> None:
+def save_view_settings(store: ConfigStore, settings: ViewSettings) -> None:
     normalized = normalize_view_settings(settings)
-    set_view_settings(
+    store.set_view_settings(
         normalized.font_size,
         normalized.scheme,
         normalized.braille_font,

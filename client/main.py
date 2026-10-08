@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from adapters.translation.provider import build_default_translation_runtime
-from app_paths import get_dictionary_directory
-from config import DEFAULT_TRANSLATION_TABLES, get_charset_maps, get_lang
+from app_paths import build_application_paths
+from config import DEFAULT_TRANSLATION_TABLES, ConfigStore
 from conversion.service import ConversionRequest, convert_text_with_alignment
 
 
@@ -13,6 +13,8 @@ SAMPLE_TEXT = """
 
 
 def run_demo(text: str = SAMPLE_TEXT) -> None:
+    paths = build_application_paths()
+    config_store = ConfigStore(paths.config)
     runtime = build_default_translation_runtime()
     try:
         output = convert_text_with_alignment(
@@ -20,15 +22,15 @@ def run_demo(text: str = SAMPLE_TEXT) -> None:
                 raw_text=text,
                 output_mode="unicode",
                 width=40,
-                dictionary_path=get_dictionary_directory() / "default.csv",
+                dictionary_path=paths.dictionary / "default.csv",
                 data_dir=BASE_DIR / "data",
                 translation_tables={
                     **DEFAULT_TRANSLATION_TABLES,
                     "default": "en-ueb-g2.ctb",
                     "en": "en-ueb-g2.ctb",
                 },
-                lang=get_lang(),
-                charset_maps=get_charset_maps(),
+                lang=config_store.get_lang(),
+                charset_maps=config_store.get_charset_maps(),
             ),
             runtime=runtime,
         )

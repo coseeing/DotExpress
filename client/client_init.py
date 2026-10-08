@@ -11,7 +11,6 @@ import urllib.request
 from urllib.error import URLError
 
 import about
-from config import get_lang, get_or_create_client_id
 from log import get_logger
 
 logger = get_logger("dotexpress.client_init", "init.log")
@@ -142,11 +141,11 @@ def post_client_init(
 def run_client_init(
     *,
     version: str = about.version,
-    client_id_provider=get_or_create_client_id,
+    client_id_provider,
     os_name_provider=platform.system,
     os_version_provider=platform.version,
     arch_provider=platform.machine,
-    locale_provider=get_lang,
+    locale_provider,
     opener=urllib.request.urlopen,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> ClientInitResult:
@@ -162,13 +161,17 @@ def run_client_init(
 
 
 def start_client_init_background(
+    config_store,
     *,
     run_client_init=run_client_init,
     thread_factory=threading.Thread,
 ):
     def worker():
         try:
-            run_client_init()
+            run_client_init(
+                client_id_provider=config_store.get_or_create_client_id,
+                locale_provider=config_store.get_lang,
+            )
         except Exception:
             pass
 

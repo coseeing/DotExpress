@@ -84,9 +84,9 @@ class ConversionLanguageTest(unittest.TestCase):
         math_translator = RecordingMathTranslator()
         config._runtime_lang = "ko"
         with patch.dict(os.environ, {config.LANG_ENV: env_lang}), patch.object(
-            config, "get_lang", side_effect=AssertionError("config.get_lang must not be read")
+            config.ConfigStore, "get_lang", side_effect=AssertionError("ConfigStore.get_lang must not be read")
         ), patch.object(
-            config, "get_charset_maps", side_effect=AssertionError("config.get_charset_maps must not be read")
+            config.ConfigStore, "get_charset_maps", side_effect=AssertionError("ConfigStore.get_charset_maps must not be read")
         ):
             output = convert_text_with_alignment(
                 request,

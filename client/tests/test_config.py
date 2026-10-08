@@ -13,18 +13,16 @@ import config
 
 class ConfigTest(unittest.TestCase):
     def setUp(self) -> None:
-        self._original_config_path = config.CONFIG_PATH
         self._tmpdir = tempfile.TemporaryDirectory()
-        config.CONFIG_PATH = str(Path(self._tmpdir.name) / "config.json")
+        self.store = config.ConfigStore(Path(self._tmpdir.name) / "config.json")
 
     def tearDown(self) -> None:
-        config.CONFIG_PATH = self._original_config_path
         self._tmpdir.cleanup()
 
     def test_view_settings_are_persisted_under_view_section(self) -> None:
-        config.set_view_settings(18, "dark", "simbraille")
+        self.store.set_view_settings(18, "dark", "simbraille")
 
-        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(self.store.path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         self.assertEqual(
@@ -38,9 +36,9 @@ class ConfigTest(unittest.TestCase):
                 }
             },
         )
-        self.assertEqual(config.get_view_font_size(), 18)
-        self.assertEqual(config.get_view_scheme(), "dark")
-        self.assertEqual(config.get_braille_font("default"), "simbraille")
+        self.assertEqual(self.store.get_view_font_size(), 18)
+        self.assertEqual(self.store.get_view_scheme(), "dark")
+        self.assertEqual(self.store.get_braille_font("default"), "simbraille")
 
     def test_conversion_settings_roundtrip_under_conversion_section(self) -> None:
         tables = {
@@ -51,11 +49,11 @@ class ConfigTest(unittest.TestCase):
             "math": "UEB",
         }
 
-        config.set_translation_tables(tables)
-        config.set_output_mode("ascii")
-        config.set_conversion_width(52)
+        self.store.set_translation_tables(tables)
+        self.store.set_output_mode("ascii")
+        self.store.set_conversion_width(52)
 
-        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(self.store.path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         self.assertEqual(
@@ -69,19 +67,19 @@ class ConfigTest(unittest.TestCase):
                 }
             },
         )
-        self.assertEqual(config.get_translation_tables(), tables)
-        self.assertEqual(config.get_output_mode(), "ascii")
-        self.assertEqual(config.get_conversion_width(), 52)
+        self.assertEqual(self.store.get_translation_tables(), tables)
+        self.assertEqual(self.store.get_output_mode(), "ascii")
+        self.assertEqual(self.store.get_conversion_width(), 52)
 
     def test_translation_tables_default_includes_math_table(self) -> None:
-        tables = config.get_translation_tables()
+        tables = self.store.get_translation_tables()
 
         self.assertEqual(tables["math"], "UEB")
 
     def test_new_config_file_contains_language_detection_defaults(self) -> None:
-        config.set_output_mode("unicode")
+        self.store.set_output_mode("unicode")
 
-        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(self.store.path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         self.assertEqual(
@@ -90,7 +88,7 @@ class ConfigTest(unittest.TestCase):
         )
 
     def test_charset_maps_read_from_config_with_defaults_for_missing_values(self) -> None:
-        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+        with open(self.store.path, "w", encoding="utf-8") as f:
             json.dump(
                 {
                     "language_detection": {
@@ -100,15 +98,15 @@ class ConfigTest(unittest.TestCase):
                 f,
             )
 
-        charset_maps = config.get_charset_maps()
+        charset_maps = self.store.get_charset_maps()
 
         self.assertEqual(charset_maps["arabicCharactersLanguage"], "fa")
         self.assertEqual(charset_maps["CJKCharactersLanguage"], "zh")
 
     def test_selected_dictionary_roundtrip_under_conversion_section(self) -> None:
-        config.set_selected_dictionary("math")
+        self.store.set_selected_dictionary("math")
 
-        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(self.store.path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         self.assertEqual(
@@ -120,10 +118,10 @@ class ConfigTest(unittest.TestCase):
                 }
             },
         )
-        self.assertEqual(config.get_selected_dictionary("default"), "math")
+        self.assertEqual(self.store.get_selected_dictionary("default"), "math")
 
     def test_view_settings_write_braille_font_and_keep_other_sections(self) -> None:
-        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+        with open(self.store.path, "w", encoding="utf-8") as f:
             json.dump(
                 {
                     "conversion": {"width": 52},
@@ -132,9 +130,9 @@ class ConfigTest(unittest.TestCase):
                 f,
             )
 
-        config.set_view_settings(14, "light", "default")
+        self.store.set_view_settings(14, "light", "default")
 
-        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(self.store.path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         self.assertEqual(
@@ -149,21 +147,22 @@ class ConfigTest(unittest.TestCase):
                 },
             },
         )
-        self.assertEqual(config.get_braille_font(), "default")
+        self.assertEqual(self.store.get_braille_font(), "default")
 
     def test_unused_single_view_setters_are_removed(self) -> None:
         for name in ("set_view_font_size", "set_view_scheme", "set_braille_font"):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(config, name))
+                self.assertFalse(hasattr(config.ConfigStore, name))
 
     def test_braille_font_defaults_to_simbraille_when_config_is_missing(self) -> None:
-        self.assertEqual(config.get_braille_font(), "simbraille")
+        self.assertEqual(self.store.get_braille_font(), "simbraille")
 
     def test_client_id_is_generated_and_persisted_under_client_section(self) -> None:
-        client_id = config.get_or_create_client_id()
+        client_id = self.store.get_or_create_client_id()
 
         UUID(client_id)
-        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(self.store.path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         self.assertEqual(
@@ -173,22 +172,22 @@ class ConfigTest(unittest.TestCase):
                 "client": {"id": client_id},
             },
         )
-        self.assertEqual(config.get_or_create_client_id(), client_id)
+        self.assertEqual(self.store.get_or_create_client_id(), client_id)
 
     def test_existing_client_id_is_reused(self) -> None:
         expected_client_id = "existing-client-id"
-        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+        with open(self.store.path, "w", encoding="utf-8") as f:
             json.dump({"client": {"id": expected_client_id}}, f)
 
-        self.assertEqual(config.get_or_create_client_id(), expected_client_id)
+        self.assertEqual(self.store.get_or_create_client_id(), expected_client_id)
 
     def test_client_id_generation_preserves_unrelated_config_values(self) -> None:
-        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+        with open(self.store.path, "w", encoding="utf-8") as f:
             json.dump({"view": {"font_size": 18}}, f)
 
-        client_id = config.get_or_create_client_id()
+        client_id = self.store.get_or_create_client_id()
 
-        with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(self.store.path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         self.assertEqual(data["view"], {"font_size": 18})
@@ -281,38 +280,36 @@ class ConfigTest(unittest.TestCase):
 
 class ConfigSaveFailureLoggingTest(unittest.TestCase):
     def setUp(self) -> None:
-        self._original_config_path = config.CONFIG_PATH
         self._tmpdir = tempfile.TemporaryDirectory()
         self._blocker = Path(self._tmpdir.name) / "blocker"
         self._blocker.write_text("not a directory", encoding="utf-8")
-        config.CONFIG_PATH = str(self._blocker / "nested" / "config.json")
+        self.store = config.ConfigStore(self._blocker / "nested" / "config.json")
 
     def tearDown(self) -> None:
-        config.CONFIG_PATH = self._original_config_path
         self._tmpdir.cleanup()
 
     def test_save_failure_is_logged_and_not_raised(self) -> None:
         with self.assertLogs("dotexpress.config", level="ERROR") as captured:
-            config.set_output_mode("ascii")
+            self.store.set_output_mode("ascii")
 
         self.assertEqual(len(captured.records), 1)
         record = captured.records[0]
         self.assertEqual(record.levelno, logging.ERROR)
         self.assertIsNotNone(record.exc_info)
-        self.assertIn(config.CONFIG_PATH, record.getMessage())
-        self.assertFalse(Path(config.CONFIG_PATH).exists())
+        self.assertIn(str(self.store.path), record.getMessage())
+        self.assertFalse(self.store.path.exists())
         self.assertTrue(self._blocker.is_file())
 
     def test_every_save_failure_is_logged(self) -> None:
         with self.assertLogs("dotexpress.config", level="ERROR") as captured:
-            config.set_output_mode("ascii")
-            config.set_conversion_width(52)
+            self.store.set_output_mode("ascii")
+            self.store.set_conversion_width(52)
 
         self.assertEqual(len(captured.records), 2)
 
     def test_save_failure_log_does_not_contain_config_data(self) -> None:
         with self.assertLogs("dotexpress.config", level="ERROR") as captured:
-            client_id = config.get_or_create_client_id()
+            client_id = self.store.get_or_create_client_id()
 
         UUID(client_id)
         self.assertNotIn(client_id, "\n".join(captured.output))
@@ -325,28 +322,26 @@ class ConfigSaveFailureLoggingTest(unittest.TestCase):
 
         try:
             with patch.object(config, "logger", unopenable):
-                config.set_output_mode("ascii")
+                self.store.set_output_mode("ascii")
         finally:
             handler.close()
 
         self.assertFalse(missing_log.parent.exists())
-        self.assertFalse(Path(config.CONFIG_PATH).exists())
+        self.assertFalse(self.store.path.exists())
 
 
 class ConfigLoadFailureLoggingTest(unittest.TestCase):
     def setUp(self) -> None:
-        self._original_config_path = config.CONFIG_PATH
         self._tmpdir = tempfile.TemporaryDirectory()
-        config.CONFIG_PATH = str(Path(self._tmpdir.name) / "config.json")
+        self.store = config.ConfigStore(Path(self._tmpdir.name) / "config.json")
         config._logged_load_failures.clear()
 
     def tearDown(self) -> None:
-        config.CONFIG_PATH = self._original_config_path
         config._logged_load_failures.clear()
         self._tmpdir.cleanup()
 
     def _write_raw(self, content: bytes) -> None:
-        with open(config.CONFIG_PATH, "wb") as f:
+        with open(self.store.path, "wb") as f:
             f.write(content)
 
     def _warnings(self, captured) -> list[logging.LogRecord]:
@@ -356,34 +351,34 @@ class ConfigLoadFailureLoggingTest(unittest.TestCase):
         self._write_raw(b"{not json")
 
         with self.assertLogs("dotexpress.config", level="WARNING") as captured:
-            output_mode = config.get_output_mode()
-            width = config.get_conversion_width()
+            output_mode = self.store.get_output_mode()
+            width = self.store.get_conversion_width()
 
         self.assertEqual(output_mode, config.DEFAULT_OUTPUT_MODE)
         self.assertEqual(width, config.DEFAULT_CONVERSION_WIDTH)
         warnings = self._warnings(captured)
         self.assertEqual(len(warnings), 1)
-        self.assertIn(config.CONFIG_PATH, warnings[0].getMessage())
+        self.assertIn(str(self.store.path), warnings[0].getMessage())
         self.assertIn("using defaults", warnings[0].getMessage())
         self.assertIsNotNone(warnings[0].exc_info)
 
     def test_warning_is_emitted_again_after_recovery(self) -> None:
         with self.assertLogs("dotexpress.config", level="WARNING") as captured:
             self._write_raw(b"{not json")
-            config.get_output_mode()
+            self.store.get_output_mode()
             self._write_raw(b'{"conversion": {"output_mode": "ascii"}}')
-            self.assertEqual(config.get_output_mode(), "ascii")
+            self.assertEqual(self.store.get_output_mode(), "ascii")
             self._write_raw(b"{not json")
-            config.get_output_mode()
+            self.store.get_output_mode()
 
         self.assertEqual(len(self._warnings(captured)), 2)
 
     def test_different_failure_on_same_path_is_logged_again(self) -> None:
         with self.assertLogs("dotexpress.config", level="WARNING") as captured:
             self._write_raw(b"{not json")
-            config.get_output_mode()
+            self.store.get_output_mode()
             self._write_raw(b"\xff\xfe\x00")
-            config.get_output_mode()
+            self.store.get_output_mode()
 
         self.assertEqual(len(self._warnings(captured)), 2)
 
@@ -391,17 +386,17 @@ class ConfigLoadFailureLoggingTest(unittest.TestCase):
         other_path = str(Path(self._tmpdir.name) / "other.json")
         with self.assertLogs("dotexpress.config", level="WARNING") as captured:
             self._write_raw(b"{not json")
-            config.get_output_mode()
-            config.CONFIG_PATH = other_path
+            self.store.get_output_mode()
+            self.store = config.ConfigStore(other_path)
             self._write_raw(b"{not json")
-            config.get_output_mode()
+            self.store.get_output_mode()
 
         self.assertEqual(len(self._warnings(captured)), 2)
 
     def test_missing_file_is_not_logged(self) -> None:
         with patch.object(config, "logger") as logger:
-            self.assertEqual(config.get_output_mode(), config.DEFAULT_OUTPUT_MODE)
-            self.assertEqual(config.get_charset_maps(), config.DEFAULT_CHARSET_MAPS)
+            self.assertEqual(self.store.get_output_mode(), config.DEFAULT_OUTPUT_MODE)
+            self.assertEqual(self.store.get_charset_maps(), config.DEFAULT_CHARSET_MAPS)
 
         self.assertEqual(logger.mock_calls, [])
 
@@ -414,7 +409,7 @@ class ConfigLoadFailureLoggingTest(unittest.TestCase):
 
         try:
             with patch.object(config, "logger", unopenable):
-                self.assertEqual(config.get_output_mode(), config.DEFAULT_OUTPUT_MODE)
+                self.assertEqual(self.store.get_output_mode(), config.DEFAULT_OUTPUT_MODE)
         finally:
             handler.close()
 

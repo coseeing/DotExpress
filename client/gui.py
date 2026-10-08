@@ -74,12 +74,12 @@ from ui.translation_menu import get_translation_menu_items
 from client_init import start_client_init_background
 
 from dialog import (
+	ConvertingDialog,
 	DictionaryManagementDialog,
 	DocumentNameDialog,
 	FileIssuesDialog,
 	InvalidWorkspaceFilesDialog,
 	SpeechSymbolsDialog,
-	finalize_dialog_layout,
 )
 from settings.view import (
 	ViewSettings,
@@ -103,22 +103,6 @@ VIEW_SCHEMES = {
 }
 
 logger = get_logger("dotexpress.gui", "gui.log")
-
-
-class ConvertingDialog(wx.Dialog):
-	def __init__(self, parent: wx.Window):
-		style = (wx.DEFAULT_DIALOG_STYLE & ~wx.CLOSE_BOX) | wx.STAY_ON_TOP
-		super().__init__(parent, title=_("Info"), style=style)
-
-		message = wx.StaticText(self, label=_("converting"))
-		sizer = wx.BoxSizer(wx.VERTICAL)
-		sizer.Add(message, 0, wx.ALL | wx.ALIGN_CENTER_HORIZONTAL, 20)
-		finalize_dialog_layout(self, sizer)
-		self.Bind(wx.EVT_CLOSE, self._on_close)
-
-	def _on_close(self, evt: wx.CloseEvent):
-		if evt.CanVeto():
-			evt.Veto()
 
 
 class NamedControlAccessible(wx.Accessible):

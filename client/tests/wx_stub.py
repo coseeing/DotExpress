@@ -374,6 +374,7 @@ def dual_view_stubs():
 
 
 _GUI_DIALOG_NAMES = (
+    "ConvertingDialog",
     "DictionaryManagementDialog",
     "DictionaryNameDialog",
     "DocumentNameDialog",

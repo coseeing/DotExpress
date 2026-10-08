@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from tests import wx_stub
 
@@ -541,6 +541,237 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         dialog.title_template = "DotExpress 設定：{category}"
 
         self.assertEqual(dialog._format_title("轉譯"), "DotExpress 設定：轉譯")
+
+
+def dead_window_errors():
+    return (
+        wx.PyDeadObjectError("dead"),
+        RuntimeError("Wrapped C/C++ object of type Dialog"),
+        RuntimeError("the window has been deleted"),
+        RuntimeError("window already deleted"),
+        RuntimeError("Window Destroyed"),
+        ReferenceError("weakly-referenced object has been deleted"),
+    )
+
+
+class _SingletonCharacterization:
+    """``show_singleton`` and ``_destroy`` of one singleton settings dialog (P2-1 characterization)."""
+
+    def dialog_class(self):
+        raise NotImplementedError
+
+    def show_kwargs(self) -> dict:
+        raise NotImplementedError
+
+    def expected_init_kwargs(self, kwargs: dict) -> dict:
+        """The keyword arguments ``show_singleton`` passes to the constructor for ``kwargs``."""
+        return kwargs
+
+    def show(self, **overrides):
+        return self.dialog_class().show_singleton(**{**self.show_kwargs(), **overrides})
+
+    def slot(self, value):
+        return patch.object(self.dialog_class(), "_instance", value)
+
+    def recording_constructor(self, events, error=None):
+        dialog_class = self.dialog_class()
+
+        def fake_init(dialog, *args, **kwargs):
+            events.append(("init", args, kwargs))
+            if error is not None:
+                raise error
+
+        def fake_show(dialog):
+            events.append(("Show", dialog_class._instance is dialog))
+
+        return patch.multiple(dialog_class, __init__=fake_init, Show=fake_show)
+
+    def test_show_singleton_builds_forwards_and_shows_a_new_dialog(self) -> None:
+        dialog_class = self.dialog_class()
+        events = []
+        with self.slot(None), self.recording_constructor(events):
+            result = self.show()
+            self.assertIs(dialog_class._instance, result)
+
+        self.assertIs(type(result), dialog_class)
+        kwargs = self.show_kwargs()
+        parent = kwargs.pop("parent")
+        self.assertEqual(events, [("init", (parent,), self.expected_init_kwargs(kwargs)), ("Show", True)])
+
+    def test_show_singleton_raises_the_live_dialog_in_order(self) -> None:
+        existing = Mock()
+        events = []
+        with self.slot(existing), self.recording_constructor(events):
+            result = self.show()
+            self.assertIs(self.dialog_class()._instance, existing)
+
+        self.assertIs(result, existing)
+        self.assertEqual(existing.mock_calls, [call.Iconize(False), call.Raise(), call.SetFocus()])
+        self.assertEqual(events, [])
+
+    def test_show_singleton_rebuilds_after_a_dead_window_error(self) -> None:
+        dialog_class = self.dialog_class()
+        for error in dead_window_errors():
+            with self.subTest(error=repr(error)):
+                existing = Mock()
+                existing.Iconize.side_effect = error
+                events = []
+                with self.slot(existing), self.recording_constructor(events):
+                    result = self.show()
+                    self.assertIs(dialog_class._instance, result)
+
+                self.assertIsNot(result, existing)
+                self.assertEqual(existing.mock_calls, [call.Iconize(False)])
+                self.assertEqual([event[0] for event in events], ["init", "Show"])
+
+    def test_show_singleton_reraises_a_live_window_error_and_keeps_the_slot(self) -> None:
+        dialog_class = self.dialog_class()
+        for error in (ReferenceError("weakly-referenced object no longer exists"), RuntimeError("unexpected")):
+            with self.subTest(error=repr(error)):
+                existing = Mock()
+                existing.Iconize.side_effect = error
+                events = []
+                with self.slot(existing), self.recording_constructor(events):
+                    with self.assertRaises(type(error)) as caught:
+                        self.show()
+                    self.assertIs(dialog_class._instance, existing)
+
+                self.assertIs(caught.exception, error)
+                self.assertEqual(events, [])
+
+    def test_show_singleton_propagates_other_exceptions_and_keeps_the_slot(self) -> None:
+        dialog_class = self.dialog_class()
+        existing = Mock()
+        existing.Raise.side_effect = KeyError("boom")
+        events = []
+        with self.slot(existing), self.recording_constructor(events):
+            with self.assertRaises(KeyError):
+                self.show()
+            self.assertIs(dialog_class._instance, existing)
+
+        self.assertEqual(existing.mock_calls, [call.Iconize(False), call.Raise()])
+        self.assertEqual(events, [])
+
+    def test_constructor_failure_leaves_the_slot_empty(self) -> None:
+        dialog_class = self.dialog_class()
+        events = []
+        with self.slot(None), self.recording_constructor(events, error=OSError("unreadable")):
+            with self.assertRaises(OSError):
+                self.show()
+            self.assertIsNone(dialog_class._instance)
+
+        self.assertEqual([event[0] for event in events], ["init"])
+
+    def test_destroy_clears_its_own_slot_and_destroys(self) -> None:
+        dialog_class = self.dialog_class()
+        dialog = object.__new__(dialog_class)
+        dialog.Destroy = Mock()
+        with self.slot(dialog):
+            dialog._destroy()
+            self.assertIsNone(dialog_class._instance)
+
+        dialog.Destroy.assert_called_once_with()
+
+    def test_destroy_keeps_another_dialog_in_the_slot(self) -> None:
+        dialog_class = self.dialog_class()
+        dialog = object.__new__(dialog_class)
+        dialog.Destroy = Mock()
+        other = Mock()
+        with self.slot(other):
+            dialog._destroy()
+            self.assertIs(dialog_class._instance, other)
+
+        dialog.Destroy.assert_called_once_with()
+        self.assertEqual(other.mock_calls, [])
+
+
+class TextProcessingSingletonTest(_SingletonCharacterization, unittest.TestCase):
+    def dialog_class(self):
+        from settings.dialogs import TextProcessingDialog
+
+        return TextProcessingDialog
+
+    def show_kwargs(self) -> dict:
+        return {"parent": "parent-window", "script_path": "dictionary/preprocessing.py"}
+
+
+class DotExpressSettingsSingletonTest(_SingletonCharacterization, unittest.TestCase):
+    def setUp(self) -> None:
+        self.snapshot = make_snapshot()
+        self.commit = Mock()
+
+    def dialog_class(self):
+        from settings.dialogs import DotExpressSettingsDialog
+
+        return DotExpressSettingsDialog
+
+    def show_kwargs(self) -> dict:
+        return {
+            "parent": "parent-window",
+            "snapshot": self.snapshot,
+            "dictionary_names": ["default", "math"],
+            "commit": self.commit,
+        }
+
+    def expected_init_kwargs(self, kwargs: dict) -> dict:
+        return {**kwargs, "initial_category": None}
+
+    def test_show_singleton_forwards_the_initial_category_to_a_new_dialog(self) -> None:
+        dialog_class = self.dialog_class()
+        category = dialog_class.category_classes[1]
+        events = []
+        with self.slot(None), self.recording_constructor(events):
+            self.show(initial_category=category)
+
+        kwargs = self.show_kwargs()
+        parent = kwargs.pop("parent")
+        self.assertEqual(events, [("init", (parent,), {**kwargs, "initial_category": category}), ("Show", True)])
+
+    def test_show_singleton_selects_the_initial_category_before_raising(self) -> None:
+        category = self.dialog_class().category_classes[2]
+        existing = Mock()
+        with self.slot(existing):
+            result = self.show(initial_category=category)
+
+        self.assertIs(result, existing)
+        self.assertEqual(
+            existing.mock_calls,
+            [call.Iconize(False), call.select_category(category), call.Raise(), call.SetFocus()],
+        )
+
+    def test_show_singleton_rejects_an_unregistered_category_before_reading_the_slot(self) -> None:
+        dialog_class = self.dialog_class()
+        existing = Mock()
+        events = []
+        with self.slot(existing), self.recording_constructor(events):
+            with self.assertRaisesRegex(ValueError, "^initial_category is not registered$"):
+                self.show(initial_category=object())
+            self.assertIs(dialog_class._instance, existing)
+
+        self.assertEqual(existing.mock_calls, [])
+        self.assertEqual(events, [])
+
+
+class SingletonSlotIndependenceTest(unittest.TestCase):
+    def test_the_two_singleton_dialogs_keep_separate_slots(self) -> None:
+        from settings.dialogs import DotExpressSettingsDialog, TextProcessingDialog
+
+        text_dialog = Mock()
+        settings_dialog = object.__new__(DotExpressSettingsDialog)
+        settings_dialog.Destroy = Mock()
+        with (
+            patch.object(TextProcessingDialog, "_instance", text_dialog),
+            patch.object(DotExpressSettingsDialog, "_instance", settings_dialog),
+        ):
+            self.assertIs(
+                TextProcessingDialog.show_singleton(parent=None, script_path="dictionary/preprocessing.py"),
+                text_dialog,
+            )
+            settings_dialog._destroy()
+            self.assertIsNone(DotExpressSettingsDialog._instance)
+            self.assertIs(TextProcessingDialog._instance, text_dialog)
+
+        settings_dialog.Destroy.assert_called_once_with()
 
 
 if __name__ == "__main__":

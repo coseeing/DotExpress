@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 import documents.workspace as workspace
+from documents.importers.base import source_name
 from documents.workspace import (
     BatchIssue,
     Document,
@@ -15,6 +16,7 @@ from documents.workspace import (
     prepare_document_for_save,
     save_document_package,
 )
+from shared import name_validation
 
 
 class DocumentWorkspaceTest(unittest.TestCase):
@@ -70,6 +72,27 @@ class DocumentWorkspaceTest(unittest.TestCase):
 
     def test_normalize_document_name_accepts_32_characters(self) -> None:
         self.assertEqual(normalize_document_name("a" * 32), "a" * 32)
+
+    def test_normalize_document_name_raises_typed_errors(self) -> None:
+        cases = (("", "empty"), ("a?b", "invalid"), ("name ", "invalid"), ("a" * 33, "too_long"))
+        for value, code in cases:
+            with self.subTest(value=value):
+                with self.assertRaises(name_validation.NameValidationError) as caught:
+                    normalize_document_name(value)
+                self.assertEqual(caught.exception.code, code)
+
+    def test_importer_source_name_raises_typed_errors_with_the_english_message(self) -> None:
+        cases = (
+            ("CON.docx", "invalid", "Name contains invalid characters."),
+            ("name..docx", "invalid", "Name cannot end with a period or space."),
+            ("a" * 33 + ".docx", "too_long", "Name cannot exceed 32 characters."),
+        )
+        for file_name, code, message in cases:
+            with self.subTest(file_name=file_name):
+                with self.assertRaises(name_validation.NameValidationError) as caught:
+                    source_name(Path(file_name))
+                self.assertEqual(caught.exception.code, code)
+                self.assertEqual(str(caught.exception), message)
 
     def test_save_and_load_document_package_roundtrip(self) -> None:
         document = Document(name="lesson1", text="source", braille="⠇⠑⠎⠎")

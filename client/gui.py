@@ -41,7 +41,6 @@ from documents.workspace import (
     create_default_document,
     document_package_path_for_name,
     ensure_workspace_directory,
-    export_document_brl,
 	get_workspace_directory,
     load_workspace_documents,
     normalize_document_name,

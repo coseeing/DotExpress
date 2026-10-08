@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from documents.session import (
     DeleteDocumentDecision,
+    document_name_exists,
+    get_adjacent_document_name,
     plan_delete_document,
     plan_open_document,
     rename_document_in_list,
@@ -49,18 +51,48 @@ class DocumentController:
     def sort_documents(self) -> None:
         self.documents.sort(key=lambda document: (document.name.casefold(), document.name))
 
-    def set_state(
-        self,
-        *,
-        documents: list[Document],
-        open_name: str | None,
-        selected_name: str | None,
-        dual_view_results_by_document: dict[str, tuple[object, ...]],
-    ) -> None:
-        self.documents = documents
-        self.open_name = open_name
-        self.selected_name = selected_name
-        self.dual_view_results_by_document = dual_view_results_by_document
+    @property
+    def has_documents(self) -> bool:
+        return bool(self.documents)
+
+    @property
+    def first_document_name(self) -> str | None:
+        return self.documents[0].name if self.documents else None
+
+    def documents_snapshot(self) -> list[Document]:
+        return list(self.documents)
+
+    def document_name_at(self, index: int) -> str | None:
+        if index < 0 or index >= len(self.documents):
+            return None
+        return self.documents[index].name
+
+    def document_name_exists(self, name: str, exclude_name: str | None = None) -> bool:
+        return document_name_exists(self.documents, name, exclude_name=exclude_name)
+
+    def adjacent_document_name(self, step: int) -> str | None:
+        return get_adjacent_document_name(self.documents, self.open_name or self.selected_name, step)
+
+    def add_document(self, document: Document) -> None:
+        self.documents.append(document)
+
+    def add_documents(self, documents: list[Document]) -> None:
+        self.documents.extend(documents)
+
+    def load_documents(self, documents: list[Document]) -> None:
+        self.documents = list(documents)
+        self.open_name = None
+        self.selected_name = None
+        self.dual_view_results_by_document = {}
+
+    def select_document(self, name: str | None) -> None:
+        self.selected_name = name
+
+    def get_dual_view_results(self, name: str | None) -> tuple[object, ...]:
+        return self.dual_view_results_by_document.get(name or "", ())
+
+    def set_dual_view_results(self, name: str, results: tuple[object, ...]) -> None:
+        self.dual_view_results_by_document[name] = results
 
     def open_document(self, name: str | None) -> Document | None:
         decision = plan_open_document(self.documents, name)

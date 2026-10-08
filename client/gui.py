@@ -6,7 +6,7 @@ import webbrowser
 import wx
 
 import about
-from i18n import N_, _, resource_path
+from i18n import _, resource_path
 from app_paths import ApplicationDataError, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
@@ -27,7 +27,7 @@ from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
 from dictionaries.presenter import DictionaryManagementPresenter
 from documents.controller import DocumentController
-from documents.formats import get_format
+from documents.formats import ExportContext, build_export_wildcard, get_format
 from documents.session import (
     document_name_exists,
     get_adjacent_document_name,
@@ -50,11 +50,9 @@ from documents.workspace import (
 from documents.export_results import (
     ExportBatchResult,
 )
-from ui.action_menu import (
-    get_document_menu_enabled_state,
-    get_document_menu_descriptors,
-)
+from ui.action_menu import get_document_menu_enabled_state
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
+from ui.menu_builder import apply_document_menu_state, build_document_menu
 from config import (
 	DEFAULT_TRANSLATION_TABLES,
 	get_charset_maps,
@@ -122,63 +120,8 @@ VIEW_SCHEMES = {
 		"foreground": wx.Colour(255, 255, 255),
 	},
 }
-DEP_WILDCARD = "DotExpress files (*.dep)|*.dep"
-BRL_WILDCARD = "Braille files (*.brl)|*.brl"
-HTML_WILDCARD = "HTML files (*.html)|*.html"
 
 logger = get_logger("dotexpress.gui", "gui.log")
-
-# Keep dynamic context-menu labels discoverable to gettext extraction.
-_MENU_TRANSLATION_MARKERS = (
-	N_("Add"),
-	N_("Edit"),
-	N_("Delete"),
-	N_("Import"),
-	N_("Export"),
-	N_("Open"),
-	N_("Dual View"),
-	N_("Rename"),
-	N_("Default"),
-	N_("Braille Font"),
-	N_("SimBraille"),
-	N_("Export All"),
-	N_("DEP"),
-	N_("Package DEP"),
-	N_("TXT"),
-	N_("PDF"),
-	N_("DOCX"),
-	N_("EPUB"),
-	N_("BRL"),
-	N_("Braille BRL"),
-	N_("Dual View HTML"),
-	N_("Delete All"),
-	N_("Translation"),
-	N_("No conversion data is available for this document."),
-	N_("Convert"),
-	N_("Settings"),
-	N_("Dictionary Management..."),
-	N_("Text Processing"),
-	N_("Text Processing Python Code"),
-	N_("Unable to open text processing script: {error}"),
-	N_("Unable to save text processing script: {error}"),
-	N_("Text processing failed: {error}"),
-	N_("The script must define exactly one top-level synchronous main function."),
-	N_("main must define exactly one positional parameter and no other parameters."),
-	N_("Confirm Delete Dictionary"),
-	N_("Do you want to delete dictionary \"{name}\"?"),
-	N_("Rename Dictionary"),
-	N_("Help"),
-	N_("Coseeing Website"),
-	N_("About DotExpress"),
-	N_("CSV files (*.csv)|*.csv"),
-	N_("DotExpress files (*.dep)|*.dep"),
-	N_("Text files (*.txt)|*.txt"),
-	N_("PDF files (*.pdf)|*.pdf"),
-	N_("Word documents (*.docx)|*.docx"),
-	N_("EPUB books (*.epub)|*.epub"),
-	N_("Braille files (*.brl)|*.brl"),
-	N_("All Supported Files"),
-)
 
 
 class ConvertingDialog(wx.Dialog):
@@ -390,45 +333,31 @@ class BrailleFrame(wx.Frame):
 
 	def _create_document_menu(self) -> tuple[wx.Menu, dict[str, wx.MenuItem]]:
 		menu = wx.Menu()
-		menu_items, submenu_items = self._append_document_menu_items(menu)
-		self._bind_document_menu_handlers(menu, menu_items, submenu_items)
+		menu_items = self._append_document_menu(menu)
 		self._sync_document_menu_state(menu_items)
 		return menu, menu_items
 
-	def _append_document_menu_items(
-		self,
-		menu: wx.Menu,
-	) -> tuple[dict[str, wx.MenuItem], dict[str, dict[str, wx.MenuItem]]]:
-		menu_items: dict[str, wx.MenuItem] = {}
-		submenu_items: dict[str, dict[str, wx.MenuItem]] = {}
-		for item in get_document_menu_descriptors():
-			if item.kind == "command":
-				menu_items[item.label] = menu.Append(wx.ID_ANY, _(item.label))
-				continue
-			submenu = wx.Menu()
-			menu_items[item.label] = menu.AppendSubMenu(submenu, _(item.label))
-			submenu_items[item.action] = {}
-			for format_key, format_label in item.formats:
-				submenu_item = submenu.Append(wx.ID_ANY, _(format_label))
-				submenu_items[item.action][format_key.casefold()] = submenu_item
-		return menu_items, submenu_items
+	def _document_menu_handlers(self) -> dict[str, object]:
+		return {
+			"open": self.on_open_document,
+			"delete": self.on_delete_document,
+			"delete_all": self.on_delete_all_documents,
+			"add": self.on_add_document,
+			"rename": self.on_rename_document,
+			"import": self.on_import_document,
+			"export": self.on_export_document,
+			"export_all": self.on_export_all_documents,
+		}
 
-	def _bind_document_menu_handlers(
-		self,
-		menu: wx.Menu,
-		menu_items: dict[str, wx.MenuItem],
-		submenu_items: dict[str, dict[str, wx.MenuItem]],
-	) -> None:
-		menu.Bind(wx.EVT_MENU, self.on_open_document, menu_items["Open"])
-		menu.Bind(wx.EVT_MENU, self.on_delete_document, menu_items["Delete"])
-		menu.Bind(wx.EVT_MENU, self.on_delete_all_documents, menu_items["Delete All"])
-		menu.Bind(wx.EVT_MENU, self.on_add_document, menu_items["Add"])
-		menu.Bind(wx.EVT_MENU, self.on_rename_document, menu_items["Rename"])
-		menu.Bind(wx.EVT_MENU, self.on_import_document, menu_items["Import"])
-		for format_key, submenu_item in submenu_items.get("export", {}).items():
-			menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_export_document(fmt), submenu_item)
-		for format_key, submenu_item in submenu_items.get("export_all", {}).items():
-			menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_export_all_documents(fmt), submenu_item)
+	def _append_document_menu(self, menu: wx.Menu) -> dict[str, wx.MenuItem]:
+		return build_document_menu(
+			menu,
+			self._document_menu_handlers(),
+			translate=_,
+			new_menu=wx.Menu,
+			menu_event=wx.EVT_MENU,
+			item_id=wx.ID_ANY,
+		)
 
 	def _sync_document_menu_state(self, menu_items: dict[str, wx.MenuItem] | None = None) -> None:
 		target_items = menu_items if menu_items is not None else getattr(self, "_document_menu_items", None)
@@ -439,10 +368,7 @@ class BrailleFrame(wx.Frame):
 			has_selection=selected_document is not None,
 			has_documents=bool(self.documents),
 		)
-		for label, enabled in menu_state.items():
-			menu_item = target_items.get(label)
-			if menu_item is not None:
-				menu_item.Enable(enabled)
+		apply_document_menu_state(target_items, menu_state)
 
 	def _update_window_title(self) -> None:
 		self.SetTitle(_(format_window_title(self._open_document_name)))
@@ -588,9 +514,6 @@ class BrailleFrame(wx.Frame):
 			parent=parent or self,
 		)
 
-	def _get_dep_wildcard(self) -> str:
-		return _(DEP_WILDCARD)
-
 	def _get_document_names(self) -> list[str]:
 		return self._get_document_controller().document_names
 
@@ -683,19 +606,6 @@ class BrailleFrame(wx.Frame):
 		self.input_txt.SetInsertionPoint(0)
 		self.input_txt.ShowPosition(0)
 
-	def _get_brl_wildcard(self) -> str:
-		return _(BRL_WILDCARD)
-
-	def _get_html_wildcard(self) -> str:
-		return _(HTML_WILDCARD)
-
-	def _get_export_wildcard(self, format_key: str) -> str:
-		return {
-			"dep": self._get_dep_wildcard,
-			"brl": self._get_brl_wildcard,
-			"html": self._get_html_wildcard,
-		}[format_key.casefold()]()
-
 	def _build_conversion_request(self, raw_text: str, output_mode: str, width: int, dictionary_path: Path) -> ConversionRequest:
 		return ConversionRequest(
 			raw_text=raw_text,
@@ -730,7 +640,7 @@ class BrailleFrame(wx.Frame):
 	def _export_document_with_dialog(self, document: Document, format_key: str) -> None:
 		descriptor = get_format(format_key)
 		default_file = f"{document.name}{descriptor.extension}"
-		wildcard = self._get_export_wildcard(descriptor.key)
+		wildcard = build_export_wildcard(descriptor, _)
 		with wx.FileDialog(
 			self,
 			_("Export Document"),
@@ -953,8 +863,7 @@ class BrailleFrame(wx.Frame):
 			self._clear_document_selection()
 		rect = self.document_list.GetItemRect(item_index) if item_index != wx.NOT_FOUND and item_index < self.document_list.GetItemCount() else None
 		menu = wx.Menu()
-		menu_items, submenu_items = self._append_document_menu_items(menu)
-		self._bind_document_menu_handlers(menu, menu_items, submenu_items)
+		menu_items = self._append_document_menu(menu)
 		self._sync_document_menu_state(menu_items)
 		popup_position = (rect.x, rect.y + rect.height) if rect is not None else client_position
 		self.document_list.PopupMenu(menu, popup_position)
@@ -1218,14 +1127,8 @@ class BrailleFrame(wx.Frame):
 		descriptor = get_format(format_key)
 		if not descriptor.exportable or descriptor.writer is None:
 			raise ValueError(f'Unsupported export format: "{format_key}".')
-		if descriptor.key == "html":
-			descriptor.writer(
-				destination_path,
-				document,
-				dual_view_results=self._dual_view_results_by_document.get(document.name, ()),
-			)
-			return
-		descriptor.writer(destination_path, document)
+		context = ExportContext(dual_view_results=self._dual_view_results_by_document.get(document.name, ()))
+		descriptor.writer(destination_path, document, context)
 
 	def _continue_single_export(self, document: Document, destination_path: Path, format_key: str) -> None:
 		try:

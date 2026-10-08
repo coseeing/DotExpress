@@ -7,15 +7,29 @@ from typing import TYPE_CHECKING
 
 from dual_view.html import render_dual_view_html
 from dual_view.model import build_dual_view_model
+from i18n import N_
 
 if TYPE_CHECKING:
     from documents.importers import ImportedDocument
+    from documents.workspace import Document
 
 
 DEP_EXTENSION = ".dep"
 BRL_EXTENSION = ".brl"
 HTML_EXTENSION = ".html"
 ALL_SUPPORTED_FILTER_KEY = "all"
+ALL_SUPPORTED_FILES_LABEL = N_("All Supported Files")
+
+
+@dataclass(frozen=True)
+class ExportContext:
+    """What an export writer may need besides the document itself."""
+
+    dual_view_results: tuple[object, ...] = ()
+
+
+DocumentLoader = Callable[[Path | str], "Document"]
+DocumentWriter = Callable[[Path | str, "Document", ExportContext], Path]
 
 
 @dataclass(frozen=True)
@@ -23,11 +37,13 @@ class DocumentFormatDescriptor:
     key: str
     extension: str
     wildcard_label: str
-    loader: Callable[[Path | str], object] | None
-    writer: Callable[[Path | str, object], object] | None
+    loader: DocumentLoader | None
+    writer: DocumentWriter | None
     requires_braille: bool
     importable: bool
     exportable: bool
+    export_wildcard: str | None = None
+    export_label: str | None = None
 
 
 def _load_imported_document(
@@ -70,44 +86,45 @@ def _load_dep(path: Path | str) -> object:
     return load_document_package(path)
 
 
-def _write_dep(path: Path | str, document: object) -> object:
+def _write_dep(path: Path | str, document: Document, context: ExportContext) -> Path:
+    del context
     from documents.workspace import save_document_package
 
     return save_document_package(path, document, include_pending_metadata=False)
 
 
-def _write_brl(path: Path | str, document: object) -> object:
+def _write_brl(path: Path | str, document: Document, context: ExportContext) -> Path:
+    del context
     from documents.workspace import export_document_brl
 
     return export_document_brl(path, document)
 
 
-def _write_html(
-    path: Path | str,
-    document: object,
-    *,
-    dual_view_results: tuple[object, ...] = (),
-) -> object:
+def _write_html(path: Path | str, document: Document, context: ExportContext) -> Path:
     del document
-    html = render_dual_view_html(build_dual_view_model(dual_view_results))
-    return Path(path).write_text(html, encoding="utf-8")
+    destination = Path(path)
+    html = render_dual_view_html(build_dual_view_model(context.dual_view_results))
+    destination.write_text(html, encoding="utf-8")
+    return destination
 
 
 DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="dep",
         extension=DEP_EXTENSION,
-        wildcard_label="DEP",
+        wildcard_label=N_("DEP"),
         loader=_load_dep,
         writer=_write_dep,
         requires_braille=False,
         importable=True,
         exportable=True,
+        export_wildcard=N_("DotExpress files (*.dep)|*.dep"),
+        export_label=N_("Package DEP"),
     ),
     DocumentFormatDescriptor(
         key="docx",
         extension=".docx",
-        wildcard_label="DOCX",
+        wildcard_label=N_("DOCX"),
         loader=_load_docx,
         writer=None,
         requires_braille=False,
@@ -117,7 +134,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="epub",
         extension=".epub",
-        wildcard_label="EPUB",
+        wildcard_label=N_("EPUB"),
         loader=_load_epub,
         writer=None,
         requires_braille=False,
@@ -127,7 +144,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="pdf",
         extension=".pdf",
-        wildcard_label="PDF",
+        wildcard_label=N_("PDF"),
         loader=_load_pdf,
         writer=None,
         requires_braille=False,
@@ -137,7 +154,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="txt",
         extension=".txt",
-        wildcard_label="TXT",
+        wildcard_label=N_("TXT"),
         loader=_load_txt,
         writer=None,
         requires_braille=False,
@@ -147,13 +164,16 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
     DocumentFormatDescriptor(
         key="brl",
         extension=BRL_EXTENSION,
-        wildcard_label="BRL",
+        wildcard_label=N_("BRL"),
         loader=None,
         writer=_write_brl,
         requires_braille=True,
         importable=False,
         exportable=True,
+        export_wildcard=N_("Braille files (*.brl)|*.brl"),
+        export_label=N_("Braille BRL"),
     ),
+    # "HTML" and the HTML save filter are not msgids; marking them would add new catalog entries.
     DocumentFormatDescriptor(
         key="html",
         extension=HTML_EXTENSION,
@@ -163,6 +183,8 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
         requires_braille=False,
         importable=False,
         exportable=True,
+        export_wildcard="HTML files (*.html)|*.html",
+        export_label=N_("Dual View HTML"),
     ),
 )
 
@@ -197,12 +219,18 @@ def build_import_wildcard(translate=lambda value: value) -> str:
             )
         )
     all_patterns = ";".join(f"*{descriptor.extension}" for descriptor in get_importable_formats())
-    parts.extend((f"{translate('All Supported Files')} ({all_patterns})", all_patterns))
+    parts.extend((f"{translate(ALL_SUPPORTED_FILES_LABEL)} ({all_patterns})", all_patterns))
     return "|".join(parts)
 
 
+def build_export_wildcard(descriptor: DocumentFormatDescriptor, translate=lambda value: value) -> str:
+    if descriptor.export_wildcard is None:
+        raise ValueError(f'Unsupported export format: "{descriptor.key}".')
+    return translate(descriptor.export_wildcard)
+
+
 def get_import_filter_labels() -> list[str]:
-    return [descriptor.wildcard_label for descriptor in get_importable_formats()] + ["All Supported Files"]
+    return [descriptor.wildcard_label for descriptor in get_importable_formats()] + [ALL_SUPPORTED_FILES_LABEL]
 
 
 def get_format_keys(importable: bool | None = None) -> tuple[str, ...]:

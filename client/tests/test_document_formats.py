@@ -1,9 +1,21 @@
+import inspect
 import unittest
+import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
-from documents.formats import build_import_wildcard, get_exportable_formats, get_format, get_importable_formats
+from documents.formats import (
+    ALL_SUPPORTED_FILES_LABEL,
+    DOCUMENT_FORMATS,
+    ExportContext,
+    build_export_wildcard,
+    build_import_wildcard,
+    get_exportable_formats,
+    get_format,
+    get_import_filter_labels,
+    get_importable_formats,
+)
 from documents.workspace import Document
 from dual_view.model import DualViewSegment
 
@@ -49,11 +61,99 @@ class DocumentFormatsTest(unittest.TestCase):
                 get_format("html").writer(
                     destination,
                     document,
-                    dual_view_results=(DualViewSegment(result=Mock(raw=[], braille=[], raw_to_braille_pos=[]), source_kind="text"),),
+                    ExportContext(
+                        dual_view_results=(DualViewSegment(result=Mock(raw=[], braille=[], raw_to_braille_pos=[]), source_kind="text"),),
+                    ),
                 )
 
             self.assertEqual(destination.read_text(encoding="utf-8"), "雙視內容")
             render.assert_called_once()
+
+    def test_writers_take_path_document_and_context(self) -> None:
+        for descriptor in get_exportable_formats():
+            with self.subTest(format_key=descriptor.key):
+                parameters = list(inspect.signature(descriptor.writer).parameters.values())
+                self.assertEqual([parameter.name for parameter in parameters], ["path", "document", "context"])
+                self.assertTrue(
+                    all(parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in parameters)
+                )
+                self.assertTrue(all(parameter.default is inspect.Parameter.empty for parameter in parameters))
+                with TemporaryDirectory() as directory:
+                    with self.assertRaises(TypeError):
+                        descriptor.writer(Path(directory) / f"alpha{descriptor.extension}", Document("alpha", "t", "b"))
+
+    def test_writers_return_destination_path(self) -> None:
+        for descriptor in get_exportable_formats():
+            with self.subTest(format_key=descriptor.key):
+                with TemporaryDirectory() as directory:
+                    destination = Path(directory) / f"alpha{descriptor.extension}"
+                    written = descriptor.writer(str(destination), Document("alpha", "t", "b"), ExportContext())
+                    self.assertEqual(written, destination)
+                    self.assertIsInstance(written, Path)
+                    self.assertTrue(destination.is_file())
+
+    def test_dep_and_brl_writers_ignore_the_context(self) -> None:
+        context = ExportContext(
+            dual_view_results=(DualViewSegment(result=Mock(raw=[], braille=[], raw_to_braille_pos=[]), source_kind="text"),),
+        )
+        document = Document("alpha", "text", "\u2801")
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            for key in ("dep", "brl"):
+                with self.subTest(format_key=key):
+                    writer = get_format(key).writer
+                    writer(root / "plain" / f"alpha.{key}", document, ExportContext())
+                    writer(root / "context" / f"alpha.{key}", document, context)
+                    if key == "dep":
+                        contents = []
+                        for folder in ("plain", "context"):
+                            with zipfile.ZipFile(root / folder / "alpha.dep") as archive:
+                                contents.append({name: archive.read(name) for name in archive.namelist()})
+                        self.assertEqual(contents[0], contents[1])
+                        self.assertEqual(contents[0], {"alpha.txt": b"text", "alpha.brl": "\u2801".encode("utf-8")})
+                    else:
+                        self.assertEqual(
+                            (root / "plain" / "alpha.brl").read_bytes(),
+                            (root / "context" / "alpha.brl").read_bytes(),
+                        )
+
+    def test_export_fields_are_all_set_exactly_for_exportable_formats(self) -> None:
+        for descriptor in DOCUMENT_FORMATS:
+            with self.subTest(format_key=descriptor.key):
+                self.assertEqual(
+                    {
+                        descriptor.exportable,
+                        descriptor.writer is not None,
+                        descriptor.export_wildcard is not None,
+                        descriptor.export_label is not None,
+                    },
+                    {descriptor.exportable},
+                )
+
+    def test_export_labels_match_menu_text(self) -> None:
+        self.assertEqual(
+            [(descriptor.key, descriptor.export_label) for descriptor in get_exportable_formats()],
+            [("dep", "Package DEP"), ("brl", "Braille BRL"), ("html", "Dual View HTML")],
+        )
+
+    def test_export_wildcard_is_the_single_format_save_filter(self) -> None:
+        expected = {
+            "dep": "DotExpress files (*.dep)|*.dep",
+            "brl": "Braille files (*.brl)|*.brl",
+            "html": "HTML files (*.html)|*.html",
+        }
+        for key, wildcard in expected.items():
+            with self.subTest(format_key=key):
+                self.assertEqual(build_export_wildcard(get_format(key)), wildcard)
+                self.assertEqual(build_export_wildcard(get_format(key), lambda value: f"T[{value}]"), f"T[{wildcard}]")
+
+    def test_export_wildcard_rejects_non_exportable_format(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'Unsupported export format: "txt"\\.'):
+            build_export_wildcard(get_format("txt"))
+
+    def test_export_context_defaults_to_no_results(self) -> None:
+        self.assertEqual(ExportContext().dual_view_results, ())
+        self.assertEqual(ExportContext(), ExportContext(dual_view_results=()))
 
     def test_import_wildcard_matches_existing_order_and_text(self) -> None:
         self.assertEqual(
@@ -67,6 +167,11 @@ class DocumentFormatsTest(unittest.TestCase):
                 "All Supported Files (*.dep;*.docx;*.epub;*.pdf;*.txt)|*.dep;*.docx;*.epub;*.pdf;*.txt"
             ),
         )
+
+    def test_all_supported_files_label_is_the_last_import_filter_label(self) -> None:
+        self.assertEqual(ALL_SUPPORTED_FILES_LABEL, "All Supported Files")
+        self.assertEqual(get_import_filter_labels()[-1], ALL_SUPPORTED_FILES_LABEL)
+        self.assertEqual(get_import_filter_labels(), ["DEP", "DOCX", "EPUB", "PDF", "TXT", "All Supported Files"])
 
     def test_export_requires_braille_policy_matches_format(self) -> None:
         self.assertFalse(get_format("dep").requires_braille)

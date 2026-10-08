@@ -1,34 +1,47 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
+
+from documents.formats import get_exportable_formats
+from i18n import N_
+
+EnabledWhen = Literal["always", "has_selection", "has_documents"]
 
 
 @dataclass(frozen=True)
 class DocumentMenuItem:
     kind: str
     label: str
-    action: str = ""
+    action: str
+    enabled_when: EnabledWhen
     formats: tuple[tuple[str, str], ...] = ()
 
 
+_EXPORT_FORMATS: tuple[tuple[str, str], ...] = tuple(
+    (descriptor.key, descriptor.export_label) for descriptor in get_exportable_formats()
+)
+
 DOCUMENT_MENU_ITEMS: tuple[DocumentMenuItem, ...] = (
-    DocumentMenuItem("command", "Open", "open"),
-    DocumentMenuItem("command", "Delete", "delete"),
-    DocumentMenuItem("command", "Delete All", "delete_all"),
-    DocumentMenuItem("command", "Add", "add"),
-    DocumentMenuItem("command", "Rename", "rename"),
-    DocumentMenuItem("command", "Import", "import"),
+    DocumentMenuItem(kind="command", label=N_("Open"), action="open", enabled_when="has_selection"),
+    DocumentMenuItem(kind="command", label=N_("Delete"), action="delete", enabled_when="has_selection"),
+    DocumentMenuItem(kind="command", label=N_("Delete All"), action="delete_all", enabled_when="has_documents"),
+    DocumentMenuItem(kind="command", label=N_("Add"), action="add", enabled_when="always"),
+    DocumentMenuItem(kind="command", label=N_("Rename"), action="rename", enabled_when="has_selection"),
+    DocumentMenuItem(kind="command", label=N_("Import"), action="import", enabled_when="always"),
     DocumentMenuItem(
-        "submenu",
-        "Export",
-        "export",
-        (("dep", "Package DEP"), ("brl", "Braille BRL"), ("html", "Dual View HTML")),
+        kind="submenu",
+        label=N_("Export"),
+        action="export",
+        enabled_when="has_selection",
+        formats=_EXPORT_FORMATS,
     ),
     DocumentMenuItem(
-        "submenu",
-        "Export All",
-        "export_all",
-        (("dep", "Package DEP"), ("brl", "Braille BRL"), ("html", "Dual View HTML")),
+        kind="submenu",
+        label=N_("Export All"),
+        action="export_all",
+        enabled_when="has_documents",
+        formats=_EXPORT_FORMATS,
     ),
 )
 
@@ -38,13 +51,5 @@ def get_document_menu_descriptors() -> tuple[DocumentMenuItem, ...]:
 
 
 def get_document_menu_enabled_state(*, has_selection: bool, has_documents: bool) -> dict[str, bool]:
-    return {
-        "Open": has_selection,
-        "Delete": has_selection,
-        "Delete All": has_documents,
-        "Add": True,
-        "Rename": has_selection,
-        "Import": True,
-        "Export": has_selection,
-        "Export All": has_documents,
-    }
+    conditions = {"always": True, "has_selection": has_selection, "has_documents": has_documents}
+    return {item.action: conditions[item.enabled_when] for item in DOCUMENT_MENU_ITEMS}

@@ -112,7 +112,7 @@ class SharedSetupConsumerTest(unittest.TestCase):
         self.assertEqual(assigned & LEGACY_SETUP_GLOBALS, set(), f"{relative_path} still builds its own catalog")
 
     def test_dialog_uses_shared_i18n(self) -> None:
-        self.assert_uses_shared_i18n("dialog.py", {"_"})
+        self.assert_uses_shared_i18n("dialog.py", {"N_", "_"})
 
     def test_settings_dialogs_uses_shared_i18n(self) -> None:
         self.assert_uses_shared_i18n("settings/dialogs.py", {"_"})
@@ -124,7 +124,7 @@ class SharedSetupConsumerTest(unittest.TestCase):
         self.assert_uses_shared_i18n("about.py", {"_"})
 
     def test_gui_uses_shared_i18n(self) -> None:
-        self.assert_uses_shared_i18n("gui.py", {"N_", "_", "resource_path"})
+        self.assert_uses_shared_i18n("gui.py", {"_", "resource_path"})
 
 
 class DuplicateSetupGuardTest(unittest.TestCase):
@@ -151,19 +151,77 @@ class DuplicateSetupGuardTest(unittest.TestCase):
 
 
 class ExtractionMarkerTest(unittest.TestCase):
-    def test_gui_menu_translation_markers_use_n_(self) -> None:
-        tree = _module_tree("gui.py")
-        markers = [
-            node.value
-            for node in tree.body
-            if isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id == "_MENU_TRANSLATION_MARKERS" for target in node.targets)
-        ]
+    # The strings that the marker tuple in gui.py kept extractable before P1-2
+    # (its 48 entries minus the four import filters that nothing displays).
+    # Each one is now marked with _() or N_() where it is defined.
+    FORMER_MARKER_MSGIDS = (
+        "Add",
+        "Edit",
+        "Delete",
+        "Import",
+        "Export",
+        "Open",
+        "Dual View",
+        "Rename",
+        "Default",
+        "Braille Font",
+        "SimBraille",
+        "Export All",
+        "DEP",
+        "Package DEP",
+        "TXT",
+        "PDF",
+        "DOCX",
+        "EPUB",
+        "BRL",
+        "Braille BRL",
+        "Dual View HTML",
+        "Delete All",
+        "Translation",
+        "No conversion data is available for this document.",
+        "Convert",
+        "Settings",
+        "Dictionary Management...",
+        "Text Processing",
+        "Text Processing Python Code",
+        "Unable to open text processing script: {error}",
+        "Unable to save text processing script: {error}",
+        "Text processing failed: {error}",
+        "The script must define exactly one top-level synchronous main function.",
+        "main must define exactly one positional parameter and no other parameters.",
+        "Confirm Delete Dictionary",
+        "Do you want to delete dictionary \"{name}\"?",
+        "Rename Dictionary",
+        "Help",
+        "Coseeing Website",
+        "About DotExpress",
+        "CSV files (*.csv)|*.csv",
+        "DotExpress files (*.dep)|*.dep",
+        "Braille files (*.brl)|*.brl",
+        "All Supported Files",
+    )
 
-        self.assertEqual(len(markers), 1)
-        self.assertIsInstance(markers[0], ast.Tuple)
-        callees = [getattr(getattr(element, "func", None), "id", None) for element in markers[0].elts]
-        self.assertEqual(callees, ["N_"] * 48)
+    def test_former_marker_strings_are_still_extracted(self) -> None:
+        extracted = set()
+        for dirpath, dirnames, filenames in os.walk(CLIENT_ROOT):
+            dirnames[:] = [name for name in dirnames if name not in {"tests", ".venv", "__pycache__"}]
+            for filename in filenames:
+                if not filename.endswith(".py"):
+                    continue
+                path = Path(dirpath) / filename
+                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=str(path))):
+                    if (
+                        isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Name)
+                        and node.func.id in {"_", "N_"}
+                        and node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)
+                    ):
+                        extracted.add(node.args[0].value)
+
+        self.assertEqual(len(self.FORMER_MARKER_MSGIDS), 44)
+        self.assertEqual(sorted(set(self.FORMER_MARKER_MSGIDS) - extracted), [])
 
     def test_generate_pot_extracts_n_keyword(self) -> None:
         script = (CLIENT_ROOT.parent / "scripts" / "generate-pot.bat").read_text(encoding="utf-8")

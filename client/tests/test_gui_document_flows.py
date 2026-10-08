@@ -3,11 +3,14 @@ from __future__ import annotations
 import importlib
 import tempfile
 import unittest
+import zipfile
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import Mock, patch
+from types import SimpleNamespace
+from unittest.mock import Mock, call, patch
 
 from tests import wx_stub
+from tests.menu_recording import DOCUMENT_MENU_BUILD_LOG, MenuRecorder, enable_log, fake_translate
 
 _SCOPE = wx_stub.StubScope(
     wx_stub.gui_frame_stubs(),
@@ -25,7 +28,9 @@ from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
-from documents.formats import get_format
+from documents.formats import ExportContext, get_format
+from dual_view.html import render_dual_view_html
+from dual_view.model import DualViewSegment, build_dual_view_model
 
 
 def make_snapshot(
@@ -74,7 +79,24 @@ class GuiDocumentFlowsTest(unittest.TestCase):
             frame._write_export_document(Path("/tmp/custom.dep"), document, "dep")
 
         get_format_mock.assert_called_once_with("dep")
-        writer.assert_called_once_with(Path("/tmp/custom.dep"), document)
+        writer.assert_called_once_with(Path("/tmp/custom.dep"), document, ExportContext())
+
+    def test_write_export_document_passes_cached_results_to_every_writer(self) -> None:
+        frame = self._make_frame()
+        document = Document("alpha", "text", "braille")
+        cached_results = (Mock(),)
+        frame._dual_view_results_by_document["alpha"] = cached_results
+        writer = Mock()
+        descriptor = replace(get_format("dep"), writer=writer)
+
+        with patch.object(gui, "get_format", return_value=descriptor):
+            frame._write_export_document(Path("/tmp/custom.dep"), document, "dep")
+
+        writer.assert_called_once_with(
+            Path("/tmp/custom.dep"),
+            document,
+            ExportContext(dual_view_results=cached_results),
+        )
 
     def test_write_html_export_document_passes_cached_dual_view_results(self) -> None:
         frame = self._make_frame()
@@ -90,7 +112,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         writer.assert_called_once_with(
             Path("/tmp/custom.html"),
             document,
-            dual_view_results=cached_results,
+            ExportContext(dual_view_results=cached_results),
         )
 
     def test_write_export_document_rejects_non_exportable_format(self) -> None:
@@ -126,27 +148,27 @@ class GuiDocumentFlowsTest(unittest.TestCase):
     def test_sync_document_menu_state_before_document_list_exists(self) -> None:
         frame = self._make_frame()
         menu_items = {
-            "Open": Mock(),
-            "Delete": Mock(),
-            "Delete All": Mock(),
-            "Add": Mock(),
-            "Rename": Mock(),
-            "Import": Mock(),
-            "Export": Mock(),
-            "Export All": Mock(),
+            "open": Mock(),
+            "delete": Mock(),
+            "delete_all": Mock(),
+            "add": Mock(),
+            "rename": Mock(),
+            "import": Mock(),
+            "export": Mock(),
+            "export_all": Mock(),
         }
 
         frame._sync_document_menu_state(menu_items)
 
         self.assertNotIn("document_list", frame.__dict__)
-        menu_items["Open"].Enable.assert_called_once_with(False)
-        menu_items["Delete"].Enable.assert_called_once_with(False)
-        menu_items["Delete All"].Enable.assert_called_once_with(False)
-        menu_items["Add"].Enable.assert_called_once_with(True)
-        menu_items["Rename"].Enable.assert_called_once_with(False)
-        menu_items["Import"].Enable.assert_called_once_with(True)
-        menu_items["Export"].Enable.assert_called_once_with(False)
-        menu_items["Export All"].Enable.assert_called_once_with(False)
+        menu_items["open"].Enable.assert_called_once_with(False)
+        menu_items["delete"].Enable.assert_called_once_with(False)
+        menu_items["delete_all"].Enable.assert_called_once_with(False)
+        menu_items["add"].Enable.assert_called_once_with(True)
+        menu_items["rename"].Enable.assert_called_once_with(False)
+        menu_items["import"].Enable.assert_called_once_with(True)
+        menu_items["export"].Enable.assert_called_once_with(False)
+        menu_items["export_all"].Enable.assert_called_once_with(False)
 
     def test_open_dual_view_creates_refreshes_and_shows_viewer(self) -> None:
         frame = self._make_frame()
@@ -1049,8 +1071,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         ):
             with self.subTest(frame_attribute=name):
                 self.assertFalse(hasattr(gui.BrailleFrame, name))
-        self.assertTrue(hasattr(gui, "DEP_WILDCARD"))
-        self.assertTrue(hasattr(gui.BrailleFrame, "_get_brl_wildcard"))
 
     def test_save_open_document_saves_prepared_document(self) -> None:
         frame = self._make_frame()
@@ -1221,6 +1241,362 @@ class DictionaryManagementFrameTest(unittest.TestCase):
             with self.subTest(kept=name):
                 self.assertTrue(hasattr(gui.BrailleFrame, name))
 
+
+class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
+    """Pins today's menu and export behavior; must pass unchanged through P1-2."""
+
+    _make_frame = GuiDocumentFlowsTest._make_frame
+
+    DOCUMENT_HANDLER_NAMES = (
+        "on_open_document",
+        "on_delete_document",
+        "on_delete_all_documents",
+        "on_add_document",
+        "on_rename_document",
+        "on_import_document",
+        "on_export_document",
+        "on_export_all_documents",
+    )
+
+    def _make_menu_frame(self):
+        frame = self._make_frame()
+        frame.handler_calls = Mock()
+        for name in self.DOCUMENT_HANDLER_NAMES:
+            setattr(frame, name, getattr(frame.handler_calls, name))
+        return frame
+
+    def _patch_menus(self, recorder: MenuRecorder):
+        return (
+            patch.object(gui.wx, "Menu", recorder.new_menu),
+            patch.object(gui.wx, "EVT_MENU", "EVT_MENU", create=True),
+            patch.object(gui, "_", fake_translate),
+        )
+
+    def _select_first_of(self, frame, *names: str) -> None:
+        frame.documents = [Document(name, "text", None) for name in names]
+        frame._documents_by_name = {document.name: document for document in frame.documents}
+        frame.document_list = Mock()
+        frame.document_list.GetFirstSelected.return_value = 0
+
+    def test_file_menu_build_log(self) -> None:
+        frame = self._make_menu_frame()
+        recorder = MenuRecorder()
+        menu_patch, event_patch, translate_patch = self._patch_menus(recorder)
+
+        with menu_patch, event_patch, translate_patch:
+            menu, _items = frame._create_document_menu()
+
+        self.assertIs(menu, recorder.menus[0])
+        self.assertEqual(
+            recorder.log,
+            DOCUMENT_MENU_BUILD_LOG + enable_log(False, False, False, True, False, True, False, False),
+        )
+
+    def test_menu_handlers_dispatch_to_frame_methods(self) -> None:
+        frame = self._make_menu_frame()
+        recorder = MenuRecorder()
+        menu_patch, event_patch, translate_patch = self._patch_menus(recorder)
+        with menu_patch, event_patch, translate_patch:
+            frame._create_document_menu()
+        event = object()
+        expected = [
+            ("menu0:T[Open]", call.on_open_document(event)),
+            ("menu0:T[Delete]", call.on_delete_document(event)),
+            ("menu0:T[Delete All]", call.on_delete_all_documents(event)),
+            ("menu0:T[Add]", call.on_add_document(event)),
+            ("menu0:T[Rename]", call.on_rename_document(event)),
+            ("menu0:T[Import]", call.on_import_document(event)),
+            ("menu1:T[Package DEP]", call.on_export_document("dep")),
+            ("menu1:T[Braille BRL]", call.on_export_document("brl")),
+            ("menu1:T[Dual View HTML]", call.on_export_document("html")),
+            ("menu2:T[Package DEP]", call.on_export_all_documents("dep")),
+            ("menu2:T[Braille BRL]", call.on_export_all_documents("brl")),
+            ("menu2:T[Dual View HTML]", call.on_export_all_documents("html")),
+        ]
+
+        self.assertEqual([item for _menu, item, _handler in recorder.binds], [item for item, _call in expected])
+        for (menu_name, item_name, handler), (_item, expected_call) in zip(recorder.binds, expected):
+            with self.subTest(item=item_name):
+                frame.handler_calls.reset_mock()
+                handler(event)
+                self.assertEqual(menu_name, "menu0")
+                self.assertEqual(frame.handler_calls.mock_calls, [expected_call])
+
+    def test_menu_enabled_states_follow_selection_and_documents(self) -> None:
+        frame = self._make_menu_frame()
+        recorder = MenuRecorder()
+        menu_patch, event_patch, translate_patch = self._patch_menus(recorder)
+        with menu_patch, event_patch, translate_patch:
+            _menu, items = frame._create_document_menu()
+        frame._document_menu_items = items
+
+        self.assertEqual(
+            recorder.log[len(DOCUMENT_MENU_BUILD_LOG):],
+            enable_log(False, False, False, True, False, True, False, False),
+        )
+
+        recorder.log.clear()
+        self._select_first_of(frame, "alpha")
+        frame._sync_document_menu_state()
+
+        self.assertEqual(recorder.log, enable_log(True, True, True, True, True, True, True, True))
+
+    def test_context_menu_on_item_selects_it_and_pops_up_below_it(self) -> None:
+        frame = self._make_menu_frame()
+        self._select_first_of(frame, "alpha")
+        frame._selected_document_name = None
+        recorder = MenuRecorder()
+        document_list = frame.document_list
+        document_list.ScreenToClient.return_value = gui.wx.Point(5, 6)
+        document_list.HitTest.return_value = (0, 0)
+        document_list.GetItemRect.return_value = SimpleNamespace(x=10, y=20, height=5)
+        document_list.GetItemCount.return_value = 1
+        document_list.PopupMenu.side_effect = lambda menu, position: recorder.log.append(("PopupMenu", menu.name, position))
+        event = Mock()
+        event.GetPosition.return_value = gui.wx.Point(100, 200)
+        menu_patch, event_patch, translate_patch = self._patch_menus(recorder)
+
+        with menu_patch, event_patch, translate_patch:
+            frame.on_document_context_menu(event)
+
+        self.assertEqual(
+            recorder.log,
+            DOCUMENT_MENU_BUILD_LOG
+            + enable_log(True, True, True, True, True, True, True, True)
+            + [("PopupMenu", "menu0", (10, 25)), ("menu0", "Destroy")],
+        )
+        document_list.ScreenToClient.assert_called_once_with(gui.wx.Point(100, 200))
+        document_list.HitTest.assert_called_once_with(gui.wx.Point(5, 6))
+        document_list.Select.assert_called_once_with(0)
+        document_list.Focus.assert_called_once_with(0)
+        self.assertEqual(frame._selected_document_name, "alpha")
+
+    def test_keyboard_context_menu_without_selection_clears_it(self) -> None:
+        frame = self._make_menu_frame()
+        self._select_first_of(frame, "alpha", "beta")
+        frame._selected_document_name = "alpha"
+        frame._document_menu_items = {}
+        recorder = MenuRecorder()
+        document_list = frame.document_list
+        document_list.GetFirstSelected.return_value = gui.wx.NOT_FOUND
+        document_list.HitTest.return_value = (gui.wx.NOT_FOUND, 0)
+        document_list.PopupMenu.side_effect = lambda menu, position: recorder.log.append(("PopupMenu", menu.name, position))
+        event = Mock()
+        event.GetPosition.return_value = gui.wx.DefaultPosition
+        menu_patch, event_patch, translate_patch = self._patch_menus(recorder)
+
+        with menu_patch, event_patch, translate_patch:
+            frame.on_document_context_menu(event)
+
+        self.assertEqual(
+            recorder.log,
+            DOCUMENT_MENU_BUILD_LOG
+            + enable_log(False, False, True, True, False, True, False, True)
+            + [("PopupMenu", "menu0", (0, 0)), ("menu0", "Destroy")],
+        )
+        self.assertIsInstance(recorder.log[-2][2], gui.wx.Point)
+        document_list.ScreenToClient.assert_not_called()
+        document_list.Select.assert_not_called()
+        document_list.GetItemRect.assert_not_called()
+        self.assertIsNone(frame._selected_document_name)
+
+    def test_menu_bar_menus_items_and_handlers(self) -> None:
+        frame = self._make_menu_frame()
+        for name in (
+            "on_convert",
+            "on_open_dual_view",
+            "on_open_text_processing",
+            "on_open_dictionary_management",
+            "on_open_settings",
+            "on_open_coseeing_website",
+            "on_about",
+        ):
+            setattr(frame, name, getattr(frame.handler_calls, name))
+        recorder = MenuRecorder()
+        frame.Bind = Mock(side_effect=lambda event, handler, item: recorder.log.append(("frame", "Bind", event, handler, item.name)))
+
+        class RecordedMenuBar:
+            def Append(self, menu, title):
+                recorder.log.append(("menubar", "Append", menu.name, title))
+
+        menu_patch, event_patch, translate_patch = self._patch_menus(recorder)
+        with menu_patch, event_patch, translate_patch, patch.object(gui.wx, "MenuBar", RecordedMenuBar):
+            menu_bar = frame._create_menu_bar()
+
+        self.assertIsInstance(menu_bar, RecordedMenuBar)
+        self.assertEqual(
+            recorder.log,
+            DOCUMENT_MENU_BUILD_LOG
+            + enable_log(False, False, False, True, False, True, False, False)
+            + [
+                ("menubar", "Append", "menu0", "T[File]"),
+                ("new", "menu3"),
+                ("menu3", "Append", -1, "T[Convert]"),
+                ("frame", "Bind", "EVT_MENU", frame.on_convert, "menu3:T[Convert]"),
+                ("menu3", "Append", -1, "T[Dual View]"),
+                ("frame", "Bind", "EVT_MENU", frame.on_open_dual_view, "menu3:T[Dual View]"),
+                ("menu3", "Append", -1, "T[Text Processing]"),
+                ("frame", "Bind", "EVT_MENU", frame.on_open_text_processing, "menu3:T[Text Processing]"),
+                ("menu3", "Append", -1, "T[Dictionary Management...]"),
+                ("frame", "Bind", "EVT_MENU", frame.on_open_dictionary_management, "menu3:T[Dictionary Management...]"),
+                ("menu3", "Append", -1, "T[Settings]"),
+                ("frame", "Bind", "EVT_MENU", frame.on_open_settings, "menu3:T[Settings]"),
+                ("menubar", "Append", "menu3", "T[Translation]"),
+                ("new", "menu4"),
+                ("menu4", "Append", -1, "T[Coseeing Website]"),
+                ("frame", "Bind", "EVT_MENU", frame.on_open_coseeing_website, "menu4:T[Coseeing Website]"),
+                ("menu4", "Append", 1, "T[About]"),
+                ("frame", "Bind", "EVT_MENU", frame.on_about, "menu4:T[About]"),
+                ("menubar", "Append", "menu4", "T[Help]"),
+            ],
+        )
+
+    def test_export_dialog_title_default_file_wildcard_and_style(self) -> None:
+        dialogs = []
+
+        class RecordedFileDialog:
+            def __init__(self, *args, **kwargs):
+                dialogs.append((args, kwargs))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def ShowModal(self):
+                return gui.wx.CANCEL
+
+        expected_wildcards = {
+            "dep": "T[DotExpress files (*.dep)|*.dep]",
+            "brl": "T[Braille files (*.brl)|*.brl]",
+            "html": "T[HTML files (*.html)|*.html]",
+        }
+        for key, wildcard in expected_wildcards.items():
+            with self.subTest(format_key=key):
+                frame = self._make_frame()
+                frame._write_export_document = Mock()
+                frame._start_export_conversion = Mock()
+                dialogs.clear()
+                with patch.object(gui.wx, "FileDialog", RecordedFileDialog), patch.object(gui, "_", fake_translate):
+                    frame._export_document_with_dialog(Document("alpha", "t", "b"), key)
+
+                self.assertEqual(
+                    dialogs,
+                    [
+                        (
+                            (frame, "T[Export Document]"),
+                            {
+                                "defaultFile": f"alpha.{key}",
+                                "wildcard": wildcard,
+                                "style": gui.wx.FD_SAVE | gui.wx.FD_OVERWRITE_PROMPT,
+                            },
+                        )
+                    ],
+                )
+                frame._write_export_document.assert_not_called()
+                frame._start_export_conversion.assert_not_called()
+
+    def test_export_dialog_corrects_only_a_wrong_extension(self) -> None:
+        for chosen, written in (("/tmp/x/out.TXT", "/tmp/x/out.brl"), ("/tmp/x/out.BRL", "/tmp/x/out.BRL")):
+            with self.subTest(chosen=chosen):
+                frame = self._make_frame()
+                frame._write_export_document = Mock()
+                dialog = Mock()
+                dialog.__enter__ = Mock(return_value=dialog)
+                dialog.__exit__ = Mock(return_value=False)
+                dialog.ShowModal.return_value = gui.wx.ID_OK
+                dialog.GetPath.return_value = chosen
+                document = Document("alpha", "t", "b")
+                with (
+                    patch.object(gui.wx, "FileDialog", Mock(return_value=dialog)),
+                    patch.object(gui.wx, "MessageBox", Mock()) as message_box,
+                ):
+                    frame._export_document_with_dialog(document, "brl")
+
+                frame._write_export_document.assert_called_once_with(Path(written), document, "brl")
+                message_box.assert_called_once()
+
+    def test_real_writers_produce_today_bytes(self) -> None:
+        frame = self._make_frame()
+        results = (
+            DualViewSegment(
+                result=SimpleNamespace(raw=["a"], braille=["⠁"], braille_to_raw_pos=[0], raw_to_braille_pos=[0]),
+                source_kind="text",
+            ),
+        )
+        frame._dual_view_results_by_document["alpha"] = results
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            frame._write_export_document(root / "alpha.dep", Document("alpha", "text", None), "dep")
+            with zipfile.ZipFile(root / "alpha.dep") as archive:
+                members = {name: archive.read(name).decode("utf-8") for name in archive.namelist()}
+            self.assertEqual(members, {"alpha.txt": "text", "alpha.brl": ""})
+
+            frame._write_export_document(root / "nested" / "alpha.brl", Document("alpha", "text", "⠁⠃"), "brl")
+            self.assertEqual((root / "nested" / "alpha.brl").read_bytes(), "⠁⠃".encode("utf-8"))
+
+            frame._write_export_document(root / "alpha.html", Document("alpha", "text", "b"), "html")
+            cached_html = render_dual_view_html(build_dual_view_model(results))
+            self.assertEqual((root / "alpha.html").read_bytes(), cached_html.encode("utf-8"))
+            self.assertIn('<span class="source">a</span>', cached_html)
+
+            frame._write_export_document(root / "beta.html", Document("beta", "text", "b"), "html")
+            empty_html = render_dual_view_html(build_dual_view_model(()))
+            self.assertEqual((root / "beta.html").read_bytes(), empty_html.encode("utf-8"))
+            self.assertNotEqual(cached_html, empty_html)
+
+            with self.assertRaises(OSError):
+                frame._write_export_document(root / "missing" / "alpha.html", Document("alpha", "text", "b"), "html")
+            self.assertFalse((root / "missing").exists())
+
+    def test_export_all_html_uses_each_document_cache(self) -> None:
+        frame = self._make_frame()
+        results = (
+            DualViewSegment(
+                result=SimpleNamespace(raw=["a"], braille=["⠁"], braille_to_raw_pos=[0], raw_to_braille_pos=[0]),
+                source_kind="text",
+            ),
+        )
+        frame._dual_view_results_by_document["alpha"] = results
+        frame._start_export_conversion = Mock(side_effect=AssertionError("conversion should not run"))
+        documents = [Document("alpha", "text", "a"), Document("beta", "text", "b")]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(gui.wx, "CallAfter", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)):
+                frame._export_next_document(documents, root, "html", ExportBatchResult())
+
+            self.assertEqual(
+                (root / "alpha.html").read_text(encoding="utf-8"),
+                render_dual_view_html(build_dual_view_model(results)),
+            )
+            self.assertEqual(
+                (root / "beta.html").read_text(encoding="utf-8"),
+                render_dual_view_html(build_dual_view_model(())),
+            )
+        result = frame._show_export_all_result.call_args.args[0]
+        self.assertTrue(result.all_succeeded)
+
+    def test_ctrl_s_in_output_editor_exports_open_document_as_brl(self) -> None:
+        frame = self._make_frame()
+        steps = Mock()
+        frame._save_open_document_with_feedback = steps.save
+        steps.save.return_value = True
+        frame._export_document_with_dialog = steps.export
+        frame.output_txt = steps.output_txt
+        event = Mock()
+        event.GetKeyCode.return_value = 83
+        event.ControlDown.return_value = True
+
+        frame.on_output_text_key_down(event)
+
+        self.assertEqual(
+            steps.mock_calls,
+            [call.save(), call.export(frame._documents_by_name["alpha"], "brl"), call.output_txt.SetFocus()],
+        )
+        event.Skip.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

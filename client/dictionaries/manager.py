@@ -4,7 +4,6 @@ import csv
 from pathlib import Path
 import shutil
 
-from app_paths import get_dictionary_directory
 from shared.name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEFAULT_DICTIONARY_NAME = "default"
@@ -12,12 +11,12 @@ DEFAULT_HEADER = ["text", "braille", "type"]
 MAX_DICTIONARY_NAME_LENGTH = MAX_NAME_LENGTH
 
 
-def dictionary_path_for_name(name: str, dictionary_dir: Path | None = None) -> Path:
-    return get_dictionary_directory(dictionary_dir) / f"{name}.csv"
+def dictionary_path_for_name(name: str, dictionary_dir: Path) -> Path:
+    return Path(dictionary_dir) / f"{name}.csv"
 
 
-def ensure_default_dictionary(dictionary_dir: Path | None = None) -> Path:
-    directory = get_dictionary_directory(dictionary_dir)
+def ensure_default_dictionary(dictionary_dir: Path) -> Path:
+    directory = Path(dictionary_dir)
     directory.mkdir(parents=True, exist_ok=True)
     default_path = directory / f"{DEFAULT_DICTIONARY_NAME}.csv"
     if not default_path.exists():
@@ -27,8 +26,8 @@ def ensure_default_dictionary(dictionary_dir: Path | None = None) -> Path:
     return default_path
 
 
-def list_dictionary_names(dictionary_dir: Path | None = None) -> list[str]:
-    directory = get_dictionary_directory(dictionary_dir)
+def list_dictionary_names(dictionary_dir: Path) -> list[str]:
+    directory = Path(dictionary_dir)
     if not directory.exists():
         return []
     names = [path.stem for path in directory.glob("*.csv") if path.is_file()]
@@ -48,8 +47,8 @@ def validate_dictionary_csv(path: Path | str) -> None:
         raise ValueError("Dictionary CSV must contain text, braille, and type headers.")
 
 
-def create_dictionary(dictionary_dir: Path | None, name: str) -> Path:
-    directory = get_dictionary_directory(dictionary_dir)
+def create_dictionary(dictionary_dir: Path, name: str) -> Path:
+    directory = Path(dictionary_dir)
     directory.mkdir(parents=True, exist_ok=True)
     normalized = normalize_dictionary_name(name)
     path = directory / f"{normalized}.csv"
@@ -61,8 +60,8 @@ def create_dictionary(dictionary_dir: Path | None, name: str) -> Path:
     return path
 
 
-def import_dictionary(dictionary_dir: Path | None, source_path: Path | str, name: str) -> Path:
-    directory = get_dictionary_directory(dictionary_dir)
+def import_dictionary(dictionary_dir: Path, source_path: Path | str, name: str) -> Path:
+    directory = Path(dictionary_dir)
     directory.mkdir(parents=True, exist_ok=True)
     normalized = normalize_dictionary_name(name)
     destination_path = directory / f"{normalized}.csv"
@@ -74,7 +73,7 @@ def import_dictionary(dictionary_dir: Path | None, source_path: Path | str, name
     return destination_path
 
 
-def rename_dictionary(dictionary_dir: Path | None, source_name: str, new_name: str) -> Path:
+def rename_dictionary(dictionary_dir: Path, source_name: str, new_name: str) -> Path:
     source_normalized = source_name.strip()
     if source_normalized.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
         raise ValueError("Default dictionary cannot be renamed.")
@@ -87,14 +86,14 @@ def rename_dictionary(dictionary_dir: Path | None, source_name: str, new_name: s
     return destination_path
 
 
-def export_dictionary(dictionary_dir: Path | None, name: str, destination_path: Path | str) -> Path:
+def export_dictionary(dictionary_dir: Path, name: str, destination_path: Path | str) -> Path:
     source_path = dictionary_path_for_name(name.strip(), dictionary_dir)
     destination = Path(destination_path)
     shutil.copyfile(source_path, destination)
     return destination
 
 
-def delete_dictionary(dictionary_dir: Path | None, name: str) -> None:
+def delete_dictionary(dictionary_dir: Path, name: str) -> None:
     normalized = name.strip()
     if normalized.casefold() == DEFAULT_DICTIONARY_NAME.casefold():
         raise ValueError("Default dictionary cannot be deleted.")

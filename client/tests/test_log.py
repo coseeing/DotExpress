@@ -14,7 +14,7 @@ class FileLoggerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             log_dir = Path(directory) / "log"
             logger_name = f"dotexpress.test.{uuid4().hex}"
-            with patch.object(log, "get_log_directory", return_value=log_dir):
+            with patch.object(log, "_log_directory", return_value=log_dir):
                 logger = log.get_logger(logger_name, "sample.log")
 
             handler = next(item for item in logger.handlers if isinstance(item, logging.FileHandler))

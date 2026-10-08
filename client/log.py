@@ -1,7 +1,11 @@
 import logging
 from pathlib import Path
 
-from app_paths import get_log_directory
+from app_paths import build_application_paths
+
+
+def _log_directory() -> Path:
+    return build_application_paths().log
 
 
 def get_logger(
@@ -14,7 +18,7 @@ def get_logger(
 
     if not logger.handlers:
         file_handler = logging.FileHandler(
-            get_log_directory() / Path(filename).name,
+            _log_directory() / Path(filename).name,
             encoding="utf-8",
             delay=True,
         )

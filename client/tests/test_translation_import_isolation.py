@@ -40,6 +40,21 @@ assert "config" not in sys.modules, "config was imported"
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_client_init_does_not_import_config(self) -> None:
+        script = """
+import sys
+import client_init
+assert "config" not in sys.modules, "config was imported"
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_conversion_does_not_import_dual_view(self) -> None:
         script = """
 import sys

@@ -14,7 +14,7 @@ from conversion.math_service import latex_to_mathml
 from conversion.presenter import ConversionPresenter
 from conversion.service import ConversionRequest
 from conversion.preprocessing.user_script import preprocessing_script_path
-from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
+from dictionaries.manager import dictionary_path_for_name
 from dictionaries.presenter import DictionaryManagementPresenter
 from documents.controller import DocumentController
 from documents.export_coordinator import ExportCoordinator

@@ -1184,7 +1184,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
             with self.subTest(module_attribute=name):
                 self.assertFalse(hasattr(gui, name))
         self.assertFalse(hasattr(gui.BrailleFrame, "_get_csv_wildcard"))
-        for name in ("dictionary_path_for_name", "get_dictionary_directory", "DictionaryManagementDialog", "DictionaryEntriesDialog"):
+        for name in ("dictionary_path_for_name", "DictionaryManagementDialog", "DictionaryEntriesDialog"):
             with self.subTest(kept=name):
                 self.assertTrue(hasattr(gui, name))
         for name in ("_get_selected_dictionary_path", "_show_file_error"):
@@ -3912,16 +3912,13 @@ class ApplicationPathsWiringCharacterizationTest(unittest.TestCase):
         """A bare frame whose application data lives under ``self.root``.
 
         The frame gets paths built from the root and one config store for them. The real
-        application root and the module-level config path point at an empty decoy folder,
-        so anything still resolved implicitly misses ``self.root`` and never reaches ``client/``.
+        application root points at an empty decoy folder, so anything still resolved
+        implicitly misses ``self.root`` and never reaches ``client/``.
         """
         decoy = self.root.parent / "decoy"
-        for patcher in (
-            patch.object(app_paths, "get_application_root", return_value=decoy),
-            patch.object(config, "CONFIG_PATH", str(decoy / "config.json")),
-        ):
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        patcher = patch.object(app_paths, "get_application_root", return_value=decoy)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         frame = object.__new__(gui.BrailleFrame)
         frame._paths = app_paths.build_application_paths(self.root)
         frame._config_store = config.ConfigStore(frame._paths.config)

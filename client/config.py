@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-from app_paths import get_config_path
 from conversion.math_braille_codes import DEFAULT_MATH_BRAILLE_TABLE, MATH_BRAILLE_TABLES  # noqa: F401  (re-exported)
 from log import get_logger
 
@@ -15,7 +14,6 @@ logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
 
 DEFAULT_FALLBACK = "zh_TW"
 LANG_ENV = "TEXT2BRAILLE_LANG"
-CONFIG_PATH = str(get_config_path())
 
 CONVERSION_SECTION = "conversion"
 VIEW_SECTION = "view"
@@ -242,70 +240,3 @@ class ConfigStore:
         self._save(data)
         return client_id
 
-
-# Module-level API kept until P2-6 step 4: each call reads CONFIG_PATH and
-# delegates to a ConfigStore built for that call.
-
-
-def get_lang() -> str:
-    return ConfigStore(CONFIG_PATH).get_lang()
-
-
-def get_charset_maps() -> dict[str, str]:
-    return ConfigStore(CONFIG_PATH).get_charset_maps()
-
-
-def set_lang(lang: str, persist: bool = False) -> None:
-    ConfigStore(CONFIG_PATH).set_lang(lang, persist)
-
-
-def get_translation_tables() -> dict:
-    return ConfigStore(CONFIG_PATH).get_translation_tables()
-
-
-def set_translation_tables(tables: dict[str, str]) -> None:
-    ConfigStore(CONFIG_PATH).set_translation_tables(tables)
-
-
-def get_output_mode(default: str = DEFAULT_OUTPUT_MODE) -> str:
-    return ConfigStore(CONFIG_PATH).get_output_mode(default)
-
-
-def set_output_mode(output_mode: str) -> None:
-    ConfigStore(CONFIG_PATH).set_output_mode(output_mode)
-
-
-def get_conversion_width(default: int = DEFAULT_CONVERSION_WIDTH) -> int:
-    return ConfigStore(CONFIG_PATH).get_conversion_width(default)
-
-
-def set_conversion_width(width: int) -> None:
-    ConfigStore(CONFIG_PATH).set_conversion_width(width)
-
-
-def get_selected_dictionary(default: str = "default") -> str:
-    return ConfigStore(CONFIG_PATH).get_selected_dictionary(default)
-
-
-def set_selected_dictionary(dictionary_name: str) -> None:
-    ConfigStore(CONFIG_PATH).set_selected_dictionary(dictionary_name)
-
-
-def get_view_font_size(default: int = DEFAULT_VIEW_FONT_SIZE) -> int:
-    return ConfigStore(CONFIG_PATH).get_view_font_size(default)
-
-
-def get_view_scheme(default: str = DEFAULT_VIEW_SCHEME) -> str:
-    return ConfigStore(CONFIG_PATH).get_view_scheme(default)
-
-
-def get_braille_font(default: str = DEFAULT_BRAILLE_FONT) -> str:
-    return ConfigStore(CONFIG_PATH).get_braille_font(default)
-
-
-def set_view_settings(font_size: int, scheme: str, braille_font: str) -> None:
-    ConfigStore(CONFIG_PATH).set_view_settings(font_size, scheme, braille_font)
-
-
-def get_or_create_client_id() -> str:
-    return ConfigStore(CONFIG_PATH).get_or_create_client_id()

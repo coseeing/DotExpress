@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 import gettext
+import inspect
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
@@ -539,11 +540,8 @@ class ConfigStoreTest(unittest.TestCase):
     def test_store_writes_the_documented_config_bytes(self) -> None:
         self.addCleanup(setattr, config, "_runtime_lang", config._runtime_lang)
         store_path = self.directory / "store" / "config.json"
-        module_path = self.directory / "module" / "config.json"
 
         self._apply_setters(config.ConfigStore(store_path))
-        with patch.object(config, "CONFIG_PATH", str(module_path)):
-            self._apply_setters(config)
 
         expected = {
             "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
@@ -560,7 +558,20 @@ class ConfigStoreTest(unittest.TestCase):
             store_path.read_text(encoding="utf-8"),
             json.dumps(expected, ensure_ascii=False, indent=2),
         )
-        self.assertEqual(module_path.read_bytes(), store_path.read_bytes())
+
+
+class ConfigModuleShapeTest(unittest.TestCase):
+    """P2-6: config IO lives on ``ConfigStore``; the module holds no path and no IO functions."""
+
+    def test_config_io_lives_only_on_the_store(self) -> None:
+        own_functions = [
+            name
+            for name, value in vars(config).items()
+            if inspect.isfunction(value) and value.__module__ == config.__name__
+        ]
+
+        self.assertEqual([name for name in own_functions if name.startswith(("get_", "set_"))], [])
+        self.assertEqual([name for name in vars(config) if "PATH" in name], [])
 
 
 if __name__ == "__main__":

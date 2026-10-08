@@ -322,5 +322,121 @@ class PresenterDeleteTest(PresenterTestCase):
 		self.set_active_name.assert_not_called()
 
 
+class PresenterRenameTest(PresenterTestCase):
+	def prompt_call(self, initial_name):
+		return ("prompt", _("Rename Dictionary"), initial_name)
+
+	def test_rename_default_does_nothing(self):
+		presenter = self.make_presenter()
+		view = FakeView()
+
+		result = presenter.rename(view, "default")
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [])
+		self.assertEqual(self.files(), ["default"])
+
+	def test_rename_cancel_keeps_file(self):
+		presenter = self.make_presenter("alpha")
+		view = FakeView(names=[None])
+
+		result = presenter.rename(view, "alpha")
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.prompt_call("alpha")])
+		self.assertEqual(self.files(), ["alpha", "default"])
+
+	def test_rename_inactive_dictionary_keeps_active_name(self):
+		presenter = self.make_presenter("alpha")
+		view = FakeView(names=["gamma"])
+
+		result = presenter.rename(view, "alpha")
+
+		self.assertEqual(result, "gamma")
+		self.assertEqual(view.calls, [self.prompt_call("alpha")])
+		self.assertEqual(self.files(), ["default", "gamma"])
+		self.assertEqual(presenter.dictionary_names, ["default", "gamma"])
+		self.set_active_name.assert_not_called()
+
+	def test_rename_active_dictionary_activates_new_name(self):
+		presenter = self.make_presenter("alpha", active="alpha")
+		view = FakeView(names=["gamma"])
+
+		result = presenter.rename(view, "alpha")
+
+		self.assertEqual(result, "gamma")
+		self.assertEqual(self.files(), ["default", "gamma"])
+		self.set_active_name.assert_called_once_with("gamma")
+		self.assertEqual(self.active, ["gamma"])
+
+	def test_rename_to_same_name_changes_nothing(self):
+		presenter = self.make_presenter("alpha", active="alpha")
+		view = FakeView(names=["alpha"])
+
+		result = presenter.rename(view, "alpha")
+
+		self.assertEqual(result, "alpha")
+		self.assertEqual(view.calls, [self.prompt_call("alpha")])
+		self.assertEqual(self.files(), ["alpha", "default"])
+		self.set_active_name.assert_not_called()
+
+	def test_rename_case_only_change_renames_file(self):
+		presenter = self.make_presenter("alpha")
+		if (self.dictionary_dir / "ALPHA.csv").exists():
+			self.skipTest("case-insensitive file system: a case-only rename is reported as a duplicate")
+		view = FakeView(names=["Alpha"])
+
+		result = presenter.rename(view, "alpha")
+
+		self.assertEqual(result, "Alpha")
+		self.assertEqual(view.calls, [self.prompt_call("alpha")])
+		self.assertEqual(self.files(), ["Alpha", "default"])
+
+	def test_rename_duplicate_shows_error_and_prompts_again_with_typed_name(self):
+		presenter = self.make_presenter("alpha", "beta")
+		view = FakeView(names=["beta", "gamma"])
+
+		result = presenter.rename(view, "alpha")
+
+		self.assertEqual(result, "gamma")
+		self.assertEqual(
+			view.calls,
+			[
+				self.prompt_call("alpha"),
+				("error", _('Dictionary "{name}" already exists.').format(name="beta")),
+				self.prompt_call("beta"),
+			],
+		)
+		self.assertEqual(self.files(), ["beta", "default", "gamma"])
+
+	def test_rename_invalid_name_shows_untranslated_info(self):
+		presenter = self.make_presenter("alpha")
+		view = FakeView(names=["bad|name"])
+
+		result = presenter.rename(view, "alpha")
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.prompt_call("alpha"), ("info", "Name contains invalid characters.")])
+		self.assertEqual(self.files(), ["alpha", "default"])
+
+	def test_rename_os_error_shows_save_error(self):
+		presenter = self.make_presenter("alpha", active="alpha")
+		view = FakeView(names=["gamma"])
+
+		with patch.object(presenter_module, "rename_dictionary_after_name_prompt", side_effect=PermissionError("denied")):
+			result = presenter.rename(view, "alpha")
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[
+				self.prompt_call("alpha"),
+				("error", _("Failed to save dictionary: {error}").format(error="denied")),
+			],
+		)
+		self.assertEqual(self.files(), ["alpha", "default"])
+		self.set_active_name.assert_not_called()
+
+
 if __name__ == "__main__":
 	unittest.main()

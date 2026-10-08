@@ -20,11 +20,12 @@ from dictionaries.manager import (
 	ensure_default_dictionary,
 	list_dictionary_names,
 )
-from dictionaries.name_prompt import prompt_dictionary_name_until_success
+from dictionaries.name_prompt import prompt_dictionary_name_until_success, rename_dictionary_after_name_prompt
 from i18n import _
 from translation.dictionary_state import (
 	plan_dictionary_state_after_add,
 	plan_dictionary_state_after_delete,
+	plan_dictionary_state_after_rename,
 	resolve_management_selection,
 )
 
@@ -125,6 +126,36 @@ class DictionaryManagementPresenter:
 			return None
 		self.refresh(name)
 		update = plan_dictionary_state_after_delete(active_name, name, previous_names)
+		if update.active_selected_name != active_name:
+			self._set_active_name(update.active_selected_name)
+		return update.management_selected_name
+
+	def rename(self, view: DictionaryManagementView, name: str) -> str | None:
+		if is_default_dictionary(name):
+			return None
+		try:
+			path = self._prompt_name_until_success(
+				view,
+				_("Rename Dictionary"),
+				name,
+				lambda dictionary_name: rename_dictionary_after_name_prompt(
+					self._dictionary_dir,
+					name,
+					dictionary_name,
+				),
+			)
+		except ValueError as exc:
+			view.show_info(str(exc))
+			return None
+		except OSError as exc:
+			view.show_error(_("Failed to save dictionary: {error}").format(error=exc))
+			return None
+		if path is None:
+			return None
+
+		active_name = self._get_active_name()
+		self.refresh(path.stem)
+		update = plan_dictionary_state_after_rename(active_name, name, path.stem, self._dictionary_names)
 		if update.active_selected_name != active_name:
 			self._set_active_name(update.active_selected_name)
 		return update.management_selected_name

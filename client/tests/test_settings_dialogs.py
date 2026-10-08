@@ -397,6 +397,22 @@ class ViewSettingsPanelTest(unittest.TestCase):
         panel._on_font_size_changed(None)
         self.assertTrue(panel.font_size_dirty)
 
+    def test_sync_font_size_sets_a_clean_spin(self) -> None:
+        panel = build_panel("ViewSettingsPanel")
+
+        self.assertIs(panel.sync_font_size(20), True)
+        self.assertEqual(panel.font_size_spin.value, 20)
+        self.assertFalse(panel.font_size_dirty)
+
+    def test_sync_font_size_leaves_a_pending_edit_alone(self) -> None:
+        panel = build_panel("ViewSettingsPanel")
+        panel.font_size_spin.SetValue(30)
+        panel._on_font_size_changed(None)
+
+        self.assertIs(panel.sync_font_size(20), False)
+        self.assertEqual(panel.font_size_spin.value, 30)
+        self.assertTrue(panel.font_size_dirty)
+
 
 class DotExpressSettingsDialogFlowTest(unittest.TestCase):
     def test_apply_validates_all_panels_before_commit(self) -> None:

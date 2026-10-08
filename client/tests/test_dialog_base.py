@@ -338,6 +338,42 @@ class SingletonDialogMixinTest(unittest.TestCase):
                 other.Destroy.assert_called_once_with()
                 parent_dialog.Destroy.assert_not_called()
 
+    def test_open_instance_returns_the_slot_without_touching_the_dialog(self) -> None:
+        for base in DIALOG_BASES:
+            with self.subTest(base=base.__name__):
+                dialog_class = singleton_class(base)
+                self.assertIsNone(dialog_class.open_instance())
+                existing = Mock()
+                dialog_class._instance = existing
+                self.assertIs(dialog_class.open_instance(), existing)
+                self.assertIs(dialog_class._instance, existing)
+                self.assertEqual(existing.mock_calls, [])
+
+    def test_open_instance_of_a_subclass_without_its_own_slot_is_none(self) -> None:
+        for base in DIALOG_BASES:
+            with self.subTest(base=base.__name__):
+                parent_class = singleton_class(base)
+                existing = Mock()
+                parent_class._instance = existing
+                child_class = type("Child", (parent_class,), {})
+
+                self.assertIsNone(child_class.open_instance())
+                self.assertIs(parent_class.open_instance(), existing)
+                self.assertEqual(existing.mock_calls, [])
+
+    def test_open_instance_is_none_after_destroy(self) -> None:
+        for base in DIALOG_BASES:
+            with self.subTest(base=base.__name__):
+                dialog_class = singleton_class(base)
+                dialog = dialog_class()
+                dialog.Show = Mock()
+                dialog.Destroy = Mock()
+                dialog_class._show_new(dialog)
+                self.assertIs(dialog_class.open_instance(), dialog)
+
+                dialog._destroy()
+                self.assertIsNone(dialog_class.open_instance())
+
 
 class DialogBaseImportTest(unittest.TestCase):
     def test_module_imports_only_the_standard_library_i18n_and_name_validation(self) -> None:

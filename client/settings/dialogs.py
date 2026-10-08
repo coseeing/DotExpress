@@ -618,6 +618,17 @@ class ViewSettingsPanel(SettingsPanel):
     def _on_font_size_changed(self, _event) -> None:
         self.font_size_dirty = True
 
+    def sync_font_size(self, font_size: int) -> bool:
+        """Show a font size changed in the main window, unless the user has edited it here.
+
+        Returns ``False``, changing nothing, while that edit is pending (until Apply or OK).
+        """
+        if self.font_size_dirty:
+            return False
+        self.font_size_spin.SetValue(font_size)
+        self.font_size_dirty = False
+        return True
+
     def _selected_scheme(self) -> str:
         return option_value_at(VIEW_SCHEME_OPTIONS, self.scheme_choice.GetSelection())
 

@@ -7,7 +7,6 @@ from documents.workspace import (
     BatchIssue,
     Document,
     batch_import_documents,
-    batch_export_documents_to_folder,
     export_document_brl,
     load_document_package,
     load_text_document,
@@ -261,84 +260,27 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0].path, source_dir / "bad.dep")
 
-    def test_batch_export_documents_to_folder_reports_existing_conflicts(self) -> None:
-        export_dir = Path(self._tmpdir.name) / "export"
-        export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / "lesson1.brl").write_text("old", encoding="utf-8")
-
-        conflicts = batch_export_documents_to_folder(
-            export_dir,
-            [
-                Document(name="lesson1", text="a", braille="⠁"),
-                Document(name="lesson2", text="b", braille="⠃"),
-            ],
-            format_key="brl",
-            overwrite=False,
-        )
-
-        self.assertEqual(conflicts, [export_dir / "lesson1.brl"])
-        self.assertFalse((export_dir / "lesson2.brl").exists())
-
-    def test_batch_export_documents_to_folder_writes_all_documents_when_overwrite_allowed(self) -> None:
-        export_dir = Path(self._tmpdir.name) / "export"
-        export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / "lesson1.brl").write_text("old", encoding="utf-8")
-
-        conflicts = batch_export_documents_to_folder(
-            export_dir,
-            [
-                Document(name="lesson1", text="a", braille="⠁"),
-                Document(name="lesson2", text="b", braille="⠃"),
-            ],
-            format_key="brl",
-            overwrite=True,
-        )
-
-        self.assertEqual(conflicts, [])
-        self.assertEqual((export_dir / "lesson1.brl").read_text(encoding="utf-8"), "⠁")
-        self.assertEqual((export_dir / "lesson2.brl").read_text(encoding="utf-8"), "⠃")
-
-    def test_batch_export_documents_to_folder_writes_dep_packages_without_pending_metadata(self) -> None:
-        export_dir = Path(self._tmpdir.name) / "export"
-        export_dir.mkdir(parents=True, exist_ok=True)
-
-        conflicts = batch_export_documents_to_folder(
-            export_dir,
-            [Document(name="lesson1", text="a", braille=None)],
-            format_key="dep",
-            overwrite=True,
-        )
-
-        self.assertEqual(conflicts, [])
-
-        import zipfile
-
-        with zipfile.ZipFile(export_dir / "lesson1.dep", "r") as archive:
-            self.assertEqual(sorted(archive.namelist()), ["lesson1.brl", "lesson1.txt"])
-
-    def test_prepare_document_for_save_preserves_pending_braille_without_auto_conversion(self) -> None:
+    def test_prepare_document_for_save_preserves_pending_braille(self) -> None:
         document = Document(name="lesson1", text="old", braille=None)
 
-        prepared, auto_error = prepare_document_for_save(
+        prepared = prepare_document_for_save(
             document,
             text="new text",
             braille="⠞⠑⠎⠞",
         )
 
         self.assertEqual(prepared, Document(name="lesson1", text="new text", braille=None))
-        self.assertIsNone(auto_error)
 
-    def test_prepare_document_for_save_keeps_existing_braille_without_auto_conversion(self) -> None:
+    def test_prepare_document_for_save_keeps_existing_braille(self) -> None:
         document = Document(name="lesson1", text="old", braille="⠃⠗⠇")
 
-        prepared, auto_error = prepare_document_for_save(
+        prepared = prepare_document_for_save(
             document,
             text="new text",
             braille="⠃⠗⠇",
         )
 
         self.assertEqual(prepared, Document(name="lesson1", text="new text", braille="⠃⠗⠇"))
-        self.assertIsNone(auto_error)
 
     def test_load_workspace_documents_sorts_valid_documents_and_collects_invalid_paths(self) -> None:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)

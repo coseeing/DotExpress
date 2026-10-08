@@ -108,38 +108,6 @@ def mapping(
     return "".join(result)
 
 
-def translate__mapping_string(
-    text: str,
-    dictionary_path: Path | str,
-    *,
-    from_field: str,
-    to_field: str,
-) -> str:
-    """
-    支援多字元對多字元的字串對照轉換。
-    """
-    dictionary_path = Path(dictionary_path)
-    if not dictionary_path.exists():
-        return text
-
-    with dictionary_path.open("r", newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        if reader.fieldnames is None:
-            raise ValueError("CSV must contain header row.")
-        if not {from_field, to_field}.issubset(reader.fieldnames):
-            raise ValueError(f"CSV must contain columns: {from_field}, {to_field}")
-
-        replacements: list[tuple[str, str]] = []
-        for row in reader:
-            source = (row.get(from_field) or "")
-            target = (row.get(to_field) or "")
-            if not source:
-                continue
-            replacements.append((source, target))
-
-    return mapping(text, replacements)
-
-
 def apply_dictionary(
     text: str,
     dictionary_path: Path | str,

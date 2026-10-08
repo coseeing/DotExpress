@@ -985,15 +985,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._dual_view_frame.Raise.assert_not_called()
         event.Skip.assert_called_once_with()
 
-    def test_rename_and_delete_keep_alignment_cache_consistent(self) -> None:
-        frame = self._make_frame()
-        frame._dual_view_results_by_document = {"alpha": ("segment",)}
-
-        frame._rename_dual_view_result("alpha", "renamed")
-        frame._delete_dual_view_result("renamed")
-
-        self.assertEqual(frame._dual_view_results_by_document, {})
-
     def test_delete_all_partial_failure_reconciles_dual_view_cache_and_refreshes_viewer(self) -> None:
         frame = self._make_frame()
         frame.documents = [
@@ -1328,6 +1319,41 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_translation_tables_are_not_module_state(self) -> None:
         self.assertFalse(hasattr(gui, "language_map_translate_table"))
+
+    def test_dead_frame_helpers_are_removed(self) -> None:
+        for name in ("IMPORT_WILDCARDS", "TXT_WILDCARD", "PDF_WILDCARD", "DOCX_WILDCARD", "EPUB_WILDCARD"):
+            with self.subTest(module_attribute=name):
+                self.assertFalse(hasattr(gui, name))
+        # Check the class, not a frame instance: the wx stub's __getattr__ makes
+        # every missing instance attribute look present.
+        for name in (
+            "_create_labeled_group",
+            "_get_import_wildcard",
+            "_get_txt_wildcard",
+            "_rename_dual_view_result",
+            "_delete_dual_view_result",
+        ):
+            with self.subTest(frame_attribute=name):
+                self.assertFalse(hasattr(gui.BrailleFrame, name))
+        self.assertTrue(hasattr(gui, "DEP_WILDCARD"))
+        self.assertTrue(hasattr(gui.BrailleFrame, "_get_brl_wildcard"))
+
+    def test_save_open_document_saves_prepared_document(self) -> None:
+        frame = self._make_frame()
+        frame._documents_by_name = {"alpha": Document("alpha", "source", "old braille")}
+        frame.workspace_dir = Path("workspace")
+        frame.input_txt.GetValue.return_value = "edited"
+        frame.output_txt.GetValue.return_value = "edited braille"
+
+        with patch.object(gui, "save_document_package") as save_package:
+            frame._save_open_document()
+
+        expected = Document("alpha", "edited", "edited braille")
+        self.assertEqual(frame._documents_by_name["alpha"], expected)
+        save_package.assert_called_once_with(
+            gui.document_package_path_for_name("alpha", Path("workspace")),
+            expected,
+        )
 
     def test_open_settings_uses_singleton_dialog(self) -> None:
         frame = object.__new__(gui.BrailleFrame)

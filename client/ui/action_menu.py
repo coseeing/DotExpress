@@ -33,24 +33,6 @@ DOCUMENT_MENU_ITEMS: tuple[DocumentMenuItem, ...] = (
 )
 
 
-def build_actions_button_label(base_label: str) -> str:
-    return f"{base_label} ▼"
-
-
-def get_actions_menu_position(button_size: tuple[int, int]) -> tuple[int, int]:
-    return (0, button_size[1])
-
-
-def get_document_menu_items() -> list[tuple[str, str] | tuple[str, str, list[str]]]:
-    items: list[tuple[str, str] | tuple[str, str, list[str]]] = []
-    for item in DOCUMENT_MENU_ITEMS:
-        if item.kind == "submenu":
-            items.append((item.kind, item.label, [label for _key, label in item.formats]))
-        else:
-            items.append((item.kind, item.label))
-    return items
-
-
 def get_document_menu_descriptors() -> tuple[DocumentMenuItem, ...]:
     return DOCUMENT_MENU_ITEMS
 
@@ -66,19 +48,3 @@ def get_document_menu_enabled_state(*, has_selection: bool, has_documents: bool)
         "Export": has_selection,
         "Export All": has_documents,
     }
-
-
-def get_dictionary_action_labels() -> list[str]:
-    return ["Edit", "Delete", "Rename", "Add", "Import", "Export"]
-
-
-def get_document_action_labels() -> list[str]:
-    return [item[1] for item in get_document_menu_items()]
-
-
-def get_document_export_format_labels() -> list[str]:
-    return [label for _key, label in DOCUMENT_MENU_ITEMS[-2].formats]
-
-
-def get_document_export_format_keys() -> list[str]:
-    return [key for key, _label in DOCUMENT_MENU_ITEMS[-2].formats]

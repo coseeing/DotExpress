@@ -31,15 +31,3 @@ def get_import_filters() -> tuple[ImportFilter, ...]:
 
 def build_import_wildcard(translate=lambda value: value) -> str:
     return build_format_wildcard(translate)
-
-
-def get_import_filter_labels() -> list[str]:
-    return list(get_format_import_filter_labels())
-
-
-def get_import_wildcard_text() -> str:
-    return build_import_wildcard()
-
-
-def get_default_import_filter_index() -> int:
-    return ALL_SUPPORTED_FILTER_INDEX

@@ -113,6 +113,9 @@ class SharedSetupConsumerTest(unittest.TestCase):
     def test_dialog_uses_shared_i18n(self) -> None:
         self.assert_uses_shared_i18n("dialog.py", {"_"})
 
+    def test_settings_dialogs_uses_shared_i18n(self) -> None:
+        self.assert_uses_shared_i18n("settings/dialogs.py", {"_"})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,18 +24,7 @@ from conversion.service import (
 	get_public_error_message,
 )
 from conversion.preprocessing.user_script import preprocessing_script_path
-from dictionaries.actions import is_default_dictionary
-from dictionaries.manager import (
-	create_dictionary,
-	delete_dictionary,
-	dictionary_path_for_name,
-	ensure_default_dictionary,
-	export_dictionary,
-	get_dictionary_directory,
-	import_dictionary,
-	list_dictionary_names,
-)
-from dictionaries.name_prompt import prompt_dictionary_name_until_success, rename_dictionary_after_name_prompt
+from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
 from dictionaries.presenter import DictionaryManagementPresenter
 from documents.controller import DocumentController
 from documents.formats import get_format
@@ -78,12 +67,6 @@ from settings.translation import (
 	save_translation_settings,
 )
 from settings.translation_tables import load_translation_tables, save_translation_tables
-from translation.dictionary_state import (
-	plan_dictionary_state_after_add,
-	plan_dictionary_state_after_delete,
-	plan_dictionary_state_after_rename,
-	resolve_management_selection,
-)
 from ui.font_support import SIMBRAILLE_FACE_NAME, get_simbraille_font_path, register_private_font_for_windows
 from ui.shortcuts import (
 	get_font_size_step_from_wheel,
@@ -112,7 +95,6 @@ from client_init import start_client_init_background
 
 from dialog import (
 	DictionaryManagementDialog,
-	DictionaryNameDialog,
 	DocumentNameDialog,
 	FileIssuesDialog,
 	InvalidWorkspaceFilesDialog,
@@ -139,7 +121,6 @@ VIEW_SCHEMES = {
 		"foreground": wx.Colour(255, 255, 255),
 	},
 }
-CSV_WILDCARD = "CSV files (*.csv)|*.csv"
 DEP_WILDCARD = "DotExpress files (*.dep)|*.dep"
 BRL_WILDCARD = "Braille files (*.brl)|*.brl"
 HTML_WILDCARD = "HTML files (*.html)|*.html"
@@ -197,14 +178,6 @@ _MENU_TRANSLATION_MARKERS = (
 	N_("Braille files (*.brl)|*.brl"),
 	N_("All Supported Files"),
 )
-
-
-def _prompt_for_dictionary_name(parent: wx.Window | None, *, title: str, initial_name: str = "") -> str | None:
-	with DictionaryNameDialog(parent, initial_name=initial_name) as dialog:
-		dialog.SetTitle(title)
-		if dialog.ShowModal() != wx.ID_OK:
-			return None
-		return dialog.get_dictionary_name()
 
 
 class ConvertingDialog(wx.Dialog):
@@ -605,9 +578,6 @@ class BrailleFrame(wx.Frame):
 
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
-
-	def _get_csv_wildcard(self) -> str:
-		return _(CSV_WILDCARD)
 
 	def _show_file_error(self, message: str, error: Exception, parent: wx.Window | None = None) -> None:
 		wx.MessageBox(

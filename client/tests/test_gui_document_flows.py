@@ -1172,6 +1172,35 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         self.assertTrue(hasattr(gui.BrailleFrame, "_set_active_dictionary"))
         self.assertTrue(hasattr(gui.BrailleFrame, "get_dictionary_names_for_dialog"))
 
+    def test_dictionary_dialog_helpers_and_imports_are_removed_from_gui(self) -> None:
+        for name in (
+            "_prompt_for_dictionary_name",
+            "CSV_WILDCARD",
+            "DictionaryNameDialog",
+            "create_dictionary",
+            "delete_dictionary",
+            "ensure_default_dictionary",
+            "export_dictionary",
+            "import_dictionary",
+            "is_default_dictionary",
+            "list_dictionary_names",
+            "plan_dictionary_state_after_add",
+            "plan_dictionary_state_after_delete",
+            "plan_dictionary_state_after_rename",
+            "prompt_dictionary_name_until_success",
+            "rename_dictionary_after_name_prompt",
+            "resolve_management_selection",
+        ):
+            with self.subTest(module_attribute=name):
+                self.assertFalse(hasattr(gui, name))
+        self.assertFalse(hasattr(gui.BrailleFrame, "_get_csv_wildcard"))
+        for name in ("dictionary_path_for_name", "get_dictionary_directory", "DictionaryManagementDialog", "SpeechSymbolsDialog"):
+            with self.subTest(kept=name):
+                self.assertTrue(hasattr(gui, name))
+        for name in ("_get_selected_dictionary_path", "_show_file_error"):
+            with self.subTest(kept=name):
+                self.assertTrue(hasattr(gui.BrailleFrame, name))
+
 
 if __name__ == "__main__":
     unittest.main()

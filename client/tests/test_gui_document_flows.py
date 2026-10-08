@@ -1326,6 +1326,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
                     gui._("Please select a translation table first."),
                 )
 
+    def test_translation_tables_are_not_module_state(self) -> None:
+        self.assertFalse(hasattr(gui, "language_map_translate_table"))
+
     def test_open_settings_uses_singleton_dialog(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
         frame.get_settings_snapshot = Mock(return_value=make_snapshot())

@@ -227,8 +227,6 @@ _MENU_TRANSLATION_MARKERS = (
 	_("All Supported Files"),
 )
 
-language_map_translate_table = load_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
-
 
 def _prompt_for_dictionary_name(parent: wx.Window | None, *, title: str, initial_name: str = "") -> str | None:
 	with DictionaryNameDialog(parent, initial_name=initial_name) as dialog:

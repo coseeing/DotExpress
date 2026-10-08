@@ -7,7 +7,7 @@ import zipfile
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import DEFAULT, Mock, call, patch
+from unittest.mock import ANY, DEFAULT, Mock, call, patch
 
 from tests import wx_stub
 from tests.menu_recording import DOCUMENT_MENU_BUILD_LOG, MenuRecorder, enable_log, fake_translate
@@ -25,6 +25,7 @@ tearDownModule = _SCOPE.deactivate
 
 from documents.controller import DocumentController
 from documents.workspace import Document, load_document_package, save_document_package
+from documents.workspace_service import DocumentWorkspaceService
 from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
@@ -63,6 +64,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._show_export_all_result = Mock()
         frame._dual_view_frame = None
         frame._document_controller = DocumentController(documents=list(documents), open_name=open_name)
+        frame._workspace_service = DocumentWorkspaceService(frame._document_controller, Path("unused-workspace"))
         frame.translation_tables = dict(gui.DEFAULT_TRANSLATION_TABLES)
         return frame
 
@@ -272,6 +274,130 @@ class DocumentControllerOwnershipTest(unittest.TestCase):
         self.assertIs(frame._document_controller, controller)
         self.assertEqual(controller.document_names, ["alpha"])
         self.assertEqual(controller.open_document_name, "alpha")
+
+
+class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
+    """The frame hands workspace IO to its service and keeps the dialogs and UI updates."""
+
+    UI_STEPS = (
+        "_refresh_document_list",
+        "_open_document_by_name",
+        "_update_window_title",
+        "_refresh_dual_view",
+        "_clear_document_editors",
+        "_ensure_open_document_exists",
+        "_review_invalid_workspace_files",
+        "_show_file_issues_dialog",
+    )
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.workspace = Path(temp_dir.name)
+
+    def _make_frame(self, documents=(), open_name=None, selected_name=None) -> gui.BrailleFrame:
+        frame = gui.BrailleFrame.__new__(gui.BrailleFrame)
+        frame._document_controller = DocumentController(
+            documents=list(documents),
+            open_name=open_name,
+            selected_name=selected_name,
+        )
+        frame._workspace_service = Mock()
+        frame._workspace_service.workspace_dir = self.workspace
+        frame.input_txt = Mock()
+        frame.output_txt = Mock()
+        frame._show_file_error = Mock()
+        frame._save_open_document_with_feedback = Mock(return_value=True)
+        frame.ui = Mock()
+        for name in self.UI_STEPS:
+            setattr(frame, name, getattr(frame.ui, name))
+        return frame
+
+    def test_initialize_state_creates_service_for_frame_controller(self) -> None:
+        frame = object.__new__(gui.BrailleFrame)
+        frame._document_controller = DocumentController()
+        frame._register_output_font = Mock(return_value=False)
+        with (
+            patch.object(gui, "get_dictionary_directory", return_value=Path("dictionary")),
+            patch.object(gui, "DictionaryManagementPresenter", return_value=Mock(dictionary_names=["default"])),
+            patch.object(gui, "load_translation_settings", return_value=TranslationSettings("unicode", 40, "default")),
+            patch.object(gui, "get_workspace_directory", return_value=self.workspace),
+            patch.object(gui, "load_view_settings", return_value=ViewSettings(40, "light", "default")),
+            patch.object(gui, "load_translation_tables", return_value={}),
+        ):
+            frame._initialize_state()
+
+        service = frame._workspace_service
+        self.assertEqual(service.workspace_dir, self.workspace)
+        service.create_document(Document("beta", "", ""))
+        self.assertEqual(frame._document_controller.document_names, ["beta"])
+        self.assertTrue((self.workspace / "beta.dep").is_file())
+
+    def test_startup_loads_through_service_and_reviews_returned_paths(self) -> None:
+        frame = self._make_frame()
+        invalid_paths = [self.workspace / "bad.dep"]
+        frame._workspace_service.load_documents.return_value = invalid_paths
+
+        frame._load_workspace_documents_at_startup()
+
+        frame._workspace_service.load_documents.assert_called_once_with()
+        self.assertEqual(
+            frame.ui.mock_calls,
+            [
+                call._refresh_document_list(),
+                call._review_invalid_workspace_files(invalid_paths),
+                call._ensure_open_document_exists(),
+                call._update_window_title(),
+            ],
+        )
+
+    def test_save_open_document_passes_editor_text_to_service(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "1")], open_name="alpha")
+        frame.input_txt.GetValue.return_value = "edited"
+        frame.output_txt.GetValue.return_value = "edited braille"
+
+        frame._save_open_document()
+
+        frame._workspace_service.save_open_document.assert_called_once_with(text="edited", braille="edited braille")
+
+    def test_create_document_adds_through_service_then_opens_it(self) -> None:
+        frame = self._make_frame()
+
+        self.assertTrue(frame._create_document("beta", focus_input=True))
+
+        frame._workspace_service.create_document.assert_called_once_with(Document("beta", "", ""))
+        self.assertEqual(
+            frame.ui.mock_calls,
+            [call._refresh_document_list("beta"), call._open_document_by_name("beta")],
+        )
+        frame.input_txt.SetFocus.assert_called_once_with()
+
+    def test_create_document_failure_shows_error_and_stops(self) -> None:
+        frame = self._make_frame()
+        error = OSError("disk full")
+        frame._workspace_service.create_document.side_effect = error
+
+        self.assertFalse(frame._create_document("beta"))
+
+        frame._show_file_error.assert_called_once_with(gui._("Failed to save document: {error}"), error)
+        self.assertEqual(frame.ui.mock_calls, [])
+
+    def test_invalid_file_review_deletes_through_service_and_reports_errors(self) -> None:
+        frame = self._make_frame()
+        invalid_paths = [self.workspace / "bad.dep", self.workspace / "worse.dep"]
+        error = OSError("locked")
+        frame._workspace_service.delete_invalid_files.side_effect = lambda paths, on_error: on_error(error)
+        dialog = Mock()
+        dialog.__enter__ = Mock(return_value=dialog)
+        dialog.__exit__ = Mock(return_value=False)
+        dialog.should_delete_invalid_files.return_value = True
+
+        with patch.object(gui, "InvalidWorkspaceFilesDialog", Mock(return_value=dialog)) as dialog_class:
+            gui.BrailleFrame._review_invalid_workspace_files(frame, invalid_paths)
+
+        dialog_class.assert_called_once_with(frame, invalid_paths)
+        frame._workspace_service.delete_invalid_files.assert_called_once_with(invalid_paths, on_error=ANY)
+        frame._show_file_error.assert_called_once_with(gui._("Failed to delete invalid workspace file: {error}"), error)
 
 
 class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
@@ -756,7 +882,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
                 Document("beta", "text-b", "braille-b"),
             ),
         )
-        frame.workspace_dir = Path("/workspace")
         frame._document_controller.set_dual_view_results("alpha", ("stale-alpha",))
         frame._document_controller.set_dual_view_results("beta", ("fresh-beta",))
         frame._document_controller.set_dual_view_results("ghost", ("stale-ghost",))
@@ -923,6 +1048,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def _initialize_state_with_loaded_tables(self, loaded_tables: dict[str, str]):
         frame = object.__new__(gui.BrailleFrame)
+        frame._document_controller = DocumentController()
         frame._register_output_font = Mock(return_value=False)
         with (
             patch.object(gui, "get_dictionary_directory", return_value=Path("dictionary")),
@@ -1117,19 +1243,18 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_save_open_document_saves_prepared_document(self) -> None:
         frame = self._make_frame(documents=(Document("alpha", "source", "old braille"),))
-        frame.workspace_dir = Path("workspace")
         frame.input_txt.GetValue.return_value = "edited"
         frame.output_txt.GetValue.return_value = "edited braille"
 
-        with patch.object(gui, "save_document_package") as save_package:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            frame._workspace_service = DocumentWorkspaceService(frame._document_controller, workspace)
             frame._save_open_document()
+            saved = load_document_package(workspace / "alpha.dep")
 
         expected = Document("alpha", "edited", "edited braille")
         self.assertEqual(frame._document_controller.get_document("alpha"), expected)
-        save_package.assert_called_once_with(
-            gui.document_package_path_for_name("alpha", Path("workspace")),
-            expected,
-        )
+        self.assertEqual(saved, expected)
 
     def test_open_settings_uses_singleton_dialog(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
@@ -1209,6 +1334,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
             dictionary_dir = Path(temp_dir)
             (dictionary_dir / "alpha.csv").write_text("text,braille,type\n", encoding="utf-8")
             frame = object.__new__(gui.BrailleFrame)
+            frame._document_controller = DocumentController()
             frame._register_output_font = Mock(return_value=False)
             with (
                 patch.object(gui, "get_dictionary_directory", return_value=dictionary_dir),
@@ -1819,7 +1945,7 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
             open_name=open_name,
             selected_name=selected_name,
         )
-        frame.workspace_dir = self.workspace
+        frame._workspace_service = DocumentWorkspaceService(frame._document_controller, self.workspace)
         open_document = next((document for document in documents if document.name == open_name), None)
         frame.input_txt = _FakeEditor("input", self.events, open_document.text if open_document else "")
         frame.output_txt = _FakeEditor("output", self.events, (open_document.braille or "") if open_document else "")

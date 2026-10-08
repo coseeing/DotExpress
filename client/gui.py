@@ -38,13 +38,12 @@ from documents.workspace import (
     batch_import_documents,
     create_default_document,
     document_package_path_for_name,
-    ensure_workspace_directory,
 	get_workspace_directory,
     load_workspace_documents,
     normalize_document_name,
-    prepare_document_for_save,
     save_document_package,
 )
+from documents.workspace_service import DocumentWorkspaceService
 from documents.export_results import (
     ExportBatchResult,
 )
@@ -179,7 +178,7 @@ class BrailleFrame(wx.Frame):
 		self._dictionary_presenter.refresh()
 		self.translation_settings = load_translation_settings(self._dictionary_presenter.dictionary_names)
 		self.translation_tables = load_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
-		self.workspace_dir = get_workspace_directory()
+		self._workspace_service = DocumentWorkspaceService(self._document_controller, get_workspace_directory())
 		self._simbraille_font_available = self._register_output_font()
 		self._dual_view_frame: DualViewFrame | None = None
 
@@ -645,19 +644,10 @@ class BrailleFrame(wx.Frame):
 		self.input_txt.SetFocus()
 
 	def _save_open_document(self) -> None:
-		open_name = self._document_controller.open_document_name
-		if not open_name:
-			return
-		document = self._document_controller.get_document(open_name)
-		if document is None:
-			return
-		updated_document = prepare_document_for_save(
-			document,
+		self._workspace_service.save_open_document(
 			text=self.input_txt.GetValue(),
 			braille=self.output_txt.GetValue(),
 		)
-		self._document_controller.replace_document(updated_document)
-		save_document_package(document_package_path_for_name(updated_document.name, self.workspace_dir), updated_document)
 
 	def _save_open_document_with_feedback(self) -> bool:
 		try:
@@ -675,11 +665,10 @@ class BrailleFrame(wx.Frame):
 			delete_invalid = dialog.should_delete_invalid_files()
 		if not delete_invalid:
 			return
-		for invalid_path in invalid_paths:
-			try:
-				invalid_path.unlink(missing_ok=True)
-			except OSError as exc:
-				self._show_file_error(_("Failed to delete invalid workspace file: {error}"), exc)
+		self._workspace_service.delete_invalid_files(
+			invalid_paths,
+			on_error=lambda exc: self._show_file_error(_("Failed to delete invalid workspace file: {error}"), exc),
+		)
 
 	def _create_document(
 		self,
@@ -691,11 +680,10 @@ class BrailleFrame(wx.Frame):
 	) -> bool:
 		document = Document(name=document_name, text=text, braille=braille)
 		try:
-			save_document_package(document_package_path_for_name(document.name, self.workspace_dir), document)
+			self._workspace_service.create_document(document)
 		except OSError as exc:
 			self._show_file_error(_("Failed to save document: {error}"), exc)
 			return False
-		self._document_controller.add_document(document)
 		self._refresh_document_list(document.name)
 		self._open_document_by_name(document.name)
 		if focus_input:
@@ -746,17 +734,15 @@ class BrailleFrame(wx.Frame):
 		issues: list[BatchIssue] = []
 		for document in documents:
 			try:
-				save_document_package(document_package_path_for_name(document.name, self.workspace_dir), document)
+				save_document_package(document_package_path_for_name(document.name, self._workspace_service.workspace_dir), document)
 			except OSError as exc:
-				issues.append(BatchIssue(path=document_package_path_for_name(document.name, self.workspace_dir), reason=str(exc)))
+				issues.append(BatchIssue(path=document_package_path_for_name(document.name, self._workspace_service.workspace_dir), reason=str(exc)))
 				continue
 			saved_documents.append(document)
 		return saved_documents, issues
 
 	def _load_workspace_documents_at_startup(self) -> None:
-		self.workspace_dir = ensure_workspace_directory(self.workspace_dir)
-		documents, invalid_paths = load_workspace_documents(self.workspace_dir)
-		self._document_controller.load_documents(documents)
+		invalid_paths = self._workspace_service.load_documents()
 		self._refresh_document_list()
 		self._review_invalid_workspace_files(invalid_paths)
 		self._ensure_open_document_exists()
@@ -839,8 +825,8 @@ class BrailleFrame(wx.Frame):
 			return
 		try:
 			renamed_document = Document(name=new_name, text=selected_document.text, braille=selected_document.braille)
-			save_document_package(document_package_path_for_name(renamed_document.name, self.workspace_dir), renamed_document)
-			old_path = document_package_path_for_name(selected_document.name, self.workspace_dir)
+			save_document_package(document_package_path_for_name(renamed_document.name, self._workspace_service.workspace_dir), renamed_document)
+			old_path = document_package_path_for_name(selected_document.name, self._workspace_service.workspace_dir)
 			if old_path.exists():
 				old_path.unlink()
 		except OSError as exc:
@@ -868,7 +854,7 @@ class BrailleFrame(wx.Frame):
 		if confirmation != wx.YES:
 			return
 		try:
-			package_path = document_package_path_for_name(selected_document.name, self.workspace_dir)
+			package_path = document_package_path_for_name(selected_document.name, self._workspace_service.workspace_dir)
 			if package_path.exists():
 				package_path.unlink()
 		except OSError as exc:
@@ -901,12 +887,12 @@ class BrailleFrame(wx.Frame):
 			return
 		for document in self._document_controller.documents_snapshot():
 			try:
-				package_path = document_package_path_for_name(document.name, self.workspace_dir)
+				package_path = document_package_path_for_name(document.name, self._workspace_service.workspace_dir)
 				if package_path.exists():
 					package_path.unlink()
 			except OSError as exc:
 				self._show_file_error(_("Failed to delete document: {error}"), exc)
-				remaining_documents, invalid_paths = load_workspace_documents(self.workspace_dir)
+				remaining_documents, invalid_paths = load_workspace_documents(self._workspace_service.workspace_dir)
 				self._document_controller.restore_documents_after_delete_all_failure(remaining_documents)
 				self._refresh_document_list()
 				self._review_invalid_workspace_files(invalid_paths)

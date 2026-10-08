@@ -1,6 +1,7 @@
 import unittest
 
 from conversion.text import char_maps, dictionary_rules, pipeline
+from languageDetection import LanguageDetector
 
 
 class RemovedDeadCodeTest(unittest.TestCase):
@@ -15,6 +16,11 @@ class RemovedDeadCodeTest(unittest.TestCase):
                 self.assertFalse(hasattr(module, name))
         self.assertTrue(hasattr(char_maps, "translate__mapping_char"))
         self.assertTrue(hasattr(dictionary_rules, "apply_dictionary"))
+
+    def test_dead_language_detection_method_is_removed(self) -> None:
+        self.assertFalse(hasattr(LanguageDetector, "process_for_spelling"))
+        self.assertTrue(hasattr(LanguageDetector, "add_detected_language_commands"))
+        self.assertTrue(hasattr(LanguageDetector, "find_language_for_charset"))
 
 
 if __name__ == "__main__":

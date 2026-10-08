@@ -201,7 +201,6 @@ class LanguageDetector(object):
 			elif isinstance(command, str):
 				sb = StringIO()
 				command = str(command)
-				prevInIgnore = False
 				rule = False
 				for c in command:
 					if leading and self._is_non_detecting_character(c):
@@ -259,32 +258,8 @@ class LanguageDetector(object):
 					if "\u2800" <= c <= "\u28ff":
 						sb.write(c)
 						continue
-					if False and (c.isdigit() or (not c.isalpha() and block <= 0x8)):
-						# if config.conf["WorldVoice"]['autoLanguageSwitching']['ignoreNumbersInLanguageDetection'] and c.isdigit():
-						if c.isdigit():
-							sb.write(c)
-							continue
-						# if config.conf["WorldVoice"]['autoLanguageSwitching']['ignorePunctuationInLanguageDetection'] and not c.isdigit():
-						if not c.isdigit():
-							sb.write(c)
-							continue
-						if prevInIgnore and not rule:
-							# Digits and ascii punctuation. We already calculated
-							sb.write(c)
-							continue
-						prevInIgnore = True
-						charset = None # Revert to default charset, we don't care here and  have to recheck later
-						if tmpLang != curLang.split("_")[0]:
-							if sb.getvalue():
-								yield sb.getvalue()
-								sb = StringIO()
-							yield LangChangeCommand(curLang)
-							tmpLang = curLang.split("_")[0]
-						sb.write(c)
-						continue
 
 					# Process alphanumeric characters.
-					prevInIgnore = False
 					try:
 						newCharset = BLOCKS[block]
 					except IndexError:
@@ -392,51 +367,3 @@ class LanguageDetector(object):
 			if lang == base and best is None:
 				best = base
 		return best or base
-
-	def process_for_spelling(self, text, locale=None):
-		if locale is None:
-			# defaultLang = getSynth().language
-			defaultLang = config.get_lang()
-		else:
-			defaultLang = locale
-		# 以完整語系作為目前語言（避免僅保留兩碼）
-		curLang = defaultLang
-		charset = None
-		sb = StringIO()
-		for c in text:
-			block = ord(c) >> BLOCK_RSHIFT
-			if c.isspace() or c.isdigit() or (not c.isalpha() and block <= 0x8):
-				charset = None
-				if curLang == defaultLang:
-					sb.write(c)
-				else:
-					if sb.getvalue():
-						yield sb.getvalue(), curLang
-					curLang = defaultLang
-					sb = StringIO()
-					sb.write(c)
-				continue
-			try:
-				newCharset = BLOCKS[block]
-			except IndexError:
-				newCharset = None
-			if charset is None or charset != newCharset:
-				tmpLang = curLang.split("_")[0]
-				if newCharset in self.languageBlocks[tmpLang]:
-					sb.write(c)
-					continue
-				base = self.find_language_for_charset(newCharset, tmpLang)
-				charset = newCharset
-				if base == tmpLang:
-					sb.write(c)
-					continue
-				if sb.getvalue():
-					yield sb.getvalue(), curLang
-					sb = StringIO()
-				sb.write(c)
-				# 以偏好規則將兩碼 base（如 zh）還原為完整語系（如 zh_TW）
-				curLang = self._preferred_full_lang(base, defaultLang)
-			else: # same charset
-				sb.write(c)
-		if sb.getvalue():
-			yield sb.getvalue(), curLang

@@ -119,6 +119,29 @@ class SharedConstantsTest(unittest.TestCase):
             TranslationResult.lang_blocks["ja"] = ()
 
 
+class EqualityTest(unittest.TestCase):
+    def test_comparing_with_another_type_is_not_equal(self) -> None:
+        result = TranslationResult(["a"], ["⠁"], [0], [0])
+
+        self.assertFalse(result == object())
+        self.assertTrue(result != "x")
+        self.assertIs(result.__eq__(42), NotImplemented)
+
+    def test_results_with_equal_lists_compare_equal(self) -> None:
+        self.assertEqual(
+            TranslationResult(["a"], ["⠁"], [0], [0]),
+            TranslationResult(["a"], ["⠁"], [0], [0]),
+        )
+        self.assertNotEqual(
+            TranslationResult(["a"], ["⠁"], [0], [0]),
+            TranslationResult(["b"], ["⠁"], [0], [0]),
+        )
+
+    def test_results_are_unhashable(self) -> None:
+        with self.assertRaises(TypeError):
+            hash(TranslationResult([], [], [], []))
+
+
 class MergeTranslationResultsTest(unittest.TestCase):
     def test_merging_nothing_gives_an_empty_result(self) -> None:
         for translations in ([], None):

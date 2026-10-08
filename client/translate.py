@@ -61,6 +61,8 @@ class TranslationResult:
 		return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
 
 	def __eq__(self, other):
+		if not isinstance(other, TranslationResult):
+			return NotImplemented
 		result = True
 		result &= (self.raw == other.raw)
 		result &= (self.braille == other.braille)

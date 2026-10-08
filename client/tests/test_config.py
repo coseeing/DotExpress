@@ -19,8 +19,7 @@ class ConfigTest(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_view_settings_are_persisted_under_view_section(self) -> None:
-        config.set_view_font_size(18)
-        config.set_view_scheme("dark")
+        config.set_view_settings(18, "dark", "simbraille")
 
         with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -32,11 +31,13 @@ class ConfigTest(unittest.TestCase):
                 "view": {
                     "font_size": 18,
                     "scheme": "dark",
+                    "braille_font": "simbraille",
                 }
             },
         )
         self.assertEqual(config.get_view_font_size(), 18)
         self.assertEqual(config.get_view_scheme(), "dark")
+        self.assertEqual(config.get_braille_font("default"), "simbraille")
 
     def test_conversion_settings_roundtrip_under_conversion_section(self) -> None:
         tables = {
@@ -118,8 +119,17 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertEqual(config.get_selected_dictionary("default"), "math")
 
-    def test_braille_font_setting_is_persisted_under_view_section(self) -> None:
-        config.set_braille_font("simbraille")
+    def test_view_settings_write_braille_font_and_keep_other_sections(self) -> None:
+        with open(config.CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "conversion": {"width": 52},
+                    "view": {"font_size": 20, "custom": "kept"},
+                },
+                f,
+            )
+
+        config.set_view_settings(14, "light", "default")
 
         with open(config.CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -127,13 +137,21 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(
             data,
             {
-                "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
+                "conversion": {"width": 52},
                 "view": {
-                    "braille_font": "simbraille",
-                }
+                    "font_size": 14,
+                    "custom": "kept",
+                    "scheme": "light",
+                    "braille_font": "default",
+                },
             },
         )
-        self.assertEqual(config.get_braille_font("default"), "simbraille")
+        self.assertEqual(config.get_braille_font(), "default")
+
+    def test_unused_single_view_setters_are_removed(self) -> None:
+        for name in ("set_view_font_size", "set_view_scheme", "set_braille_font"):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(config, name))
 
     def test_braille_font_defaults_to_simbraille_when_config_is_missing(self) -> None:
         self.assertEqual(config.get_braille_font(), "simbraille")

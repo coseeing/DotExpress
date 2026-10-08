@@ -181,28 +181,16 @@ def get_view_font_size(default: int = DEFAULT_VIEW_FONT_SIZE) -> int:
     return font_size if font_size is not None else default
 
 
-def set_view_font_size(font_size: int) -> None:
-    _set_section_value(VIEW_SECTION, FONT_SIZE_KEY, font_size)
-
-
 def get_view_scheme(default: str = DEFAULT_VIEW_SCHEME) -> str:
     data = _load_from_file()
     value = _get_section(data, VIEW_SECTION).get(SCHEME_KEY)
     return value if isinstance(value, str) else default
 
 
-def set_view_scheme(scheme: str) -> None:
-    _set_section_value(VIEW_SECTION, SCHEME_KEY, scheme)
-
-
 def get_braille_font(default: str = DEFAULT_BRAILLE_FONT) -> str:
     data = _load_from_file()
     value = _get_section(data, VIEW_SECTION).get(BRAILLE_FONT_KEY)
     return value if isinstance(value, str) else default
-
-
-def set_braille_font(braille_font: str) -> None:
-    _set_section_value(VIEW_SECTION, BRAILLE_FONT_KEY, braille_font)
 
 
 def set_view_settings(font_size: int, scheme: str, braille_font: str) -> None:

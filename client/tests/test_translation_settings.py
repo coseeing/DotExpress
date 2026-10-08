@@ -8,6 +8,7 @@ from settings.translation import (
     DEFAULT_TRANSLATION_SETTINGS,
     TranslationSettings,
     load_translation_settings,
+    normalize_translation_settings,
     save_translation_settings,
 )
 
@@ -77,6 +78,30 @@ class TranslationSettingsTest(unittest.TestCase):
                     },
                 },
             )
+
+
+class TranslationSettingsNormalizeTest(unittest.TestCase):
+    """P2-3 characterization: what normalization keeps and replaces."""
+
+    def normalize(self, output_mode="unicode", width=40):
+        return normalize_translation_settings(
+            TranslationSettings(output_mode, width, "default"),
+            ["default"],
+        )
+
+    def test_every_output_mode_is_kept_and_unknown_modes_become_the_default(self) -> None:
+        for output_mode in ("unicode", "ascii"):
+            with self.subTest(output_mode=output_mode):
+                self.assertEqual(self.normalize(output_mode).output_mode, output_mode)
+        self.assertEqual(config.DEFAULT_OUTPUT_MODE, "unicode")
+        for output_mode in ("", "UNICODE", "braille", "default"):
+            with self.subTest(output_mode=output_mode):
+                self.assertEqual(self.normalize(output_mode).output_mode, "unicode")
+
+    def test_width_is_clamped_at_both_ends(self) -> None:
+        for width, expected in ((-5, 10), (9, 10), (10, 10), (40, 40), (200, 200), (201, 200)):
+            with self.subTest(width=width):
+                self.assertEqual(self.normalize(width=width).width, expected)
 
 
 if __name__ == "__main__":

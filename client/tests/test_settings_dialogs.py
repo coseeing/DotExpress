@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import ast
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 from tests import wx_stub
@@ -20,6 +22,8 @@ with _SCOPE.loading():
 setUpModule = _SCOPE.activate
 tearDownModule = _SCOPE.deactivate
 
+import config
+import i18n
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
@@ -772,6 +776,424 @@ class SingletonSlotIndependenceTest(unittest.TestCase):
             self.assertIs(TextProcessingDialog._instance, text_dialog)
 
         settings_dialog.Destroy.assert_called_once_with()
+
+
+# --- P2-3 characterization: the option lists as the settings panels show them.
+# The panels are built for real under the settings stub scope and read the real
+# zh_TW catalog. settings.dialogs._ is never patched here (P2-3 spec, Test Plan):
+# the labels must be what a user sees, not what a patched _ returns.
+
+
+class RecordingChoice:
+    """``wx.Choice`` stand-in that keeps its items, selection and enabled state."""
+
+    def __init__(self, parent=None, choices=()):
+        self.items = list(choices)
+        self.selection = -1
+        self.enabled = True
+
+    def AppendItems(self, items):
+        self.items.extend(items)
+
+    def GetSelection(self):
+        return self.selection
+
+    def SetSelection(self, index):
+        self.selection = index
+
+    def Disable(self):
+        self.enabled = False
+
+
+class RecordingSpin:
+    """``wx.SpinCtrl`` stand-in that keeps its range and value."""
+
+    def __init__(self, parent=None, min=0, max=100, initial=0):
+        self.minimum = min
+        self.maximum = max
+        self.value = initial
+
+    def GetValue(self):
+        return self.value
+
+    def SetValue(self, value):
+        self.value = value
+
+    def Bind(self, event, handler):
+        pass
+
+
+def fake_table(file_name, display_name, output=True):
+    return SimpleNamespace(fileName=file_name, displayName=display_name, output=output)
+
+
+# English display names are what a source run gets from braille/tables/__tables.py;
+# the zhcn-g2 name is already translated, as in a packaged run (P2-3 spec D6).
+FAKE_TABLES = (
+    fake_table("zh-tw.ctb", "Chinese (Taiwan, Mandarin)"),
+    fake_table("zhcn-g2.ctb", "中文 (中國) 漢語雙拚盲文"),
+    fake_table("en-ueb-g1.ctb", "Unified English Braille Code grade 1"),
+    fake_table("en-GB-g2.ctb", "English (U.K.) grade 2"),
+    fake_table("ja-kantenji.utb", "Japanese (Kantenji) literary braille"),
+    fake_table("eo-g1.ctb", "Esperanto grade 1"),
+    fake_table("unicode-braille.utb", "Unicode braille", output=False),
+)
+ENGLISH_TABLE_NAMES = {"zhcn-g2.ctb": "Chinese (China, Mandarin) Double-phonic Braille System"}
+
+TABLE_ROW_LABELS = ["預設轉譯表", "英文轉譯表", "中文轉譯表", "日文轉譯表", "數學轉譯表"]
+# What each row lists for FAKE_TABLES: translated, sorted by the lower-cased name,
+# "None selected" first in the en/zh/ja rows only, math as is.
+FAKE_TABLE_ROWS = [
+    ["世界文一級", "中文 (中國) 漢語雙拚盲文", "中文 (台灣) 注音", "日文 (漢點字) 書寫", "英文 (英國) 二級", "英文統一一級"],
+    ["未選擇", "英文 (英國) 二級", "英文統一一級"],
+    ["未選擇", "中文 (中國) 漢語雙拚盲文", "中文 (台灣) 注音"],
+    ["未選擇", "日文 (漢點字) 書寫"],
+    ["UEB", "Nemeth"],
+]
+
+
+def build_panel(
+    panel_name,
+    *,
+    translation=TranslationSettings("unicode", 40, "default"),
+    tables=None,
+    view=ViewSettings(12, "light", "simbraille"),
+    table_list=FAKE_TABLES,
+):
+    """Build a real settings panel with recording choices and spins and a fake ``listTables``."""
+    module = sys.modules["settings.dialogs"]
+    snapshot = DotExpressSettingsSnapshot.create(
+        translation=translation,
+        translation_tables={} if tables is None else tables,
+        view=view,
+    )
+    owner = SimpleNamespace(snapshot=snapshot, dictionary_names=["default", "math"])
+    with (
+        patch.multiple(module.wx, Choice=RecordingChoice, SpinCtrl=RecordingSpin),
+        patch.object(module, "listTables", Mock(return_value=list(table_list))),
+    ):
+        return getattr(module, panel_name)(None, owner)
+
+
+def grid_rows(panel):
+    """The panel's (label, control) rows, in layout order."""
+    (grid, *_rest), _kwargs = panel.sizer.children[0]
+    widgets = [args[0] for args, _kwargs in grid.children]
+    return [(widgets[index].label, widgets[index + 1]) for index in range(0, len(widgets), 2)]
+
+
+def translation_snapshot(output_mode="unicode", width=40):
+    return DotExpressSettingsSnapshot.create(
+        translation=TranslationSettings(output_mode, width, "default"),
+        translation_tables={},
+        view=ViewSettings(12, "light", "simbraille"),
+    )
+
+
+def view_snapshot(font_size=12, scheme="light", braille_font="simbraille"):
+    return DotExpressSettingsSnapshot.create(
+        translation=TranslationSettings("unicode", 40, "default"),
+        translation_tables={},
+        view=ViewSettings(font_size, scheme, braille_font),
+    )
+
+
+def tables_snapshot(tables):
+    return DotExpressSettingsSnapshot.create(
+        translation=TranslationSettings("unicode", 40, "default"),
+        translation_tables=tables,
+        view=ViewSettings(12, "light", "simbraille"),
+    )
+
+
+class TranslationPanelOptionsTest(unittest.TestCase):
+    def test_rows_and_output_mode_choices_show_the_translated_labels_in_order(self) -> None:
+        panel = build_panel("TranslationSettingsPanel")
+
+        rows = grid_rows(panel)
+        self.assertEqual([label for label, _control in rows], ["點字類型", "寬度", "字典"])
+        self.assertEqual([control for _label, control in rows], [panel.output_choice, panel.width_spin, panel.dictionary_choice])
+        self.assertEqual(panel.output_choice.items, ["Unicode", "ASCII"])
+        self.assertEqual(panel.output_choice.items, [i18n._("Unicode"), i18n._("ASCII")])
+
+    def test_stored_output_mode_selects_its_index_and_unknown_selects_the_first(self) -> None:
+        for output_mode, expected in (("unicode", 0), ("ascii", 1), ("braille", 0), ("ASCII", 0), ("", 0)):
+            with self.subTest(output_mode=output_mode):
+                panel = build_panel(
+                    "TranslationSettingsPanel",
+                    translation=TranslationSettings(output_mode, 40, "default"),
+                )
+                self.assertEqual(panel.output_choice.selection, expected)
+
+    def test_save_maps_each_selection_to_its_value_and_out_of_range_to_the_first(self) -> None:
+        baseline = translation_snapshot()
+        panel = build_panel("TranslationSettingsPanel")
+        for selection, expected in ((0, "unicode"), (1, "ascii"), (-1, "unicode"), (2, "unicode")):
+            with self.subTest(selection=selection):
+                panel.output_choice.SetSelection(selection)
+                self.assertEqual(panel.on_save(baseline).translation.output_mode, expected)
+
+    def test_width_spin_range_and_initial_value_are_clamped(self) -> None:
+        for width, expected in ((5, 10), (10, 10), (40, 40), (200, 200), (500, 200)):
+            with self.subTest(width=width):
+                panel = build_panel(
+                    "TranslationSettingsPanel",
+                    translation=TranslationSettings("unicode", width, "default"),
+                )
+                spin = panel.width_spin
+                self.assertEqual((spin.minimum, spin.maximum, spin.value), (10, 200, expected))
+                self.assertEqual(panel.on_save(translation_snapshot()).translation.width, expected)
+
+    def test_load_snapshot_reselects_the_output_mode_and_clamps_the_width(self) -> None:
+        panel = build_panel("TranslationSettingsPanel")
+
+        panel.load_snapshot(translation_snapshot("ascii", 500))
+        self.assertEqual((panel.output_choice.selection, panel.width_spin.value), (1, 200))
+
+        panel.load_snapshot(translation_snapshot("braille", 5))
+        self.assertEqual((panel.output_choice.selection, panel.width_spin.value), (0, 10))
+
+        panel.load_snapshot(translation_snapshot("unicode", 64))
+        self.assertEqual((panel.output_choice.selection, panel.width_spin.value), (0, 64))
+
+
+class ViewPanelOptionsTest(unittest.TestCase):
+    def test_rows_and_choices_show_the_translated_labels_in_order(self) -> None:
+        panel = build_panel("ViewSettingsPanel")
+
+        rows = grid_rows(panel)
+        self.assertEqual([label for label, _control in rows], ["字型大小", "配色", "點字字型"])
+        self.assertEqual(
+            [control for _label, control in rows],
+            [panel.font_size_spin, panel.scheme_choice, panel.braille_font_choice],
+        )
+        self.assertEqual(panel.scheme_choice.items, ["淺色", "深色"])
+        self.assertEqual(panel.scheme_choice.items, [i18n._("Light"), i18n._("Dark")])
+        self.assertEqual(panel.braille_font_choice.items, ["預設", "SimBraille"])
+        self.assertEqual(panel.braille_font_choice.items, [i18n._("Default"), i18n._("SimBraille")])
+
+    def test_stored_values_select_their_index_and_unknown_values_select_the_first(self) -> None:
+        for scheme, braille_font, expected in (
+            ("light", "default", (0, 0)),
+            ("dark", "simbraille", (1, 1)),
+            ("dark", "default", (1, 0)),
+            ("sepia", "serif", (0, 0)),
+            ("Dark", "SimBraille", (0, 0)),
+        ):
+            with self.subTest(scheme=scheme, braille_font=braille_font):
+                panel = build_panel("ViewSettingsPanel", view=ViewSettings(12, scheme, braille_font))
+                self.assertEqual(
+                    (panel.scheme_choice.selection, panel.braille_font_choice.selection),
+                    expected,
+                )
+
+    def test_save_maps_out_of_range_selections_to_the_first_option(self) -> None:
+        # KNOWN QUIRK (P2-3 spec, K1): -1 and past-the-end save the first option,
+        # "default", not config.DEFAULT_BRAILLE_FONT ("simbraille").
+        self.assertEqual(config.DEFAULT_BRAILLE_FONT, "simbraille")
+        baseline = view_snapshot()
+        panel = build_panel("ViewSettingsPanel")
+        for selection, expected in (
+            (0, ("light", "default")),
+            (1, ("dark", "simbraille")),
+            (-1, ("light", "default")),
+            (2, ("light", "default")),
+        ):
+            with self.subTest(selection=selection):
+                panel.scheme_choice.SetSelection(selection)
+                panel.braille_font_choice.SetSelection(selection)
+                view = panel.on_save(baseline).view
+                self.assertEqual((view.scheme, view.braille_font), expected)
+
+    def test_font_size_spin_range_and_initial_value_are_clamped(self) -> None:
+        for font_size, expected in ((5, 8), (8, 8), (12, 12), (48, 48), (99, 48)):
+            with self.subTest(font_size=font_size):
+                panel = build_panel("ViewSettingsPanel", view=ViewSettings(font_size, "light", "default"))
+                spin = panel.font_size_spin
+                self.assertEqual((spin.minimum, spin.maximum, spin.value), (8, 48, expected))
+                self.assertEqual(panel.on_save(view_snapshot()).view.font_size, expected)
+
+    def test_load_snapshot_reselects_both_choices_and_clamps_the_font_size(self) -> None:
+        panel = build_panel("ViewSettingsPanel")
+
+        panel.load_snapshot(view_snapshot(99, "dark", "default"))
+        self.assertEqual(
+            (panel.font_size_spin.value, panel.scheme_choice.selection, panel.braille_font_choice.selection),
+            (48, 1, 0),
+        )
+
+        panel.load_snapshot(view_snapshot(5, "sepia", "simbraille"))
+        self.assertEqual(
+            (panel.font_size_spin.value, panel.scheme_choice.selection, panel.braille_font_choice.selection),
+            (8, 0, 1),
+        )
+
+
+class TranslationTablesPanelOptionsTest(unittest.TestCase):
+    STORED = {
+        "default": "zh-tw.ctb",
+        "en": "en-GB-g2.ctb",
+        "zh": "",
+        "ja": "ja-kantenji.utb",
+        "math": "Nemeth",
+    }
+
+    def test_rows_show_the_translated_field_labels_in_order(self) -> None:
+        panel = build_panel("TranslationTablesPanel")
+
+        rows = grid_rows(panel)
+        self.assertEqual([label for label, _control in rows], TABLE_ROW_LABELS)
+        self.assertEqual(
+            TABLE_ROW_LABELS,
+            [
+                i18n._("Default Translation Table"),
+                i18n._("English Translation Table"),
+                i18n._("Chinese Translation Table"),
+                i18n._("Japanese Translation Table"),
+                i18n._("Math Translation Table"),
+            ],
+        )
+
+    def test_each_row_lists_its_tables_sorted_by_translated_name(self) -> None:
+        # KNOWN QUIRK (P2-3 spec, K4): the prefix is a plain startswith on the
+        # lower-cased file name, so "zh" also takes zhcn-g2 and "en" takes en-GB-g2.
+        panel = build_panel("TranslationTablesPanel")
+
+        self.assertEqual([control.items for _label, control in grid_rows(panel)], FAKE_TABLE_ROWS)
+        self.assertEqual([control.enabled for _label, control in grid_rows(panel)], [True] * 5)
+
+    def test_source_run_and_packaged_display_names_give_the_same_rows(self) -> None:
+        english = [
+            fake_table(table.fileName, ENGLISH_TABLE_NAMES.get(table.fileName, table.displayName), table.output)
+            for table in FAKE_TABLES
+        ]
+        packaged = [fake_table(table.fileName, i18n._(table.displayName), table.output) for table in english]
+        self.assertNotEqual([table.displayName for table in english], [table.displayName for table in packaged])
+
+        for table_list in (english, packaged):
+            with self.subTest(first=table_list[0].displayName):
+                panel = build_panel("TranslationTablesPanel", table_list=table_list)
+                self.assertEqual([control.items for _label, control in grid_rows(panel)], FAKE_TABLE_ROWS)
+
+    def test_stored_file_names_select_their_rows_and_save_in_field_order(self) -> None:
+        panel = build_panel("TranslationTablesPanel", tables=self.STORED)
+
+        self.assertEqual([control.selection for _label, control in grid_rows(panel)], [2, 1, 0, 1, 1])
+        saved = panel.on_save(tables_snapshot({})).translation_tables
+        self.assertEqual(saved, self.STORED)
+        self.assertEqual(list(saved), ["default", "en", "zh", "ja", "math"])
+        self.assertTrue(panel.is_valid())
+        self.assertIsNone(panel.validation_error())
+
+    def test_unknown_or_missing_file_names_select_the_first_option(self) -> None:
+        # KNOWN QUIRK (P2-3 spec, K2): an unknown stored value silently selects
+        # index 0, and saving then stores that option.
+        panel = build_panel(
+            "TranslationTablesPanel",
+            tables={"default": "missing.ctb", "en": "zh-tw.ctb", "math": "Braille"},
+        )
+
+        self.assertEqual([control.selection for _label, control in grid_rows(panel)], [0, 0, 0, 0, 0])
+        self.assertEqual(
+            panel.on_save(tables_snapshot({})).translation_tables,
+            {"default": "eo-g1.ctb", "en": "", "zh": "", "ja": "", "math": "UEB"},
+        )
+
+    def test_load_snapshot_reselects_every_row(self) -> None:
+        panel = build_panel("TranslationTablesPanel")
+        self.assertEqual([control.selection for _label, control in grid_rows(panel)], [0, 0, 0, 0, 0])
+
+        panel.load_snapshot(tables_snapshot(self.STORED))
+
+        self.assertEqual([control.selection for _label, control in grid_rows(panel)], [2, 1, 0, 1, 1])
+
+    def test_without_tables_the_default_row_is_disabled_and_reported_first(self) -> None:
+        panel = build_panel("TranslationTablesPanel", tables=self.STORED, table_list=())
+
+        rows = grid_rows(panel)
+        self.assertEqual(
+            [(control.items, control.enabled, control.selection) for _label, control in rows],
+            [
+                ([], False, -1),
+                (["未選擇"], True, 0),
+                (["未選擇"], True, 0),
+                (["未選擇"], True, 0),
+                (["UEB", "Nemeth"], True, 1),
+            ],
+        )
+        self.assertFalse(panel.is_valid())
+        self.assertEqual(panel.validation_error(), ("請先選擇預設轉譯表。", rows[0][1]))
+        self.assertEqual(
+            panel.on_save(tables_snapshot({})).translation_tables,
+            {"default": "", "en": "", "zh": "", "ja": "", "math": "Nemeth"},
+        )
+
+    def test_validation_checks_the_required_rows_in_field_order(self) -> None:
+        panel = build_panel("TranslationTablesPanel", tables=self.STORED)
+        rows = grid_rows(panel)
+        default_choice, math_choice = rows[0][1], rows[4][1]
+
+        math_choice.SetSelection(-1)
+        self.assertFalse(panel.is_valid())
+        self.assertEqual(panel.validation_error(), ("請先選擇數學轉譯表。", math_choice))
+
+        default_choice.SetSelection(-1)
+        self.assertEqual(panel.validation_error(), ("請先選擇預設轉譯表。", default_choice))
+
+        for _label, control in rows[1:4]:
+            control.SetSelection(-1)
+        default_choice.SetSelection(0)
+        math_choice.SetSelection(1)
+        self.assertTrue(panel.is_valid())
+        self.assertIsNone(panel.validation_error())
+        self.assertEqual(
+            panel.on_save(tables_snapshot({})).translation_tables,
+            {"default": "eo-g1.ctb", "en": "", "zh": "", "ja": "", "math": "Nemeth"},
+        )
+
+
+def _tables_module_entries():
+    """(file name, display msgid, output) of every addTable call, read without importing __tables.py."""
+    path = Path(__file__).resolve().parents[1] / "braille" / "tables" / "__tables.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    entries = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "addTable":
+            file_name, display = node.args[0], node.args[1]
+            assert isinstance(display, ast.Call) and display.func.id == "_", ast.dump(display)
+            output = all(
+                not (keyword.arg == "output" and keyword.value.value is False)
+                for keyword in node.keywords
+            )
+            entries.append((file_name.value, display.args[0].value, output))
+    return entries
+
+
+class TableDisplayNameGuardTest(unittest.TestCase):
+    """Why settings.dialogs translates table names again (P2-3 spec D6). Kept permanently.
+
+    __tables.py looks for its catalog in braille/locales, which only the packaged
+    build has: a source run gets English display names, a packaged run zh_TW ones.
+    The dialog's _() must give the same names either way.
+    """
+
+    def test_translating_a_table_name_twice_changes_nothing(self) -> None:
+        entries = _tables_module_entries()
+        self.assertEqual(len(entries), 198)
+        self.assertEqual(sum(output for _file_name, _name, output in entries), 196)
+
+        not_idempotent = [
+            name for _file_name, name, _output in entries if i18n._(i18n._(name)) != i18n._(name)
+        ]
+        self.assertEqual(not_idempotent, [])
+
+    def test_sorted_output_names_are_the_same_from_english_or_translated_names(self) -> None:
+        names = [name for _file_name, name, output in _tables_module_entries() if output]
+        from_english = sorted((i18n._(name) for name in names), key=str.lower)
+        from_translated = sorted((i18n._(i18n._(name)) for name in names), key=str.lower)
+
+        self.assertEqual(from_english, from_translated)
+        self.assertEqual(from_english[:3], ["世界文一級", "中國通用盲文 (簡體中文字)", "中庫德文一級"])
 
 
 if __name__ == "__main__":

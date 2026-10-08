@@ -42,7 +42,7 @@ class FakeMathTranslator:
         self.error = error
 
     def translate(self, source: str, *, braille_code: str, language: str) -> TranslationResult:
-        self.calls.append((source, braille_code))
+        self.calls.append((source, braille_code, language))
         if self.error is not None:
             raise self.error
         braille = list(f"M[{source}]")
@@ -264,6 +264,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "zh-tw.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual(result.raw, ["計算", " ", "1+2", " ", "的值"])
@@ -280,6 +282,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "table.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual([result.raw for result in results], [["ab"], [" "], ["x+1"]])
@@ -294,6 +298,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "default.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertIn((" ", "default.ctb", " ", False), runtime.text_translator.calls)
@@ -308,6 +314,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "table.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual([result.raw for result in results], [["甲「乙」"]])
@@ -328,6 +336,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "table.ctb"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual([result.raw for result in results], [["台灣"]])
@@ -343,6 +353,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "zh-tw.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual(result.raw, ["計算 ", "1+2", " 的值"])
@@ -358,6 +370,8 @@ class ConversionServiceTest(unittest.TestCase):
                 {"default": "zh-tw.ctb", "math": "Nemeth"},
                 self.bopomofo_path,
                 runtime=runtime,
+                lang=LANG,
+                charset_maps=CHARSET_MAPS,
             )
 
     def test_translate_with_language_passes_selected_math_braille_code(self) -> None:
@@ -370,9 +384,11 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "zh-tw.ctb", "math": "UEB"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
-        self.assertEqual(math_translator.calls, [("1", "UEB")])
+        self.assertEqual(math_translator.calls, [("1", "UEB", "zh_TW")])
 
     def test_translate_with_language_keeps_escaped_dollar_in_plain_text_segment(self) -> None:
         from conversion import service
@@ -383,6 +399,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "zh-tw.ctb"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual(result.raw, ["價格\\$100"])
@@ -449,6 +467,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "table.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         for result in results:

@@ -21,6 +21,25 @@ assert "libmathcat_py" not in sys.modules
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_language_consumers_do_not_import_config(self) -> None:
+        script = """
+import sys
+import languageDetection
+import conversion.text.pipeline
+import conversion.output
+import conversion.mathcat_adapter
+import braille.tables
+assert "config" not in sys.modules, "config was imported"
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

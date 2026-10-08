@@ -68,6 +68,8 @@ def convert_text_with_alignment(
             request.translation_tables,
             request.data_dir / "Bopomofo2Braille.csv",
             runtime=runtime,
+            lang=request.lang,
+            charset_maps=request.charset_maps,
         )
         braille_wrapped, _text_wrapped = wrap_translation_results(translations, request.width)
     except Exception as error:

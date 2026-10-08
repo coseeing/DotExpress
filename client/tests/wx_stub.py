@@ -626,3 +626,240 @@ def gui_frame_stubs():
         "dialog": dialog,
         "braille.louis_helper": louis_helper,
     }
+
+
+# --- factory: test_settings_dialogs -----------------------------------------
+
+
+def settings_dialog_stubs():
+    """Recording widget set for ``settings.dialogs``: ``wx``, ``wx.lib``, and a non-package ``braille``."""
+    wx = types.ModuleType("wx")
+
+    class Window(RecordingWidget):
+        @staticmethod
+        def FindFocus():
+            return None
+
+    class Panel(Window):
+        pass
+
+    class Dialog(Window):
+        pass
+
+    class Frame(Window):
+        pass
+
+    class StaticText(Window):
+        pass
+
+    class Button(Window):
+        pass
+
+    class Choice(Window):
+        def GetSelection(self):
+            return -1
+
+        def SetSelection(self, index):
+            pass
+
+        def AppendItems(self, items):
+            pass
+
+        def Append(self, item):
+            pass
+
+        def Disable(self):
+            pass
+
+        def Enable(self, state=True):
+            pass
+
+    class SpinCtrl(Window):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._value = kwargs.get("initial", 0)
+
+        def GetValue(self):
+            return self._value
+
+        def SetValue(self, value):
+            self._value = value
+
+    class _Font:
+        def __init__(self):
+            self.family = None
+
+        def SetFamily(self, family):
+            self.family = family
+
+    class TextCtrl(Window):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._value = kwargs.get("value", "")
+            self._font = _Font()
+
+        def GetValue(self):
+            return self._value
+
+        def SetValue(self, value):
+            self._value = value
+
+        def GetFont(self):
+            return self._font
+
+        def SetFont(self, font):
+            self._font = font
+
+    class Sizer(RecordingWidget):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.children = []
+
+        def Add(self, *args, **kwargs):
+            self.children.append((args, kwargs))
+
+    class BoxSizer(Sizer):
+        pass
+
+    class GridBagSizer(Sizer):
+        def AddGrowableRow(self, idx, proportion=1):
+            pass
+
+        def AddGrowableCol(self, idx, proportion=1):
+            pass
+
+    class FlexGridSizer(Sizer):
+        def AddGrowableCol(self, idx, proportion=1):
+            pass
+
+    class ListCtrl(Window):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.style = kwargs.get("style", 0)
+            self.columns = []
+            self.items = []
+            self.selected_index = -1
+            self.focused_index = -1
+
+        @property
+        def ItemCount(self):
+            return len(self.items)
+
+        def InsertColumn(self, index, label):
+            self.columns.insert(index, label)
+
+        def Append(self, item):
+            self.items.append(item)
+
+        def Select(self, index):
+            self.selected_index = index
+
+        def GetFirstSelected(self):
+            return self.selected_index
+
+        def Focus(self, index):
+            self.focused_index = index
+            self.focused = True
+
+        def GetItemCount(self):
+            return len(self.items)
+
+        def GetItemText(self, index):
+            return self.items[index][0]
+
+    class Accessible(RecordingWidget):
+        def __init__(self, window=None):
+            self.Window = window
+
+    wx.Window = Window
+    wx.Panel = Panel
+    wx.Dialog = Dialog
+    wx.Frame = Frame
+    wx.StaticText = StaticText
+    wx.Button = Button
+    wx.Choice = Choice
+    wx.SpinCtrl = SpinCtrl
+    wx.TextCtrl = TextCtrl
+    wx.Sizer = Sizer
+    wx.BoxSizer = BoxSizer
+    wx.GridBagSizer = GridBagSizer
+    wx.FlexGridSizer = FlexGridSizer
+    wx.ListCtrl = ListCtrl
+    wx.Accessible = Accessible
+
+    braille = types.ModuleType("braille")
+    braille_tables = types.ModuleType("braille.tables")
+    braille_tables.listTables = lambda: []
+    braille.tables = braille_tables
+
+    wx_lib = types.ModuleType("wx.lib")
+    wx_lib_scrolledpanel = types.ModuleType("wx.lib.scrolledpanel")
+
+    class ScrolledPanel(Panel):
+        pass
+
+    wx_lib_scrolledpanel.ScrolledPanel = ScrolledPanel
+    wx.lib = wx_lib
+    wx_lib.scrolledpanel = wx_lib_scrolledpanel
+
+    wx.CallAfter = lambda fn, *args, **kwargs: fn(*args, **kwargs)
+    wx.DefaultPosition = (0, 0)
+    wx.DefaultSize = (0, 0)
+    wx.__path__ = []
+    wx.__getattr__ = _new_class
+
+    wx.ID_OK = 5100
+    wx.ID_CANCEL = 5101
+    wx.ID_APPLY = 5102
+    wx.ID_ANY = -1
+    wx.OK = 0x0004
+    wx.ICON_ERROR = 0x0200
+    wx.APPLY = 5102
+    wx.RESIZE_BORDER = 0x0040
+    wx.DEFAULT_DIALOG_STYLE = 0x0010
+    wx.BORDER_SUNKEN = 0x0008
+    wx.LC_SINGLE_SEL = 0x0020
+    wx.LC_REPORT = 0x0010
+    wx.LC_NO_HEADER = 0x4000
+    wx.ACC_OK = 0
+    wx.ROLE_SYSTEM_PROPERTYPAGE = 38
+    wx.EVT_LIST_ITEM_FOCUSED = 100
+    wx.EVT_LIST_ITEM_SELECTED = 101
+    wx.EVT_CHAR_HOOK = 102
+    wx.EVT_CLOSE = 103
+    wx.EVT_BUTTON = 104
+    wx.NOT_FOUND = -1
+    wx.ALL = 0x0010
+    wx.EXPAND = 0x0020
+    wx.VERTICAL = 0x0001
+    wx.HORIZONTAL = 0x0002
+    wx.ALIGN_RIGHT = 0x0200
+    wx.ALIGN_CENTER = 0x0100
+    wx.ALIGN_CENTER_VERTICAL = 0x0200
+    wx.LEFT = 0x0040
+    wx.RIGHT = 0x0080
+    wx.TOP = 0x0100
+    wx.BOTTOM = 0x0200
+    wx.SP_WRAP = 0x0001
+    wx.SP_ARROW_KEYS = 0x0002
+    wx.EVT_SPINCTRL = 110
+    wx.EVT_TEXT = 111
+    wx.WXK_TAB = 9
+    wx.TE_MULTILINE = 0x0004
+    wx.TE_RICH2 = 0x8000
+    wx.TE_DONTWRAP = 0x40000000
+    wx.FONTFAMILY_TELETYPE = 1
+
+    class PyDeadObjectError(RuntimeError):
+        pass
+
+    wx.PyDeadObjectError = PyDeadObjectError
+    wx.MessageBox = Mock()
+
+    return {
+        "wx": wx,
+        "wx.lib": wx_lib,
+        "wx.lib.scrolledpanel": wx_lib_scrolledpanel,
+        "braille": braille,
+        "braille.tables": braille_tables,
+    }

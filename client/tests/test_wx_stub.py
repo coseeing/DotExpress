@@ -237,6 +237,19 @@ class StubFactoryTest(unittest.TestCase):
         self.assertEqual(stubs["dialog"].DictionaryNameDialog().ShowModal(), 0)
         self.assertIsNone(stubs["braille.louis_helper"].initialize())
 
+    def test_settings_dialog_stubs_are_fresh_with_recording_widgets(self) -> None:
+        names = ["braille", "braille.tables", "wx", "wx.lib", "wx.lib.scrolledpanel"]
+        stubs = self.assert_fresh(wx_stub.settings_dialog_stubs, names)
+        other = wx_stub.settings_dialog_stubs()
+        wx = stubs["wx"]
+
+        self.assertTrue(issubclass(wx.Window, wx_stub.RecordingWidget))
+        self.assertEqual((wx.ID_OK, wx.OK, wx.VERTICAL), (5100, 4, 1))
+        self.assertIsNot(wx.MessageBox, other["wx"].MessageBox)
+        self.assertIs(wx.lib.scrolledpanel, stubs["wx.lib.scrolledpanel"])
+        self.assertFalse(hasattr(stubs["braille"], "__path__"))
+        self.assertEqual(stubs["braille.tables"].listTables(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

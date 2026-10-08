@@ -8,6 +8,8 @@
 
 對使用者的影響：不論從打包版或原始碼執行，都完全不變。每個字串的 zh_TW 翻譯和每個資源路徑都維持原樣。`scripts\generate-pot.bat` 擷取出的 msgid 集合維持不變。
 
+修訂：依規劃結果修正（`docs/superpowers/plans/2026-10-08-p0-5-i18n.md` 的「Spec Corrections and Refinements」）：`test_i18n` 有 16 個案例而非約 9 個、commit 由 3 個改為 7 個、防護測試使用條件 1 的樣式（包含 `LOCALE_LANGUAGES`）、`load_translation` 以 `localedir is None` 判斷，並補齊 `test_gui_document_flows.py` 中 `gui._` 呼叫處的清單。
+
 ## 方法與基準（2026-10-08 於 `refactor/p0-5-i18n`、HEAD `78a2eb2` 驗證，P0-1 至 P0-4 已合併）
 
 1. 對 `client/`（`--include=*.py`）、`scripts/` 與建置腳本執行 `grep -rn "gettext\|resource_path\|_MEIPASS\|N_(\|builtins\|\.install(\|translation("`，並逐一閱讀結果。
@@ -46,7 +48,7 @@ Roadmap 只算了五份。`storage/refactor.md` 把 `__tables.py` 視為「vendo
 - **打包版。** `scripts/build-dotexpress.bat` 執行 `pyinstaller --onefile ... --add-data "locales;locales" --add-data "data;data" ... gui.py`。三處明確檢查 `sys._MEIPASS`。`about.py` 與 `dictionaries/entries.py` 沒有檢查，但打包版仍然找得到 catalog：PyInstaller 會把打包進 PYZ 封存的模組的 `__file__` 設為 `sys._MEIPASS/<套件路徑>.pyc`，所以 `Path(__file__).resolve().parent`（或 `parents[1]`）本來就等於 `_MEIPASS`。在打包版中兩種基準一致。`i18n.py` 保留明確的 `_MEIPASS` 分支，因為那是 PyInstaller 文件記載的做法，也是多數位置採用的寫法。
 - **`__tables.py` 的潛在錯誤（本次不修正）。** 它的 `resource_path` 只往上到 `client/braille/`。從原始碼執行時找不到 catalog，但因為 `fallback=True` 而不報錯，所以每個 `BrailleTable.displayName` 都維持英文。已確認：`resource_path("locales")` 是 `/workspace/DotExpress/client/braille/locales`，這個目錄不存在，且 `listTables()[0].displayName` 是 `'Afrikaans grade 1'`。打包版走 `_MEIPASS` 分支找得到 catalog，所以名稱是中文（`'南非文一級'`）。唯一的使用者是 `settings/dialogs.py:623-625`，它會再呼叫一次 `_(table.displayName)`，所以設定對話框顯示的名稱在兩種模式下都是中文。不過 `listTables()` 依 `strxfrm(displayName)` 排序，所以 196 個輸出點字表的順序在原始碼執行（英文順序）與打包版（翻譯後名稱的順序）之間不同。
 - **沒有 builtins `_`。** 沒有任何程式呼叫 `gettext.install()` 或設定 `builtins._`（`builtins` 只出現在 `tests/test_main_demo.py` 替換 `print`，以及 NVDA 子模組中）。每個模組都使用模組全域的 `_`。
-- **測試如何使用 `_`。** `tests/test_dialog_display.py`（45-50、60-65、76-85 行）把 `dialog_module._` 換成某個 dict 的 `.get`，之後再還原。這行得通，是因為函式在被呼叫時才查找模組全域的 `_`。`tests/test_gui_document_flows.py` 呼叫 `gui._("...")` 來產生預期字串（207、230-231、296-300、412-413、463、493-494 行）。`tests/test_dialog_validation.py` 驗證 `dialog.py` 產生的真實 zh_TW 訊息。`tests/test_config.py` 與 `tests/test_import_fixtures.py` 直接用 `gettext` 開啟 `.mo` 檔，不經過任何模組。沒有測試讀取或替換任何模組的 `resource_path`、`LOCALE_DOMAIN`、`LOCALE_LANGUAGES` 或 `_translation`。
+- **測試如何使用 `_`。** `tests/test_dialog_display.py`（45-50、60-65、76-85 行）把 `dialog_module._` 換成某個 dict 的 `.get`，之後再還原。這行得通，是因為函式在被呼叫時才查找模組全域的 `_`。`tests/test_gui_document_flows.py` 呼叫 `gui._("...")` 來產生預期字串（207、230-231、296-300、412-413、463、493-494、768、826-827、944-945、1014 行）。`tests/test_dialog_validation.py` 驗證 `dialog.py` 產生的真實 zh_TW 訊息。`tests/test_config.py` 與 `tests/test_import_fixtures.py` 直接用 `gettext` 開啟 `.mo` 檔，不經過任何模組。沒有測試讀取或替換任何模組的 `resource_path`、`LOCALE_DOMAIN`、`LOCALE_LANGUAGES` 或 `_translation`。
 - **目前還沒有 `N_`。** `gui.py:167-217` 有一個 `_MENU_TRANSLATION_MARKERS`，是由 48 個 `_("...")` 呼叫組成的 tuple，唯一用途是讓 `xgettext` 看得到在別處動態翻譯的標籤（`ui/action_menu.py` 的選單標籤、檔案萬用字元等）。沒有程式讀取這個 tuple。
 - **擷取腳本。** 檔名是 `scripts/generate-pot.bat`（連字號）。`AGENTS.md`、`readme.md` 與較早的 plan 寫的是 `generate_pot.bat`。它執行 `xgettext --language=Python --keyword=_ --files-from=<client 下所有 *.py，排除 .venv 與 tests> --output=locales\dotexpress.pot`。`N_` 不在 xgettext 預設的 Python keyword 中，必須明確加上。
 - **其他以 `__file__` 為基準的路徑**（`app_paths.get_application_root`，可寫入資料放在執行檔目錄；`conversion/mathcat_adapter.py:17`，MathCAT 資源；`main.py` 的 `BASE_DIR`，只用於示範）與 gettext 無關，不在範圍內（見「範圍外」）。
@@ -81,7 +83,8 @@ def resource_path(relative_path: str) -> Path:
 
 def load_translation(localedir: Path | None = None,
                      languages: Sequence[str] = LOCALE_LANGUAGES) -> gettext.NullTranslations:
-    # gettext.translation(LOCALE_DOMAIN, localedir=str(localedir or resource_path("locales")),
+    # if localedir is None: localedir = resource_path("locales")
+    # gettext.translation(LOCALE_DOMAIN, localedir=str(localedir),
     #                     languages=list(languages), fallback=True)
     ...
 
@@ -122,25 +125,41 @@ def N_(message: str) -> str:
 
 `client/braille/tables/__tables.py` 不遷移（見「範圍」）。它的 gettext 區塊、`resource_path`，以及透過不存在的 `client/braille/locales` 查找 catalog 的行為都維持原樣。因此沒有任何行為改變，從原始碼執行時也一樣。
 
-### Commit 順序（plan 會再細化）
+### Commit 順序
 
-1. `client/i18n.py` 與 `client/tests/test_i18n.py`（先寫核心測試並確認失敗）。
-2. 遷移 `dialog.py`、`settings/dialogs.py`、`dictionaries/entries.py` 與 `about.py`。
-3. 遷移 `gui.py`、標記改用 `N_`、在 `scripts/generate-pot.bat` 加上 `--keyword=N_`，並加入「沒有重複設定」的防護測試。
+共 7 個 commit，每個遷移只處理一個模組，且都從一個在該 commit 落地前會失敗的測試開始：
+
+1. `client/i18n.py` 與 `client/tests/test_i18n.py`（先寫行為測試並確認失敗）。
+2. 遷移 `dialog.py`。
+3. 遷移 `settings/dialogs.py`。
+4. 遷移 `dictionaries/entries.py`。
+5. 遷移 `about.py`。
+6. 遷移 `gui.py`，並加入「沒有重複設定」的防護測試。
+7. 標記改用 `N_`，並在 `scripts/generate-pot.bat` 加上 `--keyword=N_`。keyword 與它唯一的呼叫者在同一個 commit 提交。
 
 ## 測試策略
 
-新增 `client/tests/test_i18n.py`（4 空白、`unittest`、不用 `wx`，所以不需要 `StubScope`）。預計約 9 個案例：
+新增 `client/tests/test_i18n.py`（4 空白、`unittest`、不用 `wx`，所以不需要 `StubScope`）。共 16 個案例：
 
 1. 沒有 `frozen` 時，`resource_path` 回傳 `<client>/<relative>`，且 `resource_path("locales") / "zh_TW" / "LC_MESSAGES" / "dotexpress.mo"` 存在。
 2. `sys.frozen = True` 且 `sys._MEIPASS = <tmp>`（以 `create=True` 替換）時，回傳 `<tmp>/<relative>`。
 3. `sys.frozen = True` 但沒有 `_MEIPASS` 時，退回 client 根目錄（現行的 `and hasattr` 規則）。
-4. `_("General") == "一般"` 且 `_("Startup Error") == "啟動錯誤"`（這些 msgid 已由 `test_config` 固定）。
+4. `_("General") == "一般"` 且 `_("Startup Error") == "啟動錯誤"`（這些 msgid 已由 `test_config` 固定）。同一個案例也固定 `LOCALE_DOMAIN == "dotexpress"`、`LOCALE_LANGUAGES == ("zh_TW",)`，以及 `load_translation()` 回傳 `GNUTranslations`。
 5. 未知的 msgid 原樣回傳。
 6. `load_translation(localedir=<空的暫存目錄>)` 回傳一個 `gettext` 為恆等函式的 `NullTranslations`，且不拋出例外。
 7. `N_(s)` 回傳同一個物件 `s`，即使該 msgid 有翻譯也一樣（`N_("General") == "General"`）。
 8. 語言不跟隨環境：以 `cwd=client/`、`LANGUAGE=en_US`、`LANG=C`、`LC_ALL=C` 啟動子行程，執行 `from i18n import _; print(_("General"))`，得到 `一般`（以 `PYTHONIOENCODING` 強制 UTF-8 輸出）。
-9. 沒有重複設定：靜態掃描 `client/**/*.py`（排除 `tests/`、`.venv/`、`__pycache__/`、`i18n.py` 與範圍外的 `braille/tables/__tables.py`），找不到 `gettext.translation(`、`import gettext`、`_MEIPASS`、`def resource_path` 或 `def _resource_path`。所有遷移完成前它都會失敗，所以跟最後一個遷移 commit 一起提交。
+9. 沒有重複設定（`DuplicateSetupGuardTest`）：靜態掃描 `client/**/*.py`，找不到符合條件 1 樣式 `gettext\.translation\(|^\s*import gettext|_MEIPASS|def _?resource_path|LOCALE_LANGUAGES` 的內容。任何深度下名為 `tests`、`.venv` 或 `__pycache__` 的目錄都會略過（與 `generate-pot.bat` 在任何位置過濾 `\tests\` 與 `\.venv\` 相同），並略過 `i18n.py` 與範圍外的 `braille/tables/__tables.py`。所有遷移完成前它都會失敗，所以跟 `gui.py` 的遷移一起提交。
+10. `dialog.py` 從 `i18n` import `{"_"}`，且不保留任何舊設定（`SharedSetupConsumerTest.test_dialog_uses_shared_i18n`）。
+11. `settings/dialogs.py` 同上。
+12. `dictionaries/entries.py` 同上。
+13. `about.py` 同上。
+14. `gui.py` 同上，但 import 的是 `{"N_", "_", "resource_path"}`（在 `N_` commit 之前是 `{"_", "resource_path"}`）。
+
+案例 10-14 以 `ast` 解析模組（不 import，所以不需要 `wx` 也不需要 `StubScope`），檢查它從 `i18n` import 的名稱與預期完全相同、沒有 `import gettext`、沒有在最上層定義 `resource_path`/`_resource_path`，也沒有在最上層指定 `LOCALE_DOMAIN`、`LOCALE_LANGUAGES`、`_translation` 或 `_`。每個案例與對應模組的遷移一起提交，在遷移前會失敗。
+
+15. `gui.py` 中 `_MENU_TRANSLATION_MARKERS` 的 48 個項目全部是 `N_(...)` 呼叫（AST 檢查）。
+16. `scripts/generate-pot.bat` 執行 `xgettext --language=Python --keyword=_ --keyword=N_ --files-from=...`。
 
 既有測試是安全網，且不得修改：`test_dialog_validation`（透過 `dialog._` 驗證真實 zh_TW 訊息）、`test_dialog_display`（替換 `dialog_module._`）、`test_gui_document_flows`（`gui._`）、`test_settings_dialogs`、`test_speech_symbols_dialog`、`test_dictionary_management_dialog`、`test_dual_view_frame`、`test_wx_stub`、`test_config`、`test_client_init`、`test_import_fixtures`。
 
@@ -151,10 +170,10 @@ def N_(message: str) -> str:
 所有指令都在 `client/` 以 venv Python（`$PY`）執行。
 
 1. **單一來源。** 在 repo 根目錄執行 `grep -rnE "gettext\.translation\(|^\s*import gettext|_MEIPASS|def _?resource_path|LOCALE_LANGUAGES" client --include=*.py | grep -v -e "/tests/" -e "/.venv/" -e "braille/tables/__tables.py"`，只會印出 `client/i18n.py` 中的行（目前會印出範圍內五個檔案的行）。`git diff main -- client/braille/tables/__tables.py` 沒有輸出。
-2. **新測試。** `$PY -m unittest tests.test_i18n -v` 結果為 `OK`。
+2. **新測試。** `$PY -m unittest tests.test_i18n -v` 結果為 `Ran 16 tests`、`OK`。
 3. **Roadmap 指令。** `$PY -m unittest tests.test_dialog_validation tests.test_dialog_display -v` 結果為 `Ran 13 tests`、`OK`。
 4. **相鄰測試不變。** `$PY -m unittest tests.test_gui_document_flows tests.test_settings_dialogs tests.test_speech_symbols_dialog tests.test_dictionary_management_dialog tests.test_dual_view_frame tests.test_wx_stub tests.test_config tests.test_client_init tests.test_import_fixtures -v` 結果為 `OK`，且 test id 與 `78a2eb2` 相同。
-5. **完整套件。** `$PY -m unittest discover -s tests -v`：`Ran 466 + N tests`（N 為 `test_i18n` 的測試數）、`FAILED (failures=1, skipped=7)`，唯一的失敗是 P2-5 案例。排除含 `(test_i18n.` 的行後，排序過的 `<test id> ... <outcome>` 各行與基準完全相同。
+5. **完整套件。** `$PY -m unittest discover -s tests -v`：`Ran 482 tests`（466 加上 `test_i18n` 的 16 個測試）、`FAILED (failures=1, skipped=7)`，唯一的失敗是 P2-5 案例。排除含 `(test_i18n.` 的行後，排序過的 `<test id> ... <outcome>` 各行與基準完全相同。
 6. **順序。** `$PY -m unittest tests.test_dialog_display tests.test_i18n tests.test_dialog_validation tests.test_gui_document_flows` 以及相反順序都是 `OK`（不依賴 `StubScope` eviction 前後 `i18n` 模組物件的同一性）。
 7. **msgid 集合。** 變更後 AST 掃描得到 357 個 msgid，與變更前的集合以及 `client/locales/dotexpress.pot` 的 msgid 完全相同。`_MENU_TRANSLATION_MARKERS` 的 48 個項目全部是 `N_(...)` 呼叫。
 8. **擷取腳本。** `scripts/generate-pot.bat` 含有 `--keyword=_ --keyword=N_`，其他行都沒有改變。

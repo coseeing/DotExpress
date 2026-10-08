@@ -6,7 +6,6 @@ from pathlib import Path
 import zipfile
 from collections.abc import Callable
 
-from app_paths import get_workspace_directory
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
 from shared.name_validation import normalize_base_name
 
@@ -34,8 +33,8 @@ def create_default_document() -> Document:
     return Document(name=DEFAULT_DOCUMENT_NAME, text="", braille=None)
 
 
-def ensure_workspace_directory(workspace_dir: Path | None = None) -> Path:
-    directory = get_workspace_directory(workspace_dir)
+def ensure_workspace_directory(workspace_dir: Path) -> Path:
+    directory = Path(workspace_dir)
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
@@ -44,8 +43,8 @@ def normalize_document_name(name: str) -> str:
     return normalize_base_name(name)
 
 
-def document_package_path_for_name(name: str, workspace_dir: Path | None = None) -> Path:
-    return get_workspace_directory(workspace_dir) / f"{name}{DEP_EXTENSION}"
+def document_package_path_for_name(name: str, workspace_dir: Path) -> Path:
+    return Path(workspace_dir) / f"{name}{DEP_EXTENSION}"
 
 
 def save_document_package(
@@ -129,7 +128,7 @@ def prepare_document_for_save(
     return Document(name=document.name, text=text, braille=saved_braille)
 
 
-def load_workspace_documents(workspace_dir: Path | None = None) -> tuple[list[Document], list[Path]]:
+def load_workspace_documents(workspace_dir: Path) -> tuple[list[Document], list[Path]]:
     directory = ensure_workspace_directory(workspace_dir)
     documents: list[Document] = []
     invalid_paths: list[Path] = []

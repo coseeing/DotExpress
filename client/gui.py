@@ -7,14 +7,13 @@ import wx
 
 import about
 from i18n import _, resource_path
-from app_paths import ApplicationDataError, prepare_application_directories
+from app_paths import ApplicationDataError, ApplicationPaths, build_application_paths, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
 from conversion.math_service import latex_to_mathml
-from conversion.presenter import ConversionPresenter
 from conversion.service import ConversionRequest
 from conversion.preprocessing.user_script import preprocessing_script_path
-from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
+from dictionaries.manager import dictionary_path_for_name
 from dictionaries.presenter import DictionaryManagementPresenter
 from documents.controller import DocumentController
 from documents.export_coordinator import ExportCoordinator
@@ -27,19 +26,14 @@ from documents.workspace import (
     DEFAULT_DOCUMENT_NAME,
     Document,
     create_default_document,
-	get_workspace_directory,
     normalize_document_name,
 )
 from documents.workspace_service import DocumentWorkspaceService
 from ui.action_menu import get_document_menu_enabled_state
+from ui.conversion_presenter import ConversionPresenter
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from ui.menu_builder import apply_document_menu_state, build_document_menu
-from config import (
-	DEFAULT_TRANSLATION_TABLES,
-	get_charset_maps,
-	get_lang,
-	set_selected_dictionary,
-)
+from config import ConfigStore, DEFAULT_TRANSLATION_TABLES
 from settings.translation import (
 	TranslationSettings,
 	load_translation_settings,
@@ -117,9 +111,18 @@ class NamedControlAccessible(wx.Accessible):
 
 
 class BrailleFrame(wx.Frame):
-	def __init__(self, *args, runtime: TranslationRuntime, **kwargs):
+	def __init__(
+		self,
+		*args,
+		runtime: TranslationRuntime,
+		paths: ApplicationPaths,
+		config_store: ConfigStore,
+		**kwargs,
+	):
 		super().__init__(*args, **kwargs)
 		self.translation_runtime = runtime
+		self._paths = paths
+		self._config_store = config_store
 		self._document_controller = DocumentController()
 
 		self._initialize_frame()
@@ -135,20 +138,23 @@ class BrailleFrame(wx.Frame):
 		self.SetMenuBar(self._create_menu_bar())
 
 	def _initialize_state(self) -> ViewSettings:
-		self.dictionary_dir = get_dictionary_directory()
+		self.dictionary_dir = self._paths.dictionary
 		self._dictionary_presenter = DictionaryManagementPresenter(
 			self.dictionary_dir,
 			get_active_name=lambda: self.translation_settings.selected_dictionary,
 			set_active_name=self._set_active_dictionary,
 		)
 		self._dictionary_presenter.refresh()
-		self.translation_settings = load_translation_settings(self._dictionary_presenter.dictionary_names)
-		self.translation_tables = load_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
-		self._workspace_service = DocumentWorkspaceService(self._document_controller, get_workspace_directory())
+		self.translation_settings = load_translation_settings(
+			self._config_store,
+			self._dictionary_presenter.dictionary_names,
+		)
+		self.translation_tables = load_translation_tables(self._config_store) or DEFAULT_TRANSLATION_TABLES.copy()
+		self._workspace_service = DocumentWorkspaceService(self._document_controller, self._paths.workspace)
 		self._simbraille_font_available = self._register_output_font()
 		self._dual_view_frame: DualViewFrame | None = None
 
-		self.view_settings = load_view_settings()
+		self.view_settings = load_view_settings(self._config_store)
 		return self.view_settings
 
 	def _create_main_layout(self, initial_settings: ViewSettings) -> None:
@@ -331,7 +337,7 @@ class BrailleFrame(wx.Frame):
 
 	def _open_dual_view_in_browser(self) -> None:
 		try:
-			html_path = write_dual_view_html(self._render_dual_view_for_open_document())
+			html_path = write_dual_view_html(self._render_dual_view_for_open_document(), self._paths.dual_view)
 			width, height = self.GetSize()
 			open_html_in_browser(html_path, (width, height))
 		except Exception as error:
@@ -419,9 +425,9 @@ class BrailleFrame(wx.Frame):
 		self.translation_tables = tables
 		self._apply_editor_view_settings(view)
 
-		save_translation_settings(translation)
-		save_translation_tables(tables)
-		save_view_settings(view)
+		save_translation_settings(self._config_store, translation)
+		save_translation_tables(self._config_store, tables)
+		save_view_settings(self._config_store, view)
 		return DotExpressSettingsSnapshot.create(translation, tables, view)
 
 	def _set_active_dictionary(self, selected_name: str) -> None:
@@ -430,7 +436,7 @@ class BrailleFrame(wx.Frame):
 			width=self.translation_settings.width,
 			selected_dictionary=selected_name,
 		)
-		set_selected_dictionary(selected_name)
+		self._config_store.set_selected_dictionary(selected_name)
 
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
@@ -527,8 +533,8 @@ class BrailleFrame(wx.Frame):
 			dictionary_path=dictionary_path,
 			data_dir=resource_path("data"),
 			translation_tables=self.translation_tables.copy(),
-			lang=get_lang(),
-			charset_maps=get_charset_maps(),
+			lang=self._config_store.get_lang(),
+			charset_maps=self._config_store.get_charset_maps(),
 		)
 
 	def _build_conversion_request_for_text(self, raw_text: str) -> ConversionRequest:
@@ -554,7 +560,7 @@ class BrailleFrame(wx.Frame):
 			replace(self.view_settings, font_size=font_size)
 		)
 		self._apply_editor_view_settings(self.view_settings)
-		save_view_settings(self.view_settings)
+		save_view_settings(self._config_store, self.view_settings)
 		settings_dialog = DotExpressSettingsDialog.open_instance()
 		if settings_dialog is not None:
 			settings_dialog.sync_font_size(self.view_settings.font_size)
@@ -962,7 +968,7 @@ class BrailleFrame(wx.Frame):
 			viewer.Destroy()
 		evt.Skip()
 
-	# --- ConversionView (conversion/presenter.py) ---------------------------
+	# --- ConversionView (ui/conversion_presenter.py) ------------------------
 
 	def get_source_text(self) -> str:
 		return self.input_txt.GetValue()
@@ -1052,8 +1058,10 @@ def _show_application_data_error(error: ApplicationDataError) -> None:
 
 class BrailleApp(wx.App):
 	def OnInit(self):
+		paths = build_application_paths()
+		self.paths = paths
 		try:
-			paths = prepare_application_directories()
+			prepare_application_directories(paths)
 			cleanup_dual_view_html(paths.dual_view)
 		except ApplicationDataError as error:
 			_show_application_data_error(error)
@@ -1063,17 +1071,25 @@ class BrailleApp(wx.App):
 			_show_application_data_error(error)
 			return False
 
+		config_store = ConfigStore(paths.config)
 		self.translation_runtime = build_default_translation_runtime()
-		self.frame = BrailleFrame(None, runtime=self.translation_runtime)
+		self.frame = BrailleFrame(
+			None,
+			runtime=self.translation_runtime,
+			paths=paths,
+			config_store=config_store,
+		)
 		self.frame.Show()
-		start_client_init_background()
+		start_client_init_background(config_store)
 		return True
 
 	def OnExit(self):
-		try:
-			cleanup_dual_view_html()
-		except OSError:
-			logger.exception("Failed to clean up dual-view HTML")
+		paths = getattr(self, "paths", None)
+		if paths is not None:
+			try:
+				cleanup_dual_view_html(paths.dual_view)
+			except OSError:
+				logger.exception("Failed to clean up dual-view HTML")
 		runtime = getattr(self, "translation_runtime", None)
 		if runtime is not None:
 			runtime.close()

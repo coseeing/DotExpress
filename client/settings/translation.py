@@ -3,14 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from config import (
+    ConfigStore,
     DEFAULT_CONVERSION_WIDTH,
     DEFAULT_OUTPUT_MODE,
-    get_conversion_width,
-    get_output_mode,
-    get_selected_dictionary,
-    set_conversion_width,
-    set_output_mode,
-    set_selected_dictionary,
 )
 from dictionaries.actions import resolve_dictionary_selection
 from .options import CONVERSION_WIDTH_RANGE, OUTPUT_MODE_OPTIONS, normalize_option_value
@@ -56,17 +51,17 @@ def normalize_translation_settings(
     )
 
 
-def load_translation_settings(dictionary_names: list[str]) -> TranslationSettings:
+def load_translation_settings(store: ConfigStore, dictionary_names: list[str]) -> TranslationSettings:
     settings = TranslationSettings(
-        output_mode=get_output_mode(DEFAULT_OUTPUT_MODE),
-        width=get_conversion_width(DEFAULT_CONVERSION_WIDTH),
-        selected_dictionary=get_selected_dictionary(DEFAULT_TRANSLATION_SETTINGS.selected_dictionary),
+        output_mode=store.get_output_mode(DEFAULT_OUTPUT_MODE),
+        width=store.get_conversion_width(DEFAULT_CONVERSION_WIDTH),
+        selected_dictionary=store.get_selected_dictionary(DEFAULT_TRANSLATION_SETTINGS.selected_dictionary),
     )
     return normalize_translation_settings(settings, dictionary_names)
 
 
-def save_translation_settings(settings: TranslationSettings) -> None:
-    set_output_mode(settings.output_mode)
-    set_conversion_width(settings.width)
-    set_selected_dictionary(settings.selected_dictionary)
+def save_translation_settings(store: ConfigStore, settings: TranslationSettings) -> None:
+    store.set_output_mode(settings.output_mode)
+    store.set_conversion_width(settings.width)
+    store.set_selected_dictionary(settings.selected_dictionary)
 

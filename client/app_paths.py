@@ -47,43 +47,22 @@ def build_application_paths(root: Path | None = None) -> ApplicationPaths:
     )
 
 
-def get_config_path(path: Path | None = None) -> Path:
-    return Path(path) if path is not None else build_application_paths().config
-
-
-def get_dictionary_directory(path: Path | None = None) -> Path:
-    return Path(path) if path is not None else build_application_paths().dictionary
-
-
-def get_workspace_directory(path: Path | None = None) -> Path:
-    return Path(path) if path is not None else build_application_paths().workspace
-
-
-def get_log_directory(path: Path | None = None) -> Path:
-    return Path(path) if path is not None else build_application_paths().log
-
-
-def get_dual_view_directory(path: Path | None = None) -> Path:
-    return Path(path) if path is not None else build_application_paths().dual_view
-
-
 def prepare_application_directories(
-    paths: ApplicationPaths | None = None,
+    paths: ApplicationPaths,
     *,
     probe_factory: Callable[..., BinaryIO] = tempfile.TemporaryFile,
 ) -> ApplicationPaths:
-    managed_paths = paths or build_application_paths()
-    for directory in managed_paths.writable_directories:
+    for directory in paths.writable_directories:
         try:
             directory.mkdir(parents=True, exist_ok=True)
             with probe_factory(dir=directory):
                 pass
         except OSError as error:
             raise ApplicationDataError(directory, error) from error
-    if managed_paths.config.exists():
+    if paths.config.exists():
         try:
-            with managed_paths.config.open("a", encoding="utf-8"):
+            with paths.config.open("a", encoding="utf-8"):
                 pass
         except OSError as error:
-            raise ApplicationDataError(managed_paths.config, error) from error
-    return managed_paths
+            raise ApplicationDataError(paths.config, error) from error
+    return paths

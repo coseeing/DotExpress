@@ -31,7 +31,7 @@ def prompt_dictionary_name_until_success(
 
 
 def rename_dictionary_after_name_prompt(
-	dictionary_dir: Path | None,
+	dictionary_dir: Path,
 	source_name: str,
 	new_name: str,
 ) -> Path:

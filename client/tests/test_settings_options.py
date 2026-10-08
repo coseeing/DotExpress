@@ -267,5 +267,9 @@ class OptionSourceConsumerTest(unittest.TestCase):
         self.assertEqual(_string_constants(tree) & (OPTION_VALUE_LITERALS | table_keys), set())
 
 
+    def test_gui_spells_out_no_option_values(self) -> None:
+        self.assertEqual(_string_constants(_module_tree("gui.py")) & OPTION_VALUE_LITERALS, set())
+
+
 if __name__ == "__main__":
     unittest.main()

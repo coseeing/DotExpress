@@ -14,6 +14,8 @@
 
 起點（P0 階段審查第 5 點）：`prepare_document_for_save(document, *, text, braille) -> Document` 已是新簽名，`batch_export_documents_to_folder` 已刪除。服務建立在新簽名上，本任務不復活批次匯出。
 
+本規格已納入實作計畫（`docs/superpowers/plans/2026-10-08-p1-3-document-controller.md`，「Spec Corrections and Refinements」一節）的更正與細化：驗收條件 3 使用字詞邊界；`test_save_open_document_saves_prepared_document` 在第 5 步改寫，而非第 7 步；四個大小寫相關測試釘住既有缺陷 1 與 2（每個平台各有兩個會略過，因此 Linux 回報 `skipped=9`）；特性測試的 frame 使用記錄用 fake 與單一有序事件紀錄，取代共用的 `Mock` parent；其 helper 在第 5 步移除 `frame.workspace_dir`；每個重構步驟都有先紅的測試（`DocumentControllerOwnershipTest`、`FrameWorkspaceServiceDelegationTest`）；改寫後的 Delete All GUI 測試使用 stub 服務；Delete All 的服務測試在 `on_error` 內檢查順序；每個不再使用的 import 在停止使用它的那一步就從 `gui` 移除；另有三項內部行為說明列於「保持不變的部分」。
+
 ## 現況（2026-10-08 於 `refactor/p1-3-document-controller` 驗證，HEAD `ef1988e`，已合併 P0-1..P0-6、P1-1 與 P1-2）
 
 基準：`cd client && python -m unittest discover -s tests -p "test_*.py"` 執行 614 個測試，`failures=1`（已知的 P2-5 測試），`skipped=7`。路線圖的聚焦測試組 `tests.test_document_controller tests.test_document_session tests.test_document_workspace tests.test_gui_document_flows` 執行 120 個測試，OK。msgid 掃描回報 353 個原始碼 msgid，差異只有已知的四個「僅在 `.pot`」的匯入篩選孤立字串。
@@ -140,7 +142,7 @@ class DocumentWorkspaceService:
 - `_initialize_state` 不再建立 controller，也不再指派四個狀態值。它把 `self.workspace_dir = get_workspace_directory()` 改為 `self._workspace_service = DocumentWorkspaceService(self._document_controller, get_workspace_directory())`。`get_workspace_directory` 仍 import 在 `gui` 中（測試在那裡 patch 它）。
 - 移除 `workspace_dir` 屬性。它唯一的讀者是文件流程，現在都經由服務。
 
-從 `gui.py` 刪除：`_get_document_controller`、四組 property、`_get_document_names`、`_sort_documents`、`_get_document_by_name`、`_replace_document`、`_document_name_exists`、`_persist_documents`，以及因此不再使用的 import（`document_name_exists`、`get_adjacent_document_name`、`document_package_path_for_name`、`ensure_workspace_directory`、`load_workspace_documents`、`prepare_document_for_save`、`save_document_package`、`batch_import_documents`；`BatchIssue`、`Document`、`DEFAULT_DOCUMENT_NAME`、`create_default_document`、`normalize_document_name` 保留，因為 frame 仍會用到）。
+從 `gui.py` 刪除：`_get_document_controller`、四組 property、`_get_document_names`、`_sort_documents`、`_get_document_by_name`、`_replace_document`、`_document_name_exists`、`_persist_documents`，以及因此不再使用的 import（`document_name_exists`、`get_adjacent_document_name`、`document_package_path_for_name`、`ensure_workspace_directory`、`load_workspace_documents`、`prepare_document_for_save`、`save_document_package`、`batch_import_documents`；`BatchIssue`、`Document`、`DEFAULT_DOCUMENT_NAME`、`create_default_document`、`normalize_document_name` 保留，因為 frame 仍會用到）。每個 import 在停止使用它的那一步移除（見遷移步驟）；`gui` 中唯一剩下未使用的 import 是原本就存在的 `ConversionStageError`（P1-4）。
 
 保留，名稱與呼叫者不變：`_save_open_document`、`_save_open_document_with_feedback`、`_create_document`、`_create_default_document`、`_ensure_open_document_exists`、`_prompt_for_document_name`、`_review_invalid_workspace_files`、`_load_workspace_documents_at_startup`、`_refresh_document_list`、`_clear_document_selection`、`_open_document_by_name`、`_open_adjacent_document`、`_get_selected_document_name`、`_get_selected_document`、`_sync_document_menu_state`、`_update_window_title`、`_render_dual_view_for_open_document`、`_write_export_document`、`_complete_conversion`，以及所有 `on_*` handler。保留這些名稱，讓特性測試與 P1-2 的測試可以不經修改地對新程式碼執行。
 
@@ -167,12 +169,12 @@ class DocumentWorkspaceService:
 1. `test:` 在 `tests/test_gui_document_flows.py` 加入特性測試（測試計畫 A 部分），在今日的程式碼上通過。
 2. `refactor:` 加入 controller 方法並刪除 `set_state`，測試放在 `tests/test_document_controller.py`。`gui` 尚未使用。
 3. `refactor:` 以測試先行加入 `documents/workspace_service.py` 與 `tests/test_workspace_service.py`（B 部分）。`gui` 尚未使用。
-4. `refactor:` frame 改用 controller 方法。在 `__init__` 建立 controller；刪除轉發 property、`_get_document_controller` 與一行包裝方法；拿掉兩個 `hasattr` 防禦；替換上面列出的每一個狀態讀寫（包括 `_complete_conversion` 與匯出的讀取）。磁碟 IO 仍在 `gui` 中執行，目錄讀自 `self.workspace_dir`。同一個 commit 更新既有 GUI 測試的 setup（C 部分），因為它們指派的 property 已不存在。
-5. `refactor:` 啟動、無效檔案審查、儲存開啟中文件、新增與預設文件建立改經由服務。`_initialize_state` 建立服務並移除 `workspace_dir`；重新命名、刪除、Delete All 與匯入中剩下的直接 IO 在第 6-7 步之前改讀 `self._workspace_service.workspace_dir`。
-6. `refactor:` 匯入改經由服務；刪除 `_persist_documents`。
-7. `refactor:` 重新命名、刪除與 Delete All 改經由服務，刪除 `gui` 中不再使用的工作區 import，並改寫兩個 patch `gui.document_package_path_for_name`、`gui.load_workspace_documents` 或 `gui.save_document_package` 的測試（C 部分）。
+4. `refactor:` frame 改用 controller 方法。在 `__init__` 建立 controller；刪除轉發 property、`_get_document_controller` 與一行包裝方法；拿掉兩個 `hasattr` 防禦；替換上面列出的每一個狀態讀寫（包括 `_complete_conversion` 與匯出的讀取）。移除 `document_name_exists` 與 `get_adjacent_document_name` 的 import。磁碟 IO 仍在 `gui` 中執行，目錄讀自 `self.workspace_dir`。同一個 commit 更新既有 GUI 測試的 setup（C 部分），因為它們指派的 property 已不存在。先寫紅燈測試：`DocumentControllerOwnershipTest`（controller 在 `_initialize_frame()` 建立選單列之前就存在；`_initialize_state` 保留它）。
+5. `refactor:` 啟動、無效檔案審查、儲存開啟中文件、新增與預設文件建立改經由服務。`_initialize_state` 建立服務並移除 `workspace_dir`；重新命名、刪除、Delete All 與匯入中剩下的直接 IO 在第 6-7 步之前改讀 `self._workspace_service.workspace_dir`。移除 `ensure_workspace_directory` 與 `prepare_document_for_save` 的 import。把 `test_save_open_document_saves_prepared_document` 改寫為暫存目錄測試（從這一步起，服務經由 `documents.workspace_service.save_document_package` 寫入，舊的 `gui.save_document_package` patch 已攔不到寫入）。特性測試 helper 的 `frame.workspace_dir` 那一行改為建立服務。先寫紅燈測試：`FrameWorkspaceServiceDelegationTest`（使用 `Mock` 服務）。
+6. `refactor:` 匯入改經由服務；刪除 `_persist_documents` 與 `batch_import_documents` 的 import。再加一個委派測試。
+7. `refactor:` 重新命名、刪除與 Delete All 改經由服務，刪除 `gui` 中不再使用的 `document_package_path_for_name`、`load_workspace_documents` 與 `save_document_package` import，並改寫 patch 了 `gui.document_package_path_for_name` 與 `gui.load_workspace_documents` 的 `test_delete_all_partial_failure_reconciles_dual_view_cache_and_refreshes_viewer`（C 部分）。再加六個委派測試。
 
-第 1 步的特性測試在之後每一步都必須不經修改地通過；只有它們共用的 setup helper 可以改（第 5 步在其中加入服務）。
+第 1 步的特性測試在之後每一步都必須不經修改地通過；只有它們共用的 setup helper 可以改：第 5 步把其中的 `frame.workspace_dir = self.workspace` 改為 `frame._workspace_service = DocumentWorkspaceService(frame._document_controller, self.workspace)`。從第 5 步起 `gui` 不得讀取 `workspace_dir`；在 stub frame 上，多餘的讀取會拿到 no-op 函式而明確失敗。
 
 ## 保持不變的部分
 
@@ -183,17 +185,17 @@ class DocumentWorkspaceService:
 - 選單狀態，包括文件清單存在前的第一次同步（P1-2 對 `_create_document_menu` 的特性紀錄不變）。
 - msgid：沒有字串新增、移除或搬到其他模組。不動 `client/locales/` 與 `scripts/`。
 
-刻意的差異（使用者看不到）：controller 改為在 `__init__` 建立一次，而不是延遲建立再於 `_initialize_state` 建立第二次；`load_documents` 另外清除開啟與選取名稱及快取，而它們在啟動時本來就是空的；刪除 `DocumentController.set_state`；服務的 `rename_document` 對相同名稱丟出 `ValueError`（GUI 無法觸及）。
+刻意的差異（使用者看不到）：controller 改為在 `__init__` 建立一次，而不是延遲建立再於 `_initialize_state` 建立第二次；`load_documents` 另外清除開啟與選取名稱及快取，而它們在啟動時本來就是空的；刪除 `DocumentController.set_state`；服務的 `rename_document` 對相同名稱丟出 `ValueError`（GUI 無法觸及）；`_save_open_document` 即使沒有開啟中文件也會讀取兩個編輯區（此時服務不做任何事）；`document_name_at` 對所有負數索引都回傳 `None`，而今日的 `self.documents[selection]` 在 `-2` 以下會從尾端繞回（`wx` 只會回傳 `-1` 或有效索引）；`load_documents` 以新的 dict 取代快取，而不是就地清空（沒有其他地方持有它的參考）。
 
 ## 測試計畫
 
 ### A. 特性測試（第 1 步，`tests/test_gui_document_flows.py`，新類別 `DocumentWorkspaceFlowsCharacterizationTest`）
 
-先寫，對今日的程式碼執行，預期值取自今日行為。每個測試使用真實的暫存工作區目錄與真實的 `DocumentController`。類別 helper `_make_workspace_frame(workspace, documents, open_name=None, selected_name=None)` 以 `object.__new__` 建立 frame，設定 `frame._document_controller = DocumentController(...)` 與 `frame.workspace_dir = workspace`，並為 `input_txt`、`output_txt`、`document_list`（`GetFirstSelected` 回傳選取名稱的索引，或 `wx.NOT_FOUND`）與 `SetTitle` 設定 `Mock`，外加 `_dual_view_frame = None`、`_document_menu_items = {}` 以及 `_make_frame` 已設定的轉換相關屬性。第 5 步時 helper 另外設定 `frame._workspace_service = DocumentWorkspaceService(frame._document_controller, workspace)`，這是這些測試唯一的變動。斷言透過 `frame._document_controller` 的屬性讀取狀態（前後都存在），並以 `load_document_package` 與目錄列表讀取磁碟。
+先寫，對今日的程式碼執行，預期值取自今日行為。每個測試使用真實的暫存工作區目錄與真實的 `DocumentController`。類別 helper `_make_workspace_frame(documents=(), open_name=None, selected_name=None)` 在測試的暫存目錄 `self.workspace` 上以 `object.__new__` 建立 frame，設定 `frame._document_controller = DocumentController(...)` 與 `frame.workspace_dir = self.workspace`，並以記錄用 fake 取代 `Mock`：`input_txt` 與 `output_txt` 用 `_FakeEditor`（保存內容、記錄 `SetFocus`），`document_list` 用 `_FakeDocumentList`（保存項目與選取，因此 `_refresh_document_list` 與選取查詢都真正執行）。`SetTitle` 記錄標題。另外設定 `_dual_view_frame = None`、`_document_menu_items = {}`，以及一個未在執行中的 `Mock` 轉換 runner。第 5 步時 helper 的 `frame.workspace_dir` 那一行改為 `frame._workspace_service = DocumentWorkspaceService(frame._document_controller, self.workspace)`，這是這些測試唯一的變動。斷言透過 `frame._document_controller` 的屬性讀取狀態（前後都存在），並以 `load_document_package` 與目錄列表讀取磁碟。
 
-對話框在 `gui` 上 patch：`wx.MessageBox`（記錄呼叫，回傳 `wx.YES` 或 `wx.NO`）、`DocumentNameDialog`（依序回傳排定名稱或取消的 fake）、`wx.FileDialog`（回傳路徑與篩選索引）、`InvalidWorkspaceFilesDialog`（記錄路徑，回傳刪除選擇）、`FileIssuesDialog`（記錄標題、訊息與問題行）。
+對話框在 `gui` 上 patch：`wx.MessageBox`（記錄呼叫，回傳 `wx.YES` 或 `wx.NO`）、`DocumentNameDialog`（依序回傳排定名稱或取消的 fake）、`wx.FileDialog`（回傳路徑與篩選索引）、`InvalidWorkspaceFilesDialog`（記錄路徑，回傳刪除選擇）、`FileIssuesDialog`（記錄標題、訊息與問題行）。每個 fake、`SetTitle` 與編輯區的 `SetFocus` 都附加到同一個有序的 `self.events` 清單（取代目的相同的共用 `Mock` parent）；`self.answers` 與 `self.names` 依序排定訊息框的回答與對話框的名稱（`None` 表示取消）。
 
-故障透過檔案系統注入，而非 patch 模組函式，因此不論 IO 由 `gui` 或服務執行，同一個測試都適用：在 `<ws>/<name>.dep` 放一個**目錄**，會讓 package 寫入失敗（`zipfile` 無法以寫入模式開啟目錄），也會讓 `unlink()` 失敗（Linux 上是 `IsADirectoryError`，Windows 與 macOS 上是 `PermissionError`，兩者皆為 `OSError`）。載入步驟會把這種目錄視為無效 package。錯誤框以標題（`_("Error")`）、旗標、parent，以及「以範本文字開頭並包含真實錯誤 `str(exc)`」的訊息檢查。
+故障透過檔案系統注入，而非 patch 模組函式，因此不論 IO 由 `gui` 或服務執行，同一個測試都適用：在 `<ws>/<name>.dep` 放一個**目錄**，會讓 package 寫入失敗（`zipfile` 無法以寫入模式開啟目錄），也會讓 `unlink()` 失敗（Linux 上是 `IsADirectoryError`，Windows 與 macOS 上是 `PermissionError`，兩者皆為 `OSError`）。載入步驟會把這種目錄視為無效 package。錯誤框以標題（`_("Error")`）、旗標、parent，以及「以範本文字開頭並包含失敗 package 的檔名」的訊息檢查（檔名在每個平台上都是 `str(exc)` 的一部分；完整路徑則不一定，因為 Windows 在訊息中會把反斜線加倍）。
 
 案例：
 
@@ -210,7 +212,7 @@ class DocumentWorkspaceService:
 11. 重新命名成功：`alpha.dep` 消失，`gamma.dep` 為 alpha 的內容（保留待轉換狀態）；名稱、開啟與選取名稱及快取 key 都移到 `gamma`；標題 `gamma - DotExpress`。
 12. 舊 package 不存在時重新命名：寫入 `gamma.dep`，沒有錯誤。
 13. 重新命名，寫入失敗（`gamma.dep` 是目錄）："Failed to save document: ..."；`alpha.dep` 完好；controller 不變。
-14. 重新命名，刪除失敗（被選取但未開啟的文件，其 package 是目錄）："Failed to save document: ..."；新 package 存在且舊項目仍在；controller 不變。
+14. 重新命名，刪除失敗（被選取但未開啟的文件，其 package 是目錄）："Failed to save document: ..."；新 package 存在且舊項目仍在；controller 不變（釘住既有缺陷 3）。
 15. 取消重新命名，以及重新命名為相同名稱：除先存檔的寫入外沒有磁碟變化；controller 不變。
 16. 刪除開啟中的中間文件：檔案消失；開啟前一個鄰居；保留它的快取項目，刪除被刪文件的項目。
 17. 刪除被選取但未開啟的文件：開啟中文件與編輯區不變。
@@ -218,13 +220,19 @@ class DocumentWorkspaceService:
 19. 刪除時回答 No：沒有任何變化。
 20. 刪除，刪除檔案失敗："Failed to delete document: ..."；狀態不變。
 21. Delete All 成功：所有 package 消失；建立並開啟 `new`；快取為空。
-22. Delete All 失敗：`alpha.dep` 為檔案、`beta.dep` 為目錄、`gamma.dep` 為檔案。`alpha.dep` 被刪除、錯誤框出現在審查對話框之前（以共用 `Mock` parent 的單一有序呼叫紀錄檢查）、審查對話框收到 `[beta.dep]`、controller 為 `[gamma]`、快取只剩 `gamma`、開啟 `gamma`。
-23. Delete All 失敗且沒有剩下有效文件：清空編輯區、不建立 `new`、失敗後不呼叫 `SetTitle`（釘住今日行為）。
+22. Delete All 失敗：`alpha.dep` 為檔案、`beta.dep` 為目錄、`gamma.dep` 為檔案。`alpha.dep` 被刪除、錯誤框出現在審查對話框之前（以有序的 `self.events` 紀錄檢查）、審查對話框收到 `[beta.dep]`、controller 為 `[gamma]`、快取只剩 `gamma`、開啟 `gamma`。
+23. Delete All 失敗且沒有剩下有效文件：清空編輯區、不建立 `new`、失敗後不呼叫 `SetTitle`（釘住既有缺陷 4）。
 24. 沒有文件時 Delete All：不存檔、不確認。
 25. 匯入兩個 `.txt`：兩個 package 都寫入；名稱已加入；開啟中文件維持開啟；沒有問題對話框。
 26. 匯入一個檔案：它被開啟。
 27. 匯入時有重複且有寫入失敗：問題對話框顯示 `Import Issues` / `Some files were skipped during import.`，載入問題行在儲存問題行（`<name>.dep: <原因>`）之前；只有已儲存的文件被加入。
 28. 選取變更：索引 1 選取第二個名稱；`wx.NOT_FOUND` 與超出尾端的索引選取 `None`。
+29. 在區分大小寫的檔案系統上只改大小寫的重新命名（`Alpha` 改為 `alpha`）：只剩 `alpha.dep`，且內容為該文件。在不區分大小寫的檔案系統上略過。
+30. 在不區分大小寫的檔案系統上只改大小寫的重新命名：package 被刪除，而 controller 中是 `alpha`（釘住既有缺陷 1）。在區分大小寫的檔案系統（Linux）上略過。
+31. 在區分大小寫的檔案系統上，已有 `alpha` 時新增 `Alpha`：兩個 package 都存在，`alpha.dep` 不變。在不區分大小寫的檔案系統上略過。
+32. 在不區分大小寫的檔案系統上，已有 `alpha` 時新增 `Alpha`：唯一的 package 成員變成 `Alpha.*`（釘住既有缺陷 2）。在區分大小寫的檔案系統（Linux）上略過。
+
+案例 29-32 在執行時探測檔案系統（比較 `<ws>/case-probe` 與 `<ws>/CASE-PROBE`），而不是依 `sys.platform` 猜測。每個釘住既有缺陷的測試都帶有 `# KNOWN BUG (P1-3 spec, known defect N)` 註解，說明它釘住的是今日行為而非期望行為，讓修正任務知道要把它反轉。
 
 既有的 `test_delete_all_partial_failure_reconciles_dual_view_cache_and_refreshes_viewer` 在第 1 步保留，於第 7 步改寫（C 部分）。
 
@@ -237,9 +245,9 @@ class DocumentWorkspaceService:
 - `save_open_document`：記憶體與磁碟都更新；待轉換 braille 保持待轉換；沒有開啟中文件時回傳 `None` 且不產生檔案；寫入失敗時錯誤在 controller 更新**之後**往外拋。
 - `create_document`：先寫 package 再加入；失敗時什麼都不加入，錯誤往外拋。
 - `import_files`：已儲存的文件依序加入；寫入失敗成為帶 package 路徑與 `str(exc)` 的 `BatchIssue`；載入問題在儲存問題之前；未知格式 key 丟出 `ValueError`。
-- `rename_document`：新 package 為來源內容，且**舊 package 被刪除**；舊 package 不存在也沒問題；寫入失敗與刪除失敗各自往外拋且 controller 不變（刪除失敗時兩個 package 都在磁碟上）；未知來源回傳 `None` 且不做 IO；相同名稱丟出 `ValueError` 且 package 留在原地。
+- `rename_document`：新 package 為來源內容，且**舊 package 被刪除**；舊 package 不存在也沒問題；寫入失敗與刪除失敗各自往外拋且 controller 不變（刪除失敗時兩個 package 都在磁碟上）；未知來源回傳 `None` 且不做 IO；相同名稱丟出 `ValueError` 且 package 留在原地。刪除失敗的測試釘住既有缺陷 3。
 - `delete_document`：刪除 package，回傳並套用決策；package 不存在也沒問題；刪除失敗時往外拋且 controller 不變。
-- `delete_all_documents`：成功時清空磁碟、清單、名稱與快取，回傳 `completed=True`；**失敗時**失敗項目之前的 package 已刪除、`on_error` 恰好呼叫一次且在重新載入之前（在回呼內記錄目錄列表來檢查）、之後 controller 與磁碟一致、快取只保留磁碟上仍存在的名稱、開啟與選取名稱已不存在時被清除、回傳無效路徑、剩下的文件不被動到。
+- `delete_all_documents`：成功時清空磁碟、清單、名稱與快取，回傳 `completed=True`；**失敗時**失敗項目之前的 package 已刪除、`on_error` 恰好呼叫一次且在重新載入之前（在回呼內記錄目錄列表與 controller 的名稱來檢查：名稱仍是原本的，表示還原尚未執行；只看目錄列表無法分辨，因為重新載入不會改變磁碟）、之後 controller 與磁碟一致、快取只保留磁碟上仍存在的名稱、開啟與選取名稱已不存在時被清除、回傳無效路徑、剩下的文件不被動到；重新載入失敗時（測試在 `on_error` 內把工作區換成一個檔案），錯誤在 `on_error` 之後往外拋，controller 不變。
 - 模組不 import `wx` 也不 import `gui`（以 AST 檢查其 import）。
 
 ### C. 更新的測試
@@ -250,8 +258,9 @@ class DocumentWorkspaceService:
   - 需要空工作區的測試傳入 `documents=()`：`test_sync_document_menu_state_before_document_list_exists`，以及 `DocumentMenuAndExportCharacterizationTest._make_menu_frame`（其預期紀錄假設在 `_select_first_of` 之前沒有文件）。`_select_first_of` 以 `frame._document_controller.load_documents(...)` 載入名稱。
   - 所有 `frame.documents = ...`、`frame._open_document_name = ...`、`frame._selected_document_name = ...` 與 `frame._dual_view_results_by_document[...]` 改為 controller 建構參數或 controller 方法呼叫（`select_document`、`set_dual_view_results`），所有讀取改為 `open_document_name`、`selected_document_name` 或 `get_dual_view_results`。測試內容與預期值不變。
   - `_initialize_state_with_loaded_tables` 與 `test_initialize_state_wires_presenter_to_active_dictionary` 在呼叫 `_initialize_state` 之前設定 `frame._document_controller = DocumentController()`（否則 stub 遮蔽會把一個函式交給服務）。
-  - `test_save_open_document_saves_prepared_document` 改為相同預期的暫存目錄測試（package 內容為 `Document("alpha", "edited", "edited braille")`）。
-  - `test_delete_all_partial_failure_reconciles_dual_view_cache_and_refreshes_viewer` 保留情境與斷言，但改以檔案系統（或 stub 服務）注入失敗，而不是 patch 已不在 `gui` 中的函式。
+  - `test_save_open_document_saves_prepared_document` 在第 5 步改為相同預期的暫存目錄測試（package 內容為 `Document("alpha", "edited", "edited braille")`）。
+  - `test_delete_all_partial_failure_reconciles_dual_view_cache_and_refreshes_viewer` 在第 7 步保留情境與斷言，改用 stub 服務：其 `delete_all_documents` 呼叫 `on_error`、透過 controller 還原 `[beta]`，並回傳 `DeleteAllResult(completed=False, invalid_paths=[])`。測試現在也檢查錯誤框與審查呼叫。檔案系統故障無法讓 `beta` 的刪除失敗、同時又讓 `beta` 重新載入為有效文件（目錄形式的 package 在重新載入時是無效的）；真正的檔案系統回滾由特性測試案例 22 與服務測試涵蓋。
+  - 新增的正向契約測試，先紅再綠，P1-4 可以沿用（不是「名稱不存在」守門測試）：`DocumentControllerOwnershipTest`（第 4 步：`test_frame_creates_its_controller_before_building_the_menu_bar`、`test_initialize_state_keeps_the_frame_controller`）與 `FrameWorkspaceServiceDelegationTest`（第 5-7 步，13 個測試：`test_initialize_state_creates_service_for_frame_controller`，以及對每個流程以 `Mock` 服務檢查 frame 以正確參數把 IO 交給服務，並經由相同的 frame 呼叫呈現服務的結果與錯誤）。
 - 不新增「名稱不存在」守門測試（P0 審查 M-2），由驗收 grep 負責。不擴充 `test_dead_frame_helpers_are_removed`。
 
 先單獨執行動到的模組，再以多個固定種子的隨機順序一起執行（scratchpad 的 `shuffle_harness.py`，種子 1-5）。`documents.workspace_service` 是 `gui` 在 `StubScope.loading()` 內首次 import 的新純模組，因此模組順序有影響（P0 審查註記與 I-1）。
@@ -260,14 +269,14 @@ class DocumentWorkspaceService:
 
 1. `grep -nE '@property|\.setter|_get_document_controller' client/gui.py` 沒有輸出。
 2. `grep -nE '\.(documents|open_name|selected_name|dual_view_results_by_document)\b' client/gui.py` 沒有輸出（沒有直接存取狀態，沒有 `self.documents` 清單操作）。
-3. `grep -nE 'save_document_package|load_workspace_documents|ensure_workspace_directory|document_package_path_for_name|batch_import_documents|prepare_document_for_save|\.unlink\(' client/gui.py` 沒有輸出（所有工作區 IO 都在服務中）。
+3. `grep -nE '\b(save_document_package|load_workspace_documents|ensure_workspace_directory|document_package_path_for_name|batch_import_documents|prepare_document_for_save)\b|\.unlink\(' client/gui.py` 沒有輸出（所有工作區 IO 都在服務中）。需要字詞邊界：`load_workspace_documents` 是保留方法 `_load_workspace_documents_at_startup` 的子字串，沒有邊界的樣式即使遷移正確也會印出該方法與其呼叫處。
 4. `grep -nE '_sort_documents|_get_document_by_name|_replace_document|_document_name_exists|_get_document_names|_persist_documents|\bworkspace_dir\b' client/gui.py` 沒有輸出。
 5. `grep -nE 'hasattr\(self, "(documents|_selected_document_name)"\)' client/gui.py` 沒有輸出。
 6. `grep -nE '^(import wx|from wx)|^from gui|^import gui' client/documents/workspace_service.py client/documents/controller.py` 沒有輸出。`grep -n 'set_state' client/documents/controller.py` 沒有輸出。
 7. `grep -nE '\.(documents|open_name|selected_name|dual_view_results_by_document)\b' client/documents/workspace_service.py` 沒有輸出（服務只用 controller 方法）。這也是 `ImportResult` 的欄位命名為 `saved` 而不是 `documents` 的原因。
 8. `git diff main --stat -- client/locales scripts` 為空，且 msgid 掃描輸出與本任務之前相同（353 個原始碼 msgid，只有已知的四個「僅在 `.pot`」孤立字串）。
-9. 路線圖驗證通過：`cd client && python3 -m unittest tests.test_document_controller tests.test_document_session tests.test_document_workspace tests.test_workspace_service tests.test_gui_document_flows -v`。另加 `tests.test_removed_dead_code tests.test_menu_builder tests.test_action_menu tests.test_wx_stub`。
-10. 完整測試：`cd client && python3 -m unittest discover -s tests -p "test_*.py"` 回報 `failures=1`（只有已知的 P2-5 失敗）、`errors=0`、`skipped=7`，測試數為 614 加上新測試（確切數字由 plan 決定）。
+9. 路線圖驗證通過：`cd client && python3 -m unittest tests.test_document_controller tests.test_document_session tests.test_document_workspace tests.test_workspace_service tests.test_gui_document_flows -v`。另加 `tests.test_removed_dead_code tests.test_menu_builder tests.test_action_menu tests.test_wx_stub`。（202 個測試，`OK (skipped=2)`；47 個測試，OK。）
+10. 完整測試：`cd client && python3 -m unittest discover -s tests -p "test_*.py"` 回報 `failures=1`（只有已知的 P2-5 失敗）、`errors=0`，測試數為 696（614 加上 82 個新測試）。在 Linux 上回報 `skipped=9`：7 個僅 Windows 的 liblouis 略過，加上兩個不區分大小寫檔案系統的測試（案例 30 與 32）；在 Windows 上則改為兩個區分大小寫的測試（案例 29 與 31）略過。
 11. 隨機順序執行沒有新的失敗或錯誤。
 12. Windows：見下方驗證債（在這台 Linux 主機上無法執行）。
 
@@ -291,10 +300,13 @@ class DocumentWorkspaceService:
 3. **重新命名時刪除舊檔失敗會讓兩個 package 都留在磁碟上**，而記憶體中的清單只保留舊名稱。下次啟動會顯示兩份文件。
 4. **Delete All 回滾後沒有剩下任何有效文件時**，會清空編輯區，但不更新標題，也不建立預設文件。
 
+釘住它們的測試（每個都帶有 `KNOWN BUG` 註解）：缺陷 1 為 `test_case_only_rename_on_case_insensitive_file_system_deletes_package`，缺陷 2 為 `test_add_case_variant_on_case_insensitive_file_system_overwrites_package`（兩者只在不區分大小寫的檔案系統上執行），缺陷 3 為 `test_rename_unlink_failure_leaves_both_packages_and_state` 與服務測試 `test_rename_unlink_failure_propagates_and_leaves_both_packages`，缺陷 4 為 `test_delete_all_failure_without_valid_document_clears_editors_only`。修正任務要把它們反轉。
+
 修正 1 與 2 的做法是在名稱詢問中以 `casefold()` 比較（並在新舊路徑為同一檔案時跳過刪除）。這是使用者可見的行為變更，應另開任務處理。
 
 ## Windows 驗證債
 
+- 在 Windows（若可行也在 macOS）上執行 `tests.test_gui_document_flows`：兩個不區分大小寫的測試（案例 30 與 32）會在那裡執行且必須通過，照原樣釘住既有缺陷 1 與 2；兩個區分大小寫的測試則略過。目錄形式的 package 故障在那裡丟出的是 `PermissionError` 而不是 `IsADirectoryError`；測試只依賴 `OSError` 與訊息中的檔名。
 - 在打包版本上，改動前後各走一次新增、重新命名、刪除、Delete All、匯入（單一與多個檔案，含重複）、Ctrl+Tab 與關閉視窗，比較工作區資料夾內容以及清單、標題與編輯區狀態。
 - 讓其他程式（例如壓縮工具）開著一個 `.dep` 再執行 Delete All 以觸發回滾：先出現錯誤框，之後若有無效檔案則出現無效檔案對話框，最後是重新載入的清單。
 - 在工作區放一個損毀的 `.dep` 後啟動，檢查無效檔案對話框及其兩個選項。

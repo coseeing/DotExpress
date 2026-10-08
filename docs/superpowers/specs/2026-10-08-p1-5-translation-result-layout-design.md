@@ -21,6 +21,8 @@ Concretely:
 
 This is a behavior-preserving refactor. For any input, the braille text, the source-text wrap, the token alignment and the dual-view model and HTML are byte-identical to `main` at `7095265`. No user-facing string changes.
 
+This spec includes the corrections and refinements from the implementation plan (`docs/superpowers/plans/2026-10-08-p1-5-translation-result-layout.md`, section "Spec Corrections and Refinements"): the scale backstop merges 20,000 ten-token results, because with one-token results the old loop takes only 11.5 s and barely misses the 5 s bound; the module-level imports of `translate` do change the standalone import closures of `conversion.wrapping` and `conversion.preprocessing.literal_braille` (no production closure changes); the golden fixture stores the width-independent snapshot once per input and the long document as digests; the fixture is regenerated with `python -m tests.test_translation_golden --write`; the test classes, the A3 test and the guards have fixed names and scope; every step has a red test or, for step 2, a mutation check; and the text-only converter helper is `reject_mathml`.
+
 Not in this task (P2-5): splitting the tokenizer (`bind_word_tokens`) and the line wrapper (`wrap`) out of `TranslationResult`, moving `TranslationResult` to `conversion/alignment.py`, and the known failing test `test_translate_with_language_does_not_duplicate_existing_spaces_around_math`.
 
 ## Current State (verified 2026-10-08 on `refactor/p1-5-translation-result-layout`, HEAD `7095265`, P0-1..P0-6 and P1-1..P1-4 merged)
@@ -159,7 +161,7 @@ def concat(cls, results):
 - The result owns four new lists, even for zero or one input, so `reclean_braille_endspace` on the merged result cannot touch a cached dual-view segment.
 - Accepted widening: `list + x` required `raw` and `braille` to be lists, while `extend` accepts any iterable. Every producer (liblouis, MathCAT and fallback adapters, literal braille, test fakes) builds lists, so no reachable input changes.
 
-`conversion/preprocessing/literal_braille.py` also imports `TranslationResult` at module level. Neither move changes any import closure (shown above).
+`conversion/preprocessing/literal_braille.py` also imports `TranslationResult` at module level. No production import closure changes: every production path that reaches these two modules (`conversion.service`, `conversion.text.pipeline`, the adapters) already loads `translate` through `adapters.translation.contracts`, and `test_platform_neutral_modules_do_not_load_native_modules` stays green. The standalone closures do change (measured): `import conversion.wrapping` and `import conversion.preprocessing.literal_braille`, each alone in a fresh interpreter, now also load `translate`, `languageDetection`, `languageDetection.blocks` and `languageDetection.unicode_blocks` (all pure Python, no native code). Also measured after step 6: `import conversion.service` stops loading `conversion.math_service` (it came in through `dual_view.model`); nothing relies on that, because `adapters.translation.provider` imports it lazily and, after step 7, `gui` and `documents.formats` import it directly. `import documents.formats` loads exactly the same modules before and after.
 
 ### `DualViewSegment` moves to `conversion/output.py` (D-4)
 
@@ -196,15 +198,15 @@ def build_dual_view_model(
 
 ### Migration steps (each step is one green commit; the plan details them)
 
-1. `test: run the translate import check in a subprocess` (M-1, plus the explicit-language fakes and the dead helpers). The 20-seed shuffle becomes clean except P2-5.
-2. `test: characterize translation and dual-view output` (all of part A of the test plan, including the golden fixture generated on unchanged production code).
+1. `test: run the translate import check in a subprocess` (M-1, plus the explicit-language fakes and the dead helpers). Red first: the explicit-language fakes switch to a module-level import of `TranslationResult`, and with the old core test run first they error (`TypeError: not TranslateResult object`), which is the M-1 pollution itself; the subprocess rewrite turns them green. The 20-seed shuffle becomes clean except P2-5.
+2. `test: characterize translation and dual-view output` (all of part A of the test plan, including the golden fixture generated on unchanged production code). Characterization cannot be red; instead a throwaway mutation script shows the golden tests catch three deliberate in-memory breakages (`reclean_token` a no-op: 6 failures; `bind_contracted_tokens` a no-op: 16; the wrap merging into the first cached segment: 26).
 3. `refactor: share TranslationResult constants` (constants and `__hash__`; part B tests).
 4. `fix: compare TranslationResult only with results` (L-1; part C test).
-5. `refactor: merge translation results in one pass` (`concat`, `__add__`, both module-level imports; part D tests).
+5. `refactor: merge translation results in one pass` (`concat`, `__add__`, both module-level imports; part D tests). The red step runs only the two structural tests; the old code needs minutes for the scale test.
 6. `refactor: move DualViewSegment to conversion output` (part E guard for `conversion`).
-7. `refactor: inject the MathML converter into the dual-view model` (part E guard for `dual_view`, test call-site updates).
+7. `refactor: inject the MathML converter into the dual-view model` (part E guard for `dual_view`, the required-converter test). The 20 test call-site updates go into the red step (the keyword is already accepted), so the green step touches production files only.
 
-The golden fixture is written once in step 2 and must not change afterwards.
+The golden fixture is written once in step 2 and must not change afterwards (sha256 `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`).
 
 ## What Stays Identical
 
@@ -225,38 +227,38 @@ All new tests are `unittest`. Golden expectations are captured from unchanged pr
    - Runtime: the real `LiblouisTextTranslator` with a deterministic fake helper (its `translate(tables, text, mode=4)` returns cells, `braille_to_raw` and `raw_to_braille` the way liblouis does). The fake gives ASCII letters one cell, digits two (number sign), CJK characters three plus one trailing blank cell at the end of a CJK run (so `reclean_braille_endspace` trims), other symbols one or two cells, and, for tables whose name contains `en`, maps `the`/`and`/`ing` to one cell (so `bind_contracted_tokens` merges). Math uses the real `MathCATMathTranslator` with a deterministic fake `translate_math`. This exercises the adapters, the pipeline, language switches, boundary spaces, literal braille, the merge, the token binding and the wrap without native code.
    - Data: the real `client/data` CSVs (character maps, Bopomofo, Braille-to-ASCII); a temporary dictionary with one `Braille/Unicode` row (`台灣` -> `⠞⠺`); `translation_tables = {"default": "zh-tw.ctb", "en": "en-ueb-g2.ctb", "zh": "zh-tw.ctb", "math": "Nemeth"}`; `lang="zh_TW"`; `charset_maps=DEFAULT_CHARSET_MAPS`.
    - Inputs (at least): Chinese prose with an embedded English word and full-width punctuation; English with inline math, a comma right after math and a Chinese word; text with inline math between spaces (the P2-5 shape, pinned as it behaves today), a hard newline, adjacent `）（` and `」『` pairs (so `reclean_token` inserts a space); an escaped dollar, a fraction, math with no surrounding spaces, `Testing, (one) [two]!`; the dictionary literal with blank lines and leading spaces; and one long document of at least 300 segments built from the others.
-   - Each short input at widths 1, 10, 24 and 40 in `unicode` mode and at width 24 in `ascii` mode; the long document at width 40.
-   - Snapshot per run: `display_text`; `wrap_translation_results(...)` (both strings); the merged result's four lists; the four lists after `reclean_braille_endspace`, `bind_word_tokens` and `reclean_token`; `translate_with_language(...)`'s four lists; every dual-view segment's `source_kind` and four lists (read after the conversion, which proves the wrap did not mutate them); every `AlignmentItem` field of `build_dual_view_model(..., mathml_converter=<deterministic fake>)`; and the SHA-256 of `render_dual_view_html` of that model. A fake converter keeps the fixture independent of the `latex2mathml` version; the real converter is pinned by A3.
-   - The fixture is JSON with `ensure_ascii=False`, sorted keys and indentation, so a diff is readable. The module has a `__main__` entry that rewrites it, run once in step 2. A prototype of this harness on `7095265` gave identical snapshots under `PYTHONHASHSEED` 0-3.
-2. **Merge semantics** (`tests/test_translation_result_core.py`): merging `[]` and `None` gives four empty lists; merging one result gives an equal result whose lists are not the input's lists; mutating the merged lists (or calling `reclean_braille_endspace` on it) leaves every input unchanged; merging three hand-built results gives the expected offsets; a non-result item raises `TypeError` with the existing message; `a + b` gives the same four lists as today.
-3. **Real MathML wiring**: in `tests/test_gui_document_flows.py`, the frame's `_render_dual_view_for_open_document()` for cached results with a math segment (`x^2`) equals `render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml), empty_message=...)` and contains `latex_to_mathml("x^2")`; the HTML export of the same results through `ExportCoordinator.write_document(..., "html")` writes exactly those bytes. (`build_dual_view_model` already accepts the keyword, so these tests pass before and after.)
-4. **Constant values** (`tests/test_translation_result_core.py`): a result's 12 punctuation attributes equal the literal sets of today, and `{k: list(v) for k, v in result.lang_blocks.items()} == build_language_blocks({"ja", "zh", "ko"})`.
+   - Each short input at widths 1, 10, 24 and 40 in `unicode` mode and at width 24 in `ascii` mode; the long document (the five short inputs joined by blank lines, 12 times: 360 segments) at width 40.
+   - Snapshot per run: `display_text` and `wrap_translation_results(...)` (both strings). Snapshot per input, stored once under `conversion` because it does not depend on the width or the output mode, and recomputed and compared on every run (so the "read after the wrap" check runs at every width): the merged result's four lists; the four lists after `reclean_braille_endspace`, `bind_word_tokens` and `reclean_token`; `translate_with_language(...)`'s four lists; every dual-view segment's `source_kind` and four lists (read after the wrap and the post-processing, which proves they did not mutate them); `dataclasses.asdict` of `build_dual_view_model(..., mathml_converter=<deterministic fake>)`; and the SHA-256 of `render_dual_view_html` of that model. The long document stores its per-input parts as SHA-256 digests of their canonical JSON plus `dual_view_segment_count` (in full it alone would be about 1 MB). A fake converter keeps the fixture independent of the `latex2mathml` version; the real converter is pinned by A3. `test_fixture_covers_every_input` pins the case list and the 300-segment minimum.
+   - The fixture is JSON with `ensure_ascii=False`, sorted keys and indentation, so a diff is readable: 189,305 bytes, 6,652 lines, sha256 `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`, identical under `PYTHONHASHSEED` 0-3. `python -m tests.test_translation_golden --write` (from `client/`) rewrites it, run once in step 2; without `--write` the module runs its tests like every other test module. The module docstring says the fixture must only be regenerated for an intended output change.
+2. **Merge semantics** (`tests/test_translation_result_core.py`, class `MergeTranslationResultsTest`, plus one test in `TranslationResultCoreTest`): merging `[]` and `None` gives four empty lists; merging one result gives an equal result whose lists are not the input's lists; mutating the merged lists (or calling `reclean_braille_endspace` on it) leaves every input unchanged; merging three hand-built results gives the expected offsets; a non-result item raises `TypeError` with the existing message; `a + b` gives the same four lists as today, aliases neither operand, and keeps its `TypeError`.
+3. **Real MathML wiring**: one test, `test_dual_view_and_html_export_render_math_with_real_mathml` in `DocumentMenuAndExportCharacterizationTest` next to the existing export byte tests. In `tests/test_gui_document_flows.py`, the frame's `_render_dual_view_for_open_document()` for cached results with a math segment (`x^2`) equals `render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml), empty_message=...)` and contains `latex_to_mathml("x^2")`; the HTML export of the same results through `ExportCoordinator.write_document(..., "html")` writes exactly those bytes. With non-empty results the `empty_message` does not appear, so the window and the export render the same bytes and are checked against the same expected string. (`build_dual_view_model` already accepts the keyword, so this test passes before and after.)
+4. **Constant values** (`tests/test_translation_result_core.py`, `TranslationResultCoreTest`): a result's 12 punctuation attributes equal the literal sets of today (full-width members written as `\u` escapes), and `{k: list(v) for k, v in result.lang_blocks.items()} == build_language_blocks({"ja", "zh", "ko"})`.
 
-### B. Shared constants (step 3)
+### B. Shared constants (step 3, class `SharedConstantsTest`)
 
 - `vars(TranslationResult([], [], [], []))` has exactly the four data keys.
 - Constructing a result does not call `translate.build_language_blocks` (patched with a `Mock`).
 - The 12 attributes are `frozenset`s and `lang_blocks` cannot be assigned into (`TypeError`).
 
-### C. Equality (step 4)
+### C. Equality (step 4, class `EqualityTest`)
 
 `result == object()` is `False`, `result != "x"` is `True`, `result.__eq__(42) is NotImplemented`, two equal results compare equal, and `hash(result)` raises `TypeError`.
 
-### D. Linear merge guards (step 5)
+### D. Linear merge guards (step 5, class `LinearMergeTest`)
 
-- **Structural (primary, deterministic):** merging 500 results constructs exactly one `TranslationResult` (count `__init__` calls through a wrapper) and never calls `__add__` (patched with `side_effect=AssertionError`). The pairwise loop builds 501 instances and calls `__add__` 500 times, so this fails on the old code without any timing.
-- **Scale backstop:** merging 20,000 one-token results equals a reference built with plain offset arithmetic and finishes within 5 s (`time.perf_counter`). Expected time with the new code is tens of milliseconds; the old code needs well over a minute (extrapolated from the 8,000-segment measurement), so the 100x+ headroom keeps it from being flaky on a slow machine.
+- **Structural (primary, deterministic):** merging 500 results constructs exactly one `TranslationResult`, which is the returned one (count `__init__` calls through a wrapper), and never calls `__add__` (patched with `side_effect=AssertionError`). The pairwise loop builds 501 instances and calls `__add__` 500 times, so this fails on the old code without any timing.
+- **Scale backstop:** merging 20,000 ten-token results (200,000 tokens, the shape of the 8,000-segment measurement above) equals a reference built with plain offset arithmetic and finishes within 5 s (`time.perf_counter`). Measured on this box: the new merge 0.06 s, the old pairwise loop 162 s (8,000 ten-token segments: 22.1 s). The bound is about 80 times the new time, and the old code needs more than 30 times the bound. One-token results would not separate them: the old loop merges 20,000 of those in 11.5 s, so a machine 2.5 times faster would let it pass.
 
 ### E. Dependency guards (steps 6 and 7, `tests/test_translation_import_isolation.py`, subprocess like the existing tests)
 
-- `import conversion.service, conversion.output, conversion.wrapping` loads no `dual_view` module.
-- `import dual_view, dual_view.model, dual_view.html` loads no `conversion` module and not `config`.
-- `build_dual_view_model([])` without `mathml_converter` raises `TypeError` (`tests/test_dual_view_model.py`).
+- `test_conversion_does_not_import_dual_view`: `import conversion.service, conversion.output, conversion.wrapping` loads no `dual_view` or `dual_view.*` module (the guard reports every one it finds).
+- `test_dual_view_does_not_import_conversion_or_config`: `import dual_view, dual_view.model, dual_view.html` loads no `conversion` or `conversion.*` module and not `config`.
+- `test_mathml_converter_is_required`: `build_dual_view_model([])` without `mathml_converter` raises a `TypeError` whose message matches `mathml_converter` (`tests/test_dual_view_model.py`).
 
 ### F. Updated tests
 
 - Five modules switch the `DualViewSegment` import to `conversion.output`.
-- The 20 converter-less `build_dual_view_model` calls pass a converter. Text-only tests pass a module helper that raises `AssertionError` (the converter must not be called for text); the `test_gui_document_flows.py` export comparisons pass `latex_to_mathml`, matching production wiring.
+- The 20 converter-less `build_dual_view_model` calls pass a converter. Text-only tests (13 in `test_dual_view_model.py`, 3 in `test_dual_view_html.py`) pass `reject_mathml`, a module function in each of those two files that raises `AssertionError` (the converter must not be called for text); the four `test_gui_document_flows.py` export comparisons pass `latex_to_mathml`, matching production wiring.
 - `tests/test_translation_result.py` is not converted or fixed here (P2-5). As a manual check, calling its 13 functions directly gives the same 8 passes and the same 5 failures (same exception types) before and after the change.
 
 ## Acceptance Criteria
@@ -264,8 +266,8 @@ All new tests are `unittest`. Golden expectations are captured from unchanged pr
 1. Roadmap verification passes on Linux: `cd client && python -m unittest tests.test_translation_result tests.test_translation_result_core tests.test_dual_view_model tests.test_dual_view_html tests.test_conversion_service -v` (`test_translation_result` contributes 0 tests, see above; only the P2-5 failure remains). Also `tests.test_translation_golden tests.test_translation_import_isolation tests.test_conversion_language_explicit tests.test_document_formats tests.test_gui_document_flows tests.test_export_coordinator tests.test_conversion_text_pipeline`.
 2. `git diff <step-2 commit> HEAD -- client/tests/fixtures/translation_golden.json` is empty, and `tests.test_translation_golden` passes at every later commit.
 3. `python -m unittest tests.test_translation_result_core tests.test_conversion_service` reports only the P2-5 failure (no errors), and so does the reverse order.
-4. Full suite (alphabetical): 754 + new tests, `failures=1` (P2-5 only), `errors=0`, `skipped=9`.
-5. Shuffled full suite, seeds 0-19 (module order shuffled with `random.Random(seed)`, one process, `unittest.TextTestRunner`; the harness used since P0-4): every seed runs the same number of tests with `failures=1 errors=0`, and the only failing test is `test_translate_with_language_does_not_duplicate_existing_spaces_around_math`.
+4. Full suite (alphabetical): 754 + 29 new tests = 783, `failures=1` (P2-5 only), `errors=0`, `skipped=9`.
+5. Shuffled full suite, seeds 0-19 (module order shuffled with `random.Random(seed)`, one process, `unittest.TextTestRunner`; the harness used since P0-4): every seed runs the same 783 tests with `failures=1 errors=0`, and the only failing test is `test_translate_with_language_does_not_duplicate_existing_spaces_around_math`.
 6. `grep -rnE "(from|import) dual_view" client/conversion` prints nothing, and `grep -rnE "(from|import) conversion" client/dual_view` prints only the `TYPE_CHECKING` import in `dual_view/model.py`. The subprocess guards in part E are the binding check.
 7. `grep -rn "^\s\+from translate import" client --include=*.py | grep -v tests/` prints nothing.
 8. `grep -n "self\.\(LEFT\|RIGHT\|MIDDLE\|END\)_[A-Z_]* = \|self.lang_blocks = " client/translate.py` prints nothing.
@@ -278,7 +280,7 @@ All new tests are `unittest`. Golden expectations are captured from unchanged pr
 - **Shared mutable constants** (low). Frozensets and a read-only mapping make accidental mutation raise instead of leaking across instances.
 - **Equality change** (low). Comparing a result with another type no longer raises. No caller relies on the exception (suite probe).
 - **Stub-scope eviction** (low). `test_dialog_display` loads `dialog.py` with `evict_everything`, which evicts `documents.formats` and, after step 7, the `conversion.math_service` it imports directly (before, through `dual_view.model`). Re-importing those creates new module objects but no class that crosses an `isinstance` check. Criterion 5 covers it.
-- **Timing backstop flakiness** (low). 100x+ headroom; the structural test is the real guard.
+- **Timing backstop flakiness** (low). The 5 s bound is about 80 times the new merge time; the structural tests are the real guard.
 - **Windows-only paths** (medium, unverifiable here). The liblouis adapter now builds results whose constants are class attributes and whose merge is linear; output must match. See the verification debt.
 
 ## Known defects found during this investigation (not fixed here)

@@ -21,6 +21,8 @@
 
 這是保持行為不變的重構。對任何輸入，點字文字、原文換行、token 對位、Dual View 模型與 HTML 都與 `main` 的 `7095265` 逐位元組相同。使用者可見字串不變。
 
+本規格已納入實作計畫（`docs/superpowers/plans/2026-10-08-p1-5-translation-result-layout.md`，「Spec Corrections and Refinements」一節）的更正與細化：規模後盾改為合併 20,000 個 10 token 的結果，因為若用單 token 結果，舊迴圈只需 11.5 秒，與 5 秒上限相差無幾；`translate` 改為模組層級 import 確實會改變 `conversion.wrapping` 與 `conversion.preprocessing.literal_braille` 單獨 import 時的範圍（正式程式碼的 import 範圍不變）；golden fixture 對每個輸入只存一次與寬度無關的快照，長文件改存摘要值；以 `python -m tests.test_translation_golden --write` 重新產生 fixture；測試類別、A3 測試與守衛的名稱和範圍已確定；每一步都有紅燈測試，步驟 2 則以突變檢查代替；純文字用的轉換器輔助函式名為 `reject_mathml`。
+
 不屬於本任務（P2-5）：把 tokenizer（`bind_word_tokens`）與換行器（`wrap`）從 `TranslationResult` 拆出、把 `TranslationResult` 移到 `conversion/alignment.py`，以及已知失敗的測試 `test_translate_with_language_does_not_duplicate_existing_spaces_around_math`。
 
 ## 現況（2026-10-08 於 `refactor/p1-5-translation-result-layout`、HEAD `7095265` 驗證，P0-1..P0-6 與 P1-1..P1-4 已合併）
@@ -159,7 +161,7 @@ def concat(cls, results):
 - 即使輸入為零個或一個，結果也擁有四個新的 list，因此對合併結果呼叫 `reclean_braille_endspace` 不會動到快取的 Dual View 段。
 - 接受的放寬：`list + x` 要求 `raw` 與 `braille` 必須是 list，`extend` 則接受任何可迭代物件。所有產生者（liblouis、MathCAT 與 fallback adapter、字面點字、測試假物件）都建立 list，所以實際可能的輸入都不受影響。
 
-`conversion/preprocessing/literal_braille.py` 也改為在模組層級 import `TranslationResult`。兩處搬移都不改變任何 import 範圍（理由見上）。
+`conversion/preprocessing/literal_braille.py` 也改為在模組層級 import `TranslationResult`。正式程式碼的 import 範圍都不變：所有會用到這兩個模組的正式路徑（`conversion.service`、`conversion.text.pipeline`、各 adapter）早已經由 `adapters.translation.contracts` 載入 `translate`，`test_platform_neutral_modules_do_not_load_native_modules` 也維持通過。單獨 import 時的範圍則會改變（實測）：在全新直譯器中單獨 `import conversion.wrapping` 或 `import conversion.preprocessing.literal_braille`，現在還會載入 `translate`、`languageDetection`、`languageDetection.blocks` 與 `languageDetection.unicode_blocks`（全是純 Python，沒有原生程式碼）。另外實測步驟 6 之後：`import conversion.service` 不再載入 `conversion.math_service`（它原本經由 `dual_view.model` 載入）；沒有任何程式依賴這點，因為 `adapters.translation.provider` 是延遲 import 它，而步驟 7 之後 `gui` 與 `documents.formats` 會直接 import 它。`import documents.formats` 載入的模組前後完全相同。
 
 ### `DualViewSegment` 移到 `conversion/output.py`（D-4）
 
@@ -196,15 +198,15 @@ def build_dual_view_model(
 
 ### 遷移步驟（每一步都是一個全綠的 commit；細節由計畫決定）
 
-1. `test: run the translate import check in a subprocess`（M-1，加上 explicit-language 的假翻譯器與刪除無用輔助函式）。20 個種子的打亂測試除了 P2-5 之外全部乾淨。
-2. `test: characterize translation and dual-view output`（測試計畫 A 部分全部，包括在未修改的正式程式碼上產生的 golden fixture）。
+1. `test: run the translate import check in a subprocess`（M-1，加上 explicit-language 的假翻譯器與刪除無用輔助函式）。先紅燈：explicit-language 的假翻譯器改為在模組層級 import `TranslationResult`，若先執行舊的 core 測試，它們會出錯（`TypeError: not TranslateResult object`），這正是 M-1 的污染本身；改為子行程後轉為綠燈。20 個種子的打亂測試除了 P2-5 之外全部乾淨。
+2. `test: characterize translation and dual-view output`（測試計畫 A 部分全部，包括在未修改的正式程式碼上產生的 golden fixture）。特性化測試不可能是紅燈；改以一次性的突變腳本證明 golden 測試能抓到三種刻意在記憶體中造成的破壞（`reclean_token` 不做事：6 個失敗；`bind_contracted_tokens` 不做事：16 個；換行時合併進第一個快取段：26 個）。
 3. `refactor: share TranslationResult constants`（常數與 `__hash__`；B 部分測試）。
 4. `fix: compare TranslationResult only with results`（L-1；C 部分測試）。
-5. `refactor: merge translation results in one pass`（`concat`、`__add__`、兩處模組層級 import；D 部分測試）。
+5. `refactor: merge translation results in one pass`（`concat`、`__add__`、兩處模組層級 import；D 部分測試）。紅燈步驟只執行兩個結構性測試；舊程式碼跑規模測試需要數分鐘。
 6. `refactor: move DualViewSegment to conversion output`（E 部分中針對 `conversion` 的守衛）。
-7. `refactor: inject the MathML converter into the dual-view model`（E 部分中針對 `dual_view` 的守衛、測試呼叫處更新）。
+7. `refactor: inject the MathML converter into the dual-view model`（E 部分中針對 `dual_view` 的守衛、必填轉換器測試）。20 處測試呼叫的更新放在紅燈步驟（該關鍵字參數早已接受），所以綠燈步驟只動正式程式碼。
 
-golden fixture 只在步驟 2 寫入一次，之後不得改變。
+golden fixture 只在步驟 2 寫入一次，之後不得改變（sha256 `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`）。
 
 ## 維持不變的部分
 
@@ -225,38 +227,38 @@ golden fixture 只在步驟 2 寫入一次，之後不得改變。
    - 執行環境：真正的 `LiblouisTextTranslator` 搭配確定性的假 helper（其 `translate(tables, text, mode=4)` 以 liblouis 的方式回傳點字方、`braille_to_raw` 與 `raw_to_braille`）。假 helper 讓 ASCII 字母對應一格、數字兩格（數符）、CJK 字三格並在每段 CJK 連續字的結尾多一個空白點字方（讓 `reclean_braille_endspace` 修剪）、其他符號一或兩格；表名含 `en` 時，把 `the`/`and`/`ing` 對應為一格（讓 `bind_contracted_tokens` 合併）。數學使用真正的 `MathCATMathTranslator` 搭配確定性的假 `translate_math`。如此可在不需原生程式碼的情況下，涵蓋 adapter、pipeline、語言切換、邊界空白、字面點字、合併、token 綁定與換行。
    - 資料：真正的 `client/data` CSV（字元對應、注音、點字轉 ASCII）；暫存字典含一列 `Braille/Unicode`（`台灣` -> `⠞⠺`）；`translation_tables = {"default": "zh-tw.ctb", "en": "en-ueb-g2.ctb", "zh": "zh-tw.ctb", "math": "Nemeth"}`；`lang="zh_TW"`；`charset_maps=DEFAULT_CHARSET_MAPS`。
    - 輸入（至少）：夾有英文詞與全形標點的中文段落；含行內數學、數學後緊接逗號、以及中文詞的英文句；數學前後有空白的文字（P2-5 的情形，依目前行為鎖定）、硬換行、相鄰的 `）（` 與 `」『`（讓 `reclean_token` 插入空白）；跳脫的錢號、分數、前後無空白的數學、`Testing, (one) [two]!`；含空行與前導空白的字典字面點字；以及由上述組成、至少 300 段的長文件。
-   - 每個短輸入以寬度 1、10、24、40 的 `unicode` 模式，以及寬度 24 的 `ascii` 模式執行；長文件以寬度 40 執行。
-   - 每次執行的快照：`display_text`；`wrap_translation_results(...)`（兩個字串）；合併結果的四個 list；經過 `reclean_braille_endspace`、`bind_word_tokens` 與 `reclean_token` 後的四個 list；`translate_with_language(...)` 的四個 list；每個 Dual View 段的 `source_kind` 與四個 list（在轉換之後讀取，證明換行沒有修改它們）；`build_dual_view_model(..., mathml_converter=<確定性假轉換器>)` 每個 `AlignmentItem` 的所有欄位；以及該模型 `render_dual_view_html` 的 SHA-256。使用假轉換器讓 fixture 不受 `latex2mathml` 版本影響；真正的轉換器由 A3 鎖定。
-   - fixture 為 JSON，使用 `ensure_ascii=False`、排序鍵與縮排，diff 易讀。模組有 `__main__` 進入點可重寫 fixture，只在步驟 2 執行一次。此 harness 的原型在 `7095265` 上以 `PYTHONHASHSEED` 0-3 執行，快照完全相同。
-2. **合併語意**（`tests/test_translation_result_core.py`）：合併 `[]` 與 `None` 得到四個空 list；合併單一結果得到相等的結果，且 list 不是輸入的 list；修改合併後的 list（或對它呼叫 `reclean_braille_endspace`）不影響任何輸入；合併三個手動建立的結果得到預期的偏移；非結果項目拋出訊息不變的 `TypeError`；`a + b` 得到與今天相同的四個 list。
-3. **真正的 MathML 接線**：在 `tests/test_gui_document_flows.py` 中，frame 對含數學段（`x^2`）的快取結果呼叫 `_render_dual_view_for_open_document()`，結果等於 `render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml), empty_message=...)` 且包含 `latex_to_mathml("x^2")`；同一份結果經由 `ExportCoordinator.write_document(..., "html")` 匯出時寫入完全相同的位元組。（`build_dual_view_model` 已接受該關鍵字參數，所以這些測試在變更前後都會通過。）
-4. **常數值**（`tests/test_translation_result_core.py`）：結果的 12 個標點屬性等於今天的字面集合，且 `{k: list(v) for k, v in result.lang_blocks.items()} == build_language_blocks({"ja", "zh", "ko"})`。
+   - 每個短輸入以寬度 1、10、24、40 的 `unicode` 模式，以及寬度 24 的 `ascii` 模式執行；長文件（五個短輸入以空行連接，重複 12 次：360 段）以寬度 40 執行。
+   - 每次執行的快照：`display_text` 與 `wrap_translation_results(...)`（兩個字串）。每個輸入的快照不受寬度與輸出模式影響，所以只在 `conversion` 下存一次，但每次執行都重新計算並比對（因此「換行之後讀取」的檢查在每個寬度都會執行）：合併結果的四個 list；經過 `reclean_braille_endspace`、`bind_word_tokens` 與 `reclean_token` 後的四個 list；`translate_with_language(...)` 的四個 list；每個 Dual View 段的 `source_kind` 與四個 list（在換行與後處理之後讀取，證明它們沒有修改這些段）；`build_dual_view_model(..., mathml_converter=<確定性假轉換器>)` 的 `dataclasses.asdict`；以及該模型 `render_dual_view_html` 的 SHA-256。長文件的每輸入部分存成其標準 JSON 的 SHA-256 摘要值，外加 `dual_view_segment_count`（完整儲存的話光它就約 1 MB）。使用假轉換器讓 fixture 不受 `latex2mathml` 版本影響；真正的轉換器由 A3 鎖定。`test_fixture_covers_every_input` 鎖定案例清單與至少 300 段的下限。
+   - fixture 為 JSON，使用 `ensure_ascii=False`、排序鍵與縮排，diff 易讀：189,305 位元組、6,652 行，sha256 `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`，在 `PYTHONHASHSEED` 0-3 下完全相同。以 `python -m tests.test_translation_golden --write`（在 `client/` 下）重寫，只在步驟 2 執行一次；不加 `--write` 時，該模組像其他測試模組一樣執行測試。模組 docstring 註明只有在有意改變輸出時才能重新產生 fixture。
+2. **合併語意**（`tests/test_translation_result_core.py`，類別 `MergeTranslationResultsTest`，另有一個測試在 `TranslationResultCoreTest`）：合併 `[]` 與 `None` 得到四個空 list；合併單一結果得到相等的結果，且 list 不是輸入的 list；修改合併後的 list（或對它呼叫 `reclean_braille_endspace`）不影響任何輸入；合併三個手動建立的結果得到預期的偏移；非結果項目拋出訊息不變的 `TypeError`；`a + b` 得到與今天相同的四個 list、不與任一運算元共用 list，並保留其 `TypeError`。
+3. **真正的 MathML 接線**：一個測試，`test_dual_view_and_html_export_render_math_with_real_mathml`，放在 `DocumentMenuAndExportCharacterizationTest` 中、既有的匯出位元組測試旁邊。在 `tests/test_gui_document_flows.py` 中，frame 對含數學段（`x^2`）的快取結果呼叫 `_render_dual_view_for_open_document()`，結果等於 `render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml), empty_message=...)` 且包含 `latex_to_mathml("x^2")`；同一份結果經由 `ExportCoordinator.write_document(..., "html")` 匯出時寫入完全相同的位元組。結果非空時不會出現 `empty_message`，所以視窗與匯出產生相同的位元組，並與同一個預期字串比對。（`build_dual_view_model` 已接受該關鍵字參數，所以此測試在變更前後都會通過。）
+4. **常數值**（`tests/test_translation_result_core.py`，`TranslationResultCoreTest`）：結果的 12 個標點屬性等於今天的字面集合（全形成員以 `\u` 跳脫寫出），且 `{k: list(v) for k, v in result.lang_blocks.items()} == build_language_blocks({"ja", "zh", "ko"})`。
 
-### B. 共用常數（步驟 3）
+### B. 共用常數（步驟 3，類別 `SharedConstantsTest`）
 
 - `vars(TranslationResult([], [], [], []))` 恰好只有四個資料鍵。
 - 建立結果時不會呼叫 `translate.build_language_blocks`（以 `Mock` patch）。
 - 12 個屬性都是 `frozenset`，且無法對 `lang_blocks` 指派項目（`TypeError`）。
 
-### C. 相等比較（步驟 4）
+### C. 相等比較（步驟 4，類別 `EqualityTest`）
 
 `result == object()` 為 `False`、`result != "x"` 為 `True`、`result.__eq__(42) is NotImplemented`、兩個相等的結果比較為相等，且 `hash(result)` 拋出 `TypeError`。
 
-### D. 線性合併守衛（步驟 5）
+### D. 線性合併守衛（步驟 5，類別 `LinearMergeTest`）
 
-- **結構性（主要、確定性）：** 合併 500 個結果只建立一個 `TranslationResult`（以包裝函式計算 `__init__` 呼叫次數），且從不呼叫 `__add__`（以 `side_effect=AssertionError` patch）。逐對合併的迴圈會建立 501 個實例並呼叫 `__add__` 500 次，所以舊程式碼不需任何計時就會失敗。
-- **規模後盾：** 合併 20,000 個單 token 結果，結果等於以單純偏移算術建立的參考值，且在 5 秒內完成（`time.perf_counter`）。新程式碼預期只需數十毫秒；舊程式碼需要遠超過一分鐘（由 8,000 段的量測外推），超過 100 倍的餘裕讓它在慢機器上也不會不穩定。
+- **結構性（主要、確定性）：** 合併 500 個結果只建立一個 `TranslationResult`，且就是回傳的那一個（以包裝函式計算 `__init__` 呼叫次數），並從不呼叫 `__add__`（以 `side_effect=AssertionError` patch）。逐對合併的迴圈會建立 501 個實例並呼叫 `__add__` 500 次，所以舊程式碼不需任何計時就會失敗。
+- **規模後盾：** 合併 20,000 個 10 token 的結果（200,000 個 token，與上文 8,000 段量測的形狀相同），結果等於以單純偏移算術建立的參考值，且在 5 秒內完成（`time.perf_counter`）。本機實測：新合併 0.06 秒，舊的逐對迴圈 162 秒（8,000 個 10 token 段：22.1 秒）。上限約為新程式碼耗時的 80 倍，而舊程式碼需要超過上限的 30 倍。單 token 結果無法區分兩者：舊迴圈合併 20,000 個單 token 結果只需 11.5 秒，快 2.5 倍的機器就會讓它通過。
 
 ### E. 依賴守衛（步驟 6 與 7，`tests/test_translation_import_isolation.py`，與既有測試一樣使用子行程）
 
-- `import conversion.service, conversion.output, conversion.wrapping` 不載入任何 `dual_view` 模組。
-- `import dual_view, dual_view.model, dual_view.html` 不載入任何 `conversion` 模組，也不載入 `config`。
-- 未傳 `mathml_converter` 呼叫 `build_dual_view_model([])` 會拋出 `TypeError`（`tests/test_dual_view_model.py`）。
+- `test_conversion_does_not_import_dual_view`：`import conversion.service, conversion.output, conversion.wrapping` 不載入任何 `dual_view` 或 `dual_view.*` 模組（守衛會列出找到的每一個）。
+- `test_dual_view_does_not_import_conversion_or_config`：`import dual_view, dual_view.model, dual_view.html` 不載入任何 `conversion` 或 `conversion.*` 模組，也不載入 `config`。
+- `test_mathml_converter_is_required`：未傳 `mathml_converter` 呼叫 `build_dual_view_model([])` 會拋出訊息符合 `mathml_converter` 的 `TypeError`（`tests/test_dual_view_model.py`）。
 
 ### F. 更新的測試
 
 - 五個模組把 `DualViewSegment` 的 import 改為 `conversion.output`。
-- 20 處未傳轉換器的 `build_dual_view_model` 呼叫改為傳入轉換器。純文字測試傳入一個會拋出 `AssertionError` 的模組輔助函式（文字段不得呼叫轉換器）；`test_gui_document_flows.py` 的匯出比對傳入 `latex_to_mathml`，與正式接線一致。
+- 20 處未傳轉換器的 `build_dual_view_model` 呼叫改為傳入轉換器。純文字測試（`test_dual_view_model.py` 13 處、`test_dual_view_html.py` 3 處）傳入 `reject_mathml`，這是兩個檔案各自的模組函式，會拋出 `AssertionError`（文字段不得呼叫轉換器）；`test_gui_document_flows.py` 的 4 處匯出比對傳入 `latex_to_mathml`，與正式接線一致。
 - `tests/test_translation_result.py` 不在此轉換或修正（P2-5）。作為手動檢查，直接呼叫其 13 個函式，變更前後都得到相同的 8 個通過與相同的 5 個失敗（例外型別相同）。
 
 ## 驗收條件
@@ -264,8 +266,8 @@ golden fixture 只在步驟 2 寫入一次，之後不得改變。
 1. 路線圖驗證在 Linux 上通過：`cd client && python -m unittest tests.test_translation_result tests.test_translation_result_core tests.test_dual_view_model tests.test_dual_view_html tests.test_conversion_service -v`（`test_translation_result` 貢獻 0 個測試，見上文；只剩 P2-5 失敗）。另外 `tests.test_translation_golden tests.test_translation_import_isolation tests.test_conversion_language_explicit tests.test_document_formats tests.test_gui_document_flows tests.test_export_coordinator tests.test_conversion_text_pipeline`。
 2. `git diff <步驟 2 的 commit> HEAD -- client/tests/fixtures/translation_golden.json` 為空，且之後每個 commit 上 `tests.test_translation_golden` 都通過。
 3. `python -m unittest tests.test_translation_result_core tests.test_conversion_service` 只回報 P2-5 失敗（沒有錯誤），反向順序亦同。
-4. 全套測試（字母順序）：754 + 新增測試，`failures=1`（只有 P2-5）、`errors=0`、`skipped=9`。
-5. 打亂順序的全套測試，種子 0-19（以 `random.Random(seed)` 打亂模組順序、單一行程、`unittest.TextTestRunner`；即 P0-4 起使用的 harness）：每個種子執行的測試數相同，皆為 `failures=1 errors=0`，唯一失敗的測試是 `test_translate_with_language_does_not_duplicate_existing_spaces_around_math`。
+4. 全套測試（字母順序）：754 + 29 個新測試 = 783，`failures=1`（只有 P2-5）、`errors=0`、`skipped=9`。
+5. 打亂順序的全套測試，種子 0-19（以 `random.Random(seed)` 打亂模組順序、單一行程、`unittest.TextTestRunner`；即 P0-4 起使用的 harness）：每個種子都執行相同的 783 個測試，皆為 `failures=1 errors=0`，唯一失敗的測試是 `test_translate_with_language_does_not_duplicate_existing_spaces_around_math`。
 6. `grep -rnE "(from|import) dual_view" client/conversion` 沒有輸出，且 `grep -rnE "(from|import) conversion" client/dual_view` 只輸出 `dual_view/model.py` 中的 `TYPE_CHECKING` import。E 部分的子行程守衛才是具約束力的檢查。
 7. `grep -rn "^\s\+from translate import" client --include=*.py | grep -v tests/` 沒有輸出。
 8. `grep -n "self\.\(LEFT\|RIGHT\|MIDDLE\|END\)_[A-Z_]* = \|self.lang_blocks = " client/translate.py` 沒有輸出。
@@ -278,7 +280,7 @@ golden fixture 只在步驟 2 寫入一次，之後不得改變。
 - **共用的可變常數**（低）。frozenset 與唯讀 mapping 讓意外修改直接拋出例外，而不是在實例間外洩。
 - **相等比較的變更**（低）。結果與其他型別比較時不再拋出例外。沒有呼叫端依賴該例外（全套測試探針）。
 - **Stub scope 驅逐**（低）。`test_dialog_display` 以 `evict_everything` 載入 `dialog.py`，會驅逐 `documents.formats`，以及步驟 7 之後它直接 import 的 `conversion.math_service`（之前是經由 `dual_view.model`）。重新 import 只會產生新的模組物件，不會有跨越 `isinstance` 檢查的類別。驗收條件 5 涵蓋此風險。
-- **計時後盾不穩定**（低）。超過 100 倍餘裕；結構性測試才是真正的守衛。
+- **計時後盾不穩定**（低）。5 秒上限約為新合併耗時的 80 倍；結構性測試才是真正的守衛。
 - **僅限 Windows 的路徑**（中，在此無法驗證）。liblouis adapter 現在建立的結果其常數為類別屬性、合併為線性；輸出必須一致。見 Windows 驗證待辦。
 
 ## 調查中發現的已知缺陷（本任務不修正）

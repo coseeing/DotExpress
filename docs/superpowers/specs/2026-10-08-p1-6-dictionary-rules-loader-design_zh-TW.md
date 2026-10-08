@@ -17,6 +17,8 @@
 
 這是保持行為不變的重構。對任何輸入，點字文字、ASCII 輸出、對位資料與雙視窗片段都與 `main` 的 `cdae2f1` 逐位元組相同。P1-5 的黃金測試資料 `client/tests/fixtures/translation_golden.json`（sha256 `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`）不得變動。不更動任何使用者可見字串。
 
+本規格已納入實作計畫（`docs/superpowers/plans/2026-10-08-p1-6-dictionary-rules-loader.md`，「Spec Corrections and Refinements」一節）的更正與細化：驗收條件 6 改用遞迴搜尋（`grep -rn`），因為對目錄執行 `grep -n` 什麼都不印、等於沒有檢查；新測試數固定為 35 個（783 -> 818）；新增兩個 pipeline 測試，固定單獨呼叫 `translate_plain_text_segment` 的讀取次數，以及傳入的 loader 優先於路徑參數；轉換測試與規則檔測試各自共用不含測試的 fixture 基底類別；規則矩陣有 11 個案例、錯誤表有 10 個；步驟 4 的紅燈執行透過模組存取新名稱，因此顯示真實的逐項讀取；步驟 2 的檢查以 5,000 個隨機案例與已提交的拆分前程式碼比對；計時條件改為「至少快 10 倍」且顯示長度相同。
+
 不在本任務內：每個片段建立一個 `LanguageDetector`（5.6 節第三點）、前處理腳本的讀取（本來就每次轉換一次）、`_translate_plain_text_segment` 這個 monkeypatch 別名（5.5 節）、`pipeline.py` 中的函式內 import、任何跨轉換快取，以及更改 CSV 編碼或驗證規則（例如接受 BOM）。
 
 ## 現況（2026-10-08 於 `refactor/p1-6-dictionary-rules-loader` 驗證，HEAD `cdae2f1`，已合併 P0-1..P0-6 與 P1-1..P1-5）
@@ -194,14 +196,14 @@ def translate_plain_text_segment(
 ### A. 特性化（步驟 1，正式程式碼變更前）
 
 1. **將 `tests/test_conversion_text_dictionary_rules.py` 改為 `unittest`**：7 個函式成為 `ApplyDictionaryTest` 的方法，斷言不變（`tmp_path` 改為 `setUp` 中的 `TemporaryDirectory`）。它們從此會執行：原本默默未執行的 7 個測試。
-2. **規則矩陣**（同模組，類別 `DictionaryRulesCasesTest`）：模組層級表格 `DICTIONARY_CASES`，每筆為（字典列、注音列、輸入、預期 `raw`、預期 `replacement`），涵蓋：以 `@` 切分並對齊的 `Braille` 列；長度不符合併為一個部分；來源重疊（最長者勝、不連鎖替換）；重複來源（第一筆勝）；`text` 為空的列（略過）、沒有 `braille` 儲存格的列（`\[\]`）、多一個儲存格的列；`processing` 回傳 list、拋出例外，以及使用真實 `normalize_zhuyin_sequence` 與真實 `client/data/Bopomofo2Braille.csv` 的 `Bopomofo` 列；輸入字面上含有 `\[` 與 `\]`；空輸入。一個測試以 `subTest` 將每個案例跑過 `apply_dictionary`。
-3. **檔案與標題列語意**（類別 `DictionaryFileSemanticsTest`）：字典不存在 -> 原文不變且 `Bopomofo2Braille.csv` 從未被開啟（計數，且該檔不存在時亦然）；字典存在但缺 `Bopomofo2Braille.csv` -> `FileNotFoundError`；兩個檔案各自的空檔、缺欄位與帶 BOM 標題列 -> 精確的 `ValueError` 訊息；無效 UTF-8 -> `UnicodeDecodeError`；兩個檔案都損壞 -> 注音檔的訊息（順序）。測試輔助函式 `_error_cases()` 回傳此表，供步驟 3 重用。
-4. **轉換層級的錯誤時機**（`tests/test_conversion_service.py`，類別 `DictionaryErrorTimingTest`，真實 pipeline，沿用該模組既有測試的記錄用假 runtime）：無標題列字典加文字 -> `ConversionStageError`，階段 `translation`，內含 `ValueError`；同一字典加 `$x$` 與加 `""` -> 成功；前處理腳本失敗加損壞字典 -> 階段 `text_processing`；位於第一個文字片段前的數學片段在錯誤前已翻譯（數學翻譯器被呼叫一次）。
+2. **規則矩陣**（同模組，類別 `DictionaryRulesCasesTest`）：模組層級表格 `DICTIONARY_CASES`，每筆為（字典列、注音列、輸入、預期 `raw`、預期 `replacement`），涵蓋：以 `@` 切分並對齊的 `Braille` 列；長度不符合併為一個部分；來源重疊（最長者勝、不連鎖替換）；重複來源（第一筆勝）；`text` 為空的列（略過）、沒有 `braille` 儲存格的列（`\[\]`）、多一個儲存格的列；`processing` 回傳 list、拋出例外，以及使用真實 `normalize_zhuyin_sequence` 與真實 `client/data/Bopomofo2Braille.csv` 的 `Bopomofo` 列；輸入字面上含有 `\[` 與 `\]`；空輸入。只有標題列的字典也是一個案例；`text` 為空、缺儲存格與多儲存格的列共用一個字典，重疊與不連鎖替換的規則也共用一個（共 11 個案例）。一個測試以 `subTest` 將每個案例跑過 `apply_dictionary`。
+3. **檔案與標題列語意**（類別 `DictionaryFileSemanticsTest`）：字典不存在 -> 原文不變且 `Bopomofo2Braille.csv` 從未被開啟（計數，且該檔不存在時亦然）；字典存在但缺 `Bopomofo2Braille.csv` -> `FileNotFoundError`；兩個檔案各自的空檔、缺欄位與帶 BOM 標題列 -> 精確的 `ValueError` 訊息；無效 UTF-8 -> `UnicodeDecodeError`；兩個檔案都損壞（兩者都缺欄位）-> 注音檔的訊息（順序）。測試輔助函式 `_error_cases()` 回傳此表（10 個案例），供步驟 3 重用；每個 `ValueError` 都比對訊息，`FileNotFoundError` 與 `UnicodeDecodeError` 只檢查型別（其訊息含暫存路徑或位元組位移）。讀取順序（先注音檔）以小型 context manager `OpenRecorder` 記錄 `Path.open` 的檔名來固定；本模組的測試共用不含測試的基底類別 `DictionaryFilesTestCase`（含 `dictionary.csv` 與 `bopomofo.csv` 的暫存目錄）。
+4. **轉換層級的錯誤時機**（`tests/test_conversion_service.py`，類別 `DictionaryErrorTimingTest`，建立在與 `DictionarySnapshotTest` 共用、不含測試的基底類別 `DictionaryConversionTestCase` 上：暫存資料目錄內有只含標題列的 `BopomofoChar2Braille.csv` 與 `Bopomofo2Braille.csv`，字典位於 `dictionary/default.csv`；真實 pipeline，沿用該模組既有測試的記錄用假 runtime）：無標題列字典加文字 -> `ConversionStageError`，階段 `translation`，內含 `ValueError`；同一字典加 `$x$` 與加 `""` -> 成功；前處理腳本失敗加損壞字典 -> 階段 `text_processing`；位於第一個文字片段前的數學片段在錯誤前已翻譯（數學翻譯器被呼叫一次）。
 5. **轉換之間會重新讀取**（同類別）：轉換、以不同規則改寫字典、再轉換 -> 第二次輸出使用新規則；刪除字典再轉換 -> 不套用字典。
 
 ### B. 拆分 trie（步驟 2）
 
-不新增測試：既有測試、A 部分與黃金測試資料已涵蓋。該步驟以一次性檢查（不提交）確認對 A 部分矩陣 `_scan_trie(text, _build_trie(rules)) == _replace_with_trie(text, rules)`。
+不新增測試：既有測試、A 部分與黃金測試資料已涵蓋。該步驟以一次性檢查（不提交）用 `git show HEAD:` 載入已提交、尚未拆分的模組，在 5,000 組以固定 seed 產生、含標記字元的隨機規則與文字上，確認其 `_replace_with_trie` 與 `mapping(..., marker=True)` 等於新的 `_replace_with_trie`、`_scan_trie(_build_trie(...))` 與 `mapping(..., marker=True)`。（拿 `_scan_trie(_build_trie(...))` 與新的 `_replace_with_trie` 比對是同義反覆，因為後者就定義為前者。）
 
 ### C. `LoadedDictionaryRules`（步驟 3，`tests/test_conversion_text_dictionary_rules.py`，類別 `LoadedDictionaryRulesTest`）
 
@@ -215,11 +217,14 @@ def translate_plain_text_segment(
 
 - `DictionaryRulesLoaderTest`（`tests/test_conversion_text_dictionary_rules.py`）：建立 loader 不開任何檔；呼叫三次 `load()` 只呼叫一次 `from_paths` 並回傳同一物件；拋出例外的 `load()` 會在下一次 `load()` 重試（呼叫 2 次）。
 - `DictionaryReadCountTest`（`tests/test_conversion_text_pipeline.py`），以檔名計數 `pathlib.Path.open`（`dictionary_rules.py` 與 `char_maps.py` 都透過 `Path.open` 開檔；測試會斷言計數的檔名中包含字典，所以若改用其他開檔函式會明確失敗，而不是以 0 次讀取空洞地通過）：
-  - 一段含行內數學、會產生至少 8 個純文字項目的中英混排文字（以計數 `LoadedDictionaryRules.apply` 呼叫作為前提斷言）：`unicode` 模式下字典、`Bopomofo2Braille.csv` 與 `BopomofoChar2Braille.csv` 各恰好開啟一次，`Braille2Ascii.csv` 從未開啟；`ascii` 模式下 `Braille2Ascii.csv` 開啟一次。舊程式碼對前兩者是每個項目開一次，因此此測試在步驟 4 之前為紅燈。
+  - 一段含行內數學、會產生至少 8 個純文字項目的中英混排文字（以計數 `LoadedDictionaryRules.apply` 呼叫作為前提斷言）：`unicode` 模式下字典、`Bopomofo2Braille.csv` 與 `BopomofoChar2Braille.csv` 各恰好開啟一次，`Braille2Ascii.csv` 從未開啟；`ascii` 模式下 `Braille2Ascii.csv` 開啟一次。舊程式碼對前兩者是每個項目開一次（測試文字為 12 次），因此此測試在步驟 4 之前為紅燈。
   - 每次轉換 `LoadedDictionaryRules.from_paths` 呼叫一次、`_build_trie` 呼叫三次（注音、raw、replacement），與項目數無關。
   - 純數學輸入既不開字典也不開 `Bopomofo2Braille.csv`。
   - 直接呼叫 `translate_with_language(...)` 時，每個字典檔各開一次。
   - 連續兩次轉換呼叫 `from_paths` 兩次（沒有跨轉換快取）。
+  - 單獨呼叫 `translate_plain_text_segment`（未傳 loader）時，不論產生多少項目，每次呼叫每個字典檔各開一次。
+  - 傳給 `translate_plain_text_segment` 的 loader 優先於路徑參數：路徑不存在時仍套用 loader 的字典，且兩次呼叫共只開檔一次。
+  - 純數學的測試在舊程式碼上已是綠燈；它固定既有行為，若改成預先載入就會失敗。紅燈執行透過模組存取新名稱（`dictionary_rules.DictionaryRulesLoader`），因此顯示真實的逐項讀取，而不是 import 錯誤。
 - `DictionarySnapshotTest`（`tests/test_conversion_service.py`）：假的文字翻譯器在第一次被呼叫後改寫字典檔；同一次轉換中之後的所有項目仍使用第一個版本，下一次轉換則使用新版本。此測試記錄刻意的快照行為改變，在舊程式碼上為紅燈。
 
 ### E. 不變的測試
@@ -240,10 +245,10 @@ def translate_plain_text_segment(
 1. 路線圖驗證在 Linux 上通過：`cd client && python -m unittest tests.test_conversion_text_dictionary_rules tests.test_conversion_text_char_maps tests.test_conversion_text_pipeline tests.test_conversion_service -v`，只剩已知的 P2-5 失敗。`tests.test_conversion_text_dictionary_rules` 會回報測試數，而不是 `NO TESTS RAN`。
 2. 以下也全綠：`tests.test_translation_golden tests.test_conversion_language_explicit tests.test_removed_dead_code tests.test_conversion_jobs tests.test_conversion_presenter tests.test_main_demo`。
 3. `git diff main -- client/tests/fixtures/translation_golden.json` 為空，sha256 仍為 `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`；`tests.test_translation_golden` 在本任務每個提交都通過。
-4. 完整測試（字母順序）：783 + 新測試（約 30 個，含改寫的 7 個；確切數字由計畫決定），`failures=1`（僅 P2-5），`errors=0`，`skipped=9`。模組順序打亂的測試工具（seed 0-19）每個 seed 都只有同一個失敗。
+4. 完整測試（字母順序）：783 + 35 個新測試 = 818（步驟 1 有 17 個，含改寫的 7 個；步驟 2 有 0 個；步驟 3 有 6 個；步驟 4 有 12 個），`failures=1`（僅 P2-5），`errors=0`，`skipped=9`。模組順序打亂的測試工具（seed 0-19）每個 seed 都只有同一個失敗。
 5. 讀取次數防護（D 部分）通過：每次轉換中字典、`Bopomofo2Braille.csv`、`BopomofoChar2Braille.csv` 與（ASCII 模式）`Braille2Ascii.csv` 各最多開啟一次。
-6. `grep -n "apply_dictionary(" client/conversion` 只顯示其定義；`grep -n "\.open(" client/conversion/text/dictionary_rules.py` 只顯示 `from_paths` 內的讀取。
-7. 實測（回報，非測試）：以 2,000 列字典轉換 `long_document`，在本機上明顯低於 2.24 秒的基線（計畫中的暫存腳本印出前後數據）。
+6. `grep -rn "apply_dictionary(" client/conversion` 只顯示其定義（對目錄執行 `grep -n` 什麼都不印，等於沒有檢查）；`grep -n "\.open(" client/conversion/text/dictionary_rules.py` 只顯示 `from_paths` 內的讀取。
+7. 實測（回報，非測試）：以 2,000 列字典轉換 `long_document`，比變更前至少快 10 倍，且顯示文字長度相同（計畫中的暫存腳本印出前後數據；本機上變更前 2.24 秒、變更後約 0.07 秒）。
 8. `git diff main --stat -- client/locales scripts client/braille client/gui.py client/dictionaries client/conversion/output.py client/conversion/text/char_maps.py` 為空。
 
 ## 風險

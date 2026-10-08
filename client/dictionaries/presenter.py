@@ -18,6 +18,7 @@ from dictionaries.manager import (
 	delete_dictionary,
 	dictionary_path_for_name,
 	ensure_default_dictionary,
+	export_dictionary,
 	import_dictionary,
 	list_dictionary_names,
 )
@@ -181,6 +182,18 @@ class DictionaryManagementPresenter:
 		if path is None:
 			return None
 		return self._selection_after_add(path.stem)
+
+	def export_to_file(self, view: DictionaryManagementView, name: str) -> None:
+		if not self._dictionary_names:
+			return None
+		destination_path = view.choose_export_path(_("Export Dictionary"), f"{name}.csv")
+		if destination_path is None:
+			return None
+		try:
+			export_dictionary(self._dictionary_dir, name, destination_path)
+		except OSError as exc:
+			view.show_error(_("Failed to export dictionary: {error}").format(error=exc))
+		return None
 
 	def _prompt_name_until_success(
 		self,

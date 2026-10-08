@@ -95,6 +95,20 @@ class PresenterModuleTest(unittest.TestCase):
 			with self.subTest(name=name):
 				self.assertIn(Protocol, getattr(presenter_module, name).__bases__)
 
+	def test_presenter_provides_every_action(self):
+		for name in (
+			"dictionary_names",
+			"dictionary_path",
+			"add",
+			"delete",
+			"rename",
+			"import_from_file",
+			"export_to_file",
+		):
+			with self.subTest(name=name):
+				self.assertTrue(hasattr(presenter_module.DictionaryManagementActions, name))
+				self.assertTrue(hasattr(DictionaryManagementPresenter, name))
+
 
 class PresenterRefreshTest(PresenterTestCase):
 	def test_constructor_does_no_io(self):
@@ -575,6 +589,65 @@ class PresenterImportTest(PresenterTestCase):
 		self.assertIsNone(result)
 		self.assertEqual(view.calls, [self.choose_call(), self.prompt_call("words")])
 		self.assertEqual(self.files(), ["default"])
+
+
+class PresenterExportTest(PresenterTestCase):
+	def choose_call(self, default_file):
+		return ("choose_export", _("Export Dictionary"), default_file)
+
+	def test_export_with_empty_list_does_nothing(self):
+		self.write_dictionary("alpha")
+		presenter = DictionaryManagementPresenter(
+			self.dictionary_dir,
+			get_active_name=lambda: "default",
+			set_active_name=self.set_active_name,
+		)
+		view = FakeView(export_path=self.root / "copy.csv")
+
+		result = presenter.export_to_file(view, "alpha")
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [])
+		self.assertFalse((self.root / "copy.csv").exists())
+
+	def test_export_cancelled_writes_nothing(self):
+		presenter = self.make_presenter("alpha")
+		view = FakeView(export_path=None)
+
+		result = presenter.export_to_file(view, "alpha")
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.choose_call("alpha.csv")])
+		self.assertEqual(sorted(path.name for path in self.root.iterdir()), ["dictionaries"])
+
+	def test_export_copies_dictionary_to_chosen_path(self):
+		presenter = self.make_presenter()
+		source = self.write_dictionary("alpha", HEADER + "Alpha,\u2801,General\n")
+		destination = self.root / "copy.csv"
+		view = FakeView(export_path=destination)
+
+		result = presenter.export_to_file(view, "alpha")
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.choose_call("alpha.csv")])
+		self.assertEqual(destination.read_bytes(), source.read_bytes())
+		self.assertEqual(presenter.dictionary_names, ["default"])
+
+	def test_export_os_error_shows_error(self):
+		presenter = self.make_presenter("alpha")
+		view = FakeView(export_path=self.root / "copy.csv")
+
+		with patch.object(presenter_module, "export_dictionary", side_effect=PermissionError("denied")):
+			result = presenter.export_to_file(view, "alpha")
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[
+				self.choose_call("alpha.csv"),
+				("error", _("Failed to export dictionary: {error}").format(error="denied")),
+			],
+		)
 
 
 if __name__ == "__main__":

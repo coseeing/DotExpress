@@ -1,4 +1,3 @@
-import importlib
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch, sentinel
@@ -6,12 +5,9 @@ from unittest.mock import Mock, call, patch, sentinel
 from tests import wx_stub
 
 # The module that defines ConvertingDialog, loaded against stub wx.
-_SCOPE = wx_stub.StubScope(
-    wx_stub.gui_frame_stubs(),
-    isolate=("gui", "settings.dialogs", "ui.dual_view"),
-)
+_SCOPE = wx_stub.StubScope(wx_stub.dialog_validation_stubs(), isolate=("dialog",))
 with _SCOPE.loading():
-    defining_module = importlib.import_module("gui")
+    import dialog as defining_module
 
 setUpModule = _SCOPE.activate
 tearDownModule = _SCOPE.deactivate

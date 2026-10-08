@@ -97,6 +97,29 @@ class MathCATAdapterTest(unittest.TestCase):
         set_rules_dir_calls = [call for call in fake.calls if call[0] == "SetRulesDir"]
         self.assertEqual(len(set_rules_dir_calls), 2)
 
+    def test_language_preference_is_lowercase_with_hyphen(self) -> None:
+        fake = FakeLib()
+        adapter = TestMathCATAdapter(fake_lib=fake)
+        config.set_lang("en_US", persist=False)
+
+        adapter.get_braille_for_mathml("<math/>")
+
+        self.assertIn(("SetPreference", "Language", "en-us"), fake.calls)
+
+    def test_each_call_sets_its_own_language(self) -> None:
+        fake = FakeLib()
+        adapter = TestMathCATAdapter(fake_lib=fake)
+
+        config.set_lang("zh_TW", persist=False)
+        adapter.get_braille_for_mathml("<math/>")
+        config.set_lang("en", persist=False)
+        adapter.get_braille_for_mathml("<math/>")
+
+        self.assertEqual(
+            [call[2] for call in fake.calls if call[:2] == ("SetPreference", "Language")],
+            ["zh-tw", "en"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

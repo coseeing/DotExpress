@@ -192,6 +192,26 @@ class StubScope:
         parent_name, _, child = name.rpartition(".")
         return parent_name, child
 
+    @staticmethod
+    def _children_first(names):
+        return sorted(names, key=lambda name: name.count("."), reverse=True)
+
+    def _forget(self, name):
+        """Remove ``name`` from ``sys.modules`` and from its parent package.
+
+        The import system binds a submodule as an attribute of its parent, and
+        ``from parent import child`` trusts that attribute over ``sys.modules``,
+        so leaving it behind would hand later importers the dropped module.
+        The scope's own stub modules keep the wiring their factory gave them.
+        """
+        module = sys.modules.pop(name)
+        if self.stubs.get(name) is module:
+            return
+        parent_name, child = self._parent_and_child(name)
+        parent = sys.modules.get(parent_name) if parent_name else None
+        if parent is not None and vars(parent).get(child, _MISSING) is module:
+            delattr(parent, child)
+
     def _parent_attrs(self):
         attrs = {}
         for name in self.isolate:
@@ -206,9 +226,9 @@ class StubScope:
 
     def _restore(self, snapshot):
         modules, attrs = snapshot
-        for name in [name for name in sys.modules if self._is_managed(name)]:
-            if name not in modules:
-                del sys.modules[name]
+        dropped = [name for name in sys.modules if self._is_managed(name) and name not in modules]
+        for name in self._children_first(dropped):
+            self._forget(name)
         sys.modules.update(modules)
         for name, value in attrs.items():
             parent_name, child = self._parent_and_child(name)
@@ -241,9 +261,9 @@ class StubScope:
         self.loaded_attrs = self._parent_attrs()
         self._restore(self._load_snapshot)
         new_names = set(sys.modules) - before
-        for name in new_names:
+        for name in self._children_first(new_names):
             if not self._is_managed(name) and self.evict(name):
-                del sys.modules[name]
+                self._forget(name)
         self._check_leaks(new_names)
 
     def load_file(self, name, path):

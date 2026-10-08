@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from app_paths import get_workspace_directory
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
-from shared.name_validation import MAX_NAME_LENGTH, normalize_base_name
+from shared.name_validation import normalize_base_name
 
 DEP_EXTENSION = ".dep"
 TXT_EXTENSION = ".txt"

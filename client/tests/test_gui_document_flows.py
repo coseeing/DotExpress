@@ -1084,8 +1084,8 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             Document("beta", "text", None),
         ]
 
+        frame.translation_tables = {"default": ""}
         with (
-            patch.dict(gui.language_map_translate_table, {"default": ""}, clear=True),
             patch.object(gui.wx, "CallAfter", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)),
             patch.object(gui.wx, "MessageBox") as message_box,
         ):
@@ -1126,8 +1126,8 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             def GetPath(self):
                 return "/tmp/exported"
 
+        frame.translation_tables = {"default": ""}
         with (
-            patch.dict(gui.language_map_translate_table, {"default": ""}, clear=True),
             patch.object(gui.wx, "FileDialog", _AcceptedFileDialog),
             patch.object(gui.wx, "MessageBox") as message_box,
         ):
@@ -1151,6 +1151,8 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             tables={"default": "en-ueb-g1.ctb", "math": "Nemeth"},
             view=ViewSettings(18, "dark", "default"),
         )
+        previous_tables = {"default": "zh-tw.ctb"}
+        frame.translation_tables = previous_tables
 
         with patch.object(gui, "save_translation_settings"), \
              patch.object(gui, "save_translation_tables"), \
@@ -1159,7 +1161,10 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
         self.assertEqual(frame.translation_settings, snapshot.translation)
         self.assertEqual(frame.view_settings, snapshot.view)
-        self.assertEqual(gui.language_map_translate_table, snapshot.translation_tables)
+        self.assertEqual(frame.translation_tables, snapshot.translation_tables)
+        self.assertIsNot(frame.translation_tables, snapshot.translation_tables)
+        self.assertIsNot(result.translation_tables, frame.translation_tables)
+        self.assertEqual(previous_tables, {"default": "zh-tw.ctb"})
         frame._apply_editor_view_settings.assert_called_once_with(snapshot.view)
         self.assertEqual(result, snapshot)
 
@@ -1196,6 +1201,116 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
         self.assertEqual(frame.translation_tables, gui.DEFAULT_TRANSLATION_TABLES)
         self.assertIsNot(frame.translation_tables, gui.DEFAULT_TRANSLATION_TABLES)
+
+    def test_settings_snapshot_reads_frame_translation_tables(self) -> None:
+        frame = self._make_frame()
+        frame.translation_settings = TranslationSettings("unicode", 40, "default")
+        frame.view_settings = ViewSettings(40, "light", "default")
+        frame.get_dictionary_names_for_dialog = Mock(return_value=["default"])
+        frame.translation_tables = {"default": "test-default.ctb", "math": "test-math.ctb"}
+
+        snapshot = frame.get_settings_snapshot()
+
+        self.assertEqual(
+            snapshot.translation_tables,
+            {"default": "test-default.ctb", "math": "test-math.ctb"},
+        )
+        self.assertIsNot(snapshot.translation_tables, frame.translation_tables)
+
+    def test_conversion_request_copies_frame_translation_tables(self) -> None:
+        frame = self._make_frame()
+        frame.translation_tables = {"default": "test-default.ctb", "math": "test-math.ctb"}
+
+        request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
+
+        self.assertEqual(
+            request.translation_tables,
+            {"default": "test-default.ctb", "math": "test-math.ctb"},
+        )
+        self.assertIsNot(request.translation_tables, frame.translation_tables)
+
+    def test_applied_settings_tables_reach_next_conversion_request(self) -> None:
+        frame = self._make_frame()
+        frame._dictionary_names = ["default"]
+        frame._apply_editor_view_settings = Mock()
+        frame.get_dictionary_names_for_dialog = Mock(return_value=["default"])
+        snapshot = make_snapshot(tables={"default": "test-default.ctb", "math": "test-math.ctb"})
+
+        with patch.object(gui, "save_translation_settings"), \
+             patch.object(gui, "save_translation_tables"), \
+             patch.object(gui, "save_view_settings"):
+            frame.apply_settings_from_dialog(snapshot)
+        request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
+
+        self.assertEqual(request.translation_tables, snapshot.translation_tables)
+
+    def test_convert_without_default_table_shows_info_and_does_not_convert(self) -> None:
+        frame = self._make_frame()
+        frame.translation_tables = {"default": ""}
+        frame._start_conversion = Mock()
+
+        with patch.object(gui.wx, "MessageBox") as message_box:
+            frame.on_convert(None)
+
+        message_box.assert_called_once_with(
+            gui._("Please select a translation table first."),
+            gui._("Info"),
+            gui.wx.OK | gui.wx.ICON_INFORMATION,
+            parent=frame,
+        )
+        frame._start_conversion.assert_not_called()
+
+    def test_convert_with_default_table_starts_conversion_without_message(self) -> None:
+        frame = self._make_frame()
+        frame.translation_tables = {"default": "zh-tw.ctb"}
+        frame.translation_settings = TranslationSettings("ascii", 32, "default")
+        frame.input_txt.GetValue.return_value = "source"
+        frame._get_selected_dictionary_path = Mock(return_value=Path("dictionary/default.csv"))
+        frame._start_conversion = Mock()
+
+        with patch.object(gui.wx, "MessageBox") as message_box:
+            frame.on_convert(None)
+
+        frame._start_conversion.assert_called_once_with(
+            "source",
+            32,
+            "ascii",
+            Path("dictionary/default.csv"),
+        )
+        message_box.assert_not_called()
+
+    def test_export_conversion_with_default_table_starts_background_conversion(self) -> None:
+        frame = self._make_frame()
+        frame.translation_tables = {"default": "zh-tw.ctb"}
+        frame.translation_settings = TranslationSettings("ascii", 32, "default")
+        frame._get_selected_dictionary_path = Mock(return_value=Path("dictionary/default.csv"))
+        frame._start_conversion = Mock()
+        on_success = Mock()
+        on_error = Mock()
+        on_missing_table = Mock()
+
+        started = frame._start_export_conversion(
+            Document("alpha", "text", None),
+            Path("/tmp/export/alpha.brl"),
+            "brl",
+            on_success=on_success,
+            on_error=on_error,
+            on_missing_table=on_missing_table,
+        )
+
+        self.assertTrue(started)
+        frame._start_conversion.assert_called_once_with(
+            "text",
+            32,
+            "ascii",
+            Path("dictionary/default.csv"),
+            on_success=on_success,
+            on_error=on_error,
+            update_output=False,
+            show_success=False,
+        )
+        on_missing_table.assert_not_called()
+        on_error.assert_not_called()
 
     def test_open_settings_uses_singleton_dialog(self) -> None:
         frame = object.__new__(gui.BrailleFrame)

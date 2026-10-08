@@ -227,8 +227,6 @@ _MENU_TRANSLATION_MARKERS = (
 	_("All Supported Files"),
 )
 
-language_map_translate_table = load_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
-
 
 def _prompt_for_dictionary_name(parent: wx.Window | None, *, title: str, initial_name: str = "") -> str | None:
 	with DictionaryNameDialog(parent, initial_name=initial_name) as dialog:
@@ -328,6 +326,7 @@ class BrailleFrame(wx.Frame):
 		ensure_default_dictionary(self.dictionary_dir)
 		self._dictionary_names = list_dictionary_names(self.dictionary_dir)
 		self.translation_settings = load_translation_settings(self._dictionary_names)
+		self.translation_tables = load_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
 		self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
 		self.workspace_dir = get_workspace_directory()
 		self._document_controller = DocumentController()
@@ -619,7 +618,7 @@ class BrailleFrame(wx.Frame):
 		dictionary_names = self.get_dictionary_names_for_dialog()
 		return DotExpressSettingsSnapshot.create(
 			normalize_translation_settings(self.translation_settings, dictionary_names),
-			language_map_translate_table,
+			self.translation_tables,
 			normalize_view_settings(self.view_settings),
 		)
 
@@ -634,8 +633,7 @@ class BrailleFrame(wx.Frame):
 
 		self.translation_settings = translation
 		self.view_settings = view
-		language_map_translate_table.clear()
-		language_map_translate_table.update(tables)
+		self.translation_tables = tables
 		self._apply_editor_view_settings(view)
 
 		save_translation_settings(translation)
@@ -787,7 +785,7 @@ class BrailleFrame(wx.Frame):
 			width=width,
 			dictionary_path=dictionary_path,
 			data_dir=resource_path("data"),
-			translation_tables=language_map_translate_table.copy(),
+			translation_tables=self.translation_tables.copy(),
 		)
 
 	def _format_batch_issue_lines(self, issues: list[BatchIssue]) -> list[str]:
@@ -1516,6 +1514,11 @@ class BrailleFrame(wx.Frame):
 			parent=self,
 		)
 
+	def _missing_default_table_message(self) -> str | None:
+		if self.translation_tables.get("default"):
+			return None
+		return _("Please select a translation table first.")
+
 	def _start_export_conversion(
 		self,
 		document: Document,
@@ -1526,9 +1529,8 @@ class BrailleFrame(wx.Frame):
 		on_error=None,
 		on_missing_table=None,
 	) -> bool:
-		default_table = language_map_translate_table.get("default")
-		if not default_table:
-			message = _("Please select a translation table first.")
+		message = self._missing_default_table_message()
+		if message is not None:
 			if on_missing_table is not None:
 				on_missing_table(message)
 			elif on_error is not None:
@@ -1606,10 +1608,10 @@ class BrailleFrame(wx.Frame):
 		if self._conversion_runner.is_running():
 			return
 
-		default_table = language_map_translate_table.get("default")
-		if not default_table:
+		message = self._missing_default_table_message()
+		if message is not None:
 			wx.MessageBox(
-				_("Please select a translation table first."),
+				message,
 				_("Info"),
 				wx.OK | wx.ICON_INFORMATION,
 				parent=self,

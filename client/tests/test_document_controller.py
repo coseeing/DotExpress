@@ -173,6 +173,104 @@ class DocumentControllerTest(unittest.TestCase):
         self.assertEqual(controller.selected_document_name, "alpha")
         self.assertEqual(controller.dual_view_results_by_document, {"alpha": ("keep",), "zoo": ("keep-zoo",)})
 
+    def test_add_document_appends_without_sorting(self) -> None:
+        controller = DocumentController(documents=[self.documents[2]])
+
+        controller.add_document(self.documents[0])
+
+        self.assertEqual(controller.document_names, ["zoo", "alpha"])
+
+    def test_add_documents_appends_in_given_order(self) -> None:
+        controller = DocumentController(documents=[self.documents[1]])
+
+        controller.add_documents([self.documents[2], self.documents[0]])
+
+        self.assertEqual(controller.document_names, ["beta", "zoo", "alpha"])
+
+    def test_load_documents_replaces_list_and_clears_names_and_cache(self) -> None:
+        loaded = [self.documents[1], self.documents[2]]
+        controller = DocumentController(
+            documents=[self.documents[0]],
+            open_name="alpha",
+            selected_name="alpha",
+            dual_view_results_by_document={"alpha": ("segment",)},
+        )
+
+        controller.load_documents(loaded)
+        loaded.append(self.documents[0])
+
+        self.assertEqual(controller.document_names, ["beta", "zoo"])
+        self.assertIsNone(controller.open_document_name)
+        self.assertIsNone(controller.selected_document_name)
+        self.assertEqual(controller.get_dual_view_results("alpha"), ())
+
+    def test_select_document_sets_name_without_validation(self) -> None:
+        controller = DocumentController(documents=list(self.documents), selected_name="alpha")
+
+        controller.select_document("missing")
+        self.assertEqual(controller.selected_document_name, "missing")
+        controller.select_document(None)
+        self.assertIsNone(controller.selected_document_name)
+
+    def test_document_name_at_returns_none_outside_the_list(self) -> None:
+        controller = DocumentController(documents=list(self.documents))
+
+        self.assertEqual(controller.document_name_at(0), "alpha")
+        self.assertEqual(controller.document_name_at(2), "zoo")
+        self.assertIsNone(controller.document_name_at(-1))
+        self.assertIsNone(controller.document_name_at(3))
+
+    def test_has_documents_and_first_document_name(self) -> None:
+        empty = DocumentController()
+        controller = DocumentController(documents=[self.documents[1], self.documents[0]])
+
+        self.assertFalse(empty.has_documents)
+        self.assertIsNone(empty.first_document_name)
+        self.assertTrue(controller.has_documents)
+        self.assertEqual(controller.first_document_name, "beta")
+
+    def test_documents_snapshot_is_a_copy(self) -> None:
+        controller = DocumentController(documents=list(self.documents))
+
+        snapshot = controller.documents_snapshot()
+        snapshot.clear()
+
+        self.assertEqual(controller.document_names, ["alpha", "beta", "zoo"])
+        self.assertEqual(controller.documents_snapshot(), self.documents)
+        self.assertIsNot(controller.documents_snapshot(), controller.documents)
+
+    def test_adjacent_document_name_prefers_open_over_selected(self) -> None:
+        controller = DocumentController(documents=list(self.documents), open_name="beta", selected_name="zoo")
+
+        self.assertEqual(controller.adjacent_document_name(1), "zoo")
+        self.assertEqual(controller.adjacent_document_name(-1), "alpha")
+
+        controller.open_name = None
+        self.assertEqual(controller.adjacent_document_name(1), "alpha")
+        self.assertIsNone(DocumentController().adjacent_document_name(1))
+
+    def test_document_name_exists_is_exact_and_honours_exclude(self) -> None:
+        controller = DocumentController(documents=list(self.documents))
+
+        self.assertTrue(controller.document_name_exists("beta"))
+        self.assertFalse(controller.document_name_exists("Beta"))
+        self.assertFalse(controller.document_name_exists("beta", exclude_name="beta"))
+        self.assertTrue(controller.document_name_exists("zoo", exclude_name="beta"))
+
+    def test_dual_view_results_get_and_set(self) -> None:
+        controller = DocumentController(documents=list(self.documents))
+
+        self.assertEqual(controller.get_dual_view_results("alpha"), ())
+        self.assertEqual(controller.get_dual_view_results(None), ())
+        controller.set_dual_view_results("alpha", ("segment",))
+        controller.set_dual_view_results("ghost", ("other",))
+
+        self.assertEqual(controller.get_dual_view_results("alpha"), ("segment",))
+        self.assertEqual(
+            controller.dual_view_results_by_document,
+            {"alpha": ("segment",), "ghost": ("other",)},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

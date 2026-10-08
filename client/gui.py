@@ -75,11 +75,11 @@ from client_init import start_client_init_background
 
 from dialog import (
 	ConvertingDialog,
+	DictionaryEntriesDialog,
 	DictionaryManagementDialog,
 	DocumentNameDialog,
 	FileIssuesDialog,
 	InvalidWorkspaceFilesDialog,
-	SpeechSymbolsDialog,
 )
 from settings.view import (
 	ViewSettings,
@@ -941,7 +941,7 @@ class BrailleFrame(wx.Frame):
 		if result != wx.ID_EDIT or edit_name is None:
 			return
 		dictionary_path = self._dictionary_presenter.dictionary_path(edit_name)
-		with SpeechSymbolsDialog(self, dictionary_path=dictionary_path) as editor:
+		with DictionaryEntriesDialog(self, dictionary_path=dictionary_path) as editor:
 			editor.ShowModal()
 
 	def on_convert(self, _evt):

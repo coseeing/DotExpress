@@ -928,7 +928,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
     def _open_management(self, frame, result, edit_name):
         with (
             patch.object(gui, "DictionaryManagementDialog") as dialog_class,
-            patch.object(gui, "SpeechSymbolsDialog") as editor_class,
+            patch.object(gui, "DictionaryEntriesDialog") as editor_class,
         ):
             dialog = dialog_class.return_value.__enter__.return_value
             dialog.ShowModal.return_value = result
@@ -1051,7 +1051,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
             with self.subTest(module_attribute=name):
                 self.assertFalse(hasattr(gui, name))
         self.assertFalse(hasattr(gui.BrailleFrame, "_get_csv_wildcard"))
-        for name in ("dictionary_path_for_name", "get_dictionary_directory", "DictionaryManagementDialog", "SpeechSymbolsDialog"):
+        for name in ("dictionary_path_for_name", "get_dictionary_directory", "DictionaryManagementDialog", "DictionaryEntriesDialog"):
             with self.subTest(kept=name):
                 self.assertTrue(hasattr(gui, name))
         for name in ("_get_selected_dictionary_path", "_show_file_error"):

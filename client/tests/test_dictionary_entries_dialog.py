@@ -1,4 +1,4 @@
-"""Tests of the dictionary entries editor (``dialog.SpeechSymbolsDialog``).
+"""Tests of the dictionary entries editor (``dialog.DictionaryEntriesDialog``).
 
 The editor is driven only through its wx surface by ``_EditorHarness``: the
 module's ``wx`` is a namespace of fake widgets and distinct power-of-two flags,
@@ -66,7 +66,7 @@ dialog, _DIALOG_SCOPE = wx_stub.load_speech_dialog()
 setUpModule = _DIALOG_SCOPE.activate
 tearDownModule = _DIALOG_SCOPE.deactivate
 CallbackVirtualListCtrl = dialog.CallbackVirtualListCtrl
-SpeechSymbolsDialog = dialog.SpeechSymbolsDialog
+DictionaryEntriesDialog = dialog.DictionaryEntriesDialog
 _NATIVE_DIALOG_BASE = dialog.wx.Dialog
 
 
@@ -308,7 +308,7 @@ class _EditorHarness:
             stack.enter_context(patch.object(dialog, "wx", self.wx))
             stack.enter_context(patch.object(dialog, "CallbackVirtualListCtrl", self._list_ctrl))
             stack.enter_context(patch.object(dialog, "AddSymbolDialog", self._entry_dialog))
-            editor = object.__new__(SpeechSymbolsDialog)
+            editor = object.__new__(DictionaryEntriesDialog)
             editor.CreateButtonSizer = self._create_button_sizer
             editor.FindWindowById = self._find_window_by_id
             editor.SetSizerAndFit = lambda _sizer: self.record("SetSizerAndFit")
@@ -551,7 +551,7 @@ class DialogModuleIsolationTest(unittest.TestCase):
 # --- pre-P2-2 tests, rewritten onto the harness (same assertions) -----------
 
 
-class SpeechSymbolsDialogFilterTest(_EditorTestCase):
+class DictionaryEntriesDialogFilterTest(_EditorTestCase):
     def setUp(self) -> None:
         # Beta is added through the entry dialog: the loader drops a Bopomofo row
         # whose braille is not a zhuyin sequence. Row 0 is selected, as before.
@@ -621,7 +621,7 @@ class SpeechSymbolsDialogFilterTest(_EditorTestCase):
         self.assertTrue(skipped)
 
 
-class SpeechSymbolsDialogBuildUiTest(_EditorTestCase):
+class DictionaryEntriesDialogBuildUiTest(_EditorTestCase):
     def test_build_ui_binds_item_activation_to_edit_handler(self) -> None:
         harness = self.open_editor([ALPHA])
         editor = harness.dialog
@@ -636,7 +636,7 @@ class SpeechSymbolsDialogBuildUiTest(_EditorTestCase):
         )
 
 
-class SpeechSymbolsDialogMutationTest(_EditorTestCase):
+class DictionaryEntriesDialogMutationTest(_EditorTestCase):
     def setUp(self) -> None:
         self.harness = self.open_editor([ALPHA, BETA])
 
@@ -734,7 +734,7 @@ class SpeechSymbolsDialogMutationTest(_EditorTestCase):
 # --- new characterization (P2-2 part A) -------------------------------------
 
 
-class SpeechSymbolsDialogConstructionTest(_EditorTestCase):
+class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
     def test_construction_log_is_exact(self) -> None:
         harness = self.open_editor([ALPHA, BETA], keep_log=True)
 
@@ -840,7 +840,7 @@ class SpeechSymbolsDialogConstructionTest(_EditorTestCase):
         self.assertEqual(harness.cancel_button.label, "\u53d6\u6d88")
 
 
-class SpeechSymbolsDialogCellTextTest(_EditorTestCase):
+class DictionaryEntriesDialogCellTextTest(_EditorTestCase):
     def test_cells_show_text_braille_and_the_translated_type_label(self) -> None:
         harness = self.open_editor([
             ["Alpha", "\u2801", "General"],
@@ -866,7 +866,7 @@ class SpeechSymbolsDialogCellTextTest(_EditorTestCase):
         self.assertEqual(str(caught.exception), "Unknown column: 3")
 
 
-class SpeechSymbolsDialogFilterBehaviorTest(_EditorTestCase):
+class DictionaryEntriesDialogFilterBehaviorTest(_EditorTestCase):
     def test_filter_uses_casefold_not_lower(self) -> None:
         harness = self.open_editor([["Stra\u00dfe", "\u280e", "General"], ["STRASSE", "", "General"]])
 
@@ -966,7 +966,7 @@ class SpeechSymbolsDialogFilterBehaviorTest(_EditorTestCase):
         )
 
 
-class SpeechSymbolsDialogAddTest(_EditorTestCase):
+class DictionaryEntriesDialogAddTest(_EditorTestCase):
     def test_cancel_changes_nothing(self) -> None:
         harness = self.open_editor([ALPHA])
         before = harness.state()
@@ -1068,7 +1068,7 @@ class SpeechSymbolsDialogAddTest(_EditorTestCase):
         self.assertEqual(harness.rows(), [ALPHA_CELLS, ["Alpine", "\u2801\u2807", GENERAL]])
 
 
-class SpeechSymbolsDialogEditTest(_EditorTestCase):
+class DictionaryEntriesDialogEditTest(_EditorTestCase):
     def test_edit_button_opens_the_selected_entry(self) -> None:
         harness = self.open_editor([ALPHA, BETA])
         harness.select(1)
@@ -1200,7 +1200,7 @@ class SpeechSymbolsDialogEditTest(_EditorTestCase):
         self.assertEqual(harness.rows(), [ALPHA_CELLS])
 
 
-class SpeechSymbolsDialogDeleteTest(_EditorTestCase):
+class DictionaryEntriesDialogDeleteTest(_EditorTestCase):
     def test_delete_has_no_confirmation_and_selects_the_row_now_at_that_index(self) -> None:
         harness = self.open_editor([ALPHA, BETA, ["Gamma", "\u281b", "General"]])
         harness.select(1)
@@ -1271,7 +1271,7 @@ class SpeechSymbolsDialogDeleteTest(_EditorTestCase):
         )
 
 
-class SpeechSymbolsDialogOkTest(_EditorTestCase):
+class DictionaryEntriesDialogOkTest(_EditorTestCase):
     def test_ok_saves_the_full_list_in_order_and_closes(self) -> None:
         harness = self.open_editor([BETA, ALPHA])
         harness.script_entry("Gamma", "\u281b", "Braille")
@@ -1360,9 +1360,9 @@ class SpeechSymbolsDialogOkTest(_EditorTestCase):
 # --- the dialog delegates to the model (P2-2 part C) -------------------------
 
 
-class SpeechSymbolsDialogModelTest(_EditorTestCase):
+class DictionaryEntriesDialogModelTest(_EditorTestCase):
     def test_dictionary_path_is_required(self) -> None:
-        parameter = inspect.signature(SpeechSymbolsDialog.__init__).parameters["dictionary_path"]
+        parameter = inspect.signature(DictionaryEntriesDialog.__init__).parameters["dictionary_path"]
 
         self.assertIs(parameter.default, inspect.Parameter.empty)
 

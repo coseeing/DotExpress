@@ -327,7 +327,7 @@ class CallbackVirtualListCtrl(wx.ListCtrl):
 DictionaryEntryListCtrl = CallbackVirtualListCtrl
 
 
-class SpeechSymbolsDialog(ContextManagedDialog, wx.Dialog):
+class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 	"""Dialog for editing custom dictionary mappings stored on disk.
 
 	Supervising controller: the widgets and the selected row live here, the

@@ -6,11 +6,16 @@
 
 三項變更：
 
-1. `_save_to_file` 建立新設定檔時，不再加入 `language_detection` 區段。
+1. 修正 `tests/test_translation_settings.py::test_save_persists_one_complete_settings_value` 過時的預期值。該測試改為預期 `_save_to_file` 刻意寫入新設定檔的 `language_detection.charset_maps` 預設值。注入行為本身保留（見「決策」）。
 2. `_load_from_file` 與 `_save_to_file` 透過專案 logger 記錄失敗，不再隱藏錯誤。
 3. 移除未使用的 setter：`set_view_font_size`、`set_view_scheme`、`set_braille_font`。
 
 這是重建安全網的小步驟，不包含 S-5 建議的 `ConfigStore` 重新設計。
+
+## 決策
+
+- **不採納路線圖移除 `language_detection` 注入的建議。** `storage/refactor.md`（S-5 與 P0-1 列）以「讀取端已合併預設值」為由，提議刪除 `_save_to_file` 中把 `language_detection.charset_maps` 預設值寫入新設定檔的區塊。但這個注入是最近一次功能 commit `6e5819f`（「feat: align language detection with configured language」）刻意加入的，該 commit 也新增了 `test_new_config_file_contains_language_detection_defaults` 來固定此行為。它是使用者可見的：新的 `config.json` 會顯示 `charset_maps` 區段，這是使用者發現並手動編輯此設定的唯一途徑（沒有 UI 可編輯）。重構必須保留使用者可見行為，因此保留注入。錯的是那個失敗的測試：`6e5819f` 沒有更新 `tests/test_translation_settings.py`，所以 P0-1 讓該測試對齊目前行為，而不是修改 `config.py` 去配合測試。
+- 兩個 I/O 輔助函式的捕捉範圍維持 `except Exception`（不在未捕捉例外的 GUI 處理器中產生新的當機路徑）；縮小範圍留待 S-5 的 `ConfigStore` 工作。
 
 ## 現況（2026-10-08 於 `refactor/p0-1-config-alignment`、HEAD `6e5819f` 驗證）
 
@@ -29,15 +34,11 @@
 
 ## 行為變更
 
-### 1. 首次儲存不再注入 `language_detection`
+### 1. 保留 `language_detection` 注入；修正過時的測試
 
-從 `_save_to_file` 刪除 `if not os.path.exists(CONFIG_PATH): data = {...}` 區塊。新建立的設定檔只會包含呼叫的 setter 所寫入的區段。
+`_save_to_file` 的 `if not os.path.exists(CONFIG_PATH): data = {...}` 區塊維持不變。新建立的設定檔仍以 `{"language_detection": {"charset_maps": DEFAULT_CHARSET_MAPS}}` 開頭，後面接著 setter 寫入的區段。路線圖的移除提議為何不採納，請見「決策」。
 
-- 透過 `get_charset_maps()` 讀到的值在任何情況下都不變，讀取端本來就會補上預設值。
-- 既有、已含 `language_detection` 區段的 `config.json`（由包含 `6e5819f` 的版本寫入）維持原樣。setter 採 read-modify-write，會保留不屬於自己的區段。
-- 副作用：想手動編輯檔案來修改 `charset_maps` 的人，在新設定檔中找不到範本區段。此設定沒有 UI 可編輯，而路線圖已記錄此取捨（「設定檔首次建立時少一個區段」）。這是刻意的決定，不是疏漏。
-- 保留 `DEFAULT_CHARSET_MAPS` 與 `get_charset_maps()`，`languageDetection` 會使用它們。
-- `os` import 仍然需要（`os.makedirs`、`os.path.dirname`、`os.getenv`）。
+此項唯一的變更在 `tests/test_translation_settings.py`：`test_save_persists_one_complete_settings_value` 的預期 dict 在既有的 `conversion` 區段旁加入 `"language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS}`，與 `tests/test_config.py` 已經預期注入的方式一致。
 
 ### 2. 記錄讀寫失敗，而不是吞掉
 
@@ -78,6 +79,7 @@ logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
 
 ## 維持不變的部分
 
+- `_save_to_file` 建立新設定檔時注入 `language_detection.charset_maps` 預設值的行為，以及 `get_charset_maps()` 回傳的值。
 - `config.py` 中所有保留下來的公開函式與常數，其簽章、預設值與回傳值。
 - `_load_from_file` 與 `_save_to_file` 永遠不會拋出例外。呼叫端（GUI 事件處理器、`client_init` 背景執行緒）看到的仍是同樣不拋例外的行為。
 - read-modify-write 語意，包括保留未知或其他區段。
@@ -100,17 +102,13 @@ logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
 
 `tests/test_translation_settings.py`
 
-- 不修改。`test_save_persists_one_complete_settings_value` 必須照原樣通過。
+- 只更新 `test_save_persists_one_complete_settings_value` 的預期 dict，加入 `"language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS}`。如此該測試即可在注入不變的情況下通過。
 
 `tests/test_config.py`
 
-- 從四個完全相等比對的測試（view、conversion roundtrip、selected dictionary、client id）的預期 dict 中，移除 `"language_detection": {...}` 項目。
-- 將 `test_new_config_file_contains_language_detection_defaults` 改為一個驗證兩件事的測試：
-  - 在新路徑呼叫 `set_output_mode("unicode")` 後，檔案中沒有 `language_detection` 鍵；
-  - `config.get_charset_maps()` 仍等於 `config.DEFAULT_CHARSET_MAPS`。
-- 新增測試：既有的 `language_detection` 區段在呼叫 setter 後仍保留。
+- 既有的注入預期維持不變：完全相等比對之預期 dict 中的 `"language_detection": {...}` 項目，以及 `test_new_config_file_contains_language_detection_defaults`，都照原樣保留。
 - 將使用已刪除 setter 的測試改用 `set_view_settings`：
-  - `test_view_settings_are_persisted_under_view_section` 呼叫 `set_view_settings(18, "dark", "simbraille")`，並預期三個檢視鍵都存在。
+  - `test_view_settings_are_persisted_under_view_section` 呼叫 `set_view_settings(18, "dark", "simbraille")`，並預期三個檢視鍵都存在（加上既有的 `language_detection` 項目）。
   - 點字字型儲存測試驗證 `set_view_settings` 會把 `braille_font` 寫在 `view` 底下，且保留其他區段中不相關的鍵。
 - 新增錯誤處理測試：
   - **儲存失敗會記錄、不會拋出。** 把 `CONFIG_PATH` 指到一個路徑元件是一般檔案的位置之下，這樣 `os.makedirs` 在所有平台上都會拋出 `OSError`。在 `self.assertLogs("dotexpress.config", level="ERROR")` 中呼叫一個 setter，並驗證：
@@ -128,7 +126,7 @@ logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
 
 ## 驗收條件
 
-1. `config.py` 中沒有 `language_detection` 注入，且 `grep -rn "set_view_font_size\|set_view_scheme\|set_braille_font" client --include=*.py` 只找到 `gui.py` 的 `_set_view_font_size` 方法與其呼叫處。
+1. `config.py` 中的 `language_detection` 注入維持不變，且 `grep -rn "set_view_font_size\|set_view_scheme\|set_braille_font" client --include=*.py` 只找到 `gui.py` 的 `_set_view_font_size` 方法與其呼叫處。
 2. `_load_from_file` 與 `_save_to_file` 中沒有裸 `pass`。所有非 `FileNotFoundError` 的失敗都依上述方式經由 `config.logger`（`dotexpress.config`）記錄。
 3. import `config` 不會建立 `log/` 或 `config.log`。這由 `log.get_logger` 保證，並由 `tests/test_log.py` 涵蓋。
 4. 聚焦驗證通過，0 個失敗、0 個錯誤：
@@ -138,7 +136,7 @@ logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
 
 ## 風險
 
-- **`charset_maps` 較不易被發現**（低）：新建立的設定檔不再包含範本區段。讀取端的預設值不變，路線圖已接受此取捨。
+- **與路線圖列的差異**（低）：P0-1 不移除 `storage/refactor.md` 提議移除的注入。後續任務（特別是 S-5 的 `ConfigStore` 工作）必須保留注入，而不是照原始建議處理；「決策」一節即為此紀錄。
 - **設定檔損毀時灌爆 log**（已緩解）：以路徑加簽章為鍵的節流處理。
 - **`log/` 存在前就記錄**（低）：若在 `prepare_application_directories` 執行前讀取設定失敗，`FileHandler` 無法開檔。此時標準函式庫的 `Handler.handleError` 會在 stderr（若存在）印出「Logging error」提示並繼續執行，絕不會當掉。在正常啟動順序中，`log/` 會在主視窗讀取設定前完成驗證。
 - **測試寫入真實 log 目錄**（低）：只有在未來的測試觸發失敗路徑、卻沒有使用 `assertLogs` 或 patch logger 時才可能發生。測試策略要求兩者擇一。

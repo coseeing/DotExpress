@@ -6,11 +6,16 @@ Bring `client/config.py` and its tests back into agreement and stop it from sile
 
 Three changes:
 
-1. `_save_to_file` stops adding a `language_detection` section when it creates a new config file.
+1. Fix the stale expectation in `tests/test_translation_settings.py::test_save_persists_one_complete_settings_value`. The test now expects the `language_detection.charset_maps` defaults that `_save_to_file` deliberately writes into a new config file. The injection itself is kept (see Decisions).
 2. `_load_from_file` and `_save_to_file` log failures through the project logger instead of hiding them.
 3. Remove the unused setters `set_view_font_size`, `set_view_scheme` and `set_braille_font`.
 
 This is a small step to restore a safety net. It does not include the `ConfigStore` redesign that S-5 recommends.
+
+## Decisions
+
+- **The roadmap's suggestion to remove the `language_detection` injection is rejected.** `storage/refactor.md` (S-5 and the P0-1 row) proposed deleting the block in `_save_to_file` that writes `language_detection.charset_maps` defaults into a newly created config file, on the grounds that the read side already merges defaults. The injection was added on purpose by the most recent feature commit, `6e5819f` ("feat: align language detection with configured language"), which also added `test_new_config_file_contains_language_detection_defaults` to lock it in. It is user-visible: a new `config.json` shows the `charset_maps` section, which is the only way users can discover and hand-edit this setting (there is no UI for it). The refactor must preserve user-visible behavior, so the injection stays. The failing test is the one that is wrong: `6e5819f` did not update `tests/test_translation_settings.py`, so P0-1 aligns that test with the current behavior instead of changing `config.py` to match the test.
+- Catch breadth stays `except Exception` in both I/O helpers (no new crash paths in GUI handlers that do not catch exceptions); narrowing is deferred to the S-5 `ConfigStore` work.
 
 ## Current State (verified 2026-10-08 on `refactor/p0-1-config-alignment`, HEAD `6e5819f`)
 
@@ -29,15 +34,11 @@ This is a small step to restore a safety net. It does not include the `ConfigSto
 
 ## Behavior Changes
 
-### 1. No `language_detection` injection on first save
+### 1. Keep the `language_detection` injection; fix the stale test
 
-Delete the `if not os.path.exists(CONFIG_PATH): data = {...}` block from `_save_to_file`. A newly created config file then holds only the sections that the calling setter wrote.
+`_save_to_file` keeps its `if not os.path.exists(CONFIG_PATH): data = {...}` block unchanged. A newly created config file still starts with `{"language_detection": {"charset_maps": DEFAULT_CHARSET_MAPS}}` followed by the sections the setter wrote. See Decisions for why the roadmap's removal proposal was rejected.
 
-- Values read through `get_charset_maps()` stay the same in every case. The read side already supplies the defaults.
-- Existing `config.json` files that already contain a `language_detection` section (written by builds that included `6e5819f`) are left alone. The setters do read-modify-write and keep sections they do not own.
-- Side effect: someone who wants to change `charset_maps` by editing the file by hand no longer finds a template section in a new file. No UI edits this setting, and the roadmap row records this trade-off ("設定檔首次建立時少一個區段"). This is a deliberate decision, not an oversight.
-- `DEFAULT_CHARSET_MAPS` and `get_charset_maps()` stay. `languageDetection` uses them.
-- The `os` import is still needed for `os.makedirs`, `os.path.dirname` and `os.getenv`.
+The only change for this item is in `tests/test_translation_settings.py`: the expected dict in `test_save_persists_one_complete_settings_value` gains `"language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS}` next to the existing `conversion` section, matching how `tests/test_config.py` already expects the injection.
 
 ### 2. Log load and save failures instead of swallowing them
 
@@ -78,6 +79,7 @@ Roadmap task P0-3 also lists these three setters (section 5.4). After P0-1 lands
 
 ## What Stays Identical
 
+- The `language_detection.charset_maps` default injection when `_save_to_file` creates a new config file, and the values returned by `get_charset_maps()`.
 - Signatures, defaults and return values of every remaining public function and constant in `config.py`.
 - `_load_from_file` and `_save_to_file` never raise. Callers (GUI event handlers, the `client_init` background thread) still see the same non-raising behavior.
 - Read-modify-write semantics, including preservation of unknown or other sections.
@@ -100,17 +102,13 @@ All tests use `unittest`, run from `client/`, and keep the existing `setUp` that
 
 `tests/test_translation_settings.py`
 
-- No edits. `test_save_persists_one_complete_settings_value` must pass as written.
+- Update only the expected dict in `test_save_persists_one_complete_settings_value` to include `"language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS}`. The test then passes against the unchanged injection.
 
 `tests/test_config.py`
 
-- Remove the `"language_detection": {...}` entry from the expected dicts in the four exact-equality tests (view, conversion roundtrip, selected dictionary, client id).
-- Replace `test_new_config_file_contains_language_detection_defaults` with a test that does two things:
-  - after `set_output_mode("unicode")` on a fresh path, the file contains no `language_detection` key;
-  - `config.get_charset_maps()` still equals `config.DEFAULT_CHARSET_MAPS`.
-- Add a test that a pre-existing `language_detection` section survives a setter call.
+- Keep the existing injection expectations unchanged: the `"language_detection": {...}` entries in the exact-equality expected dicts and `test_new_config_file_contains_language_detection_defaults` stay as they are.
 - Move tests that used the deleted setters over to `set_view_settings`:
-  - `test_view_settings_are_persisted_under_view_section` calls `set_view_settings(18, "dark", "simbraille")` and expects all three view keys.
+  - `test_view_settings_are_persisted_under_view_section` calls `set_view_settings(18, "dark", "simbraille")` and expects all three view keys (plus the existing `language_detection` entry).
   - The braille-font persistence test asserts that `set_view_settings` writes `braille_font` under `view`, and that `set_view_settings` keeps unrelated keys in other sections.
 - New error-handling tests:
   - **Save failure is logged, not raised.** Point `CONFIG_PATH` below a path component that is a regular file. `os.makedirs` then raises an `OSError` on every platform. Call a setter under `self.assertLogs("dotexpress.config", level="ERROR")`. Assert that:
@@ -128,7 +126,7 @@ Unchanged safety nets that must stay green: `tests/test_view_settings.py`, `test
 
 ## Acceptance Criteria
 
-1. `config.py` contains no `language_detection` injection, and `grep -rn "set_view_font_size\|set_view_scheme\|set_braille_font" client --include=*.py` returns only `gui.py`'s `_set_view_font_size` method and its call site.
+1. `config.py` still contains the `language_detection` injection unchanged, and `grep -rn "set_view_font_size\|set_view_scheme\|set_braille_font" client --include=*.py` returns only `gui.py`'s `_set_view_font_size` method and its call site.
 2. `_load_from_file` and `_save_to_file` contain no bare `pass`. Every non-`FileNotFoundError` failure goes through `config.logger` (`dotexpress.config`) as described above.
 3. Importing `config` creates neither `log/` nor `config.log`. This is guaranteed by `log.get_logger` and covered by `tests/test_log.py`.
 4. Focused verification passes with 0 failures and 0 errors:
@@ -138,7 +136,7 @@ Unchanged safety nets that must stay green: `tests/test_view_settings.py`, `test
 
 ## Risks
 
-- **Less discoverable `charset_maps`** (low): newly created config files no longer contain the template section. The read-side defaults are unchanged. The roadmap accepts this trade-off.
+- **Divergence from the roadmap row** (low): P0-1 no longer removes the injection that `storage/refactor.md` proposed removing. Later tasks (notably the S-5 `ConfigStore` work) must preserve the injection rather than follow the original suggestion; the Decisions section is the record of this.
 - **Log flood with a corrupt config** (mitigated): handled by the throttle keyed on path and signature.
 - **Logging before `log/` exists** (low): if a config read fails before `prepare_application_directories` runs, the `FileHandler` cannot open its file. The standard library's `Handler.handleError` then prints a "Logging error" notice to stderr (when one exists) and continues. It never crashes. In the normal startup order, `log/` is validated before the main frame reads settings.
 - **Tests writing to the real log directory** (low): only possible if a future test triggers a failure path without `assertLogs` or a patched logger. The test strategy requires one or the other.

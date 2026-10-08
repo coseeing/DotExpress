@@ -250,6 +250,13 @@ class StubFactoryTest(unittest.TestCase):
         self.assertFalse(hasattr(stubs["braille"], "__path__"))
         self.assertEqual(stubs["braille.tables"].listTables(), [])
 
+    def test_speech_dialog_stubs_are_fresh_submodule_modules(self) -> None:
+        wx = self.assert_fresh(wx_stub.speech_dialog_stubs, ["wx"])["wx"]
+
+        self.assertIsInstance(wx, wx_stub.AutoSubmoduleModule)
+        self.assertEqual((wx.NOT_FOUND, wx.OK, wx.ICON_ERROR), (-1, 1, 2))
+        self.assertIsNone(wx.MessageBox("text"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -863,3 +863,56 @@ def settings_dialog_stubs():
         "braille": braille,
         "braille.tables": braille_tables,
     }
+
+
+# --- factory and loader: test_speech_symbols_dialog, test_dictionary_management_dialog
+
+
+SPEECH_DIALOG_MODULE_NAME = "_speech_symbols_dialog_under_test"
+SPEECH_RESTORE_ROOTS = frozenset(
+    {
+        "Bopomofo",
+        "PIL",
+        "braille",
+        "bs4",
+        "dialog",
+        "dictionaries",
+        "documents",
+        "ebooklib",
+        "lxml",
+        "mammoth",
+        "markdown",
+        "markdownify",
+        "pymupdf",
+        "pypdf",
+        "translation",
+        "wx",
+    }
+)
+
+
+def speech_dialog_stubs():
+    """Submodule-registering ``wx`` for ``dialog.py`` (``OK`` = 1, flags absorb ``|``)."""
+    wx = AutoSubmoduleModule("wx")
+    wx.Dialog = _new_class("Dialog")
+    wx.ListCtrl = _new_class("ListCtrl")
+    wx.Window = _new_class("Window")
+    wx.CommandEvent = _new_class("CommandEvent")
+    wx.ListEvent = _new_class("ListEvent")
+    wx.NOT_FOUND = -1
+    wx.OK = 1
+    wx.ICON_ERROR = 2
+    wx.MessageBox = lambda *args, **kwargs: None
+    return {"wx": wx}
+
+
+def evict_speech_roots(name):
+    return name.split(".")[0] in SPEECH_RESTORE_ROOTS
+
+
+def load_speech_dialog():
+    """Load ``dialog.py`` as ``SPEECH_DIALOG_MODULE_NAME``; return ``(module, scope)``."""
+    scope = StubScope(speech_dialog_stubs(), evict=evict_speech_roots)
+    with scope.loading():
+        module = scope.load_file(SPEECH_DIALOG_MODULE_NAME, DIALOG_PATH)
+    return module, scope

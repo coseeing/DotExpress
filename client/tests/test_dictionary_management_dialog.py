@@ -4,7 +4,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from tests.test_speech_symbols_dialog import dialog
+from tests import wx_stub
+
+
+dialog, _DIALOG_SCOPE = wx_stub.load_speech_dialog()
+setUpModule = _DIALOG_SCOPE.activate
+tearDownModule = _DIALOG_SCOPE.deactivate
 
 
 DictionaryManagementDialog = dialog.DictionaryManagementDialog

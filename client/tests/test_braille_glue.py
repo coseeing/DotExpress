@@ -1,7 +1,9 @@
 import ctypes
 import importlib.util
+import json
 import logging
 import os
+import subprocess
 import sys
 import tempfile
 import types
@@ -12,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import braille
+import braille.tables as tables
 
 CLIENT_DIR = Path(__file__).resolve().parents[1]
 VENDOR_HELPER = CLIENT_DIR.parent / "vendor" / "nvda" / "liblouis" / "runtime" / "louis_helper.py"
@@ -41,6 +44,20 @@ def exec_vendor_helper() -> types.ModuleType:
     helper = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helper)
     return helper
+
+
+def run_fresh(script: str) -> dict:
+    """Run ``script`` in a new interpreter from client/ and return the JSON it prints."""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=CLIENT_DIR,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(completed.stderr)
+    return json.loads(completed.stdout)
 
 
 @contextmanager
@@ -124,6 +141,34 @@ class LouisHelperResolverCharacterizationTest(unittest.TestCase):
             str(raised.exception),
             f"Could not resolve table 'custom.ctb', looked in paths: {[self.custom, self.builtin]!r}",
         )
+
+
+class BrailleGlueLoggingTest(unittest.TestCase):
+    def test_importing_braille_tables_leaves_the_root_logger_alone(self) -> None:
+        state = run_fresh(
+            "import json, logging\n"
+            "import braille.tables\n"
+            "print(json.dumps({\n"
+            "    'root_handlers': len(logging.root.handlers),\n"
+            "    'root_level': logging.getLevelName(logging.root.level),\n"
+            "    'named_logger': braille.tables.log is logging.getLogger('braille.tables'),\n"
+            "}))\n"
+        )
+
+        self.assertEqual(state, {"root_handlers": 0, "root_level": "WARNING", "named_logger": True})
+
+
+class TableDirectoryTest(unittest.TestCase):
+    def test_builtin_source_is_the_tables_dir(self) -> None:
+        self.assertEqual(tables.get_table_directory(tables.TableSource.BUILTIN), tables.TABLES_DIR)
+
+    def test_unknown_source_has_no_directory(self) -> None:
+        self.assertIsNone(tables.get_table_directory("no-such-source"))
+
+    def test_source_from_a_child_map_is_found(self) -> None:
+        with patch.object(tables, "_tablesDirs", tables._tablesDirs.new_child({"addon": "/addon/tables"})):
+            self.assertEqual(tables.get_table_directory("addon"), "/addon/tables")
+            self.assertEqual(tables.get_table_directory(tables.TableSource.BUILTIN), tables.TABLES_DIR)
 
 
 if __name__ == "__main__":

@@ -1312,6 +1312,20 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         on_missing_table.assert_not_called()
         on_error.assert_not_called()
 
+    def test_missing_default_table_message_reports_only_unset_default(self) -> None:
+        frame = self._make_frame()
+        frame.translation_tables = {"default": "zh-tw.ctb"}
+
+        self.assertIsNone(frame._missing_default_table_message())
+
+        for tables in ({}, {"default": ""}, {"default": None}):
+            with self.subTest(tables=tables):
+                frame.translation_tables = tables
+                self.assertEqual(
+                    frame._missing_default_table_message(),
+                    gui._("Please select a translation table first."),
+                )
+
     def test_open_settings_uses_singleton_dialog(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
         frame.get_settings_snapshot = Mock(return_value=make_snapshot())

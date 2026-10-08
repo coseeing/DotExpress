@@ -1516,6 +1516,11 @@ class BrailleFrame(wx.Frame):
 			parent=self,
 		)
 
+	def _missing_default_table_message(self) -> str | None:
+		if self.translation_tables.get("default"):
+			return None
+		return _("Please select a translation table first.")
+
 	def _start_export_conversion(
 		self,
 		document: Document,
@@ -1526,9 +1531,8 @@ class BrailleFrame(wx.Frame):
 		on_error=None,
 		on_missing_table=None,
 	) -> bool:
-		default_table = self.translation_tables.get("default")
-		if not default_table:
-			message = _("Please select a translation table first.")
+		message = self._missing_default_table_message()
+		if message is not None:
 			if on_missing_table is not None:
 				on_missing_table(message)
 			elif on_error is not None:
@@ -1606,10 +1610,10 @@ class BrailleFrame(wx.Frame):
 		if self._conversion_runner.is_running():
 			return
 
-		default_table = self.translation_tables.get("default")
-		if not default_table:
+		message = self._missing_default_table_message()
+		if message is not None:
 			wx.MessageBox(
-				_("Please select a translation table first."),
+				message,
 				_("Info"),
 				wx.OK | wx.ICON_INFORMATION,
 				parent=self,

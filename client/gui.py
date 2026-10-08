@@ -328,6 +328,7 @@ class BrailleFrame(wx.Frame):
 		ensure_default_dictionary(self.dictionary_dir)
 		self._dictionary_names = list_dictionary_names(self.dictionary_dir)
 		self.translation_settings = load_translation_settings(self._dictionary_names)
+		self.translation_tables = load_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
 		self._refresh_dictionary_names(self.translation_settings.selected_dictionary)
 		self.workspace_dir = get_workspace_directory()
 		self._document_controller = DocumentController()

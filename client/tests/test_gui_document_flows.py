@@ -363,6 +363,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame._documents_by_name = {"alpha": Document("alpha", "source", None)}
         frame._get_document_by_name = lambda name: frame._documents_by_name.get(name)
         frame._replace_document = lambda document: frame._documents_by_name.__setitem__(document.name, document)
+        frame.translation_tables = dict(gui.DEFAULT_TRANSLATION_TABLES)
         return frame
 
     def test_write_export_document_uses_registry_writer(self) -> None:
@@ -1161,6 +1162,40 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         self.assertEqual(gui.language_map_translate_table, snapshot.translation_tables)
         frame._apply_editor_view_settings.assert_called_once_with(snapshot.view)
         self.assertEqual(result, snapshot)
+
+    def _initialize_state_with_loaded_tables(self, loaded_tables: dict[str, str]):
+        frame = object.__new__(gui.BrailleFrame)
+        frame._refresh_dictionary_names = Mock()
+        frame._register_output_font = Mock(return_value=False)
+        with (
+            patch.object(gui, "get_dictionary_directory", return_value=Path("dictionary")),
+            patch.object(gui, "ensure_default_dictionary"),
+            patch.object(gui, "list_dictionary_names", return_value=["default"]),
+            patch.object(
+                gui,
+                "load_translation_settings",
+                return_value=TranslationSettings("unicode", 40, "default"),
+            ),
+            patch.object(gui, "get_workspace_directory", return_value=Path("workspace")),
+            patch.object(gui, "load_view_settings", return_value=ViewSettings(40, "light", "default")),
+            patch.object(gui, "load_translation_tables", return_value=loaded_tables) as load_tables,
+        ):
+            frame._initialize_state()
+        return frame, load_tables
+
+    def test_initialize_state_loads_translation_tables_into_frame(self) -> None:
+        loaded_tables = {"default": "test-default.ctb", "math": "test-math.ctb"}
+
+        frame, load_tables = self._initialize_state_with_loaded_tables(loaded_tables)
+
+        self.assertEqual(frame.translation_tables, loaded_tables)
+        load_tables.assert_called_once_with()
+
+    def test_initialize_state_falls_back_to_default_tables_when_loader_returns_empty(self) -> None:
+        frame, _load_tables = self._initialize_state_with_loaded_tables({})
+
+        self.assertEqual(frame.translation_tables, gui.DEFAULT_TRANSLATION_TABLES)
+        self.assertIsNot(frame.translation_tables, gui.DEFAULT_TRANSLATION_TABLES)
 
     def test_open_settings_uses_singleton_dialog(self) -> None:
         frame = object.__new__(gui.BrailleFrame)

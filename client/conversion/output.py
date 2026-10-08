@@ -21,10 +21,16 @@ class ConversionRequest:
 
 
 @dataclass(frozen=True)
+class DualViewSegment:
+    result: object
+    source_kind: str
+
+
+@dataclass(frozen=True)
 class ConversionOutput:
     display_text: str
     translation_results: tuple[object, ...]
-    dual_view_segments: tuple[object, ...] = ()
+    dual_view_segments: tuple[DualViewSegment, ...] = ()
 
 
 class ConversionStageError(Exception):

@@ -1,4 +1,5 @@
 import string
+from types import MappingProxyType
 
 from languageDetection.unicode_blocks import (
     build_language_blocks,
@@ -7,51 +8,60 @@ from languageDetection.unicode_blocks import (
 )
 
 
+_CJK_LANGUAGE_BLOCKS = MappingProxyType({
+	language: tuple(blocks)
+	for language, blocks in build_language_blocks(("ja", "zh", "ko")).items()
+})
+
+
 class TranslationResult:
+	LEFT_PUNCT_HALF = frozenset("([{")
+	RIGHT_PUNCT_HALF = frozenset(")]}")
+	MIDDLE_SENTENCE_PUNCT_HALF = frozenset(",;:%")
+	END_SENTENCE_PUNCT_HALF = frozenset(".!?")
+
+	LEFT_PUNCT_FULL = frozenset("‘“「『〈《【〔〖（")
+	RIGHT_PUNCT_FULL = frozenset("’”」』〉》】〕〗）")
+	MIDDLE_SENTENCE_PUNCT_FULL = frozenset("，；：、％")
+	END_SENTENCE_PUNCT_FULL = frozenset("。！？")
+
+	LEFT_PUNCT = LEFT_PUNCT_HALF | LEFT_PUNCT_FULL
+	RIGHT_PUNCT = RIGHT_PUNCT_HALF | RIGHT_PUNCT_FULL
+	MIDDLE_SENTENCE_PUNCT = MIDDLE_SENTENCE_PUNCT_HALF | MIDDLE_SENTENCE_PUNCT_FULL
+	END_SENTENCE_PUNCT = END_SENTENCE_PUNCT_HALF | END_SENTENCE_PUNCT_FULL
+
+	lang_blocks = _CJK_LANGUAGE_BLOCKS
+
+	__hash__ = None
+
 	def __init__(self, raw, braille, braille_to_raw_pos, raw_to_braille_pos):
 		self.raw = raw
 		self.braille = braille
 		self.braille_to_raw_pos = braille_to_raw_pos
 		self.raw_to_braille_pos = raw_to_braille_pos
 
-		self.LEFT_PUNCT_HALF = set("([{")
-		self.RIGHT_PUNCT_HALF = set(")]}")
-		self.MIDDLE_SENTENCE_PUNCT_HALF = set(",;:%")
-		self.END_SENTENCE_PUNCT_HALF = set(".!?")
-
-		self.LEFT_PUNCT_FULL = set("‘“「『〈《【〔〖（")
-		self.RIGHT_PUNCT_FULL = set("’”」』〉》】〕〗）")
-		self.MIDDLE_SENTENCE_PUNCT_FULL = set("，；：、％")
-		self.END_SENTENCE_PUNCT_FULL = set("。！？")
-
-		self.LEFT_PUNCT = self.LEFT_PUNCT_HALF | self.LEFT_PUNCT_FULL
-		self.RIGHT_PUNCT = self.RIGHT_PUNCT_HALF | self.RIGHT_PUNCT_FULL
-		self.MIDDLE_SENTENCE_PUNCT = self.MIDDLE_SENTENCE_PUNCT_HALF | self.MIDDLE_SENTENCE_PUNCT_FULL
-		self.END_SENTENCE_PUNCT = self.END_SENTENCE_PUNCT_HALF | self.END_SENTENCE_PUNCT_FULL
-
-		self.lang_blocks = build_language_blocks({"ja", "zh", "ko"})
+	@classmethod
+	def concat(cls, results):
+		raw, braille, braille_to_raw_pos, raw_to_braille_pos = [], [], [], []
+		for result in results:
+			if not isinstance(result, TranslationResult):
+				raise TypeError("not TranslateResult object")
+			raw_offset = len(raw)
+			braille_offset = len(braille)
+			raw.extend(result.raw)
+			braille.extend(result.braille)
+			braille_to_raw_pos.extend(pos + raw_offset for pos in result.braille_to_raw_pos)
+			raw_to_braille_pos.extend(pos + braille_offset for pos in result.raw_to_braille_pos)
+		return cls(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
 
 	def __add__(self, other):
 		if not isinstance(other, TranslationResult):
 			raise TypeError("not TranslateResult object")
-
-		raw_offset = len(self.raw)
-		braille_offset = len(self.braille)
-
-		raw = self.raw + other.raw
-		braille = self.braille + other.braille
-		braille_to_raw_pos = (
-			list(self.braille_to_raw_pos)
-			+ [pos + raw_offset for pos in other.braille_to_raw_pos]
-		)
-		raw_to_braille_pos = (
-			list(self.raw_to_braille_pos)
-			+ [pos + braille_offset for pos in other.raw_to_braille_pos]
-		)
-
-		return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
+		return TranslationResult.concat((self, other))
 
 	def __eq__(self, other):
+		if not isinstance(other, TranslationResult):
+			return NotImplemented
 		result = True
 		result &= (self.raw == other.raw)
 		result &= (self.braille == other.braille)

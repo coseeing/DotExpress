@@ -2,12 +2,11 @@ import csv
 import tempfile
 import unittest
 from pathlib import Path
-from types import ModuleType
 
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
 from config import DEFAULT_CHARSET_MAPS
-from dual_view.model import DualViewSegment
+from conversion.output import DualViewSegment
 from conversion.service import (
     ConversionOutput,
     ConversionRequest,
@@ -97,73 +96,6 @@ class ConversionServiceTest(unittest.TestCase):
             text_translator=text_translator or FakeTextTranslator(),
             math_translator=math_translator or FakeMathTranslator(),
         )
-
-    def _fake_translate_module(self) -> ModuleType:
-        fake_module = ModuleType("translate")
-
-        class FakeTranslationResult:
-            def __init__(self, raw, braille, braille_to_raw_pos, raw_to_braille_pos):
-                self.raw = raw
-                self.braille = braille
-                self.braille_to_raw_pos = braille_to_raw_pos
-                self.raw_to_braille_pos = raw_to_braille_pos
-
-            def __add__(self, other):
-                raw_offset = len(self.raw)
-                braille_offset = len(self.braille)
-                return FakeTranslationResult(
-                    self.raw + other.raw,
-                    self.braille + other.braille,
-                    list(self.braille_to_raw_pos) + [pos + raw_offset for pos in other.braille_to_raw_pos],
-                    list(self.raw_to_braille_pos) + [pos + braille_offset for pos in other.raw_to_braille_pos],
-                )
-
-        fake_module.TranslationResult = FakeTranslationResult
-        fake_module.translate = lambda *_args, **_kwargs: None
-        fake_module.translate_as_single_token = lambda *_args, **_kwargs: None
-        return fake_module
-
-    def _mutating_translate_module(self) -> ModuleType:
-        fake_module = ModuleType("translate")
-
-        class MutatingTranslationResult:
-            def __init__(self, raw, braille, braille_to_raw_pos, raw_to_braille_pos):
-                self.raw = raw
-                self.braille = braille
-                self.braille_to_raw_pos = braille_to_raw_pos
-                self.raw_to_braille_pos = raw_to_braille_pos
-
-            def __add__(self, other):
-                raw_offset = len(self.raw)
-                braille_offset = len(self.braille)
-                return MutatingTranslationResult(
-                    self.raw + other.raw,
-                    self.braille + other.braille,
-                    list(self.braille_to_raw_pos) + [pos + raw_offset for pos in other.braille_to_raw_pos],
-                    list(self.raw_to_braille_pos) + [pos + braille_offset for pos in other.raw_to_braille_pos],
-                )
-
-            def reclean_braille_endspace(self):
-                return None
-
-            def bind_word_tokens(self):
-                self.raw = ["".join(self.raw)]
-                self.raw_to_braille_pos = [0]
-                self.braille_to_raw_pos = [0] * len(self.braille)
-
-            def reclean_token(self):
-                return None
-
-            def wrap(self, _width):
-                return "".join(self.braille), "".join(self.raw)
-
-        fake_module.TranslationResult = MutatingTranslationResult
-        return fake_module
-
-    def _translation_result(self, raw, braille, braille_to_raw_pos, raw_to_braille_pos):
-        from translate import TranslationResult
-
-        return TranslationResult(raw, braille, braille_to_raw_pos, raw_to_braille_pos)
 
     def test_empty_source_does_not_read_or_execute_preprocessing_script(self) -> None:
         dictionary_dir = self.test_dir / "dictionary"

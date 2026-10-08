@@ -8,6 +8,7 @@ from unittest.mock import patch
 import config
 from adapters.translation.contracts import TranslationRuntime
 from conversion.service import ConversionRequest, convert_text_with_alignment
+from translate import TranslationResult
 
 
 TABLES = {
@@ -26,15 +27,11 @@ MIXED_TEXT_CALLS = [
 ]
 
 
-# The fakes import TranslationResult per call: tests.test_translation_result_core
-# re-imports `translate`, and the wrapping step only accepts the current class.
 class RecordingTextTranslator:
     def __init__(self) -> None:
         self.calls = []
 
     def translate(self, text, *, table, raw, single_token=False):
-        from translate import TranslationResult
-
         self.calls.append((text, table))
         braille = list(f"T[{text}]")
         return TranslationResult([raw], braille, [0] * len(braille), [0])
@@ -45,8 +42,6 @@ class RecordingMathTranslator:
         self.calls = []
 
     def translate(self, source, *, braille_code, language):
-        from translate import TranslationResult
-
         self.calls.append((source, braille_code, language))
         braille = list(f"M[{source}]")
         return TranslationResult([source], braille, [0] * len(braille), [0])

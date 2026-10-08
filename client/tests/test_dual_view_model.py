@@ -1,7 +1,12 @@
 import unittest
 
 from adapters.translation.fallback import FallbackTextTranslator
-from dual_view.model import DualViewSegment, build_dual_view_model
+from conversion.output import DualViewSegment
+from dual_view.model import build_dual_view_model
+
+
+def reject_mathml(latex):
+	raise AssertionError(f"text items must not be converted to MathML: {latex!r}")
 
 
 class TranslationResult:
@@ -28,7 +33,7 @@ class DualViewModelTest(unittest.TestCase):
 		)
 
 	def test_builds_one_item_per_raw_element(self):
-		model = build_dual_view_model([self.text_segment("ab", "⠁⠃", [0, 1])])
+		model = build_dual_view_model([self.text_segment("ab", "⠁⠃", [0, 1])], mathml_converter=reject_mathml)
 
 		self.assertEqual([item.raw_text for item in model.segments[0].items], ["a", "b"])
 		self.assertEqual([item.braille_text for item in model.segments[0].items], ["⠁", "⠃"])
@@ -37,13 +42,13 @@ class DualViewModelTest(unittest.TestCase):
 		model = build_dual_view_model([
 			self.text_segment("a", "⠁", [0]),
 			self.text_segment("b", "⠃", [0]),
-		])
+		], mathml_converter=reject_mathml)
 
 		self.assertEqual(len(model.segments), 2)
 		self.assertEqual([segment.source_text for segment in model.segments], ["a", "b"])
 
 	def test_supports_multiple_and_empty_braille_ranges(self):
-		model = build_dual_view_model([self.text_segment("abc", "⠁⠂⠉", [0, 2, 2])])
+		model = build_dual_view_model([self.text_segment("abc", "⠁⠂⠉", [0, 2, 2])], mathml_converter=reject_mathml)
 
 		items = model.segments[0].items
 		self.assertEqual(items[0].braille_text, "⠁⠂")
@@ -51,7 +56,7 @@ class DualViewModelTest(unittest.TestCase):
 		self.assertEqual(items[2].braille_text, "⠉")
 
 	def test_keeps_spaces_and_newlines_as_source_items(self):
-		model = build_dual_view_model([self.text_segment("a \nb", "⠁⠀⠃", [0, 1, 2, 2])])
+		model = build_dual_view_model([self.text_segment("a \nb", "⠁⠀⠃", [0, 1, 2, 2])], mathml_converter=reject_mathml)
 
 		self.assertEqual([item.raw_text for item in model.segments[0].items], ["a", " ", "\n", "b"])
 		self.assertTrue(model.segments[0].items[1].is_space)
@@ -63,14 +68,18 @@ class DualViewModelTest(unittest.TestCase):
 				result=TranslationResult(["word"], list("⠺⠕⠗⠙"), [0, 0, 0, 0], [0]),
 				source_kind="text",
 			),
-		])
+		], mathml_converter=reject_mathml)
 
 		self.assertEqual(len(model.segments[0].items), 1)
 		self.assertEqual(model.segments[0].items[0].raw_text, "word")
 		self.assertEqual(model.segments[0].items[0].braille_text, "⠺⠕⠗⠙")
 
+	def test_mathml_converter_is_required(self):
+		with self.assertRaisesRegex(TypeError, "mathml_converter"):
+			build_dual_view_model([])
+
 	def test_empty_results_produce_empty_document(self):
-		self.assertEqual(build_dual_view_model([]).segments, ())
+		self.assertEqual(build_dual_view_model([], mathml_converter=reject_mathml).segments, ())
 
 	def test_multi_character_raw_element_renders_as_one_card(self):
 		model = build_dual_view_model([
@@ -78,14 +87,14 @@ class DualViewModelTest(unittest.TestCase):
 				result=TranslationResult(["我們", "這", "一家"], ["b1", "b2", "b3"], [0, 0, 0], [0, 1, 2]),
 				source_kind="text",
 			),
-		])
+		], mathml_converter=reject_mathml)
 
 		self.assertEqual(len(model.segments[0].items), 3)
 		self.assertEqual([item.raw_text for item in model.segments[0].items], ["我們", "這", "一家"])
 		self.assertEqual([item.braille_text for item in model.segments[0].items], ["b1", "b2", "b3"])
 
 	def test_single_space_is_space_card(self):
-		model = build_dual_view_model([self.text_segment(" ", "⠀", [0])])
+		model = build_dual_view_model([self.text_segment(" ", "⠀", [0])], mathml_converter=reject_mathml)
 
 		self.assertEqual(len(model.segments[0].items), 1)
 		item = model.segments[0].items[0]
@@ -93,7 +102,7 @@ class DualViewModelTest(unittest.TestCase):
 		self.assertTrue(item.is_space)
 
 	def test_single_newline_is_break(self):
-		model = build_dual_view_model([self.text_segment("\n", "", [0])])
+		model = build_dual_view_model([self.text_segment("\n", "", [0])], mathml_converter=reject_mathml)
 
 		self.assertEqual(len(model.segments[0].items), 1)
 		item = model.segments[0].items[0]
@@ -106,7 +115,7 @@ class DualViewModelTest(unittest.TestCase):
 				result=TranslationResult(["我們 這 一家"], list("b1"), [0, 0], [0]),
 				source_kind="text",
 			),
-		])
+		], mathml_converter=reject_mathml)
 
 		self.assertEqual(len(model.segments[0].items), 1)
 		self.assertEqual(model.segments[0].items[0].raw_text, "我們 這 一家")
@@ -116,7 +125,7 @@ class DualViewModelTest(unittest.TestCase):
 		dangling = self.text_segment("xy", "⠁⠃", [0, 99])
 
 		with self.assertRaises(ValueError):
-			build_dual_view_model([dangling])
+			build_dual_view_model([dangling], mathml_converter=reject_mathml)
 
 	def test_unknown_source_kind_raises_value_error(self):
 		segment = DualViewSegment(
@@ -125,7 +134,7 @@ class DualViewModelTest(unittest.TestCase):
 		)
 
 		with self.assertRaisesRegex(ValueError, "source_kind"):
-			build_dual_view_model([segment])
+			build_dual_view_model([segment], mathml_converter=reject_mathml)
 
 	def test_fallback_character_mapping_builds_dual_view_segments(self) -> None:
 		result = FallbackTextTranslator().translate(
@@ -136,7 +145,7 @@ class DualViewModelTest(unittest.TestCase):
 
 		model = build_dual_view_model([
 			DualViewSegment(result=result, source_kind="text"),
-		])
+		], mathml_converter=reject_mathml)
 
 		self.assertEqual(
 			[

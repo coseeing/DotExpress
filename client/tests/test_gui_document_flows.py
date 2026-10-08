@@ -31,9 +31,11 @@ from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
+from conversion.math_service import latex_to_mathml
+from conversion.output import DualViewSegment
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
 from dual_view.html import render_dual_view_html
-from dual_view.model import DualViewSegment, build_dual_view_model
+from dual_view.model import build_dual_view_model
 
 
 def make_snapshot(
@@ -1361,18 +1363,41 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             self.assertEqual((root / "nested" / "alpha.brl").read_bytes(), "⠁⠃".encode("utf-8"))
 
             frame._export_coordinator.write_document(root / "alpha.html", Document("alpha", "text", "b"), "html")
-            cached_html = render_dual_view_html(build_dual_view_model(results))
+            cached_html = render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml))
             self.assertEqual((root / "alpha.html").read_bytes(), cached_html.encode("utf-8"))
             self.assertIn('<span class="source">a</span>', cached_html)
 
             frame._export_coordinator.write_document(root / "beta.html", Document("beta", "text", "b"), "html")
-            empty_html = render_dual_view_html(build_dual_view_model(()))
+            empty_html = render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml))
             self.assertEqual((root / "beta.html").read_bytes(), empty_html.encode("utf-8"))
             self.assertNotEqual(cached_html, empty_html)
 
             with self.assertRaises(OSError):
                 frame._export_coordinator.write_document(root / "missing" / "alpha.html", Document("alpha", "text", "b"), "html")
             self.assertFalse((root / "missing").exists())
+
+    def test_dual_view_and_html_export_render_math_with_real_mathml(self) -> None:
+        frame = self._make_export_frame()
+        results = (
+            DualViewSegment(
+                result=SimpleNamespace(raw=["x^2"], braille=["⠭", "⠘", "⠆"], braille_to_raw_pos=[0, 0, 0], raw_to_braille_pos=[0]),
+                source_kind="math",
+            ),
+        )
+        frame._document_controller.set_dual_view_results("alpha", results)
+        expected = render_dual_view_html(
+            build_dual_view_model(results, mathml_converter=latex_to_mathml),
+            empty_message=gui._("No conversion data is available for this document."),
+        )
+
+        window_html = frame._render_dual_view_for_open_document()
+
+        self.assertEqual(window_html, expected)
+        self.assertIn(latex_to_mathml("x^2"), window_html)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "alpha.html"
+            frame._export_coordinator.write_document(path, Document("alpha", "text", "b"), "html")
+            self.assertEqual(path.read_bytes(), expected.encode("utf-8"))
 
     def test_export_all_html_uses_each_document_cache(self) -> None:
         frame = self._make_export_frame()
@@ -1395,11 +1420,11 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
 
             self.assertEqual(
                 (root / "alpha.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model(results)),
+                render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml)),
             )
             self.assertEqual(
                 (root / "beta.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model(())),
+                render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml)),
             )
         frame.show_info.assert_called_once_with(
             gui._(ExportBatchResult().summary_template),

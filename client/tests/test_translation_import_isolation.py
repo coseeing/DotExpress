@@ -40,6 +40,45 @@ assert "config" not in sys.modules, "config was imported"
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_conversion_does_not_import_dual_view(self) -> None:
+        script = """
+import sys
+import conversion.service
+import conversion.output
+import conversion.wrapping
+loaded = sorted(name for name in sys.modules if name == "dual_view" or name.startswith("dual_view."))
+assert not loaded, f"dual_view modules were imported: {loaded}"
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_dual_view_does_not_import_conversion_or_config(self) -> None:
+        script = """
+import sys
+import dual_view
+import dual_view.model
+import dual_view.html
+loaded = sorted(
+    name for name in sys.modules
+    if name in {"conversion", "config"} or name.startswith("conversion.")
+)
+assert not loaded, f"conversion or config modules were imported: {loaded}"
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

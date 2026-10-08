@@ -24,13 +24,8 @@ class _TrieNode:
     target: str | None = None
 
 
-def _replace_with_trie(text: str, replacements: Iterable[tuple[str, str]]) -> str:
-    """Replace source text using left-to-right, longest-prefix matching.
-
-    The trie is built from dictionary sources and only the original input is
-    scanned. Emitted targets are never re-scanned, so replacement rules cannot
-    cascade into one another.
-    """
+def _build_trie(replacements: Iterable[tuple[str, str]]) -> _TrieNode:
+    """Build the match trie for (source, target) rules; empty sources are skipped."""
     root = _TrieNode()
     for source, target in replacements:
         if not source:
@@ -46,7 +41,16 @@ def _replace_with_trie(text: str, replacements: Iterable[tuple[str, str]]) -> st
         # Match the existing replacement order: the first duplicate source wins.
         if node.target is None:
             node.target = target
+    return root
 
+
+def _scan_trie(text: str, root: _TrieNode) -> str:
+    """Replace source text using left-to-right, longest-prefix matching.
+
+    Only the original input is scanned. Emitted targets are never re-scanned,
+    so replacement rules cannot cascade into one another. The trie is only
+    read, never changed, so one trie can serve many scans.
+    """
     result: list[str] = []
     index = 0
     while index < len(text):
@@ -70,6 +74,10 @@ def _replace_with_trie(text: str, replacements: Iterable[tuple[str, str]]) -> st
             index = longest_end
 
     return "".join(result)
+
+
+def _replace_with_trie(text: str, replacements: Iterable[tuple[str, str]]) -> str:
+    return _scan_trie(text, _build_trie(replacements))
 
 
 def _wrap_atomic_parts(parts: list[str]) -> str:

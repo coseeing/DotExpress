@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import List
 
 import wx
 from dictionaries.actions import get_action_availability, resolve_dictionary_selection
@@ -12,10 +11,9 @@ from dictionaries.entries import (
 	ENTRY_TYPE_OPTIONS,
 	DictionaryEntry,
 	load_dictionary_entries,
-	normalize_entry_type,
-	save_dictionary_entries,
 	validate_dictionary_entry,
 )
+from dictionaries.entry_list_model import DictionaryEntryListModel, DuplicateEntryError, EntryListUpdate
 from dictionaries.manager import (
 	DEFAULT_DICTIONARY_NAME,
 	normalize_dictionary_name,
@@ -330,16 +328,19 @@ DictionaryEntryListCtrl = CallbackVirtualListCtrl
 
 
 class SpeechSymbolsDialog(ContextManagedDialog, wx.Dialog):
-	"""Dialog for editing custom dictionary mappings stored on disk."""
+	"""Dialog for editing custom dictionary mappings stored on disk.
 
-	def __init__(self, parent: wx.Window | None, dictionary_path: Path | None = None):
+	Supervising controller: the widgets and the selected row live here, the
+	entries and the filter in ``DictionaryEntryListModel``.
+	"""
+
+	def __init__(self, parent: wx.Window | None, dictionary_path: Path):
 		super().__init__(parent, title=_("Custom Dictionary Manager"), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
 
-		self.dictionary_path = Path(dictionary_path) if dictionary_path else (Path("data") / "dictionary.csv")
-		self.entries: List[DictionaryEntry] = self._load_entries()
-		self.filtered_entries: List[DictionaryEntry] = list(self.entries)
+		self.dictionary_path = Path(dictionary_path)
+		self._model = DictionaryEntryListModel.load(self.dictionary_path)
 		self._build_ui()
-		self.filter_entries()
+		self._render(self._model.apply_filter(self.filter_ctrl.GetValue(), self._get_selected_index()))
 		self._update_button_states()
 
 	def _build_ui(self) -> None:
@@ -356,7 +357,7 @@ class SpeechSymbolsDialog(ContextManagedDialog, wx.Dialog):
 
 		self.list_ctrl = CallbackVirtualListCtrl(
 			self,
-			self._get_item_text,
+			self._model.cell_text,
 			style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL | wx.LC_VIRTUAL,
 		)
 		self.list_ctrl.InsertColumn(0, _("Source Text"), width=200)
@@ -390,57 +391,17 @@ class SpeechSymbolsDialog(ContextManagedDialog, wx.Dialog):
 
 		finalize_dialog_layout(self, main_sizer)
 
-	def _load_entries(self) -> List[DictionaryEntry]:
-		return load_dictionary_entries(self.dictionary_path)
-
-	def _get_item_text(self, item: int, column: int) -> str:
-		entry = self.filtered_entries[item]
-		if column == 0:
-			return entry.text
-		if column == 1:
-			return entry.braille
-		if column == 2:
-			return ENTRY_TYPE_LABELS.get(entry.entry_type, entry.entry_type)
-		raise ValueError(f"Unknown column: {column}")
-
-	def _entry_matches_filter(self, entry: DictionaryEntry, filter_text: str) -> bool:
-		normalized_filter = filter_text.casefold()
-		return normalized_filter in entry.text.casefold() or normalized_filter in entry.braille.casefold()
-
-	def filter_entries(
-		self,
-		filter_text: str | None = None,
-		preferred_entry: DictionaryEntry | None = None,
-		fallback_index: int = 0,
-	) -> None:
-		previous_entry = preferred_entry or self._get_selected_entry()
-		if filter_text is None:
-			filter_text = self.filter_ctrl.GetValue()
-
-		if filter_text:
-			self.filtered_entries = [
-				entry for entry in self.entries if self._entry_matches_filter(entry, filter_text)
-			]
-		else:
-			self.filtered_entries = list(self.entries)
-
-		self.list_ctrl.SetItemCount(len(self.filtered_entries))
+	def _render(self, update: EntryListUpdate) -> None:
+		self.list_ctrl.SetItemCount(self._model.visible_count)
 		self.list_ctrl.Refresh()
-		if not self.filtered_entries:
+		if update.selection is None:
 			self._clear_selection()
 			self._update_button_states()
 			return
-
-		new_index = min(fallback_index, len(self.filtered_entries) - 1)
-		if previous_entry is not None:
-			try:
-				new_index = self.filtered_entries.index(previous_entry)
-			except ValueError:
-				pass
-		self._select_index(new_index)
+		self._select_index(update.selection)
 
 	def _on_filter_changed(self, event: wx.CommandEvent) -> None:
-		self.filter_entries(self.filter_ctrl.GetValue())
+		self._render(self._model.apply_filter(self.filter_ctrl.GetValue(), self._get_selected_index()))
 		event.Skip()
 
 	def _update_button_states(self) -> None:
@@ -450,13 +411,9 @@ class SpeechSymbolsDialog(ContextManagedDialog, wx.Dialog):
 
 	def _get_selected_index(self) -> int | None:
 		index = self.list_ctrl.GetFirstSelected()
-		if index == wx.NOT_FOUND or index < 0 or index >= len(self.filtered_entries):
+		if index == wx.NOT_FOUND or index < 0 or index >= self._model.visible_count:
 			return None
 		return index
-
-	def _get_selected_entry(self) -> DictionaryEntry | None:
-		index = self._get_selected_index()
-		return self.filtered_entries[index] if index is not None else None
 
 	def _clear_selection(self) -> None:
 		index = self.list_ctrl.GetFirstSelected()
@@ -464,7 +421,7 @@ class SpeechSymbolsDialog(ContextManagedDialog, wx.Dialog):
 			self.list_ctrl.Select(index, False)
 
 	def _select_index(self, index: int) -> None:
-		if index < 0 or index >= len(self.filtered_entries):
+		if index < 0 or index >= self._model.visible_count:
 			self._clear_selection()
 			self._update_button_states()
 			return
@@ -484,60 +441,38 @@ class SpeechSymbolsDialog(ContextManagedDialog, wx.Dialog):
 		new_entry = self._open_entry_dialog()
 		if new_entry is None:
 			return
-		if self._identifier_exists(new_entry.text):
-			wx.MessageBox(
-				_('Source text "{identifier}" already exists.').format(identifier=new_entry.text),
-				_("Error"),
-				wx.OK | wx.ICON_ERROR,
-				parent=self,
-			)
+		try:
+			update = self._model.add(new_entry)
+		except DuplicateEntryError as error:
+			self._show_duplicate_error(error.identifier)
 			return
-		self.entries.append(new_entry)
-		filter_text = self.filter_ctrl.GetValue()
-		if filter_text and not self._entry_matches_filter(new_entry, filter_text):
+		if update.filter_cleared:
 			self.filter_ctrl.ChangeValue("")
-			filter_text = ""
-		self.filter_entries(filter_text, preferred_entry=new_entry)
+		self._render(update)
 
 	def _on_edit_clicked(self, _event: wx.CommandEvent) -> None:
 		self._edit_selected()
 
 	def _edit_selected(self) -> None:
 		visible_index = self._get_selected_index()
-		current_entry = self._get_selected_entry()
+		current_entry = self._model.visible_entry(visible_index)
 		if visible_index is None or current_entry is None:
 			return
 		updated_entry = self._open_entry_dialog(current_entry)
 		if updated_entry is None:
 			return
-		if self._identifier_exists(updated_entry.text, exclude_entry=current_entry):
-			wx.MessageBox(
-				_('Source text "{identifier}" already exists.').format(identifier=updated_entry.text),
-				_("Error"),
-				wx.OK | wx.ICON_ERROR,
-				parent=self,
-			)
+		try:
+			update = self._model.replace(visible_index, updated_entry)
+		except DuplicateEntryError as error:
+			self._show_duplicate_error(error.identifier)
 			return
-		full_index = next(
-			index for index, entry in enumerate(self.entries) if entry is current_entry
-		)
-		self.entries[full_index] = updated_entry
-		self.filter_entries(
-			self.filter_ctrl.GetValue(),
-			preferred_entry=updated_entry,
-			fallback_index=visible_index,
-		)
+		self._render(update)
 
 	def _on_remove_clicked(self, _event: wx.CommandEvent) -> None:
 		visible_index = self._get_selected_index()
-		current_entry = self._get_selected_entry()
-		if visible_index is None or current_entry is None:
+		if visible_index is None:
 			return
-		self.entries.remove(current_entry)
-		self.filter_entries(
-			self.filter_ctrl.GetValue(),
-			fallback_index=visible_index,
-		)
+		self._render(self._model.remove(visible_index))
 
 	def _open_entry_dialog(self, entry: DictionaryEntry | None = None) -> DictionaryEntry | None:
 		with AddSymbolDialog(self, entry) as dialog:
@@ -545,29 +480,21 @@ class SpeechSymbolsDialog(ContextManagedDialog, wx.Dialog):
 				return None
 			return dialog.get_entry()
 
-	def _identifier_exists(
-		self,
-		identifier: str,
-		exclude_entry: DictionaryEntry | None = None,
-	) -> bool:
-		return any(
-			entry.text == identifier and entry is not exclude_entry
-			for entry in self.entries
+	def _show_duplicate_error(self, identifier: str) -> None:
+		wx.MessageBox(
+			_('Source text "{identifier}" already exists.').format(identifier=identifier),
+			_("Error"),
+			wx.OK | wx.ICON_ERROR,
+			parent=self,
 		)
-
-	def _normalize_type(self, entry_type: str | None) -> str:
-		return normalize_entry_type(entry_type)
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
 		try:
-			self._save_entries()
+			self._model.save(self.dictionary_path)
 		except IOError as exc:
 			wx.MessageBox(_("Failed to save: {error}").format(error=exc), _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
 			return
 		event.Skip()
-
-	def _save_entries(self) -> None:
-		save_dictionary_entries(self.dictionary_path, self.entries)
 
 
 class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):

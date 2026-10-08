@@ -15,6 +15,7 @@ regenerate it to make a refactor pass.
 """
 
 import csv
+import inspect
 import json
 import random
 import sys
@@ -26,6 +27,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from dictionaries.entries import DictionaryEntry, load_dictionary_entries
+from dictionaries.entry_list_model import DictionaryEntryListModel
 from i18n import _
 from tests import wx_stub
 
@@ -1353,6 +1355,23 @@ class SpeechSymbolsDialogOkTest(_EditorTestCase):
         # KNOWN BUG (P2-2 spec, Q3; data loss), pinned as it is today, NOT desired: the
         # file was truncated before the failing row, so Beta is gone from disk.
         self.assertEqual(harness.saved_csv(), HEADER)
+
+
+# --- the dialog delegates to the model (P2-2 part C) -------------------------
+
+
+class SpeechSymbolsDialogModelTest(_EditorTestCase):
+    def test_dictionary_path_is_required(self) -> None:
+        parameter = inspect.signature(SpeechSymbolsDialog.__init__).parameters["dictionary_path"]
+
+        self.assertIs(parameter.default, inspect.Parameter.empty)
+
+    def test_model_is_loaded_from_the_dictionary_path(self) -> None:
+        harness = self.open_editor([ALPHA, BETA])
+
+        self.assertIsInstance(harness.dialog._model, DictionaryEntryListModel)
+        self.assertEqual(harness.dialog._model.entries, (DictionaryEntry(*ALPHA), DictionaryEntry(*BETA)))
+        self.assertEqual(harness.dialog.dictionary_path, harness.path)
 
 
 # --- golden trace -----------------------------------------------------------

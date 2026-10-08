@@ -10,24 +10,14 @@ from i18n import _, resource_path
 from app_paths import ApplicationDataError, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
-from conversion.jobs import (
-	ConversionCompletionPolicy,
-	ConversionJobFailure,
-	ConversionJobRequest,
-	ConversionJobRunner,
-	ConversionJobSuccess,
-)
-from conversion.service import (
-	ConversionOutput,
-	ConversionRequest,
-	ConversionStageError,
-	get_public_error_message,
-)
+from conversion.presenter import ConversionPresenter
+from conversion.service import ConversionRequest
 from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
 from dictionaries.presenter import DictionaryManagementPresenter
 from documents.controller import DocumentController
-from documents.formats import ExportContext, build_export_wildcard, get_format
+from documents.export_coordinator import ExportCoordinator
+from documents.formats import DocumentFormatDescriptor, build_export_wildcard, get_format
 from documents.session import (
     format_window_title,
 )
@@ -40,9 +30,6 @@ from documents.workspace import (
     normalize_document_name,
 )
 from documents.workspace_service import DocumentWorkspaceService
-from documents.export_results import (
-    ExportBatchResult,
-)
 from ui.action_menu import get_document_menu_enabled_state
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from ui.menu_builder import apply_document_menu_state, build_document_menu
@@ -220,14 +207,22 @@ class BrailleFrame(wx.Frame):
 		return editors_box
 
 	def _initialize_conversion_state(self) -> None:
-		self._conversion_runner = ConversionJobRunner(
+		self._convert_dialog = None
+		self._conversion_presenter = ConversionPresenter(
+			self,
+			self._document_controller,
 			runtime=self.translation_runtime,
-			on_success=self._finish_conversion_success,
-			on_failure=self._finish_conversion_failure,
+			build_request=self._build_conversion_request_for_text,
+			get_translation_tables=lambda: self.translation_tables,
+			call_after=wx.CallAfter,
+			call_later=wx.CallLater,
+		)
+		self._export_coordinator = ExportCoordinator(
+			self,
+			self._document_controller,
+			self._conversion_presenter,
 			call_after=wx.CallAfter,
 		)
-		self._convert_dialog = None
-		self._convert_dialog_timer = None
 
 	def _apply_initial_settings(self, initial_settings: ViewSettings) -> None:
 		self._apply_editor_view_settings(initial_settings)
@@ -457,12 +452,12 @@ class BrailleFrame(wx.Frame):
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
 
-	def _show_file_error(self, message: str, error: Exception, parent: wx.Window | None = None) -> None:
+	def _show_file_error(self, message: str, error: Exception) -> None:
 		wx.MessageBox(
 			message.format(error=error),
 			_("Error"),
 			wx.OK | wx.ICON_ERROR,
-			parent=parent or self,
+			parent=self,
 		)
 
 	def on_open_coseeing_website(self, _evt: wx.CommandEvent) -> None:
@@ -553,6 +548,15 @@ class BrailleFrame(wx.Frame):
 			charset_maps=get_charset_maps(),
 		)
 
+	def _build_conversion_request_for_text(self, raw_text: str) -> ConversionRequest:
+		settings = self.translation_settings
+		return self._build_conversion_request(
+			raw_text,
+			settings.output_mode,
+			settings.width,
+			self._get_selected_dictionary_path(),
+		)
+
 	def _format_batch_issue_lines(self, issues: list[BatchIssue]) -> list[str]:
 		return [f"{issue.path.name}: {issue.reason}" for issue in issues]
 
@@ -561,53 +565,6 @@ class BrailleFrame(wx.Frame):
 			return
 		with FileIssuesDialog(self, title=title, message=message, issues=self._format_batch_issue_lines(issues)) as dialog:
 			dialog.ShowModal()
-
-	def _confirm_overwrite_all(self, conflicts: list[Path]) -> bool:
-		if not conflicts:
-			return True
-		message = _(
-			"The destination folder already contains one or more files that would be overwritten. Do you want to overwrite all of them?"
-		)
-		return (
-			wx.MessageBox(message, _("Confirm Overwrite"), wx.YES_NO | wx.ICON_WARNING, parent=self) == wx.YES
-		)
-
-	def _export_document_with_dialog(self, document: Document, format_key: str) -> None:
-		descriptor = get_format(format_key)
-		default_file = f"{document.name}{descriptor.extension}"
-		wildcard = build_export_wildcard(descriptor, _)
-		with wx.FileDialog(
-			self,
-			_("Export Document"),
-			defaultFile=default_file,
-			wildcard=wildcard,
-			style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
-		) as file_dialog:
-			if file_dialog.ShowModal() != wx.ID_OK:
-				return
-			destination_path = Path(file_dialog.GetPath())
-		target_suffix = descriptor.extension
-		if destination_path.suffix.casefold() != target_suffix:
-			destination_path = destination_path.with_suffix(target_suffix)
-		if document.braille is None:
-			self._start_export_conversion(
-				document,
-				destination_path,
-				format_key,
-				on_success=lambda braille: self._continue_single_export(
-					Document(document.name, document.text, braille),
-					destination_path,
-					format_key,
-				),
-				on_error=lambda message: wx.MessageBox(
-					message,
-					_("Error"),
-					wx.OK | wx.ICON_ERROR,
-					parent=self,
-				),
-			)
-			return
-		self._continue_single_export(document, destination_path, format_key)
 
 	def _set_view_font_size(self, font_size: int) -> None:
 		self.view_settings = normalize_view_settings(
@@ -916,23 +873,14 @@ class BrailleFrame(wx.Frame):
 		if not self._save_open_document_with_feedback():
 			return
 		selected_document = self._get_selected_document() or selected_document
-		self._export_document_with_dialog(selected_document, format_key)
+		self._export_coordinator.export_document(selected_document, format_key)
 
 	def on_export_all_documents(self, format_key: str) -> None:
 		if not self._document_controller.has_documents:
 			return
 		if not self._save_open_document_with_feedback():
 			return
-		with wx.DirDialog(self, _("Export All Documents")) as dir_dialog:
-			if dir_dialog.ShowModal() != wx.ID_OK:
-				return
-			destination_dir = Path(dir_dialog.GetPath())
-		suffix = get_format(format_key).extension
-		documents = self._document_controller.documents_snapshot()
-		conflicts = [destination_dir / f"{document.name}{suffix}" for document in documents if (destination_dir / f"{document.name}{suffix}").exists()]
-		if conflicts and not self._confirm_overwrite_all(conflicts):
-			return
-		self._export_next_document(documents, destination_dir, format_key, ExportBatchResult())
+		self._export_coordinator.export_all(format_key)
 
 	def on_editor_mousewheel(self, event: wx.MouseEvent) -> None:
 		step = get_font_size_step_from_wheel(event.GetWheelRotation(), event.ControlDown())
@@ -962,7 +910,7 @@ class BrailleFrame(wx.Frame):
 				controller = self._document_controller
 				document = controller.get_document(controller.open_document_name)
 				if document is not None:
-					self._export_document_with_dialog(document, get_format("brl").key)
+					self._export_coordinator.export_document(document, get_format("brl").key)
 			self.output_txt.SetFocus()
 			return
 		event.Skip()
@@ -1011,154 +959,30 @@ class BrailleFrame(wx.Frame):
 		with SpeechSymbolsDialog(self, dictionary_path=dictionary_path) as editor:
 			editor.ShowModal()
 
-	def _write_export_document(self, destination_path: Path, document: Document, format_key: str) -> None:
-		descriptor = get_format(format_key)
-		if not descriptor.exportable or descriptor.writer is None:
-			raise ValueError(f'Unsupported export format: "{format_key}".')
-		context = ExportContext(dual_view_results=self._document_controller.get_dual_view_results(document.name))
-		descriptor.writer(destination_path, document, context)
-
-	def _continue_single_export(self, document: Document, destination_path: Path, format_key: str) -> None:
-		try:
-			self._write_export_document(destination_path, document, format_key)
-		except OSError as exc:
-			self._show_file_error(_("Failed to export document: {error}"), exc)
-			return
-		wx.MessageBox(
-			_("The document was exported successfully."),
-			_("Export Complete"),
-			wx.OK | wx.ICON_INFORMATION,
-			parent=self,
-		)
-
-	def _missing_default_table_message(self) -> str | None:
-		if self.translation_tables.get("default"):
-			return None
-		return _("Please select a translation table first.")
-
-	def _start_export_conversion(
-		self,
-		document: Document,
-		destination_path: Path,
-		format_key: str,
-		*,
-		on_success=None,
-		on_error=None,
-		on_missing_table=None,
-	) -> bool:
-		message = self._missing_default_table_message()
-		if message is not None:
-			if on_missing_table is not None:
-				on_missing_table(message)
-			elif on_error is not None:
-				on_error(message)
-			return False
-		settings = self.translation_settings
-		self._start_conversion(
-			document.text,
-			settings.width,
-			settings.output_mode,
-			self._get_selected_dictionary_path(),
-			on_success=on_success,
-			on_error=on_error,
-			update_output=False,
-			show_success=False,
-		)
-		return True
-
-	def _export_next_document(
-		self,
-		remaining: list[Document],
-		destination_dir: Path,
-		format_key: str,
-		result: ExportBatchResult,
-	) -> None:
-		if not remaining:
-			self._show_export_all_result(result)
-			return
-
-		descriptor = get_format(format_key)
-		document = remaining[0]
-		rest = remaining[1:]
-		destination_path = destination_dir / f"{document.name}{descriptor.extension}"
-
-		def continue_batch() -> None:
-			wx.CallAfter(self._export_next_document, rest, destination_dir, format_key, result)
-
-		def write_document(export_document: Document) -> None:
-			try:
-				self._write_export_document(destination_path, export_document, format_key)
-			except OSError as exc:
-				result.add_failure(document.name, str(exc))
-			else:
-				result.add_success(document.name)
-			continue_batch()
-
-		if document.braille is not None:
-			write_document(document)
-			return
-
-		def conversion_failed(message: str) -> None:
-			result.add_failure(document.name, message)
-			continue_batch()
-
-		self._start_export_conversion(
-			document,
-			destination_path,
-			format_key,
-			on_success=lambda braille: write_document(Document(document.name, document.text, braille)),
-			on_error=conversion_failed,
-			on_missing_table=conversion_failed,
-		)
-
-	def _show_export_all_result(self, result: ExportBatchResult) -> None:
-		style = wx.OK | (wx.ICON_INFORMATION if result.all_succeeded else wx.ICON_WARNING)
-		message = _(result.summary_template).format(**result.summary_values)
-		wx.MessageBox(
-			message,
-			_(result.summary_title),
-			style,
-			parent=self,
-		)
-
 	def on_convert(self, _evt):
-		if self._conversion_runner.is_running():
-			return
-
-		message = self._missing_default_table_message()
-		if message is not None:
-			wx.MessageBox(
-				message,
-				_("Info"),
-				wx.OK | wx.ICON_INFORMATION,
-				parent=self,
-			)
-			return
-		raw_text = self.input_txt.GetValue()
-		settings = self.translation_settings
-		self._start_conversion(
-			raw_text,
-			settings.width,
-			settings.output_mode,
-			self._get_selected_dictionary_path(),
-		)
+		self._conversion_presenter.convert()
 
 	def _on_close(self, evt: wx.CloseEvent):
-		if self._conversion_runner.is_running() and evt.CanVeto():
+		if self._conversion_presenter.is_running() and evt.CanVeto():
 			evt.Veto()
 			return
 		if not self._save_open_document_with_feedback():
 			if evt.CanVeto():
 				evt.Veto()
 			return
-		self._close_converting_dialog()
+		self.close_converting_dialog()
 		if self._dual_view_frame is not None:
 			viewer = self._dual_view_frame
 			self._dual_view_frame = None
 			viewer.Destroy()
 		evt.Skip()
 
-	def _set_conversion_busy(self, busy: bool):
+	# --- ConversionView (conversion/presenter.py) ---------------------------
+
+	def get_source_text(self) -> str:
+		return self.input_txt.GetValue()
+
+	def set_conversion_busy(self, busy: bool) -> None:
 		menu_bar = self.GetMenuBar()
 		if menu_bar is not None:
 			for menu_label in (_("File"), _("Translation")):
@@ -1168,51 +992,14 @@ class BrailleFrame(wx.Frame):
 		self.document_list.Enable(not busy)
 		self.input_txt.Enable(not busy)
 
-	def _start_conversion(
-		self,
-		raw_text: str,
-		width: int,
-		output_mode: str,
-		dictionary_path: Path,
-		*,
-		on_success=None,
-		on_error=None,
-		update_output: bool = True,
-		show_success: bool = True,
-	):
-		self._set_conversion_busy(True)
-		self._close_converting_dialog()
-		policy = ConversionCompletionPolicy(
-			on_success=on_success,
-			on_error=on_error,
-			update_output=update_output,
-			show_success=show_success,
-		)
-		job_id = self._conversion_runner.start(
-			ConversionJobRequest(
-			conversion_request=self._build_conversion_request(
-				raw_text,
-				output_mode,
-					width,
-					dictionary_path,
-				),
-				completion_policy=policy,
-			)
-		)
-		self._convert_dialog_timer = wx.CallLater(2000, self._show_converting_dialog, job_id)
-
-	def _show_converting_dialog(self, job_id: int):
-		if job_id != self._conversion_runner.active_job_id:
-			return
-		if not self._conversion_runner.is_running():
-			return
+	def show_converting_dialog(self) -> None:
 		if self._convert_dialog is not None:
 			return
 		self._convert_dialog = ConvertingDialog(self)
 		self._convert_dialog.Show()
 		self._convert_dialog.Raise()
 
-	def _close_converting_dialog(self):
+	def close_converting_dialog(self) -> None:
 		if self._convert_dialog is None:
 			return
 		dialog = self._convert_dialog
@@ -1220,77 +1007,52 @@ class BrailleFrame(wx.Frame):
 		dialog.Unbind(wx.EVT_CLOSE)
 		dialog.Destroy()
 
-	def _complete_conversion(
-		self,
-		policy: ConversionCompletionPolicy,
-		conversion_output: ConversionOutput | None = None,
-		error_message: str | None = None,
-		display_text: str | None = None,
-	):
-		if self._convert_dialog_timer is not None:
-			self._convert_dialog_timer.Stop()
-			self._convert_dialog_timer = None
-		self._close_converting_dialog()
-		self._set_conversion_busy(False)
-		on_success = policy.on_success
-		on_error = policy.on_error
-		update_output = policy.update_output
-		show_success = policy.show_success
+	def show_conversion_output(self, text: str) -> None:
+		self.output_txt.SetValue(text)
+		self.output_txt.SetFocus()
 
-		if error_message is not None:
-			if on_error is not None:
-				on_error(error_message)
-			else:
-				wx.MessageBox(
-					error_message,
-					_("Error"),
-					wx.OK | wx.ICON_ERROR,
-					parent=self,
-				)
-			return
+	def refresh_dual_view(self) -> None:
+		self._refresh_dual_view()
 
-		output = conversion_output or ConversionOutput(display_text or "", ())
-		converted_braille = output.display_text
-		if update_output:
-			self.output_txt.SetValue(converted_braille)
-			self.output_txt.SetFocus()
-			controller = self._document_controller
-			open_name = controller.open_document_name
-			if open_name:
-				document = controller.get_document(open_name)
-				if document is not None:
-					controller.replace_document(
-						Document(
-							document.name,
-							self.input_txt.GetValue(),
-							converted_braille,
-						)
-					)
-				controller.set_dual_view_results(open_name, output.dual_view_segments)
-			self._refresh_dual_view()
-		if on_success is not None:
-			on_success(converted_braille)
-		if show_success:
-			wx.MessageBox(_("Conversion completed."), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+	def show_info(self, message: str, caption: str) -> None:
+		wx.MessageBox(message, caption, wx.OK | wx.ICON_INFORMATION, parent=self)
 
-	def _finish_conversion_success(self, result: ConversionJobSuccess) -> None:
-		self._complete_conversion(result.completion_policy, conversion_output=result.conversion_output)
+	def show_error(self, message: str, caption: str) -> None:
+		wx.MessageBox(message, caption, wx.OK | wx.ICON_ERROR, parent=self)
 
-	def _finish_conversion_failure(self, result: ConversionJobFailure) -> None:
-		message_templates = {
-			"ascii": _("ASCII conversion failed: {error}"),
-			"text_processing": _("Text processing failed: {error}"),
-		}
-		message_template = message_templates.get(
-			result.error.stage,
-			_("Translation failed: {error}"),
+	# --- ExportView (documents/export_coordinator.py) -----------------------
+
+	def show_warning(self, message: str, caption: str) -> None:
+		wx.MessageBox(message, caption, wx.OK | wx.ICON_WARNING, parent=self)
+
+	def choose_export_path(self, default_file: str, descriptor: DocumentFormatDescriptor) -> Path | None:
+		wildcard = build_export_wildcard(descriptor, _)
+		with wx.FileDialog(
+			self,
+			_("Export Document"),
+			defaultFile=default_file,
+			wildcard=wildcard,
+			style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+		) as file_dialog:
+			if file_dialog.ShowModal() != wx.ID_OK:
+				return None
+			return Path(file_dialog.GetPath())
+
+	def choose_export_directory(self) -> Path | None:
+		with wx.DirDialog(self, _("Export All Documents")) as dir_dialog:
+			if dir_dialog.ShowModal() != wx.ID_OK:
+				return None
+			return Path(dir_dialog.GetPath())
+
+	def confirm_overwrite_all(self, conflicts: list[Path]) -> bool:
+		if not conflicts:
+			return True
+		message = _(
+			"The destination folder already contains one or more files that would be overwritten. Do you want to overwrite all of them?"
 		)
-		error_text = _(get_public_error_message(result.error.error))
-		self._complete_conversion(
-			result.completion_policy,
-			error_message=message_template.format(error=error_text),
+		return (
+			wx.MessageBox(message, _("Confirm Overwrite"), wx.YES_NO | wx.ICON_WARNING, parent=self) == wx.YES
 		)
-
 
 def _show_application_data_error(error: ApplicationDataError) -> None:
 	wx.MessageBox(

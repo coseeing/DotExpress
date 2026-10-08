@@ -36,11 +36,8 @@ from documents.workspace import (
     DEFAULT_DOCUMENT_NAME,
     Document,
     create_default_document,
-    document_package_path_for_name,
 	get_workspace_directory,
-    load_workspace_documents,
     normalize_document_name,
-    save_document_package,
 )
 from documents.workspace_service import DocumentWorkspaceService
 from documents.export_results import (
@@ -811,15 +808,10 @@ class BrailleFrame(wx.Frame):
 		if new_name is None or new_name == selected_document.name:
 			return
 		try:
-			renamed_document = Document(name=new_name, text=selected_document.text, braille=selected_document.braille)
-			save_document_package(document_package_path_for_name(renamed_document.name, self._workspace_service.workspace_dir), renamed_document)
-			old_path = document_package_path_for_name(selected_document.name, self._workspace_service.workspace_dir)
-			if old_path.exists():
-				old_path.unlink()
+			renamed_document = self._workspace_service.rename_document(selected_document.name, new_name)
 		except OSError as exc:
 			self._show_file_error(_("Failed to save document: {error}"), exc)
 			return
-		renamed_document = self._document_controller.rename_document(selected_document.name, new_name)
 		if renamed_document is None:
 			return
 		self._refresh_document_list(renamed_document.name)
@@ -841,13 +833,10 @@ class BrailleFrame(wx.Frame):
 		if confirmation != wx.YES:
 			return
 		try:
-			package_path = document_package_path_for_name(selected_document.name, self._workspace_service.workspace_dir)
-			if package_path.exists():
-				package_path.unlink()
+			delete_decision = self._workspace_service.delete_document(selected_document.name)
 		except OSError as exc:
 			self._show_file_error(_("Failed to delete document: {error}"), exc)
 			return
-		delete_decision = self._document_controller.delete_document(selected_document.name)
 		self._refresh_document_list(self._document_controller.selected_document_name)
 		if self._document_controller.has_documents:
 			open_name = self._document_controller.open_document_name
@@ -872,24 +861,18 @@ class BrailleFrame(wx.Frame):
 		)
 		if confirmation != wx.YES:
 			return
-		for document in self._document_controller.documents_snapshot():
-			try:
-				package_path = document_package_path_for_name(document.name, self._workspace_service.workspace_dir)
-				if package_path.exists():
-					package_path.unlink()
-			except OSError as exc:
-				self._show_file_error(_("Failed to delete document: {error}"), exc)
-				remaining_documents, invalid_paths = load_workspace_documents(self._workspace_service.workspace_dir)
-				self._document_controller.restore_documents_after_delete_all_failure(remaining_documents)
-				self._refresh_document_list()
-				self._review_invalid_workspace_files(invalid_paths)
-				if self._document_controller.has_documents:
-					self._open_document_by_name(self._document_controller.first_document_name)
-				else:
-					self._clear_document_editors()
-				self._refresh_dual_view()
-				return
-		self._document_controller.delete_all_documents()
+		result = self._workspace_service.delete_all_documents(
+			on_error=lambda exc: self._show_file_error(_("Failed to delete document: {error}"), exc),
+		)
+		if not result.completed:
+			self._refresh_document_list()
+			self._review_invalid_workspace_files(result.invalid_paths)
+			if self._document_controller.has_documents:
+				self._open_document_by_name(self._document_controller.first_document_name)
+			else:
+				self._clear_document_editors()
+			self._refresh_dual_view()
+			return
 		self._update_window_title()
 		self._refresh_document_list()
 		self._clear_document_editors()

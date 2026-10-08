@@ -25,7 +25,7 @@ tearDownModule = _SCOPE.deactivate
 
 from documents.controller import DocumentController
 from documents.workspace import BatchIssue, Document, load_document_package, save_document_package
-from documents.workspace_service import DocumentWorkspaceService, ImportResult
+from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
 from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
@@ -429,6 +429,116 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
                     gui._("Some files were skipped during import."),
                     [issue],
                 ),
+            ],
+        )
+
+    def _patch_name_dialog(self, name: str):
+        dialog = Mock()
+        dialog.__enter__ = Mock(return_value=dialog)
+        dialog.__exit__ = Mock(return_value=False)
+        dialog.ShowModal.return_value = gui.wx.ID_OK
+        dialog.get_document_name.return_value = name
+        return patch.object(gui, "DocumentNameDialog", Mock(return_value=dialog))
+
+    def test_rename_goes_through_service_then_refreshes(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+        frame._workspace_service.rename_document.return_value = Document("gamma", "a", "1")
+
+        with self._patch_name_dialog("gamma"):
+            frame.on_rename_document(None)
+
+        frame._workspace_service.rename_document.assert_called_once_with("alpha", "gamma")
+        self.assertEqual(
+            frame.ui.mock_calls,
+            [call._refresh_document_list("gamma"), call._update_window_title(), call._refresh_dual_view()],
+        )
+        frame._show_file_error.assert_not_called()
+
+    def test_rename_failure_from_service_shows_save_error(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+        error = OSError("locked")
+        frame._workspace_service.rename_document.side_effect = error
+
+        with self._patch_name_dialog("gamma"):
+            frame.on_rename_document(None)
+
+        frame._show_file_error.assert_called_once_with(gui._("Failed to save document: {error}"), error)
+        self.assertEqual(frame.ui.mock_calls, [])
+
+    def test_delete_goes_through_service_then_refreshes(self) -> None:
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
+        frame = self._make_frame(documents, open_name="alpha", selected_name="beta")
+        frame._workspace_service.delete_document.side_effect = frame._document_controller.delete_document
+
+        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+            frame.on_delete_document(None)
+
+        frame._workspace_service.delete_document.assert_called_once_with("beta")
+        self.assertEqual(frame.ui.mock_calls, [call._refresh_document_list("alpha"), call._refresh_dual_view()])
+        frame._show_file_error.assert_not_called()
+
+    def test_delete_failure_from_service_shows_delete_error(self) -> None:
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
+        frame = self._make_frame(documents, open_name="alpha", selected_name="beta")
+        error = OSError("locked")
+        frame._workspace_service.delete_document.side_effect = error
+
+        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+            frame.on_delete_document(None)
+
+        frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
+        self.assertEqual(frame.ui.mock_calls, [])
+        self.assertEqual(frame._document_controller.documents, documents)
+
+    def test_delete_all_success_goes_through_service(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+        controller = frame._document_controller
+
+        def delete_all_documents(*, on_error):
+            controller.delete_all_documents()
+            return DeleteAllResult(completed=True, invalid_paths=[])
+
+        frame._workspace_service.delete_all_documents.side_effect = delete_all_documents
+
+        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+            frame.on_delete_all_documents(None)
+
+        frame._workspace_service.delete_all_documents.assert_called_once_with(on_error=ANY)
+        self.assertEqual(
+            frame.ui.mock_calls,
+            [
+                call._update_window_title(),
+                call._refresh_document_list(),
+                call._clear_document_editors(),
+                call._ensure_open_document_exists(),
+                call._refresh_dual_view(),
+            ],
+        )
+
+    def test_delete_all_failure_reviews_paths_from_service(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+        controller = frame._document_controller
+        error = OSError("locked")
+        invalid_paths = [self.workspace / "alpha.dep"]
+
+        def delete_all_documents(*, on_error):
+            on_error(error)
+            controller.restore_documents_after_delete_all_failure([])
+            return DeleteAllResult(completed=False, invalid_paths=invalid_paths)
+
+        frame._workspace_service.delete_all_documents.side_effect = delete_all_documents
+
+        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+            frame.on_delete_all_documents(None)
+
+        frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
+        self.assertEqual(
+            frame.ui.mock_calls,
+            [
+                call._refresh_document_list(),
+                call._review_invalid_workspace_files(invalid_paths),
+                call._clear_document_editors(),
+                call._refresh_dual_view(),
             ],
         )
 
@@ -925,21 +1035,23 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._open_document_by_name = Mock()
         frame._clear_document_editors = Mock()
         frame._refresh_dual_view = Mock()
+        error = OSError("unlink failed")
+        controller = frame._document_controller
 
-        alpha_path = Mock()
-        alpha_path.exists.return_value = True
-        alpha_path.unlink.return_value = None
-        beta_path = Mock()
-        beta_path.exists.return_value = True
-        beta_path.unlink.side_effect = OSError("unlink failed")
+        def delete_all_documents(*, on_error):
+            # Stub service: alpha's package is deleted, beta's unlink fails, the reload finds beta.
+            on_error(error)
+            controller.restore_documents_after_delete_all_failure([Document("beta", "reloaded", "braille-b")])
+            return DeleteAllResult(completed=False, invalid_paths=[])
 
-        with (
-            patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES),
-            patch.object(gui, "document_package_path_for_name", side_effect=[alpha_path, beta_path]),
-            patch.object(gui, "load_workspace_documents", return_value=([Document("beta", "reloaded", "braille-b")], [])),
-        ):
+        frame._workspace_service = Mock()
+        frame._workspace_service.delete_all_documents.side_effect = delete_all_documents
+
+        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
             frame.on_delete_all_documents(None)
 
+        frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
+        frame._review_invalid_workspace_files.assert_called_once_with([])
         self.assertEqual(frame._document_controller.dual_view_results_by_document, {"beta": ("fresh-beta",)})
         frame._refresh_dual_view.assert_called_once_with()
         frame._open_document_by_name.assert_called_once_with("beta")

@@ -1,3 +1,4 @@
+import importlib.util
 import unittest
 
 from conversion.text import char_maps, dictionary_rules, pipeline
@@ -5,6 +6,10 @@ from languageDetection import LanguageDetector
 
 
 class RemovedDeadCodeTest(unittest.TestCase):
+    def test_dictionary_import_flow_module_is_removed(self) -> None:
+        self.assertIsNone(importlib.util.find_spec("dictionaries.import_flow"))
+        self.assertIsNotNone(importlib.util.find_spec("dictionaries.name_prompt"))
+
     def test_dead_conversion_text_helpers_are_removed(self) -> None:
         for module, name in (
             (dictionary_rules, "translate__mapping_string"),

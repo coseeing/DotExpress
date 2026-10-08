@@ -239,4 +239,3 @@ class ConfigStore:
         data[CLIENT_SECTION] = section_data
         self._save(data)
         return client_id
-

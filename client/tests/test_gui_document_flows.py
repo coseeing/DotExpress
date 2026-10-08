@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import tempfile
 import unittest
 import zipfile
@@ -3349,6 +3350,19 @@ class FrameViewMethodsTest(unittest.TestCase):
                 call("info text", "Info caption", gui.wx.OK | gui.wx.ICON_INFORMATION, parent=frame),
                 call("error text", "Error caption", gui.wx.OK | gui.wx.ICON_ERROR, parent=frame),
             ],
+        )
+
+    def test_show_file_error_formats_the_error_for_the_frame(self) -> None:
+        frame = self._make_frame()
+        with patch.object(gui.wx, "MessageBox") as message_box:
+            frame._show_file_error("Failed: {error}", OSError("disk full"))
+
+        message_box.assert_called_once_with(
+            "Failed: disk full", gui._("Error"), gui.wx.OK | gui.wx.ICON_ERROR, parent=frame
+        )
+        self.assertEqual(
+            list(inspect.signature(gui.BrailleFrame._show_file_error).parameters),
+            ["self", "message", "error"],
         )
 
 

@@ -11,10 +11,7 @@ from app_paths import ApplicationDataError, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
 from conversion.presenter import ConversionPresenter
-from conversion.service import (
-	ConversionRequest,
-	ConversionStageError,
-)
+from conversion.service import ConversionRequest
 from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
 from dictionaries.presenter import DictionaryManagementPresenter
@@ -455,12 +452,12 @@ class BrailleFrame(wx.Frame):
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
 
-	def _show_file_error(self, message: str, error: Exception, parent: wx.Window | None = None) -> None:
+	def _show_file_error(self, message: str, error: Exception) -> None:
 		wx.MessageBox(
 			message.format(error=error),
 			_("Error"),
 			wx.OK | wx.ICON_ERROR,
-			parent=parent or self,
+			parent=self,
 		)
 
 	def on_open_coseeing_website(self, _evt: wx.CommandEvent) -> None:

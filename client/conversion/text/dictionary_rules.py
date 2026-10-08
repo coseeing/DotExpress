@@ -116,6 +116,106 @@ def mapping(
     return "".join(result)
 
 
+@dataclass(frozen=True)
+class LoadedDictionaryRules:
+    """Parsed dictionary rules with their match tries, read once and applied many times.
+
+    Immutable: the rule tuples never change and the private tries are built once,
+    in __post_init__, and only read afterwards.
+    """
+
+    raw_rules: tuple[tuple[str, str], ...] = ()
+    replacement_rules: tuple[tuple[str, str], ...] = ()
+    _raw_trie: _TrieNode = field(init=False, repr=False, compare=False)
+    _replacement_trie: _TrieNode = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_raw_trie", _build_trie(self.raw_rules))
+        object.__setattr__(self, "_replacement_trie", _build_trie(self.replacement_rules))
+
+    @classmethod
+    def from_paths(
+        cls,
+        dictionary_path: Path | str,
+        bopomofo_path: Path | str,
+        *,
+        processing: Callable[[str], str],
+    ) -> "LoadedDictionaryRules":
+        """Read the dictionary and Bopomofo rule files.
+
+        A missing dictionary gives empty rules without opening the Bopomofo file.
+        """
+        dictionary_path = Path(dictionary_path)
+        if not dictionary_path.exists():
+            return cls()
+
+        with Path(bopomofo_path).open("r", newline="", encoding="utf-8") as f_b:
+            reader = csv.DictReader(f_b)
+            if reader.fieldnames is None:
+                raise ValueError("CSV must contain header row.")
+            if not {"Bopomofo", "Braille"}.issubset(reader.fieldnames):
+                raise ValueError("CSV must contain columns: Bopomofo, Braille")
+
+            replacements_bopomofo: list[tuple[str, str]] = []
+            for row in reader:
+                source = (row.get("Bopomofo") or "")
+                target = (row.get("Braille") or "")
+                if not source:
+                    continue
+                replacements_bopomofo.append((source, target))
+        bopomofo_trie = _build_trie(replacements_bopomofo)
+
+        with dictionary_path.open("r", newline="", encoding="utf-8") as f_d:
+            reader = csv.DictReader(f_d)
+            if reader.fieldnames is None:
+                raise ValueError("CSV must contain header row.")
+            if not {"text", "braille", "type"}.issubset(reader.fieldnames):
+                raise ValueError("CSV must contain columns: text, braille, type")
+
+            raws: list[tuple[str, str]] = []
+            replacements: list[tuple[str, str]] = []
+            for row in reader:
+                source = (row.get("text") or "")
+                target = (row.get("braille") or "")
+                if not source:
+                    continue
+
+                type_ = (row.get("type") or "")
+                if type_ == "Bopomofo":
+                    try:
+                        target = processing(target)
+                    except Exception:
+                        pass
+                    if isinstance(target, str):
+                        target_parts = [target]
+                    else:
+                        target_parts = list(target)
+                    replacement_parts = [_scan_trie(part, bopomofo_trie) for part in target_parts]
+                else:
+                    replacement_parts = target.split("@")
+
+                raw_parts, replacement_parts = _align_source_and_replacement_parts(source, replacement_parts)
+                raws.append((source, _wrap_atomic_parts(raw_parts)))
+                replacements.append((source, _wrap_atomic_parts(replacement_parts)))
+
+        return cls(tuple(raws), tuple(replacements))
+
+    def apply(self, text: str) -> dict[str, str]:
+        """Return the raw and replacement text; reads no file and builds no trie."""
+        if not self.raw_rules and not self.replacement_rules:
+            return {
+                "raw": text,
+                "replacement": text,
+            }
+        # Both outputs are derived from the same original text. The trie therefore
+        # gives them identical dictionary-match boundaries without relying on marker
+        # wrapping to prevent a second replacement pass.
+        return {
+            "raw": _scan_trie(text, self._raw_trie),
+            "replacement": _scan_trie(text, self._replacement_trie),
+        }
+
+
 def apply_dictionary(
     text: str,
     dictionary_path: Path | str,
@@ -125,71 +225,11 @@ def apply_dictionary(
     """
     支援不同類型字典的轉換。
     """
-    dictionary_path = Path(dictionary_path)
-    if not dictionary_path.exists():
-        return {
-            "raw": text,
-            "replacement": text,
-        }
-
-    with bopomofo_path.open("r", newline="", encoding="utf-8") as f_b:
-        reader = csv.DictReader(f_b)
-        if reader.fieldnames is None:
-            raise ValueError("CSV must contain header row.")
-        if not {"Bopomofo", "Braille"}.issubset(reader.fieldnames):
-            raise ValueError("CSV must contain columns: Bopomofo, Braille")
-
-        replacements_bopomofo: list[tuple[str, str]] = []
-        for row in reader:
-            source = (row.get("Bopomofo") or "")
-            target = (row.get("Braille") or "")
-            if not source:
-                continue
-            replacements_bopomofo.append((source, target))
-
-    with dictionary_path.open("r", newline="", encoding="utf-8") as f_d:
-        reader = csv.DictReader(f_d)
-        if reader.fieldnames is None:
-            raise ValueError("CSV must contain header row.")
-        if not {"text", "braille", "type"}.issubset(reader.fieldnames):
-            raise ValueError("CSV must contain columns: text, braille, type")
-
-        raws: list[tuple[str, str]] = []
-        replacements: list[tuple[str, str]] = []
-        for row in reader:
-            source = (row.get("text") or "")
-            target = (row.get("braille") or "")
-            if not source:
-                continue
-
-            type_ = (row.get("type") or "")
-            if type_ == "Bopomofo":
-                try:
-                    target = processing(target)
-                except Exception:
-                    pass
-                if isinstance(target, str):
-                    target_parts = [target]
-                else:
-                    target_parts = list(target)
-                replacement_parts = [mapping(part, replacements_bopomofo) for part in target_parts]
-            else:
-                replacement_parts = target.split("@")
-
-            raw_parts, replacement_parts = _align_source_and_replacement_parts(source, replacement_parts)
-            raws.append((source, _wrap_atomic_parts(raw_parts)))
-            replacements.append((source, _wrap_atomic_parts(replacement_parts)))
-
-    # Both outputs are derived from the same original text. The trie therefore
-    # gives them identical dictionary-match boundaries without relying on marker
-    # wrapping to prevent a second replacement pass.
-    raw = mapping(text, raws)
-    replacement = mapping(text, replacements)
-
-    return {
-        "raw": raw,
-        "replacement": replacement,
-    }
+    return LoadedDictionaryRules.from_paths(
+        dictionary_path,
+        bopomofo_path,
+        processing=processing,
+    ).apply(text)
 
 
 def split_bracket_segments(text: str) -> list[BracketSegment]:

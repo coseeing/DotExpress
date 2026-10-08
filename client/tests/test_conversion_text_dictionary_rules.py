@@ -1,11 +1,14 @@
 import csv
 import tempfile
 import unittest
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from typing import NamedTuple
 from unittest.mock import patch
 
+from conversion.text import dictionary_rules
 from conversion.text.dictionary_rules import (
+    LoadedDictionaryRules,
     apply_dictionary,
     split_bracket_segments,
 )
@@ -478,6 +481,69 @@ class DictionaryFileSemanticsTest(DictionaryFilesTestCase):
                 if case.message is not None:
                     self.assertEqual(str(context.exception), case.message)
 
+
+class LoadedDictionaryRulesTest(DictionaryFilesTestCase):
+    def test_from_paths_gives_the_recorded_output_for_every_case(self) -> None:
+        for case in DICTIONARY_CASES:
+            with self.subTest(case=case.name):
+                bopomofo_path = self.write_case_files(case)
+
+                rules = LoadedDictionaryRules.from_paths(
+                    self.dictionary_path,
+                    bopomofo_path,
+                    processing=PROCESSING[case.processing],
+                )
+
+                self.assertEqual(rules.apply(case.text), {"raw": case.raw, "replacement": case.replacement})
+
+    def test_from_paths_raises_the_recorded_errors(self) -> None:
+        for case in _error_cases():
+            with self.subTest(case=case.name):
+                self.write_error_files(case)
+
+                with self.assertRaises(case.error) as context:
+                    LoadedDictionaryRules.from_paths(self.dictionary_path, self.bopomofo_path, processing=_identity)
+
+                if case.message is not None:
+                    self.assertEqual(str(context.exception), case.message)
+
+    def test_missing_dictionary_gives_empty_rules_without_opening_the_bopomofo_file(self) -> None:
+        with OpenRecorder() as recorder:
+            rules = LoadedDictionaryRules.from_paths(self.dictionary_path, self.bopomofo_path, processing=_identity)
+
+        self.assertEqual(rules, LoadedDictionaryRules())
+        self.assertEqual(recorder.names, [])
+
+    def test_rules_are_immutable_tuples_in_file_order(self) -> None:
+        self.dictionary_path.write_text(DICTIONARY_HEADER + "乙,Y,\n甲,X,\n乙,Z,\n", encoding="utf-8")
+        self.bopomofo_path.write_bytes(VALID_BOPOMOFO)
+
+        rules = LoadedDictionaryRules.from_paths(self.dictionary_path, self.bopomofo_path, processing=_identity)
+
+        self.assertEqual(rules.raw_rules, (("乙", r"\[乙\]"), ("甲", r"\[甲\]"), ("乙", r"\[乙\]")))
+        self.assertEqual(rules.replacement_rules, (("乙", r"\[Y\]"), ("甲", r"\[X\]"), ("乙", r"\[Z\]")))
+        with self.assertRaises(FrozenInstanceError):
+            rules.raw_rules = ()
+        with self.assertRaises(FrozenInstanceError):
+            rules.replacement_rules = ()
+
+    def test_apply_reads_no_file_and_builds_no_trie(self) -> None:
+        self.dictionary_path.write_text(DICTIONARY_HEADER + "甲,X,\n", encoding="utf-8")
+        self.bopomofo_path.write_bytes(VALID_BOPOMOFO)
+        rules = LoadedDictionaryRules.from_paths(self.dictionary_path, self.bopomofo_path, processing=_identity)
+
+        with OpenRecorder() as recorder, patch.object(
+            dictionary_rules, "_build_trie", wraps=dictionary_rules._build_trie
+        ) as build_trie:
+            results = [rules.apply(text) for text in ("甲", "乙甲", "甲甲")]
+
+        self.assertEqual(recorder.names, [])
+        self.assertEqual(build_trie.call_count, 0)
+        self.assertEqual(results[2], {"raw": r"\[甲\]\[甲\]", "replacement": r"\[X\]\[X\]"})
+
+    def test_empty_rules_return_the_text_unchanged(self) -> None:
+        self.assertEqual(LoadedDictionaryRules().apply("台灣"), {"raw": "台灣", "replacement": "台灣"})
+        self.assertEqual(LoadedDictionaryRules().apply(""), {"raw": "", "replacement": ""})
 
 if __name__ == "__main__":
     unittest.main()

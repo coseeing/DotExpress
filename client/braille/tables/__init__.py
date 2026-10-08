@@ -23,12 +23,7 @@ from typing import NamedTuple
 
 import logging
 
-log = logging
-log.basicConfig(
-	level=logging.INFO,
-	format="%(asctime)s [%(levelname)s] %(message)s",
-	datefmt="%Y-%m-%d %H:%M:%S"
-)
+log = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TABLES_DIR = os.path.join(BASE_DIR, "liblouis", "tables")
@@ -104,6 +99,7 @@ _outputTableForLangs: dict[str, str] = dict()
 def getDefaultTableForCurLang(tableType: TableType, lang: str) -> str:
 	"""Gets the file name of the default braille table for C{lang}.
 	DotExpress: the caller passes the language; upstream NVDA reads languageHandler.getLanguage().
+	DotExpress: kept for parity with NVDA brailleTables; no DotExpress code calls it.
 	:param tableType: INPUT (back-translation) or OUTPUT (translation).
 	:param lang: The language code, for example C{zh_TW} or C{en}.
 	:return: A L{BrailleTable} fileName.
@@ -183,6 +179,14 @@ def listTables() -> list[BrailleTable]:
 		_tables.values(),
 		key=lambda table: (table.source != TableSource.BUILTIN, strxfrm(table.displayName)),
 	)
+
+
+def get_table_directory(source: str) -> str | None:
+	"""Get the directory that holds the tables of a table source.
+	@param source: A table source, for example L{TableSource.BUILTIN}.
+	@return: The directory, or C{None} if the source has no directory.
+	"""
+	return _tablesDirs.get(source)
 
 
 #: Maps old table names to new table names for tables renamed in newer versions of liblouis.

@@ -164,7 +164,7 @@ def _adapt_helper(source: str) -> str:
         ("import languageHandler\n", ""),
         (
             "from logHandler import log\n",
-            'import logging\n\nlog = logging.getLogger(__name__)\nlogging.basicConfig(\n\tlevel=logging.INFO,\n\tformat="%(asctime)s [%(levelname)s] %(message)s",\n\tdatefmt="%Y-%m-%d %H:%M:%S",\n)\nBASE_DIR = os.path.dirname(os.path.abspath(__file__))\nWINFUNCTYPE = getattr(__import__("ctypes"), "WINFUNCTYPE", CFUNCTYPE)\n',
+            'import logging\n\nlog = logging.getLogger(__name__)\nBASE_DIR = os.path.dirname(os.path.abspath(__file__))\nWINFUNCTYPE = getattr(__import__("ctypes"), "WINFUNCTYPE", CFUNCTYPE)\n',
         ),
         (
             "with os.add_dll_directory(globalVars.appDir):\n\timport louis\n",
@@ -172,7 +172,7 @@ def _adapt_helper(source: str) -> str:
         ),
         ("directoriesToSearch = [brailleTables.TABLES_DIR]\n", "directoriesToSearch = [braille_tables.TABLES_DIR]\n"),
         ("registeredTable = brailleTables.getTable(table)\n", "registeredTable = braille_tables.getTable(table)\n"),
-        ("path = brailleTables._tablesDirs.get(registeredTable.source)\n", "path = braille_tables._tablesDirs.get(registeredTable.source)\n"),
+        ("path = brailleTables._tablesDirs.get(registeredTable.source)\n", "path = braille_tables.get_table_directory(registeredTable.source)\n"),
         ("brailleTables module", "braille tables module"),
         ("\tlog._log(NVDALevel, message, [], codepath=codepath)\n", '\tlog.log(NVDALevel, "%s: %s", codepath, message)\n'),
         (

@@ -228,6 +228,19 @@ class SyncNvdaLiblouisTests(unittest.TestCase):
         self.assertIn("dotexpressFixtureMarker", adapted_helper)
         self.assertNotIn("git show", adapted_helper)
 
+    def test_helper_adaptation_leaves_logging_configuration_to_the_app(self):
+        synchronize(
+            root=self.root,
+            expected_liblouis_commit=self.liblouis_commit,
+            nvda_commit_override=self.nvda_commit,
+        )
+
+        adapted_helper = (self.vendor / "runtime" / "louis_helper.py").read_text(encoding="utf-8")
+        self.assertNotIn("basicConfig", adapted_helper)
+        self.assertIn("\nlog = logging.getLogger(__name__)\n", adapted_helper)
+        self.assertIn("path = braille_tables.get_table_directory(registeredTable.source)\n", adapted_helper)
+        self.assertNotIn("_tablesDirs", adapted_helper)
+
     def test_synchronize_isolated_from_current_working_directory(self):
         helper_source = (self.nvda / "source" / "louisHelper.py").read_text(encoding="utf-8")
         helper_source = helper_source.replace(

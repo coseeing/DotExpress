@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from tests import wx_stub
+from tests.file_log_isolation import isolate_file_logs
 
 _STUBS = wx_stub.dual_view_stubs()
 _SCOPE = wx_stub.StubScope(_STUBS, isolate=("ui.dual_view",))
@@ -10,7 +11,12 @@ with _SCOPE.loading():
 	from ui.dual_view import DualViewFrame
 	import ui.dual_view as dual_view
 
-setUpModule = _SCOPE.activate
+
+def setUpModule():
+	_SCOPE.activate()
+	unittest.addModuleCleanup(isolate_file_logs("dotexpress.dual_view"))
+
+
 tearDownModule = _SCOPE.deactivate
 
 

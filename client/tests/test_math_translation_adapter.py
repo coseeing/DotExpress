@@ -31,6 +31,22 @@ class MathCATMathTranslatorTest(unittest.TestCase):
         self.assertEqual(result.raw_to_braille_pos, [])
         self.assertEqual(result.braille_to_raw_pos, [])
 
+    def test_close_calls_the_given_callback(self) -> None:
+        closed = []
+        adapter = MathCATMathTranslator(
+            translate_math=lambda *_args, **_kwargs: "",
+            close=lambda: closed.append(True),
+        )
+
+        adapter.close()
+
+        self.assertEqual(closed, [True])
+
+    def test_close_without_callback_does_nothing(self) -> None:
+        adapter = MathCATMathTranslator(translate_math=lambda *_args, **_kwargs: "")
+
+        self.assertIsNone(adapter.close())
+
 
 if __name__ == "__main__":
     unittest.main()

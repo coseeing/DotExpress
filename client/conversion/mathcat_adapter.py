@@ -22,9 +22,23 @@ class MathCATAdapter:
 	resource_root: Path
 	_libmathcat: object | None = None
 	_dll_directory_handle: object | None = None
+	_closed: bool = False
 
 	def initialize(self) -> None:
+		self._ensure_open()
 		self._load_libmathcat()
+
+	def close(self) -> None:
+		self._closed = True
+		handle = self._dll_directory_handle
+		self._dll_directory_handle = None
+		self._libmathcat = None
+		if handle is not None:
+			handle.close()
+
+	def _ensure_open(self) -> None:
+		if self._closed:
+			raise MathCATError("MathCAT adapter is closed")
 
 	def _rules_dir(self) -> Path:
 		return self.resource_root / "Rules"
@@ -89,6 +103,7 @@ class MathCATAdapter:
 		*,
 		language: str,
 	) -> str:
+		self._ensure_open()
 		try:
 			libmathcat = self._load_libmathcat()
 			self._configure_runtime(libmathcat, braille_code, language)
@@ -98,13 +113,3 @@ class MathCATAdapter:
 			raise
 		except Exception as error:
 			raise MathCATError(str(error)) from error
-
-
-_SHARED_ADAPTER: MathCATAdapter | None = None
-
-
-def get_shared_mathcat_adapter() -> MathCATAdapter:
-	global _SHARED_ADAPTER
-	if _SHARED_ADAPTER is None:
-		_SHARED_ADAPTER = MathCATAdapter(resource_root=get_default_mathcat_resource_root())
-	return _SHARED_ADAPTER

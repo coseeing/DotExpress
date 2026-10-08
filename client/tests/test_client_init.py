@@ -10,6 +10,11 @@ from uuid import UUID
 
 import client_init
 import config
+from tests.file_log_isolation import isolate_file_logs
+
+
+def setUpModule() -> None:
+    unittest.addModuleCleanup(isolate_file_logs("dotexpress.client_init"))
 
 
 class _Response:

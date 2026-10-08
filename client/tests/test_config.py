@@ -1,8 +1,10 @@
 import json
+import logging
 import tempfile
 import unittest
 import gettext
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID
 
 import config
@@ -274,6 +276,60 @@ class ConfigTest(unittest.TestCase):
             translation.gettext("Failed to open dual view: {error}"),
             "無法開啟雙視檢視：{error}",
         )
+
+
+class ConfigSaveFailureLoggingTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_config_path = config.CONFIG_PATH
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._blocker = Path(self._tmpdir.name) / "blocker"
+        self._blocker.write_text("not a directory", encoding="utf-8")
+        config.CONFIG_PATH = str(self._blocker / "nested" / "config.json")
+
+    def tearDown(self) -> None:
+        config.CONFIG_PATH = self._original_config_path
+        self._tmpdir.cleanup()
+
+    def test_save_failure_is_logged_and_not_raised(self) -> None:
+        with self.assertLogs("dotexpress.config", level="ERROR") as captured:
+            config.set_output_mode("ascii")
+
+        self.assertEqual(len(captured.records), 1)
+        record = captured.records[0]
+        self.assertEqual(record.levelno, logging.ERROR)
+        self.assertIsNotNone(record.exc_info)
+        self.assertIn(config.CONFIG_PATH, record.getMessage())
+        self.assertFalse(Path(config.CONFIG_PATH).exists())
+        self.assertTrue(self._blocker.is_file())
+
+    def test_every_save_failure_is_logged(self) -> None:
+        with self.assertLogs("dotexpress.config", level="ERROR") as captured:
+            config.set_output_mode("ascii")
+            config.set_conversion_width(52)
+
+        self.assertEqual(len(captured.records), 2)
+
+    def test_save_failure_log_does_not_contain_config_data(self) -> None:
+        with self.assertLogs("dotexpress.config", level="ERROR") as captured:
+            client_id = config.get_or_create_client_id()
+
+        UUID(client_id)
+        self.assertNotIn(client_id, "\n".join(captured.output))
+
+    def test_save_failure_does_not_raise_when_log_file_cannot_be_opened(self) -> None:
+        missing_log = Path(self._tmpdir.name) / "missing-log-dir" / "config.log"
+        handler = logging.FileHandler(missing_log, encoding="utf-8", delay=True)
+        unopenable = logging.Logger("dotexpress.config.unopenable")
+        unopenable.addHandler(handler)
+
+        try:
+            with patch.object(config, "logger", unopenable):
+                config.set_output_mode("ascii")
+        finally:
+            handler.close()
+
+        self.assertFalse(missing_log.parent.exists())
+        self.assertFalse(Path(config.CONFIG_PATH).exists())
 
 
 if __name__ == "__main__":

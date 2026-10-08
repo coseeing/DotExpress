@@ -1,9 +1,13 @@
 import json
+import logging
 import os
 from typing import Optional
 from uuid import uuid4
 
 from app_paths import get_config_path
+from log import get_logger
+
+logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
 
 DEFAULT_FALLBACK = "zh_TW"
 LANG_ENV = "TEXT2BRAILLE_LANG"
@@ -44,6 +48,16 @@ DEFAULT_CHARSET_MAPS = {
 _runtime_lang: Optional[str] = None
 
 
+def _log_current_exception(level: int, message: str, *args: object) -> None:
+    try:
+        logger.log(level, message, *args, exc_info=True)
+    except OSError:
+        # A delay=True FileHandler opens its file inside emit() and raises if
+        # log/ is missing or unwritable. Config I/O must never raise, so a
+        # diagnostic that cannot be written is dropped.
+        pass
+
+
 def _load_from_file() -> dict:
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -67,7 +81,7 @@ def _save_to_file(data: dict) -> None:
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception:
-        pass
+        _log_current_exception(logging.ERROR, "Failed to save config file %s", CONFIG_PATH)
 
 
 def _coerce_int(value: object) -> Optional[int]:

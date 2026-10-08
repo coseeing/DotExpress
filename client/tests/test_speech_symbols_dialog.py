@@ -1,5 +1,4 @@
 import csv
-import importlib.util
 import sys
 import tempfile
 import types
@@ -8,27 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from dictionaries.entries import DictionaryEntry, load_dictionary_entries
+from tests import wx_stub
 
 
-class _AutoModule(types.ModuleType):
-    def __getattr__(self, name):
-        if name.startswith('__') and name.endswith('__'):
-            raise AttributeError(name)
-        sub_name = f'{self.__name__}.{name}'
-        if sub_name not in sys.modules:
-            sub = _AutoModule(sub_name)
-            sys.modules[sub_name] = sub
-        return sys.modules[sub_name]
-
-    def __or__(self, other):
-        return self
-
-    def __ror__(self, other):
-        return self
-
-
-_MODULE_UNDER_TEST_NAME = '_speech_symbols_dialog_under_test'
-_DIALOG_PATH = Path(__file__).resolve().parents[1] / 'dialog.py'
+_MODULE_UNDER_TEST_NAME = wx_stub.SPEECH_DIALOG_MODULE_NAME
 _SCOPED_STUB_MODULES = (
     'wx',
     'mammoth',
@@ -44,38 +26,6 @@ _SCOPED_STUB_MODULES = (
     'ebooklib',
     'ebooklib.epub',
 )
-_SCOPED_RESTORE_ROOTS = {
-    'Bopomofo',
-    'PIL',
-    'braille',
-    'bs4',
-    'dialog',
-    'dictionaries',
-    'documents',
-    'ebooklib',
-    'lxml',
-    'mammoth',
-    'markdown',
-    'markdownify',
-    'pymupdf',
-    'pypdf',
-    'translation',
-    'wx',
-}
-
-
-def _make_wx_stub() -> _AutoModule:
-    wx_stub = _AutoModule('wx')
-    wx_stub.Dialog = type('Dialog', (), {})
-    wx_stub.ListCtrl = type('ListCtrl', (), {})
-    wx_stub.Window = type('Window', (), {})
-    wx_stub.CommandEvent = type('CommandEvent', (), {})
-    wx_stub.ListEvent = type('ListEvent', (), {})
-    wx_stub.NOT_FOUND = -1
-    wx_stub.OK = 1
-    wx_stub.ICON_ERROR = 2
-    wx_stub.MessageBox = lambda *args, **kwargs: None
-    return wx_stub
 
 
 def _restore_module_binding(name: str, existed: bool, module: types.ModuleType | None) -> None:
@@ -85,42 +35,14 @@ def _restore_module_binding(name: str, existed: bool, module: types.ModuleType |
         sys.modules.pop(name, None)
 
 
-def _install_scoped_import_stubs() -> None:
-    sys.modules['wx'] = _make_wx_stub()
-
-
-def _restore_scoped_modules(previous_modules: dict[str, types.ModuleType]) -> None:
-    for name in list(sys.modules):
-        if name == _MODULE_UNDER_TEST_NAME:
-            del sys.modules[name]
-            continue
-        if name.split('.')[0] in _SCOPED_RESTORE_ROOTS and name not in previous_modules:
-            del sys.modules[name]
-
-    for name, previous in previous_modules.items():
-        sys.modules[name] = previous
-
-
 def _load_dialog_module() -> types.ModuleType:
-    previous_modules = {
-        name: module
-        for name, module in sys.modules.items()
-        if name.split('.')[0] in _SCOPED_RESTORE_ROOTS
-    }
-    try:
-        _install_scoped_import_stubs()
-        spec = importlib.util.spec_from_file_location(_MODULE_UNDER_TEST_NAME, _DIALOG_PATH)
-        if spec is None or spec.loader is None:
-            raise ImportError(f'Unable to load dialog module from {_DIALOG_PATH}')
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[_MODULE_UNDER_TEST_NAME] = module
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        _restore_scoped_modules(previous_modules)
+    module, _scope = wx_stub.load_speech_dialog()
+    return module
 
 
-dialog = _load_dialog_module()
+dialog, _DIALOG_SCOPE = wx_stub.load_speech_dialog()
+setUpModule = _DIALOG_SCOPE.activate
+tearDownModule = _DIALOG_SCOPE.deactivate
 CallbackVirtualListCtrl = dialog.CallbackVirtualListCtrl
 SpeechSymbolsDialog = dialog.SpeechSymbolsDialog
 

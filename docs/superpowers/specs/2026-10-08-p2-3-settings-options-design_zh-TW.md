@@ -14,6 +14,8 @@
 
 這次重構不改變行為。每個選項標籤、選項順序、選取索引、儲存值、正規化結果、spin 範圍與編輯區顏色，在 zh_TW 與未翻譯的執行環境下都維持相同。msgid 不變（353，集合相同）。黃金測試資料 `client/tests/fixtures/translation_golden.json`（sha256 `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`）與 `client/tests/fixtures/dictionary_entries_trace.json`（sha256 `f493da52376c8eac32a50c33b7f11870451360bed4bf26c1db339ccd2c66c2cf`）都不變。
 
+規劃後修正：plan `docs/superpowers/plans/2026-10-08-p2-3-settings-options.md`（「Spec Corrections and Refinements」一節）更正了兩項事實（步驟 3 也必須搬移對話框的兩個 spin；`tests/test_settings_dialogs.py` 實際跑 47 個測試），並細化了測試計畫、步驟 3-5 的紅燈步驟、幾項程式碼選擇與測試數量；以下已併入這些修改。
+
 ## 現況（2026-10-08 於 `refactor/p2-3-settings-options` 驗證，HEAD `f16bfc8`，已合併 P0-*、P1-*、P2-1 與 P2-2）
 
 縮排：`settings/*.py`、`config.py`、`tests/test_settings_dialogs.py`、`tests/test_view_settings.py` 與 `tests/test_translation_settings.py` 用 4 個空白；`gui.py` 用 tab。
@@ -57,7 +59,7 @@
 
 ### 與此相關的測試
 
-`tests/test_settings_dialogs.py`（39 個測試，`StubScope(settings_dialog_stubs(), isolate=("settings.dialogs",))`，stub 的 `listTables()` 回傳 `[]`）。其中兩個測試把 `panel.CHOICE_SPECS` 指定為 5 個 tuple 的清單，另有數個把 `settings.dialogs._` patch 成恆等函式。另外還有 `tests/test_view_settings.py`、`tests/test_translation_settings.py`、`tests/test_settings_state.py`、`tests/test_translation_tables.py`、`tests/test_math_braille_codes.py`、`tests/test_config.py`（釘住 `DEFAULT_*` 的值），以及 `tests/test_gui_document_flows.py`（`isolate=("gui", "settings.dialogs", "ui.dual_view")`；該處 `_apply_editor_view_settings` 一律被 mock，所以顏色從未被測試）。`tests/test_i18n.py` 斷言 `settings/dialogs.py` 從 `i18n` 只匯入 `{"_"}`，並確保 "Default"、"SimBraille"、"Braille Font" 仍會被擷取。
+`tests/test_settings_dialogs.py`（39 個測試方法，實際跑 47 個測試：`_SingletonCharacterization` mixin 的 8 個方法在 `TextProcessingSingletonTest` 與 `DotExpressSettingsSingletonTest` 中各跑一次；`StubScope(settings_dialog_stubs(), isolate=("settings.dialogs",))`，stub 的 `listTables()` 回傳 `[]`）。其中兩個測試把 `panel.CHOICE_SPECS` 指定為 5 個 tuple 的清單，另有數個把 `settings.dialogs._` patch 成恆等函式。另外還有 `tests/test_view_settings.py`、`tests/test_translation_settings.py`、`tests/test_settings_state.py`、`tests/test_translation_tables.py`、`tests/test_math_braille_codes.py`、`tests/test_config.py`（釘住 `DEFAULT_*` 的值），以及 `tests/test_gui_document_flows.py`（`isolate=("gui", "settings.dialogs", "ui.dual_view")`；該處 `_apply_editor_view_settings` 一律被 mock，所以顏色從未被測試）。`tests/test_i18n.py` 斷言 `settings/dialogs.py` 從 `i18n` 只匯入 `{"_"}`，並確保 "Default"、"SimBraille"、"Braille Font" 仍會被擷取。
 
 ## 設計
 
@@ -130,13 +132,15 @@ def option_index(options, value) -> int                           # 第一個相
 def option_value_at(options, index: int) -> str                   # options[index].value；index < 0 或 >= len 時為 options[0].value
 ```
 
-msgid 以字面值寫在 `N_()` 裡，所以 `xgettext --keyword=N_`（`scripts/generate-pot.bat` 已有）與 msgid 掃描都會擷取。匯入 `settings.options` 會執行 `settings/__init__`（因此也會載入 `config`），這和現在匯入任何 settings 模組時完全一樣；`options.py` 本身除了上列匯入之外不再增加任何匯入。
+msgid 以字面值寫在 `N_()` 裡，所以 `xgettext --keyword=N_`（`scripts/generate-pot.bat` 已有）與 msgid 掃描都會擷取。匯入 `settings.options` 會執行 `settings/__init__`（因此也會載入 `config`），這和現在匯入任何 settings 模組時完全一樣；`options.py` 本身除了上列匯入之外不再增加任何匯入。現在匯入 `settings.translation` 或 `settings.view` 也會（經由 `options.py`）匯入 `i18n`；`i18n` 除了載入隨附的目錄之外沒有其他副作用，而每個 GUI 行程本來就會載入它。
+
+小型程式碼選擇：每個欄位以屬性 docstring 說明，模組 docstring 記錄 D3 的循環匯入原因。`option_value_at` 保留舊的 `index < 0 or index >= len` 判斷；`normalize_option_value` 用 `in option_values(options)`（與以前一樣是 tuple 成員判斷）；`IntRange.clamp` 就是舊的 `max(minimum, min(maximum, value))`。
 
 ### 變更後的使用端
 
-- `settings/translation.py`：`_normalize_output_mode` -> `normalize_option_value(OUTPUT_MODE_OPTIONS, value, DEFAULT_TRANSLATION_SETTINGS.output_mode)`；`_normalize_width` -> `CONVERSION_WIDTH_RANGE.clamp`。移除 `MIN/MAX_CONVERSION_WIDTH` 與 `SUPPORTED_OUTPUT_MODES`。
+- `settings/translation.py`：`_normalize_output_mode` -> `normalize_option_value(OUTPUT_MODE_OPTIONS, value, DEFAULT_TRANSLATION_SETTINGS.output_mode)`；`_normalize_width` -> `CONVERSION_WIDTH_RANGE.clamp`。移除 `MIN/MAX_CONVERSION_WIDTH` 與 `SUPPORTED_OUTPUT_MODES`。由於 `settings/dialogs.py` 從 `.translation` 與 `.view` 匯入寬度與字型大小常數，同一步也要把對話框的兩個 spin（`min`/`max`/`initial` 與兩處 `load_snapshot` 夾限，共 4 處）及其匯入改為 `CONVERSION_WIDTH_RANGE`/`VIEW_FONT_SIZE_RANGE`；否則 `import settings.dialogs`（連帶 `gui`）會失敗。
 - `settings/view.py`：同理，改用 `VIEW_FONT_SIZE_RANGE`、`VIEW_SCHEME_OPTIONS`、`BRAILLE_FONT_OPTIONS` 與 `config.DEFAULT_*`。移除那四個常數。
-- `settings/dialogs.py`：移除三個選項 tuple 與 `CHOICE_SPECS`。選項以 `[_(o.label) for o in ...]` 建立。六個 `_selected_*`/`_select_*` 的內容改用 `option_value_at`/`option_index`，spin 改用 `range.minimum/maximum/clamp`。`TranslationTablesPanel` 透過類別屬性 `TABLE_FIELDS = TRANSLATION_TABLE_FIELDS` 逐一處理 `TRANSLATION_TABLE_FIELDS`（測試可覆寫）。每列 `StaticText` 的標籤與驗證訊息都用 `_(field.label)`。`not field.required` 時在最前面加上「未選擇」。`is_valid`/`validation_error` 依欄位順序檢查必填欄位。`_options_for_key` 改為 `_options_for_field(field)`：有 `fixed_choices` 時建成 `TableOption(v, v)`，否則依 `file_prefix` 篩選。`_load_table_options`、`TableOption` dataclass、`_("None selected")` 與 `_(table.displayName)`（加上新註解，D6）都留在對話框。
+- `settings/dialogs.py`：移除三個選項 tuple 與 `CHOICE_SPECS`。選項以 `[_(o.label) for o in ...]` 建立。六個 `_selected_*`/`_select_*` 的內容改用 `option_value_at`/`option_index`，spin 改用 `range.minimum/maximum/clamp`（已在步驟 3 完成，見上）。`TranslationTablesPanel` 透過類別屬性 `TABLE_FIELDS = TRANSLATION_TABLE_FIELDS` 逐一處理 `TRANSLATION_TABLE_FIELDS`（測試可覆寫）。每列 `StaticText` 的標籤與驗證訊息都用 `_(field.label)`。`not field.required` 時在最前面加上「未選擇」。`is_valid`/`validation_error` 依欄位順序檢查必填欄位（`is_valid` 改為 `all(... for field in TABLE_FIELDS if field.required)`：呼叫相同，短路行為也與 `default and math` 相同）。`_options_for_key` 改為 `_options_for_field(field)`：有 `fixed_choices` 時建成 `TableOption(v, v)`，否則呼叫保留下來的 `_options_for_lang(field.file_prefix)`。`_load_table_options`、`TableOption` dataclass、`_("None selected")` 與 `_(table.displayName)`（在該清單上方加上新註解，D6）都留在對話框。
 - `gui.py`：`VIEW_SCHEMES` 由 `VIEW_SCHEME_OPTIONS` 建成（鍵相同，值為 `{"background": wx.Colour(*bg), "foreground": wx.Colour(*fg)}`）。改用 `settings.braille_font == BRAILLE_FONT_SIMBRAILLE`。
 - `config.py`：`DEFAULT_TRANSLATION_TABLES` 改為 `"math": DEFAULT_MATH_BRAILLE_TABLE`，其餘不變，`config` 也不新增匯入。
 - 不更動：`settings/state.py`、`settings/translation_tables.py`、`conversion/*`（包括 `output.py:85` 的 `== "ascii"` 與 `text/pipeline.py:71` 的 `{"default", "math"}`，見「不在範圍內」）、`main.py`、`dual_view/*`、`braille/*`、`locales/*`、`scripts/*`。
@@ -149,39 +153,45 @@ msgid 以字面值寫在 `N_()` 裡，所以 `xgettext --keyword=N_`（`scripts/
 
 特徵化測試使用**真實的** zh_TW 目錄，絕不 patch `settings.dialogs._`（或 `gui._`）。在舊程式碼下，這種 patch 不會影響選項標籤，因為它們在匯入時就已翻譯；在新程式碼下，同樣的 patch 會顯示英文標籤。所以帶 patch 的測試記錄到的是實作細節，而不是使用者看到的結果。需要未翻譯的標籤時，就對 msgid 與 `i18n._(msgid)` 斷言。
 
-### A. 對現有程式碼的特徵化（步驟 1；`tests/test_settings_dialogs.py`，以及 `tests/test_view_settings.py`、`tests/test_translation_settings.py`）
+### A. 對現有程式碼的特徵化（步驟 1）
 
-1. 在 settings stub scope 下實際建構 Translation 面板，並把測試內的記錄用 `wx.Choice`/`StaticText` patch 進 `settings.dialogs.wx`。斷言：輸出選項為 `["Unicode", "ASCII"]`（且 `== [i18n._("Unicode"), i18n._("ASCII")]`）；`unicode`/`ascii`/不明值的初始選取（0/1/0）；選取 0、1、-1、2 時 `on_save` 的值（`unicode`、`ascii`、`unicode`、`unicode`）；寬度 5、40、500 時寬度 spin 的 min/max/initial。
+A 部分直接寫出字面值（`"unicode"`、`"淺色"`、`(10, 200)`……），加上 `i18n._(msgid)` 與 `config.DEFAULT_*`，從不使用舊的 tuple，因此步驟 1 之後不再修改。位置：第 1-3 與第 6 項在 `tests/test_settings_dialogs.py`（`TranslationPanelOptionsTest`、`ViewPanelOptionsTest`、`TranslationTablesPanelOptionsTest`、`TableDisplayNameGuardTest`）；第 4 項在 `tests/test_translation_settings.py`（`TranslationSettingsNormalizeTest`）與 `tests/test_view_settings.py`（`ViewSettingsNormalizeTest`）；第 5 項在 `tests/test_gui_document_flows.py`（`EditorViewSettingsCharacterizationTest`），這是唯一有 gui stub scope 的模組。A 部分在現有程式碼上必然通過，所以另用一個拋棄式 mutant runner（不提交）對 `client/` 的複本套用 20 個單點破壞（輸出標籤未翻譯、配色順序對調、不明值選取最後一項、點字字型未選時存成 config 預設值、配色超出範圍時拋例外、寬度 spin 最大值少 1、重新載入寬度或字型大小初始值未夾限、math 也加上「未選擇」、表格列順序改變、math 選項倒序、表名未再翻譯、空白列仍啟用、不明表格選取最後一項、先驗證 math、儲存時漏掉 math、寬度下限未夾限、不明配色變成 dark、dark 前景色差 1、只在字型已註冊時才用 SimBraille），證明每一個都會讓 A 部分失敗。
+
+面板的觀察方式：以 `SimpleNamespace` 作為 owner，在 `patch.multiple(module.wx, Choice=RecordingChoice, SpinCtrl=RecordingSpin)` 與 `patch.object(module, "listTables", ...)` 下，建構 `sys.modules["settings.dialogs"]` 中真正的面板類別。列由版面讀出：stub 的 `FlexGridSizer` 會記錄每次 `Add`，所以能依序取得（標籤、控制項）配對，驗證的焦點目標則與該列的控制項比對。只使用公開屬性 `output_choice`、`width_spin`、`dictionary_choice`、`scheme_choice`、`braille_font_choice`、`font_size_spin`（用來設定選取），從不讀取私有欄位或欄位清單。
+
+1. 在 settings stub scope 下，以上述記錄用 `wx.Choice`/`wx.SpinCtrl` 實際建構 Translation 面板。斷言：輸出選項為 `["Unicode", "ASCII"]`（且 `== [i18n._("Unicode"), i18n._("ASCII")]`）；`unicode`/`ascii`/不明值的初始選取（0/1/0）；選取 0、1、-1、2 時 `on_save` 的值（`unicode`、`ascii`、`unicode`、`unicode`）；寬度 5、40、500 時寬度 spin 的 min/max/initial。
 2. View 面板：配色選項 `["淺色", "深色"]`，點字字型選項 `["預設", "SimBraille"]`，各值與不明值的選取。`on_save` 把選取 -1 對應到 `light`/`default`（釘住 K1：不是 `simbraille`）。字型 spin 的 min/max/initial 會夾限。
-3. Tables 面板，以 stub `listTables` 回傳假的類 `BrailleTable` 物件：有些是英文名稱（原始碼執行路徑），一個已是 zh_TW（打包路徑），一個 `output=False`，檔名涵蓋 `en`/`zh`/`ja` 前綴與一個不符合任何前綴的。斷言：列標籤與順序；每列的顯示清單（已排序，只有 en/zh/ja 最前面有「未選擇」，math 恰為 `UEB, Nemeth`）；英文名稱與 zh 名稱得到相同的 zh 標籤；沒有選項的列停用且為 `NOT_FOUND`；不明的儲存檔名選取索引 0（釘住 K2）；`on_save` 的鍵與順序；`default` 空白時的驗證訊息與焦點，再來是 `math` 空白時的。
+3. Tables 面板，以 stub `listTables` 回傳假的類 `BrailleTable` 物件：有些是英文名稱（原始碼執行路徑），一個已是 zh_TW（打包路徑），一個 `output=False`，檔名涵蓋 `en`/`zh`/`ja` 前綴、一個大寫檔名（`en-GB-g2.ctb`）、一個 `zhcn` 前綴（K4）與一個不符合任何前綴的。斷言：列標籤與順序；每列的顯示清單（已排序，只有 en/zh/ja 最前面有「未選擇」，math 恰為 `UEB, Nemeth`）；英文名稱與 zh 名稱得到相同的 zh 標籤；沒有選項的列停用且為 `NOT_FOUND`；不明的儲存檔名選取索引 0（釘住 K2）；`on_save` 的鍵與順序；`default` 空白時的驗證訊息與焦點，再來是 `math` 空白時的。
 4. 正規化函式：每份清單的每個值都原樣保留，不明值變成 `config.DEFAULT_*`，兩端都會夾限。
-5. gui 配色顏色：在 gui scope 下，`gui.VIEW_SCHEMES` 等於 `{"light": {background (255,255,255), foreground (0,0,0)}, "dark": 相反}`（stub 的 `wx.Colour` 是 tuple）。
+5. gui 配色顏色：在 gui scope 下，`gui.VIEW_SCHEMES` 等於 `{"light": {background (255,255,255), foreground (0,0,0)}, "dark": 相反}`（stub 的 `wx.Colour` 是 tuple）。由於步驟 5 會修改 `_apply_editor_view_settings`，而既有測試一律 mock 它，因此也一併特徵化：兩個編輯區的字型大小、顏色及其呼叫順序、字型已註冊／`win32`／兩者皆非時的 SimBraille 字型，以及不明值的正規化。
 6. 表格顯示名稱守門（永久保留）：以 AST 解析 `braille/tables/__tables.py`，不匯入它。對每個 `addTable` 名稱斷言 `i18n._(i18n._(name)) == i18n._(name)`，並斷言 output 表翻譯後排序的清單，不論從英文名稱或從已翻譯名稱建立都相同。
 
 ### B. 選項模組（步驟 2；新的 `tests/test_settings_options.py`，4 個空白，無 wx，無 stub scope）
 
-各 tuple 確切的值、msgid 與順序；描述子是凍結的，清單是 tuple；輔助函式的行為（成員、不明值、-1、超出範圍、空前綴）；`IntRange.clamp`。不變式：每個 `config.DEFAULT_OUTPUT_MODE/VIEW_SCHEME/BRAILLE_FONT` 都在對應的值之中；`DEFAULT_VIEW_FONT_SIZE`/`DEFAULT_CONVERSION_WIDTH` 都在各自範圍內；`tuple(f.key for f in TRANSLATION_TABLE_FIELDS) == tuple(config.DEFAULT_TRANSLATION_TABLES)`；math 欄位的 `fixed_choices is math_braille_codes.MATH_BRAILLE_TABLES`；`config.DEFAULT_TRANSLATION_TABLES["math"] == DEFAULT_MATH_BRAILLE_TABLE`；必填鍵恰為 `{"default", "math"}`。另有 AST 守門（匯入、不得有 `_`），並檢查每個標籤都是 `N_()` 的字面引數。此測試模組在最上層、任何 stub scope 之外匯入 `settings.options`，讓描述子類別的身分在各 scope 間一致。`tests/test_i18n.py` 新增 `test_settings_options_uses_shared_i18n`（`{"N_"}`），`settings/dialogs.py` 的期望仍為 `{"_"}`。
+各 tuple 確切的值、msgid 與順序；描述子是凍結的，清單是 tuple；輔助函式的行為（成員、不明值、-1、超出範圍，以及空的選項 tuple：`option_values(()) == ()`、`option_index((), v) == 0`、`normalize_option_value((), v, d) == d`；`None` 檔名前綴由 A 部分的 default 列涵蓋）；`IntRange.clamp`。不變式：每個 `config.DEFAULT_OUTPUT_MODE/VIEW_SCHEME/BRAILLE_FONT` 都在對應的值之中；`DEFAULT_VIEW_FONT_SIZE`/`DEFAULT_CONVERSION_WIDTH` 都在各自範圍內；`tuple(f.key for f in TRANSLATION_TABLE_FIELDS) == tuple(config.DEFAULT_TRANSLATION_TABLES)`；math 欄位的 `fixed_choices is math_braille_codes.MATH_BRAILLE_TABLES`；`config.DEFAULT_TRANSLATION_TABLES["math"] == DEFAULT_MATH_BRAILLE_TABLE`，並以 AST 檢查 config 寫的是名稱 `DEFAULT_MATH_BRAILLE_TABLE`（讓步驟 2 的 config 修改先紅燈）；必填鍵恰為 `{"default", "math"}`。另有 AST 守門（匯入、不得有 `_`），並檢查每個標籤都是 `N_()` 的字面引數。共 19 個測試、四個類別：`OptionListsTest`（6）、`OptionHelpersTest`（5）、`ConfigDefaultsInvariantTest`（5）、`OptionsModuleGuardTest`（3）。此測試模組在最上層、任何 stub scope 之外匯入 `settings.options`，讓描述子類別的身分在各 scope 間一致。`tests/test_i18n.py` 新增 `test_settings_options_uses_shared_i18n`（`{"N_"}`），`settings/dialogs.py` 的期望仍為 `{"_"}`。
 
 ### C. 遷移（步驟 3-5）
 
-每一步之後，A 部分都不需修改即可通過。既有測試只有以下修改：兩個指定 `panel.CHOICE_SPECS` 的測試拿掉該指定（類別預設值就是同樣的五個欄位），或改為指定 `TABLE_FIELDS`；舊名稱移除後，A 部分的不變式測試改用 `option_values(...)`。
+每一步之後，A 部分都不需修改即可通過。既有測試只有一處修改：兩個指定 `panel.CHOICE_SPECS` 的測試在步驟 4 拿掉該指定（類別預設值就是同樣的五個欄位）。A 部分沒有需要切換的不變式測試（不變式都在 B 部分）。
+
+步驟 3-5 的紅燈步驟：每一步先在 `tests/test_settings_options.py` 的 `OptionSourceConsumerTest` 加一個守門測試並確認紅燈。步驟 3（`test_normalizers_define_no_option_lists_or_ranges`）：`settings/translation.py` 的模組層級指定只有 `DEFAULT_TRANSLATION_SETTINGS`，`settings/view.py` 則沒有。步驟 4（`test_settings_panels_define_no_option_lists_or_option_values`）：`settings/dialogs.py` 只有 `_DEAD_WINDOW_ERROR_TYPES` 與 `CommitSettings`，`TranslationTablesPanel` 的類別本體只指定 `title`、`panel_description`、`TABLE_FIELDS`。步驟 5（`test_gui_spells_out_no_option_values`）只檢查 `gui.py` 的字面值。三個守門都檢查遷移後的模組中沒有任何選項值的字串字面值（`unicode ascii light dark simbraille UEB Nemeth`，對話框另加表格鍵）。守門是允許清單，從不寫出被移除的名稱，所以 AC6 的第一個 grep（也涵蓋 `client/tests`）仍為空。`translation.py` 不檢查 `"default"`，因為那裡它是預設字典的名稱。
 
 ## 遷移步驟（每一步一個全綠的 commit）
 
 1. `test: characterize settings option lists`（A 部分，針對現有程式碼）。
 2. `refactor: add settings option source`（B 部分。模組尚未被使用；唯一例外是 `config.DEFAULT_TRANSLATION_TABLES["math"]` 改為 `DEFAULT_MATH_BRAILLE_TABLE`，值完全相同）。
-3. `refactor: normalize settings through option source`（`settings/translation.py`、`settings/view.py`；移除舊常數）。
-4. `refactor: build settings panels from option source`（`settings/dialogs.py`；移除 `CHOICE_SPECS` 與 `_options_for_key` 分派；D6 註解；上述兩處測試修改）。
-5. `refactor: derive gui view schemes from option source`（`gui.py`）。
+3. `refactor: normalize settings through option source`（`settings/translation.py`、`settings/view.py`；移除舊常數；也包括使用這些常數的對話框寬度與字型大小 spin 及其匯入；一個守門測試）。
+4. `refactor: build settings panels from option source`（`settings/dialogs.py`；移除 `CHOICE_SPECS` 與 `_options_for_key` 分派；D6 註解；上述兩處測試修改；一個守門測試）。
+5. `refactor: derive gui view schemes from option source`（`gui.py`；一個守門測試）。
 
 ## 驗收條件
 
-1. Linux 上的路線圖驗證：`cd client && $PY -m unittest tests.test_settings_dialogs tests.test_translation_settings tests.test_view_settings tests.test_settings_options -v` 通過。
+1. Linux 上的路線圖驗證：`cd client && $PY -m unittest tests.test_settings_dialogs tests.test_translation_settings tests.test_view_settings tests.test_settings_options -v` 通過（99 個測試）。
 2. 以下也全綠：`tests.test_settings_state tests.test_translation_tables tests.test_math_braille_codes tests.test_config tests.test_gui_document_flows tests.test_i18n tests.test_wx_stub tests.test_removed_dead_code tests.test_translation_golden tests.test_dictionary_entries_dialog`。
-3. 完整套件：973 + N 個測試（N = 新測試數，由 plan 確定），`failures=1`（只有 P2-5），`errors=0`，`skipped=9`。shuffle harness（`$SP/shuffle_harness.py`）種子 0-19 每個都只有同一個失敗。`test_settings_options`、`test_settings_dialogs` 與 `test_gui_document_flows` 單獨執行可通過，並且與 `test_settings_options` 兩兩配對、兩種順序都通過。
+3. 完整套件：973 + 50 = 1023 個測試（步驟 1：27，步驟 2：20，步驟 3-5 各 1），`failures=1`（只有 P2-5），`errors=0`，`skipped=9`。shuffle harness（`$SP/shuffle_harness.py`）種子 0-19 每個都只有同一個失敗。`test_settings_options`、`test_settings_dialogs` 與 `test_gui_document_flows` 單獨執行可通過，並且與 `test_settings_options` 兩兩配對、兩種順序都通過。
 4. 上述兩個測試資料的 sha256 不變，且 `git diff main -- client/tests/fixtures` 為空。
 5. msgid 掃描：353，且以從 `main` 存下的清單執行 `--compare` 時回報 `SOURCE == SAVED`。`git diff main --stat -- client/locales scripts client/braille client/conversion client/dual_view client/main.py` 為空。
-6. `grep -rnE "SUPPORTED_OUTPUT_MODES|VIEW_SCHEME_KEYS|BRAILLE_FONT_KEYS|_OUTPUT_MODES|_VIEW_SCHEME_OPTIONS|_BRAILLE_FONT_OPTIONS|CHOICE_SPECS|_options_for_key|MIN_CONVERSION_WIDTH|MAX_CONVERSION_WIDTH|VIEW_FONT_SIZE_MIN|VIEW_FONT_SIZE_MAX" client --include=*.py` 沒有任何輸出。`grep -rnE '"(unicode|ascii|light|dark|simbraille|UEB|Nemeth)"' client --include=*.py --exclude-dir=tests` 只列出 `settings/options.py`、`config.py`（`DEFAULT_OUTPUT_MODE`、`DEFAULT_VIEW_SCHEME`、`DEFAULT_BRAILLE_FONT`）、`conversion/math_braille_codes.py`、`conversion/output.py`（2 處）、`conversion/presenter.py`（1 處）與 `main.py`（1 處）。
+6. `grep -rnE "SUPPORTED_OUTPUT_MODES|VIEW_SCHEME_KEYS|BRAILLE_FONT_KEYS|_OUTPUT_MODES|_VIEW_SCHEME_OPTIONS|_BRAILLE_FONT_OPTIONS|CHOICE_SPECS|_options_for_key|MIN_CONVERSION_WIDTH|MAX_CONVERSION_WIDTH|VIEW_FONT_SIZE_MIN|VIEW_FONT_SIZE_MAX" client --include=*.py` 沒有任何輸出。`grep -rnE '"(unicode|ascii|light|dark|simbraille|UEB|Nemeth)"' client --include=*.py --exclude-dir=tests` 只列出 `settings/options.py`、`config.py`（`DEFAULT_OUTPUT_MODE`、`DEFAULT_VIEW_SCHEME`、`DEFAULT_BRAILLE_FONT`）、`conversion/math_braille_codes.py`、`conversion/output.py`（2 處）、`conversion/presenter.py`（1 處）與 `main.py`（1 處）。若工作目錄中有被 git 忽略的 `client/.venv`，兩個 grep 都需要加上 `--exclude-dir=.venv`，否則也會列出第三方套件。
 7. `client/settings/options.py` 通過 AST 守門，`tests.test_i18n` 連同新的使用端測試一起通過。
 
 ## 風險
@@ -201,7 +211,7 @@ msgid 以字面值寫在 `N_()` 裡，所以 `xgettext --keyword=N_`（`scripts/
 3. **K3** 轉譯表載入時從不正規化，任何字串都接受；`MATH_BRAILLE_TABLES` 以外的數學值會傳到轉換流程，由 `conversion/mathcat_adapter.py` 退回 `UEB`。
 4. **K4** 前綴篩選只是對小寫檔名做 `startswith`（例如 `zh` 也會符合所有 `zh-*`/`zhcn*` 表）。
 
-釘住這些特性的測試標記為 `# KNOWN QUIRK (P2-3 spec, Kn)`。
+釘住這些特性的測試標記為 `# KNOWN QUIRK (P2-3 spec, Kn)`：K1 `ViewPanelOptionsTest.test_save_maps_out_of_range_selections_to_the_first_option` 與 `OptionHelpersTest.test_option_value_at_maps_out_of_range_indexes_to_the_first_option`；K2 `TranslationTablesPanelOptionsTest.test_unknown_or_missing_file_names_select_the_first_option`；K4 `TranslationTablesPanelOptionsTest.test_each_row_lists_its_tables_sorted_by_translated_name`。K3 除了 K2 之外沒有面板上可見的影響，交由既有的 `test_translation_tables` 涵蓋。
 
 ## Windows 驗證債
 

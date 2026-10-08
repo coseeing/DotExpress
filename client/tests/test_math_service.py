@@ -7,6 +7,11 @@ from conversion.math_service import (
     mathml_to_nemeth_braille,
     translate_math_segment,
 )
+from tests.file_log_isolation import isolate_file_logs
+
+
+def setUpModule() -> None:
+    unittest.addModuleCleanup(isolate_file_logs("dotexpress.math"))
 
 
 class MathServiceTest(unittest.TestCase):

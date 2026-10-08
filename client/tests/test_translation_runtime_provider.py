@@ -9,6 +9,11 @@ from adapters.translation.contracts import RuntimeUnavailableError
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
 from conversion.math_service import latex_to_mathml
 from conversion.mathcat_adapter import MathCATError
+from tests.file_log_isolation import isolate_file_logs
+
+
+def setUpModule() -> None:
+    unittest.addModuleCleanup(isolate_file_logs("dotexpress.translation"))
 
 
 class ClosableTranslator:

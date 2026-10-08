@@ -148,27 +148,27 @@ class GuiDocumentFlowsTest(unittest.TestCase):
     def test_sync_document_menu_state_before_document_list_exists(self) -> None:
         frame = self._make_frame()
         menu_items = {
-            "Open": Mock(),
-            "Delete": Mock(),
-            "Delete All": Mock(),
-            "Add": Mock(),
-            "Rename": Mock(),
-            "Import": Mock(),
-            "Export": Mock(),
-            "Export All": Mock(),
+            "open": Mock(),
+            "delete": Mock(),
+            "delete_all": Mock(),
+            "add": Mock(),
+            "rename": Mock(),
+            "import": Mock(),
+            "export": Mock(),
+            "export_all": Mock(),
         }
 
         frame._sync_document_menu_state(menu_items)
 
         self.assertNotIn("document_list", frame.__dict__)
-        menu_items["Open"].Enable.assert_called_once_with(False)
-        menu_items["Delete"].Enable.assert_called_once_with(False)
-        menu_items["Delete All"].Enable.assert_called_once_with(False)
-        menu_items["Add"].Enable.assert_called_once_with(True)
-        menu_items["Rename"].Enable.assert_called_once_with(False)
-        menu_items["Import"].Enable.assert_called_once_with(True)
-        menu_items["Export"].Enable.assert_called_once_with(False)
-        menu_items["Export All"].Enable.assert_called_once_with(False)
+        menu_items["open"].Enable.assert_called_once_with(False)
+        menu_items["delete"].Enable.assert_called_once_with(False)
+        menu_items["delete_all"].Enable.assert_called_once_with(False)
+        menu_items["add"].Enable.assert_called_once_with(True)
+        menu_items["rename"].Enable.assert_called_once_with(False)
+        menu_items["import"].Enable.assert_called_once_with(True)
+        menu_items["export"].Enable.assert_called_once_with(False)
+        menu_items["export_all"].Enable.assert_called_once_with(False)
 
     def test_open_dual_view_creates_refreshes_and_shows_viewer(self) -> None:
         frame = self._make_frame()

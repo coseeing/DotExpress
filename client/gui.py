@@ -400,10 +400,10 @@ class BrailleFrame(wx.Frame):
 		submenu_items: dict[str, dict[str, wx.MenuItem]] = {}
 		for item in get_document_menu_descriptors():
 			if item.kind == "command":
-				menu_items[item.label] = menu.Append(wx.ID_ANY, _(item.label))
+				menu_items[item.action] = menu.Append(wx.ID_ANY, _(item.label))
 				continue
 			submenu = wx.Menu()
-			menu_items[item.label] = menu.AppendSubMenu(submenu, _(item.label))
+			menu_items[item.action] = menu.AppendSubMenu(submenu, _(item.label))
 			submenu_items[item.action] = {}
 			for format_key, format_label in item.formats:
 				submenu_item = submenu.Append(wx.ID_ANY, _(format_label))
@@ -416,12 +416,12 @@ class BrailleFrame(wx.Frame):
 		menu_items: dict[str, wx.MenuItem],
 		submenu_items: dict[str, dict[str, wx.MenuItem]],
 	) -> None:
-		menu.Bind(wx.EVT_MENU, self.on_open_document, menu_items["Open"])
-		menu.Bind(wx.EVT_MENU, self.on_delete_document, menu_items["Delete"])
-		menu.Bind(wx.EVT_MENU, self.on_delete_all_documents, menu_items["Delete All"])
-		menu.Bind(wx.EVT_MENU, self.on_add_document, menu_items["Add"])
-		menu.Bind(wx.EVT_MENU, self.on_rename_document, menu_items["Rename"])
-		menu.Bind(wx.EVT_MENU, self.on_import_document, menu_items["Import"])
+		menu.Bind(wx.EVT_MENU, self.on_open_document, menu_items["open"])
+		menu.Bind(wx.EVT_MENU, self.on_delete_document, menu_items["delete"])
+		menu.Bind(wx.EVT_MENU, self.on_delete_all_documents, menu_items["delete_all"])
+		menu.Bind(wx.EVT_MENU, self.on_add_document, menu_items["add"])
+		menu.Bind(wx.EVT_MENU, self.on_rename_document, menu_items["rename"])
+		menu.Bind(wx.EVT_MENU, self.on_import_document, menu_items["import"])
 		for format_key, submenu_item in submenu_items.get("export", {}).items():
 			menu.Bind(wx.EVT_MENU, lambda _evt, fmt=format_key: self.on_export_document(fmt), submenu_item)
 		for format_key, submenu_item in submenu_items.get("export_all", {}).items():
@@ -436,8 +436,8 @@ class BrailleFrame(wx.Frame):
 			has_selection=selected_document is not None,
 			has_documents=bool(self.documents),
 		)
-		for label, enabled in menu_state.items():
-			menu_item = target_items.get(label)
+		for action, enabled in menu_state.items():
+			menu_item = target_items.get(action)
 			if menu_item is not None:
 				menu_item.Enable(enabled)
 

@@ -23,7 +23,8 @@ with _SCOPE.loading():
 setUpModule = _SCOPE.activate
 tearDownModule = _SCOPE.deactivate
 
-from documents.workspace import Document
+from documents.controller import DocumentController
+from documents.workspace import Document, load_document_package, save_document_package
 from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
@@ -1597,6 +1598,827 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             [call.save(), call.export(frame._documents_by_name["alpha"], "brl"), call.output_txt.SetFocus()],
         )
         event.Skip.assert_not_called()
+
+
+class _FakeEditor:
+    def __init__(self, name: str, events: list, value: str = ""):
+        self.name = name
+        self.events = events
+        self.value = value
+
+    def SetValue(self, value: str) -> None:
+        self.value = value
+
+    def GetValue(self) -> str:
+        return self.value
+
+    def SetFocus(self) -> None:
+        self.events.append(("focus", self.name))
+
+    def SetInsertionPoint(self, _position: int) -> None:
+        pass
+
+    def ShowPosition(self, _position: int) -> None:
+        pass
+
+
+class _FakeDocumentList:
+    def __init__(self, names: list[str], selected_index: int):
+        self.items = list(names)
+        self.selected = selected_index
+
+    def DeleteAllItems(self) -> None:
+        self.items = []
+        self.selected = gui.wx.NOT_FOUND
+
+    def InsertItem(self, index: int, label: str) -> None:
+        self.items.insert(index, label)
+
+    def GetItemCount(self) -> int:
+        return len(self.items)
+
+    def Select(self, index: int, on: int = 1) -> None:
+        self.selected = index if on else gui.wx.NOT_FOUND
+
+    def Focus(self, _index: int) -> None:
+        pass
+
+    def GetFirstSelected(self) -> int:
+        return self.selected
+
+
+class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
+    """Pins today's document flows: disk effects, dialogs, state; must pass unchanged through P1-3.
+
+    Faults come from the file system: a directory at ``<ws>/<name>.dep`` makes the package
+    write and the unlink fail with an ``OSError`` and is loaded as an invalid package.
+    """
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.root = Path(temp_dir.name)
+        self.workspace = self.root / "workspace"
+        self.events: list = []
+        self.answers: list = []
+        self.names: list = []
+        self.delete_invalid = False
+        self.import_paths: list[str] = []
+        self.import_filter_index = gui.ALL_SUPPORTED_FILTER_INDEX
+        for patcher in (
+            patch.object(gui.wx, "MessageBox", self._message_box),
+            patch.object(gui, "DocumentNameDialog", self._name_dialog_class()),
+            patch.object(gui, "InvalidWorkspaceFilesDialog", self._invalid_files_dialog_class()),
+            patch.object(gui, "FileIssuesDialog", self._issues_dialog_class()),
+            patch.object(gui.wx, "FileDialog", self._import_dialog_class()),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    # --- fakes -------------------------------------------------------------
+
+    def _message_box(self, message, caption, style, parent=None):
+        self.events.append(("MessageBox", message, caption, style, parent))
+        return self.answers.pop(0) if self.answers else gui.wx.OK
+
+    def _name_dialog_class(self):
+        test = self
+
+        class FakeDocumentNameDialog:
+            def __init__(self, parent, title, initial_name=""):
+                test.events.append(("DocumentNameDialog", title, initial_name))
+                self.name = test.names.pop(0)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def ShowModal(self):
+                return gui.wx.ID_OK if self.name is not None else gui.wx.CANCEL
+
+            def get_document_name(self):
+                return self.name
+
+        return FakeDocumentNameDialog
+
+    def _invalid_files_dialog_class(self):
+        test = self
+
+        class FakeInvalidWorkspaceFilesDialog:
+            def __init__(self, parent, invalid_paths):
+                test.events.append(("InvalidWorkspaceFilesDialog", list(invalid_paths)))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def ShowModal(self):
+                return gui.wx.ID_OK
+
+            def should_delete_invalid_files(self):
+                return test.delete_invalid
+
+        return FakeInvalidWorkspaceFilesDialog
+
+    def _issues_dialog_class(self):
+        test = self
+
+        class FakeFileIssuesDialog:
+            def __init__(self, parent, title, message, issues):
+                test.events.append(("FileIssuesDialog", title, message, list(issues)))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def ShowModal(self):
+                return gui.wx.ID_OK
+
+        return FakeFileIssuesDialog
+
+    def _import_dialog_class(self):
+        test = self
+
+        class FakeImportDialog:
+            def __init__(self, parent, title, wildcard="", style=0):
+                test.events.append(("FileDialog", title, style))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def SetFilterIndex(self, index):
+                pass
+
+            def ShowModal(self):
+                return gui.wx.ID_OK
+
+            def GetFilterIndex(self):
+                return test.import_filter_index
+
+            def GetPaths(self):
+                return list(test.import_paths)
+
+        return FakeImportDialog
+
+    # --- helpers -----------------------------------------------------------
+
+    def _make_workspace_frame(self, documents=(), open_name=None, selected_name=None) -> gui.BrailleFrame:
+        frame = gui.BrailleFrame.__new__(gui.BrailleFrame)
+        documents = list(documents)
+        frame._document_controller = DocumentController(
+            documents=documents,
+            open_name=open_name,
+            selected_name=selected_name,
+        )
+        frame.workspace_dir = self.workspace
+        open_document = next((document for document in documents if document.name == open_name), None)
+        frame.input_txt = _FakeEditor("input", self.events, open_document.text if open_document else "")
+        frame.output_txt = _FakeEditor("output", self.events, (open_document.braille or "") if open_document else "")
+        names = [document.name for document in documents]
+        frame.document_list = _FakeDocumentList(
+            names,
+            names.index(selected_name) if selected_name in names else gui.wx.NOT_FOUND,
+        )
+        frame.SetTitle = lambda title: self.events.append(("title", title))
+        frame._dual_view_frame = None
+        frame._document_menu_items = {}
+        frame._conversion_runner = Mock()
+        frame._conversion_runner.is_running.return_value = False
+        frame._close_converting_dialog = Mock()
+        return frame
+
+    def _write_packages(self, *documents: Document) -> None:
+        for document in documents:
+            save_document_package(self.workspace / f"{document.name}.dep", document)
+
+    def _block(self, name: str) -> Path:
+        """Make ``<ws>/<name>.dep`` a non-empty directory: writes and unlinks of it fail."""
+        path = self.workspace / f"{name}.dep"
+        (path / "keep").mkdir(parents=True)
+        return path
+
+    def _listing(self) -> list[str]:
+        return sorted(path.name for path in self.workspace.iterdir())
+
+    def _package(self, name: str) -> Document:
+        return load_document_package(self.workspace / f"{name}.dep")
+
+    def _members(self, name: str) -> list[str]:
+        with zipfile.ZipFile(self.workspace / f"{name}.dep") as archive:
+            return sorted(archive.namelist())
+
+    def _state(self, frame) -> tuple:
+        controller = frame._document_controller
+        return (
+            list(controller.documents),
+            controller.open_name,
+            controller.selected_name,
+            dict(controller.dual_view_results_by_document),
+        )
+
+    def _assert_error_box(self, event, template: str, path_name: str, frame) -> None:
+        kind, message, caption, style, parent = event
+        self.assertEqual(kind, "MessageBox")
+        self.assertTrue(message.startswith(gui._(template).partition("{error}")[0]), message)
+        self.assertIn(path_name, message)
+        self.assertEqual(caption, gui._("Error"))
+        self.assertEqual(style, gui.wx.OK | gui.wx.ICON_ERROR)
+        self.assertIs(parent, frame)
+
+    def _confirm(self, message: str, title: str, frame) -> tuple:
+        return (
+            "MessageBox",
+            message,
+            title,
+            gui.wx.YES_NO | gui.wx.NO_DEFAULT | gui.wx.ICON_WARNING,
+            frame,
+        )
+
+    def _skip_unless_case_sensitive(self, sensitive: bool) -> None:
+        self.workspace.mkdir(parents=True, exist_ok=True)
+        probe = self.workspace / "case-probe"
+        probe.write_text("", encoding="utf-8")
+        is_sensitive = not (self.workspace / "CASE-PROBE").exists()
+        probe.unlink()
+        if is_sensitive != sensitive:
+            self.skipTest("needs a case-%s file system" % ("sensitive" if sensitive else "insensitive"))
+
+    # --- Add and default document ------------------------------------------
+
+    def test_add_saves_open_document_then_creates_and_opens_new_document(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("a edited")
+        self.names = ["beta"]
+
+        frame.on_add_document(None)
+
+        self.assertEqual(self._package("alpha"), Document("alpha", "a edited", "1"))
+        self.assertEqual(self._package("beta"), Document("beta", "", ""))
+        self.assertEqual(self._members("beta"), ["beta.brl", "beta.txt"])
+        self.assertEqual(frame._document_controller.document_names, ["alpha", "beta"])
+        self.assertEqual(frame._document_controller.open_name, "beta")
+        self.assertEqual(frame._document_controller.selected_name, "beta")
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("", ""))
+        self.assertEqual(frame.document_list.items, ["alpha", "beta"])
+        self.assertEqual(frame.document_list.selected, 1)
+        self.assertEqual(
+            self.events,
+            [("DocumentNameDialog", gui._("Add Document"), ""), ("title", "beta - DotExpress")],
+        )
+
+    def test_add_duplicate_name_reprompts_with_that_name(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.names = ["alpha", "beta"]
+
+        frame.on_add_document(None)
+
+        self.assertEqual(
+            self.events[:3],
+            [
+                ("DocumentNameDialog", gui._("Add Document"), ""),
+                (
+                    "MessageBox",
+                    gui._('Document "{name}" already exists.').format(name="alpha"),
+                    gui._("Error"),
+                    gui.wx.OK | gui.wx.ICON_ERROR,
+                    frame,
+                ),
+                ("DocumentNameDialog", gui._("Add Document"), "alpha"),
+            ],
+        )
+        self.assertEqual(frame._document_controller.document_names, ["alpha", "beta"])
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
+    def test_add_write_failure_shows_error_and_keeps_state(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        self._block("beta")
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        before = self._state(frame)
+        self.names = ["beta"]
+
+        frame.on_add_document(None)
+
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "beta.dep", frame)
+        self.assertEqual(self._state(frame), before)
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("a", "1"))
+
+    def test_default_document_is_pending_opened_and_focused(self) -> None:
+        frame = self._make_workspace_frame()
+
+        frame._ensure_open_document_exists()
+
+        self.assertEqual(self._listing(), ["new.dep"])
+        self.assertEqual(self._package("new"), Document("new", "", None))
+        self.assertEqual(self._members("new"), ["new.brl", "new.meta.json", "new.txt"])
+        self.assertEqual(frame._document_controller.document_names, ["new"])
+        self.assertEqual(frame._document_controller.open_name, "new")
+        self.assertEqual(self.events, [("title", "new - DotExpress"), ("focus", "input")])
+
+    # --- startup -----------------------------------------------------------
+
+    def test_startup_with_missing_workspace_creates_it_and_default_document(self) -> None:
+        frame = self._make_workspace_frame()
+
+        frame._load_workspace_documents_at_startup()
+
+        self.assertEqual(self._listing(), ["new.dep"])
+        self.assertEqual(frame._document_controller.document_names, ["new"])
+        self.assertEqual(frame._document_controller.open_name, "new")
+        self.assertEqual(
+            self.events,
+            [("title", "new - DotExpress"), ("focus", "input"), ("title", "new - DotExpress")],
+        )
+
+    def test_startup_reviews_invalid_packages_and_opens_first_valid_one(self) -> None:
+        self._write_packages(Document("good", "g", "1"))
+        (self.workspace / "bad.dep").write_bytes(b"not a zip")
+        self.delete_invalid = True
+        frame = self._make_workspace_frame()
+
+        frame._load_workspace_documents_at_startup()
+
+        self.assertEqual(
+            self.events,
+            [
+                ("InvalidWorkspaceFilesDialog", [self.workspace / "bad.dep"]),
+                ("title", "good - DotExpress"),
+                ("title", "good - DotExpress"),
+            ],
+        )
+        self.assertEqual(self._listing(), ["good.dep"])
+        self.assertEqual(frame._document_controller.document_names, ["good"])
+        self.assertEqual(frame._document_controller.open_name, "good")
+        self.assertEqual(frame.input_txt.value, "g")
+
+    def test_startup_invalid_file_delete_error_continues_with_next_file(self) -> None:
+        self._block("a-blocked")
+        (self.workspace / "b-corrupt.dep").write_bytes(b"not a zip")
+        self._write_packages(Document("good", "g", "1"))
+        self.delete_invalid = True
+        frame = self._make_workspace_frame()
+
+        frame._load_workspace_documents_at_startup()
+
+        self.assertEqual(
+            self.events[0],
+            ("InvalidWorkspaceFilesDialog", [self.workspace / "a-blocked.dep", self.workspace / "b-corrupt.dep"]),
+        )
+        self._assert_error_box(self.events[1], "Failed to delete invalid workspace file: {error}", "a-blocked.dep", frame)
+        self.assertEqual(self.events[2:], [("title", "good - DotExpress"), ("title", "good - DotExpress")])
+        self.assertEqual(self._listing(), ["a-blocked.dep", "good.dep"])
+
+    # --- save --------------------------------------------------------------
+
+    def test_save_open_document_keeps_pending_document_pending(self) -> None:
+        alpha = Document("alpha", "a", None)
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("edited")
+        frame.output_txt.SetValue("ignored braille")
+
+        self.assertTrue(frame._save_open_document_with_feedback())
+
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "edited", None)])
+        self.assertEqual(self._package("alpha"), Document("alpha", "edited", None))
+        self.assertIn("alpha.meta.json", self._members("alpha"))
+        self.assertEqual(self.events, [])
+
+    def test_save_failure_reports_error_after_updating_memory(self) -> None:
+        self._block("alpha")
+        frame = self._make_workspace_frame([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("edited")
+        frame.output_txt.SetValue("edited braille")
+
+        self.assertFalse(frame._save_open_document_with_feedback())
+
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "alpha.dep", frame)
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "edited", "edited braille")])
+
+    def test_close_vetoes_when_save_fails(self) -> None:
+        self._block("alpha")
+        frame = self._make_workspace_frame([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+        event = Mock()
+        event.CanVeto.return_value = True
+
+        frame._on_close(event)
+
+        event.Veto.assert_called_once_with()
+        event.Skip.assert_not_called()
+        frame._close_converting_dialog.assert_not_called()
+
+    # --- rename ------------------------------------------------------------
+
+    def test_rename_writes_new_package_deletes_old_and_moves_state(self) -> None:
+        alpha = Document("alpha", "a", None)
+        beta = Document("beta", "b", "2")
+        self._write_packages(alpha, beta)
+        frame = self._make_workspace_frame([alpha, beta], open_name="alpha", selected_name="alpha")
+        frame._document_controller.dual_view_results_by_document.update({"alpha": ("seg-a",), "beta": ("seg-b",)})
+        self.names = ["gamma"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(self._listing(), ["beta.dep", "gamma.dep"])
+        self.assertEqual(self._package("gamma"), Document("gamma", "a", None))
+        self.assertIn("gamma.meta.json", self._members("gamma"))
+        self.assertEqual(
+            self._state(frame),
+            (
+                [Document("beta", "b", "2"), Document("gamma", "a", None)],
+                "gamma",
+                "gamma",
+                {"gamma": ("seg-a",), "beta": ("seg-b",)},
+            ),
+        )
+        self.assertEqual(frame.document_list.items, ["beta", "gamma"])
+        self.assertEqual(frame.document_list.selected, 1)
+        self.assertEqual(
+            self.events,
+            [("DocumentNameDialog", gui._("Rename Document"), "alpha"), ("title", "gamma - DotExpress")],
+        )
+
+    def test_rename_with_missing_old_package_writes_new_one(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        beta = Document("beta", "b", "2")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha, beta], open_name="alpha", selected_name="beta")
+        self.names = ["gamma"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(self._listing(), ["alpha.dep", "gamma.dep"])
+        self.assertEqual(self._package("gamma"), Document("gamma", "b", "2"))
+        self.assertEqual(frame._document_controller.document_names, ["alpha", "gamma"])
+        self.assertEqual(frame._document_controller.open_name, "alpha")
+        self.assertEqual(frame._document_controller.selected_name, "gamma")
+
+    def test_rename_write_failure_keeps_old_package_and_state(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        self._block("gamma")
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        before = self._state(frame)
+        self.names = ["gamma"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "gamma.dep", frame)
+        self.assertEqual(self._package("alpha"), alpha)
+        self.assertEqual(self._state(frame), before)
+
+    def test_rename_unlink_failure_leaves_both_packages_and_state(self) -> None:
+        # KNOWN BUG (P1-3 spec, known defect 3), pinned as it is today, NOT desired
+        # behavior: the new package is written, the old unlink fails, and both stay
+        # on disk while memory keeps only the old name. A later fix task flips this.
+        alpha = Document("alpha", "a", "1")
+        beta = Document("beta", "b", "2")
+        self._write_packages(alpha)
+        self._block("beta")
+        frame = self._make_workspace_frame([alpha, beta], open_name="alpha", selected_name="beta")
+        before = self._state(frame)
+        self.names = ["gamma"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "beta.dep", frame)
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep", "gamma.dep"])
+        self.assertEqual(self._package("gamma"), Document("gamma", "b", "2"))
+        self.assertEqual(self._state(frame), before)
+
+    def test_rename_cancelled_or_unchanged_does_nothing(self) -> None:
+        for answer in (None, "alpha"):
+            with self.subTest(answer=answer):
+                self.events.clear()
+                alpha = Document("alpha", "a", "1")
+                self._write_packages(alpha)
+                frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+                before = self._state(frame)
+                self.names = [answer]
+
+                frame.on_rename_document(None)
+
+                self.assertEqual(self.events, [("DocumentNameDialog", gui._("Rename Document"), "alpha")])
+                self.assertEqual(self._listing(), ["alpha.dep"])
+                self.assertEqual(self._state(frame), before)
+
+    def test_case_only_rename_on_case_sensitive_file_system(self) -> None:
+        self._skip_unless_case_sensitive(True)
+        alpha = Document("Alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="Alpha", selected_name="Alpha")
+        self.names = ["alpha"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(self._package("alpha"), Document("alpha", "a", "1"))
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+
+    def test_case_only_rename_on_case_insensitive_file_system_deletes_package(self) -> None:
+        # KNOWN BUG (P1-3 spec, known defect 1; data loss), pinned as it is today, NOT
+        # desired behavior: the new package is the old file, so the unlink that follows
+        # removes the document. A later fix task flips this.
+        self._skip_unless_case_sensitive(False)
+        alpha = Document("Alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="Alpha", selected_name="Alpha")
+        self.names = ["alpha"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(self._listing(), [])
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+        self.assertEqual(self.events, [("DocumentNameDialog", gui._("Rename Document"), "Alpha"), ("title", "alpha - DotExpress")])
+
+    def test_add_case_variant_on_case_sensitive_file_system(self) -> None:
+        self._skip_unless_case_sensitive(True)
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.names = ["Alpha"]
+
+        frame.on_add_document(None)
+
+        self.assertEqual(self._listing(), ["Alpha.dep", "alpha.dep"])
+        self.assertEqual(self._package("alpha"), alpha)
+        self.assertEqual(frame._document_controller.document_names, ["Alpha", "alpha"])
+
+    def test_add_case_variant_on_case_insensitive_file_system_overwrites_package(self) -> None:
+        # KNOWN BUG (P1-3 spec, known defect 2; data loss), pinned as it is today, NOT
+        # desired behavior: the case-sensitive duplicate check accepts "Alpha", and its
+        # package replaces alpha's. A later fix task flips this.
+        self._skip_unless_case_sensitive(False)
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.names = ["Alpha"]
+
+        frame.on_add_document(None)
+
+        self.assertEqual([name.casefold() for name in self._listing()], ["alpha.dep"])
+        self.assertEqual(self._members(self._listing()[0][: -len(".dep")]), ["Alpha.brl", "Alpha.txt"])
+        self.assertEqual(frame._document_controller.document_names, ["Alpha", "alpha"])
+
+    # --- delete ------------------------------------------------------------
+
+    def test_delete_open_middle_document_opens_previous_neighbour(self) -> None:
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2"), Document("gamma", "c", "3")]
+        self._write_packages(*documents)
+        frame = self._make_workspace_frame(documents, open_name="beta", selected_name="beta")
+        frame._document_controller.dual_view_results_by_document.update({"alpha": ("seg-a",), "beta": ("seg-b",)})
+        self.answers = [gui.wx.YES]
+
+        frame.on_delete_document(None)
+
+        self.assertEqual(
+            self.events,
+            [
+                self._confirm(
+                    gui._('Do you want to delete document "{name}"?').format(name="beta"),
+                    gui._("Confirm Delete Document"),
+                    frame,
+                ),
+                ("title", "alpha - DotExpress"),
+            ],
+        )
+        self.assertEqual(self._listing(), ["alpha.dep", "gamma.dep"])
+        self.assertEqual(
+            self._state(frame),
+            ([documents[0], documents[2]], "alpha", "alpha", {"alpha": ("seg-a",)}),
+        )
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("a", "1"))
+
+    def test_delete_selected_document_that_is_not_open_keeps_editors(self) -> None:
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
+        self._write_packages(*documents)
+        frame = self._make_workspace_frame(documents, open_name="alpha", selected_name="beta")
+        self.answers = [gui.wx.YES]
+
+        frame.on_delete_document(None)
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(self._state(frame), ([documents[0]], "alpha", "alpha", {}))
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("a", "1"))
+        self.assertEqual(len(self.events), 1)
+
+    def test_delete_last_document_creates_default_document(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.answers = [gui.wx.YES]
+
+        frame.on_delete_document(None)
+
+        self.assertEqual(self._listing(), ["new.dep"])
+        self.assertEqual(self._package("new"), Document("new", "", None))
+        self.assertEqual(self._state(frame), ([Document("new", "", None)], "new", "new", {}))
+        self.assertEqual(
+            self.events[1:],
+            [("title", "DotExpress"), ("title", "new - DotExpress"), ("focus", "input")],
+        )
+
+    def test_delete_answered_no_changes_nothing(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        before = self._state(frame)
+        self.answers = [gui.wx.NO]
+
+        frame.on_delete_document(None)
+
+        self.assertEqual(len(self.events), 1)
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(self._state(frame), before)
+
+    def test_delete_unlink_failure_shows_error_and_keeps_state(self) -> None:
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
+        self._write_packages(documents[0])
+        self._block("beta")
+        frame = self._make_workspace_frame(documents, open_name="alpha", selected_name="beta")
+        before = self._state(frame)
+        self.answers = [gui.wx.YES]
+
+        frame.on_delete_document(None)
+
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to delete document: {error}", "beta.dep", frame)
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+        self.assertEqual(self._state(frame), before)
+
+    # --- Delete All --------------------------------------------------------
+
+    def test_delete_all_success_removes_packages_and_creates_default_document(self) -> None:
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
+        self._write_packages(*documents)
+        frame = self._make_workspace_frame(documents, open_name="alpha", selected_name="alpha")
+        frame._document_controller.dual_view_results_by_document.update({"alpha": ("seg-a",)})
+        self.answers = [gui.wx.YES]
+
+        frame.on_delete_all_documents(None)
+
+        self.assertEqual(
+            self.events,
+            [
+                self._confirm(
+                    gui._("Delete All will remove all documents. Do you want to continue?"),
+                    gui._("Confirm Delete All"),
+                    frame,
+                ),
+                ("title", "DotExpress"),
+                ("title", "new - DotExpress"),
+                ("focus", "input"),
+            ],
+        )
+        self.assertEqual(self._listing(), ["new.dep"])
+        self.assertEqual(self._state(frame), ([Document("new", "", None)], "new", "new", {}))
+
+    def test_delete_all_failure_reports_then_reloads_and_reviews(self) -> None:
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2"), Document("gamma", "c", "3")]
+        self._write_packages(documents[0], documents[2])
+        self._block("beta")
+        frame = self._make_workspace_frame(documents, open_name="alpha", selected_name="alpha")
+        frame._document_controller.dual_view_results_by_document.update(
+            {"alpha": ("seg-a",), "beta": ("seg-b",), "gamma": ("seg-c",)}
+        )
+        self.answers = [gui.wx.YES]
+
+        frame.on_delete_all_documents(None)
+
+        self.assertEqual(len(self.events), 4)
+        self._assert_error_box(self.events[1], "Failed to delete document: {error}", "beta.dep", frame)
+        self.assertEqual(
+            self.events[2:],
+            [
+                ("InvalidWorkspaceFilesDialog", [self.workspace / "beta.dep"]),
+                ("title", "gamma - DotExpress"),
+            ],
+        )
+        self.assertEqual(self._listing(), ["beta.dep", "gamma.dep"])
+        self.assertEqual(self._state(frame), ([documents[2]], "gamma", "gamma", {"gamma": ("seg-c",)}))
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("c", "3"))
+
+    def test_delete_all_failure_without_valid_document_clears_editors_only(self) -> None:
+        # KNOWN BUG (P1-3 spec, known defect 4), pinned as it is today, NOT desired
+        # behavior: the rollback leaves no valid document, so only the editors are
+        # cleared (no title update, no default document). A later fix task flips this.
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
+        self._write_packages(documents[0])
+        self._block("beta")
+        frame = self._make_workspace_frame(documents, open_name="alpha", selected_name="alpha")
+        self.answers = [gui.wx.YES]
+
+        frame.on_delete_all_documents(None)
+
+        self.assertEqual(len(self.events), 3)
+        self._assert_error_box(self.events[1], "Failed to delete document: {error}", "beta.dep", frame)
+        self.assertEqual(self.events[2], ("InvalidWorkspaceFilesDialog", [self.workspace / "beta.dep"]))
+        self.assertEqual(self._listing(), ["beta.dep"])
+        self.assertEqual(self._state(frame), ([], None, None, {}))
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("", ""))
+
+    def test_delete_all_without_documents_does_nothing(self) -> None:
+        frame = self._make_workspace_frame()
+        frame._save_open_document_with_feedback = Mock()
+
+        frame.on_delete_all_documents(None)
+
+        frame._save_open_document_with_feedback.assert_not_called()
+        self.assertEqual(self.events, [])
+        self.assertFalse(self.workspace.exists())
+
+    # --- import ------------------------------------------------------------
+
+    def _write_sources(self, **texts: str) -> list[str]:
+        source_dir = self.root / "sources"
+        source_dir.mkdir(exist_ok=True)
+        paths = []
+        for stem, text in texts.items():
+            path = source_dir / f"{stem}.txt"
+            path.write_text(text, encoding="utf-8")
+            paths.append(str(path))
+        return paths
+
+    def test_import_two_files_adds_them_and_keeps_open_document(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.import_paths = self._write_sources(delta="d", beta="b")
+
+        frame.on_import_document(None)
+
+        self.assertEqual(self.events, [("FileDialog", gui._("Import Document"), gui.wx.FD_OPEN | gui.wx.FD_MULTIPLE)])
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep", "delta.dep"])
+        self.assertEqual(self._package("delta"), Document("delta", "d", None))
+        self.assertEqual(
+            self._state(frame),
+            ([alpha, Document("beta", "b", None), Document("delta", "d", None)], "alpha", "alpha", {}),
+        )
+        self.assertEqual(frame.document_list.items, ["alpha", "beta", "delta"])
+
+    def test_import_one_file_opens_it(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.import_paths = self._write_sources(beta="b")
+
+        frame.on_import_document(None)
+
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+        self.assertEqual(frame._document_controller.open_name, "beta")
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("b", ""))
+        self.assertEqual(self.events[1:], [("title", "beta - DotExpress")])
+
+    def test_import_reports_load_issues_before_save_issues(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        self._block("delta")
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.import_paths = self._write_sources(Alpha="dup", beta="b", delta="d")
+
+        frame.on_import_document(None)
+
+        self.assertEqual(frame._document_controller.document_names, ["alpha", "beta"])
+        self.assertEqual(frame._document_controller.open_name, "beta")
+        kind, title, message, lines = self.events[-1]
+        self.assertEqual((kind, title, message), ("FileIssuesDialog", gui._("Import Issues"), gui._("Some files were skipped during import.")))
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[0], 'Alpha.txt: Document "Alpha" already exists.')
+        self.assertTrue(lines[1].startswith("delta.dep: "), lines[1])
+        self.assertIn("delta.dep", lines[1][len("delta.dep: "):])
+
+    # --- selection ---------------------------------------------------------
+
+    def test_selection_change_maps_index_to_name(self) -> None:
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
+        frame = self._make_workspace_frame(documents, open_name="alpha", selected_name="alpha")
+        for index, expected in ((1, "beta"), (gui.wx.NOT_FOUND, None), (2, None), (0, "alpha")):
+            with self.subTest(index=index):
+                frame.document_list.selected = index
+                event = Mock()
+
+                frame.on_document_selection_changed(event)
+
+                self.assertEqual(frame._document_controller.selected_name, expected)
+                event.Skip.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()

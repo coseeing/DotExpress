@@ -6,6 +6,7 @@ from types import ModuleType
 
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
+from config import DEFAULT_CHARSET_MAPS
 from dual_view.model import DualViewSegment
 from conversion.service import (
     ConversionOutput,
@@ -17,6 +18,10 @@ from conversion.service import (
     translate_with_language_segments,
 )
 from translate import TranslationResult
+
+
+LANG = "zh_TW"
+CHARSET_MAPS = dict(DEFAULT_CHARSET_MAPS)
 
 
 class FakeTextTranslator:
@@ -36,8 +41,8 @@ class FakeMathTranslator:
         self.calls = []
         self.error = error
 
-    def translate(self, source: str, *, braille_code: str) -> TranslationResult:
-        self.calls.append((source, braille_code))
+    def translate(self, source: str, *, braille_code: str, language: str) -> TranslationResult:
+        self.calls.append((source, braille_code, language))
         if self.error is not None:
             raise self.error
         braille = list(f"M[{source}]")
@@ -62,6 +67,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=Path("dictionary/default.csv"),
             data_dir=Path("data"),
             translation_tables={"default": "zh-tw.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
     def _write_csv(self, path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -174,6 +181,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "table.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         output = convert_text_with_alignment(request, runtime=self._runtime())
@@ -196,6 +205,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "table.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         runtime = self._runtime()
 
@@ -219,6 +230,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "table.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         with self.assertRaises(ConversionStageError) as context:
@@ -251,6 +264,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "zh-tw.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual(result.raw, ["計算", " ", "1+2", " ", "的值"])
@@ -267,6 +282,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "table.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual([result.raw for result in results], [["ab"], [" "], ["x+1"]])
@@ -281,6 +298,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "default.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertIn((" ", "default.ctb", " ", False), runtime.text_translator.calls)
@@ -295,6 +314,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "table.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual([result.raw for result in results], [["甲「乙」"]])
@@ -315,6 +336,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "table.ctb"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual([result.raw for result in results], [["台灣"]])
@@ -330,6 +353,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "zh-tw.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual(result.raw, ["計算 ", "1+2", " 的值"])
@@ -345,6 +370,8 @@ class ConversionServiceTest(unittest.TestCase):
                 {"default": "zh-tw.ctb", "math": "Nemeth"},
                 self.bopomofo_path,
                 runtime=runtime,
+                lang=LANG,
+                charset_maps=CHARSET_MAPS,
             )
 
     def test_translate_with_language_passes_selected_math_braille_code(self) -> None:
@@ -357,9 +384,11 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "zh-tw.ctb", "math": "UEB"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
-        self.assertEqual(math_translator.calls, [("1", "UEB")])
+        self.assertEqual(math_translator.calls, [("1", "UEB", "zh_TW")])
 
     def test_translate_with_language_keeps_escaped_dollar_in_plain_text_segment(self) -> None:
         from conversion import service
@@ -370,6 +399,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "zh-tw.ctb"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         self.assertEqual(result.raw, ["價格\\$100"])
@@ -383,6 +414,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=self.dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "zh-tw.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -398,6 +431,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=self.dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -414,6 +449,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=self.dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -430,6 +467,8 @@ class ConversionServiceTest(unittest.TestCase):
             {"default": "table.ctb", "math": "Nemeth"},
             self.bopomofo_path,
             runtime=runtime,
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
 
         for result in results:
@@ -443,6 +482,8 @@ class ConversionServiceTest(unittest.TestCase):
             dictionary_path=self.dictionary_path,
             data_dir=self.test_dir,
             translation_tables={"default": "zh-tw.ctb"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 

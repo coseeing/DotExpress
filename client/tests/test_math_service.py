@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock, patch
 
 from conversion.math_service import (
     MathConversionError,
@@ -21,7 +22,21 @@ class MathServiceTest(unittest.TestCase):
 
     def test_translate_math_segment_raises_math_conversion_error_for_latex_failure(self) -> None:
         with self.assertRaises(MathConversionError):
-            translate_math_segment(r"\frac{2}{")
+            translate_math_segment(r"\frac{2}{", language="zh_TW")
+
+    def test_translate_math_segment_forwards_language_to_mathcat(self) -> None:
+        adapter = Mock()
+        adapter.get_braille_for_mathml.return_value = "\u283c\u2801"
+
+        with patch("conversion.mathcat_adapter.get_shared_mathcat_adapter", return_value=adapter):
+            braille = translate_math_segment("1", braille_code="Nemeth", language="en")
+
+        self.assertEqual(braille, "\u283c\u2801")
+        adapter.get_braille_for_mathml.assert_called_once_with(
+            latex_to_mathml("1"),
+            braille_code="Nemeth",
+            language="en",
+        )
 
 
 if __name__ == "__main__":

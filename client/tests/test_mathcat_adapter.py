@@ -1,7 +1,6 @@
 import unittest
 from pathlib import Path
 
-import config
 from conversion.mathcat_adapter import MathCATAdapter, MathCATError
 
 
@@ -45,13 +44,6 @@ class TestMathCATAdapter(MathCATAdapter):
 
 
 class MathCATAdapterTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self._original_runtime_lang = config._runtime_lang
-        config.set_lang("zh_TW", persist=False)
-
-    def tearDown(self) -> None:
-        config._runtime_lang = self._original_runtime_lang
-
     def test_initialize_loads_runtime_once(self) -> None:
         adapter = TestMathCATAdapter()
 
@@ -68,7 +60,7 @@ class MathCATAdapterTest(unittest.TestCase):
         fake = FakeLib()
         adapter = TestMathCATAdapter(fake_lib=fake)
 
-        self.assertEqual(adapter.get_braille_for_mathml("<math/>"), "⠼⠁")
+        self.assertEqual(adapter.get_braille_for_mathml("<math/>", language="zh_TW"), "⠼⠁")
 
         self.assertEqual(fake.calls[0][0], "SetRulesDir")
         self.assertIn(("SetPreference", "BrailleCode", "UEB"), fake.calls)
@@ -79,23 +71,49 @@ class MathCATAdapterTest(unittest.TestCase):
         fake = FakeLib()
         adapter = TestMathCATAdapter(fake_lib=fake)
 
-        adapter.get_braille_for_mathml("<math/>", braille_code="UEB")
+        adapter.get_braille_for_mathml("<math/>", braille_code="UEB", language="zh_TW")
 
         self.assertIn(("SetPreference", "BrailleCode", "UEB"), fake.calls)
 
     def test_get_braille_for_mathml_wraps_runtime_failures(self) -> None:
         adapter = TestMathCATAdapter(load_error=RuntimeError("load failed"))
         with self.assertRaisesRegex(MathCATError, "load failed"):
-            adapter.get_braille_for_mathml("<math/>")
+            adapter.get_braille_for_mathml("<math/>", language="zh_TW")
 
     def test_get_braille_for_mathml_reapplies_runtime_configuration_for_each_call(self) -> None:
         fake = FakeLib("⠁")
         adapter = TestMathCATAdapter(fake_lib=fake)
-        adapter.get_braille_for_mathml("<math><mn>1</mn></math>")
-        adapter.get_braille_for_mathml("<math><mn>2</mn></math>")
+        adapter.get_braille_for_mathml("<math><mn>1</mn></math>", language="zh_TW")
+        adapter.get_braille_for_mathml("<math><mn>2</mn></math>", language="zh_TW")
 
         set_rules_dir_calls = [call for call in fake.calls if call[0] == "SetRulesDir"]
         self.assertEqual(len(set_rules_dir_calls), 2)
+
+    def test_language_preference_is_lowercase_with_hyphen(self) -> None:
+        fake = FakeLib()
+        adapter = TestMathCATAdapter(fake_lib=fake)
+
+        adapter.get_braille_for_mathml("<math/>", language="en_US")
+
+        self.assertIn(("SetPreference", "Language", "en-us"), fake.calls)
+
+    def test_each_call_sets_its_own_language(self) -> None:
+        fake = FakeLib()
+        adapter = TestMathCATAdapter(fake_lib=fake)
+
+        adapter.get_braille_for_mathml("<math/>", language="zh_TW")
+        adapter.get_braille_for_mathml("<math/>", language="en")
+
+        self.assertEqual(
+            [call[2] for call in fake.calls if call[:2] == ("SetPreference", "Language")],
+            ["zh-tw", "en"],
+        )
+
+    def test_language_is_required(self) -> None:
+        adapter = TestMathCATAdapter()
+
+        with self.assertRaises(TypeError):
+            adapter.get_braille_for_mathml("<math/>")
 
 
 if __name__ == "__main__":

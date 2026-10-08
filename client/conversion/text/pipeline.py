@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Callable
 
-import config
 from adapters.translation.contracts import TranslationRuntime
 from conversion.preprocessing.user_script import execute_preprocessing_script
 from conversion.preprocessing.literal_braille import (
@@ -53,15 +52,17 @@ def translate_plain_text_segment(
     bopomofo_path: Path,
     *,
     runtime: TranslationRuntime,
+    lang: str,
+    charset_maps: dict[str, str],
 ):
     from text.zhuyin import normalize_zhuyin_sequence
     from languageDetection import LangChangeCommand, LanguageDetector
 
     language = [key for key, value in translation_tables.items() if key not in {"default", "math"} and value != ""]
-    language_detector = LanguageDetector(language)
+    language_detector = LanguageDetector(language, default_lang=lang, charset_maps=charset_maps)
     sequence = list(language_detector.add_detected_language_commands([text]))
 
-    default_lang = config.get_lang().replace("-", "_").split("_", 1)[0]
+    default_lang = lang.replace("-", "_").split("_", 1)[0]
     translate_table = translation_tables.get(default_lang) or translation_tables["default"]
     translations = []
     for item in sequence:

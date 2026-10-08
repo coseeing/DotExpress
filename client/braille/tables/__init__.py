@@ -22,7 +22,6 @@ from typing import NamedTuple
 
 
 import logging
-import config
 
 log = logging
 log.basicConfig(
@@ -102,9 +101,11 @@ _outputTableForLangs: dict[str, str] = dict()
 """Maps languages to output L{BrailleTable.fileName}."""
 
 
-def getDefaultTableForCurLang(tableType: TableType) -> str:
-	"""Gets the file name of the braille table for the current NVDA language.
+def getDefaultTableForCurLang(tableType: TableType, lang: str) -> str:
+	"""Gets the file name of the default braille table for C{lang}.
+	DotExpress: the caller passes the language; upstream NVDA reads languageHandler.getLanguage().
 	:param tableType: INPUT (back-translation) or OUTPUT (translation).
+	:param lang: The language code, for example C{zh_TW} or C{en}.
 	:return: A L{BrailleTable} fileName.
 	"""
 	match tableType:
@@ -114,7 +115,6 @@ def getDefaultTableForCurLang(tableType: TableType) -> str:
 			langDict = _outputTableForLangs
 		case _:
 			raise ValueError(f"Unknown tableType: {tableType}")
-	lang = config.get_lang()
 	# lang = languageHandler.getLanguage()
 	table = langDict.get(lang)
 	if table is not None:

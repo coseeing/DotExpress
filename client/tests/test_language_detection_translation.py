@@ -3,6 +3,7 @@ import ctypes
 import unittest
 from typing import Iterable
 
+from config import DEFAULT_CHARSET_MAPS
 from languageDetection import LangChangeCommand, LanguageDetector
 
 if not hasattr(ctypes, "WINFUNCTYPE"):
@@ -33,7 +34,7 @@ def test_language_detection_translation_consistency() -> None:
 	before = [
 		"我們 Coseeing 透過開發創新工具，讓視障者看見更多資訊和可能；透過舉辦推廣活動，讓大眾看見障礙者面臨的實際挑戰和需求。希望以多元的形式與持續的行動，讓所有人都能共同看見這精采的世界以及獨特的彼此"
 	]
-	detector = LanguageDetector(["en", "zh_TW", "ja"])
+	detector = LanguageDetector(["en", "zh_TW", "ja"], default_lang="zh_TW", charset_maps=DEFAULT_CHARSET_MAPS)
 	after = list(detector.add_detected_language_commands(before))
 
 	before_merged = _merge_sequence(before)

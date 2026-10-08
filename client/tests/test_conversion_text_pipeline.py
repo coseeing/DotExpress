@@ -1,10 +1,10 @@
 import csv
 import tempfile
 import unittest
-from unittest.mock import patch
 from pathlib import Path
 
 from adapters.translation.contracts import TranslationRuntime
+from config import DEFAULT_CHARSET_MAPS
 from conversion.output import ConversionRequest, convert_text_with_alignment
 from conversion.text.dictionary_rules import apply_dictionary, split_bracket_segments
 from conversion.text.pipeline import (
@@ -13,6 +13,9 @@ from conversion.text.pipeline import (
     translate_plain_text_segment,
 )
 from translate import TranslationResult
+
+
+LANGUAGE_TABLES = {"default": "default.ctb", "en": "en.ctb", "zh": "zh.ctb", "ja": "ja.ctb"}
 
 
 class ConversionTextPipelineTest(unittest.TestCase):
@@ -31,6 +34,19 @@ class ConversionTextPipelineTest(unittest.TestCase):
                 raise AssertionError("runtime translator should not be used")
 
         return TranslationRuntime(text_translator=Translator(), math_translator=Translator())
+
+    def _recording_runtime(self, calls: list) -> TranslationRuntime:
+        class Translator:
+            def translate(self, text, *, table, raw, single_token=False):
+                calls.append((text, table))
+                return TranslationResult(raw, text, list(range(len(text))), list(range(len(raw))))
+
+        return TranslationRuntime(text_translator=Translator(), math_translator=Translator())
+
+    def _plain_text_paths(self, directory: Path) -> tuple[Path, Path]:
+        dictionary_path = self._write_csv(directory, "dictionary.csv", ["text", "braille", "type"], [])
+        bopomofo_path = self._write_csv(directory, "bopomofo.csv", ["Bopomofo", "Braille"], [])
+        return dictionary_path, bopomofo_path
 
     def test_preprocess_source_text_runs_user_script_before_bopomofo_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -138,14 +154,15 @@ class ConversionTextPipelineTest(unittest.TestCase):
 
             runtime = TranslationRuntime(text_translator=Translator(), math_translator=Translator())
 
-            with patch("conversion.text.pipeline.config.get_lang", return_value="en"):
-                translate_plain_text_segment(
-                    "Hello",
-                    dictionary_path,
-                    {"default": "zh-tw.ctb", "en": "en-ueb-g1.ctb"},
-                    bopomofo_path,
-                    runtime=runtime,
-                )
+            translate_plain_text_segment(
+                "Hello",
+                dictionary_path,
+                {"default": "zh-tw.ctb", "en": "en-ueb-g1.ctb"},
+                bopomofo_path,
+                runtime=runtime,
+                lang="en",
+                charset_maps=dict(DEFAULT_CHARSET_MAPS),
+            )
 
             self.assertEqual(calls, ["en-ueb-g1.ctb"])
 
@@ -196,6 +213,8 @@ class ConversionTextPipelineTest(unittest.TestCase):
                 dictionary_path=dictionary_path,
                 data_dir=data_dir,
                 translation_tables={"default": "table.ctb"},
+                lang="en",
+                charset_maps=dict(DEFAULT_CHARSET_MAPS),
             )
 
             translated_texts = []
@@ -209,3 +228,44 @@ class ConversionTextPipelineTest(unittest.TestCase):
 
             self.assertEqual(result.display_text, "wrapped")
             self.assertEqual(translated_texts, ["processed"])
+
+    def test_non_detecting_text_uses_current_language_table(self) -> None:
+        for lang, table in (("en", "en.ctb"), ("zh_TW", "zh.ctb")):
+            with self.subTest(lang=lang), tempfile.TemporaryDirectory() as tmpdir:
+                dictionary_path, bopomofo_path = self._plain_text_paths(Path(tmpdir))
+                calls = []
+
+                translate_plain_text_segment(
+                    "\u2192",
+                    dictionary_path,
+                    LANGUAGE_TABLES,
+                    bopomofo_path,
+                    runtime=self._recording_runtime(calls),
+                    lang=lang,
+                    charset_maps=dict(DEFAULT_CHARSET_MAPS),
+                )
+
+                self.assertEqual(calls, [("\u2192", table)])
+
+    def test_cjk_charset_map_selects_table_for_cjk_text(self) -> None:
+        for cjk_language, table in (("zh", "zh.ctb"), ("ja", "ja.ctb")):
+            charset_maps = {
+                "latinCharactersLanguage": "en",
+                "CJKCharactersLanguage": cjk_language,
+                "arabicCharactersLanguage": "ar",
+            }
+            with self.subTest(cjk_language=cjk_language), tempfile.TemporaryDirectory() as tmpdir:
+                dictionary_path, bopomofo_path = self._plain_text_paths(Path(tmpdir))
+                calls = []
+
+                translate_plain_text_segment(
+                    "A中",
+                    dictionary_path,
+                    LANGUAGE_TABLES,
+                    bopomofo_path,
+                    runtime=self._recording_runtime(calls),
+                    lang="en",
+                    charset_maps=charset_maps,
+                )
+
+                self.assertEqual(calls, [("A", "en.ctb"), (" ", "en.ctb"), ("中", table)])

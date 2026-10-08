@@ -30,6 +30,8 @@ def translate_with_language_dual_view_segments(
     bopomofo_path,
     *,
     runtime: TranslationRuntime,
+    lang: str,
+    charset_maps: dict[str, str],
 ) -> list[DualViewSegment]:
     if text == "":
         return []
@@ -53,6 +55,8 @@ def translate_with_language_dual_view_segments(
                 translation_tables,
                 bopomofo_path,
                 runtime=runtime,
+                lang=lang,
+                charset_maps=charset_maps,
             )
             if isinstance(plain_results, (list, tuple)):
                 for result in plain_results:
@@ -63,6 +67,7 @@ def translate_with_language_dual_view_segments(
             result = runtime.math_translator.translate(
                 segment["text"],
                 braille_code=math_braille_code,
+                language=lang,
             )
             segments_records.append(DualViewSegment(result=result, source_kind="math"))
     return segments_records
@@ -75,6 +80,8 @@ def translate_with_language_segments(
     bopomofo_path,
     *,
     runtime: TranslationRuntime,
+    lang: str,
+    charset_maps: dict[str, str],
 ):
     return [
         segment.result
@@ -84,6 +91,8 @@ def translate_with_language_segments(
             translation_tables,
             bopomofo_path,
             runtime=runtime,
+            lang=lang,
+            charset_maps=charset_maps,
         )
     ]
 
@@ -95,6 +104,8 @@ def translate_with_language(
     bopomofo_path,
     *,
     runtime: TranslationRuntime,
+    lang: str,
+    charset_maps: dict[str, str],
 ):
     return merge_translation_results(
         translate_with_language_segments(
@@ -103,6 +114,8 @@ def translate_with_language(
             translation_tables,
             bopomofo_path,
             runtime=runtime,
+            lang=lang,
+            charset_maps=charset_maps,
         )
     )
 
@@ -116,7 +129,7 @@ def convert_text_with_alignment(
     captured_segments: list[DualViewSegment] = []
 
     def translate_segments_with_dual_view(
-        text, dictionary_path, translation_tables, bopomofo_path, *, runtime
+        text, dictionary_path, translation_tables, bopomofo_path, *, runtime, lang, charset_maps
     ):
         segments = translate_with_language_dual_view_segments(
             text,
@@ -124,6 +137,8 @@ def convert_text_with_alignment(
             translation_tables,
             bopomofo_path,
             runtime=runtime,
+            lang=lang,
+            charset_maps=charset_maps,
         )
         captured_segments.extend(segments)
         return [s.result for s in segments]

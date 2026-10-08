@@ -12,7 +12,7 @@ except Exception as exc:
 	raise unittest.SkipTest(f"liblouis bindings unavailable: {exc}") from exc
 
 from adapters.translation.provider import build_default_translation_runtime
-from config import DEFAULT_TRANSLATION_TABLES
+from config import DEFAULT_CHARSET_MAPS, DEFAULT_TRANSLATION_TABLES
 from conversion.service import translate_with_language
 
 
@@ -23,12 +23,13 @@ def test_add_blank_between_language_change() -> None:
 	runtime = build_default_translation_runtime()
 	try:
 		result = translate_with_language(
-			"zh-tw.ctb",
 			"嶼我I起",
 			BASE_DIR / "dictionary" / "default.csv",
 			DEFAULT_TRANSLATION_TABLES,
 			BASE_DIR / "data" / "Bopomofo2Braille.csv",
 			runtime=runtime,
+			lang="zh_TW",
+			charset_maps=DEFAULT_CHARSET_MAPS,
 		)
 	finally:
 		runtime.close()

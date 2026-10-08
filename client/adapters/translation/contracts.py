@@ -22,7 +22,7 @@ class BrailleTextTranslator(Protocol):
 
 
 class MathSegmentTranslator(Protocol):
-    def translate(self, source: str, *, braille_code: str) -> TranslationResult: ...
+    def translate(self, source: str, *, braille_code: str, language: str) -> TranslationResult: ...
 
 
 @dataclass

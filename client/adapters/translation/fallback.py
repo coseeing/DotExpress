@@ -28,5 +28,5 @@ class FallbackTextTranslator:
 
 
 class FallbackMathTranslator:
-    def translate(self, source: str, *, braille_code: str) -> TranslationResult:
+    def translate(self, source: str, *, braille_code: str, language: str) -> TranslationResult:
         return build_character_fallback(source)

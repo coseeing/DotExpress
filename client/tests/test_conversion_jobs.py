@@ -8,6 +8,7 @@ from conversion.jobs import (
 	ConversionJobRunner,
 	ConversionJobSuccess,
 )
+from config import DEFAULT_CHARSET_MAPS
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
 
 
@@ -43,6 +44,8 @@ class ConversionJobRunnerTest(unittest.TestCase):
 				dictionary_path=Path("dictionary/default.csv"),
 				data_dir=Path("data"),
 				translation_tables={"default": "zh-tw.ctb", "math": "nemeth.ctb"},
+				lang="zh_TW",
+				charset_maps=dict(DEFAULT_CHARSET_MAPS),
 			),
 			completion_policy=ConversionCompletionPolicy() if completion_policy is None else completion_policy,
 		)

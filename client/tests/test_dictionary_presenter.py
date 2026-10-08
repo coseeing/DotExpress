@@ -237,5 +237,90 @@ class PresenterAddTest(PresenterTestCase):
 		self.set_active_name.assert_not_called()
 
 
+class PresenterDeleteTest(PresenterTestCase):
+	def confirm_call(self, name):
+		return (
+			"confirm",
+			_('Do you want to delete dictionary "{name}"?').format(name=name),
+			_("Confirm Delete Dictionary"),
+		)
+
+	def test_delete_default_shows_info_without_confirmation(self):
+		presenter = self.make_presenter("alpha")
+		view = FakeView()
+
+		result = presenter.delete(view, "default")
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [("info", _("The default dictionary cannot be deleted."))])
+		self.assertEqual(self.files(), ["alpha", "default"])
+
+	def test_delete_declined_keeps_file(self):
+		presenter = self.make_presenter("alpha")
+		view = FakeView(confirm=False)
+
+		result = presenter.delete(view, "alpha")
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.confirm_call("alpha")])
+		self.assertEqual(self.files(), ["alpha", "default"])
+		self.assertEqual(presenter.dictionary_names, ["alpha", "default"])
+
+	def test_delete_inactive_dictionary_keeps_active_name(self):
+		presenter = self.make_presenter("alpha", "beta", active="beta")
+		view = FakeView()
+
+		result = presenter.delete(view, "alpha")
+
+		self.assertEqual(result, "default")
+		self.assertEqual(view.calls, [self.confirm_call("alpha")])
+		self.assertEqual(self.files(), ["beta", "default"])
+		self.assertEqual(presenter.dictionary_names, ["beta", "default"])
+		self.assertEqual(self.active, ["beta"])
+		self.set_active_name.assert_not_called()
+
+	def test_delete_active_dictionary_activates_planned_fallback(self):
+		presenter = self.make_presenter("alpha", "beta", active="beta")
+		view = FakeView()
+
+		result = presenter.delete(view, "beta")
+
+		self.assertEqual(result, "default")
+		self.assertEqual(view.calls, [self.confirm_call("beta")])
+		self.assertEqual(self.files(), ["alpha", "default"])
+		self.set_active_name.assert_called_once_with("alpha")
+		self.assertEqual(self.active, ["alpha"])
+
+	def test_delete_os_error_shows_error_and_changes_nothing(self):
+		presenter = self.make_presenter("alpha", active="alpha")
+		view = FakeView()
+
+		with patch.object(presenter_module, "delete_dictionary", side_effect=PermissionError("denied")):
+			result = presenter.delete(view, "alpha")
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[
+				self.confirm_call("alpha"),
+				("error", _("Failed to delete dictionary: {error}").format(error="denied")),
+			],
+		)
+		self.assertEqual(self.files(), ["alpha", "default"])
+		self.assertEqual(presenter.dictionary_names, ["alpha", "default"])
+		self.set_active_name.assert_not_called()
+
+	def test_delete_does_not_catch_value_error_for_padded_default_name(self):
+		presenter = self.make_presenter(" default")
+		view = FakeView()
+
+		with self.assertRaises(ValueError):
+			presenter.delete(view, " default")
+
+		self.assertEqual(view.calls, [self.confirm_call(" default")])
+		self.assertEqual(self.files(), [" default", "default"])
+		self.set_active_name.assert_not_called()
+
+
 if __name__ == "__main__":
 	unittest.main()

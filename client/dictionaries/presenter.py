@@ -12,8 +12,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from dictionaries.actions import is_default_dictionary
 from dictionaries.manager import (
 	create_dictionary,
+	delete_dictionary,
 	dictionary_path_for_name,
 	ensure_default_dictionary,
 	list_dictionary_names,
@@ -22,6 +24,7 @@ from dictionaries.name_prompt import prompt_dictionary_name_until_success
 from i18n import _
 from translation.dictionary_state import (
 	plan_dictionary_state_after_add,
+	plan_dictionary_state_after_delete,
 	resolve_management_selection,
 )
 
@@ -102,6 +105,29 @@ class DictionaryManagementPresenter:
 		if path is None:
 			return None
 		return self._selection_after_add(path.stem)
+
+	def delete(self, view: DictionaryManagementView, name: str) -> str | None:
+		if is_default_dictionary(name):
+			view.show_info(_("The default dictionary cannot be deleted."))
+			return None
+		if not view.confirm(
+			_('Do you want to delete dictionary "{name}"?').format(name=name),
+			_("Confirm Delete Dictionary"),
+		):
+			return None
+
+		previous_names = list(self._dictionary_names)
+		active_name = self._get_active_name()
+		try:
+			delete_dictionary(self._dictionary_dir, name)
+		except OSError as exc:
+			view.show_error(_("Failed to delete dictionary: {error}").format(error=exc))
+			return None
+		self.refresh(name)
+		update = plan_dictionary_state_after_delete(active_name, name, previous_names)
+		if update.active_selected_name != active_name:
+			self._set_active_name(update.active_selected_name)
+		return update.management_selected_name
 
 	def _prompt_name_until_success(
 		self,

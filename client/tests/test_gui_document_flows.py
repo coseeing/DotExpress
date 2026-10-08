@@ -28,7 +28,7 @@ from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
 from settings.view import ViewSettings
-from documents.formats import get_format
+from documents.formats import ExportContext, get_format
 from dual_view.html import render_dual_view_html
 from dual_view.model import DualViewSegment, build_dual_view_model
 
@@ -79,7 +79,24 @@ class GuiDocumentFlowsTest(unittest.TestCase):
             frame._write_export_document(Path("/tmp/custom.dep"), document, "dep")
 
         get_format_mock.assert_called_once_with("dep")
-        writer.assert_called_once_with(Path("/tmp/custom.dep"), document)
+        writer.assert_called_once_with(Path("/tmp/custom.dep"), document, ExportContext())
+
+    def test_write_export_document_passes_cached_results_to_every_writer(self) -> None:
+        frame = self._make_frame()
+        document = Document("alpha", "text", "braille")
+        cached_results = (Mock(),)
+        frame._dual_view_results_by_document["alpha"] = cached_results
+        writer = Mock()
+        descriptor = replace(get_format("dep"), writer=writer)
+
+        with patch.object(gui, "get_format", return_value=descriptor):
+            frame._write_export_document(Path("/tmp/custom.dep"), document, "dep")
+
+        writer.assert_called_once_with(
+            Path("/tmp/custom.dep"),
+            document,
+            ExportContext(dual_view_results=cached_results),
+        )
 
     def test_write_html_export_document_passes_cached_dual_view_results(self) -> None:
         frame = self._make_frame()
@@ -95,7 +112,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         writer.assert_called_once_with(
             Path("/tmp/custom.html"),
             document,
-            dual_view_results=cached_results,
+            ExportContext(dual_view_results=cached_results),
         )
 
     def test_write_export_document_rejects_non_exportable_format(self) -> None:

@@ -10,6 +10,7 @@ from dual_view.model import build_dual_view_model
 
 if TYPE_CHECKING:
     from documents.importers import ImportedDocument
+    from documents.workspace import Document
 
 
 DEP_EXTENSION = ".dep"
@@ -19,12 +20,23 @@ ALL_SUPPORTED_FILTER_KEY = "all"
 
 
 @dataclass(frozen=True)
+class ExportContext:
+    """What an export writer may need besides the document itself."""
+
+    dual_view_results: tuple[object, ...] = ()
+
+
+DocumentLoader = Callable[[Path | str], "Document"]
+DocumentWriter = Callable[[Path | str, "Document", ExportContext], Path]
+
+
+@dataclass(frozen=True)
 class DocumentFormatDescriptor:
     key: str
     extension: str
     wildcard_label: str
-    loader: Callable[[Path | str], object] | None
-    writer: Callable[[Path | str, object], object] | None
+    loader: DocumentLoader | None
+    writer: DocumentWriter | None
     requires_braille: bool
     importable: bool
     exportable: bool
@@ -70,27 +82,26 @@ def _load_dep(path: Path | str) -> object:
     return load_document_package(path)
 
 
-def _write_dep(path: Path | str, document: object) -> object:
+def _write_dep(path: Path | str, document: Document, context: ExportContext) -> Path:
+    del context
     from documents.workspace import save_document_package
 
     return save_document_package(path, document, include_pending_metadata=False)
 
 
-def _write_brl(path: Path | str, document: object) -> object:
+def _write_brl(path: Path | str, document: Document, context: ExportContext) -> Path:
+    del context
     from documents.workspace import export_document_brl
 
     return export_document_brl(path, document)
 
 
-def _write_html(
-    path: Path | str,
-    document: object,
-    *,
-    dual_view_results: tuple[object, ...] = (),
-) -> object:
+def _write_html(path: Path | str, document: Document, context: ExportContext) -> Path:
     del document
-    html = render_dual_view_html(build_dual_view_model(dual_view_results))
-    return Path(path).write_text(html, encoding="utf-8")
+    destination = Path(path)
+    html = render_dual_view_html(build_dual_view_model(context.dual_view_results))
+    destination.write_text(html, encoding="utf-8")
+    return destination
 
 
 DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (

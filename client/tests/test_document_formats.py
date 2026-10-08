@@ -1,9 +1,17 @@
+import inspect
 import unittest
+import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
-from documents.formats import build_import_wildcard, get_exportable_formats, get_format, get_importable_formats
+from documents.formats import (
+    ExportContext,
+    build_import_wildcard,
+    get_exportable_formats,
+    get_format,
+    get_importable_formats,
+)
 from documents.workspace import Document
 from dual_view.model import DualViewSegment
 
@@ -49,11 +57,65 @@ class DocumentFormatsTest(unittest.TestCase):
                 get_format("html").writer(
                     destination,
                     document,
-                    dual_view_results=(DualViewSegment(result=Mock(raw=[], braille=[], raw_to_braille_pos=[]), source_kind="text"),),
+                    ExportContext(
+                        dual_view_results=(DualViewSegment(result=Mock(raw=[], braille=[], raw_to_braille_pos=[]), source_kind="text"),),
+                    ),
                 )
 
             self.assertEqual(destination.read_text(encoding="utf-8"), "雙視內容")
             render.assert_called_once()
+
+    def test_writers_take_path_document_and_context(self) -> None:
+        for descriptor in get_exportable_formats():
+            with self.subTest(format_key=descriptor.key):
+                parameters = list(inspect.signature(descriptor.writer).parameters.values())
+                self.assertEqual([parameter.name for parameter in parameters], ["path", "document", "context"])
+                self.assertTrue(
+                    all(parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in parameters)
+                )
+                self.assertTrue(all(parameter.default is inspect.Parameter.empty for parameter in parameters))
+                with TemporaryDirectory() as directory:
+                    with self.assertRaises(TypeError):
+                        descriptor.writer(Path(directory) / f"alpha{descriptor.extension}", Document("alpha", "t", "b"))
+
+    def test_writers_return_destination_path(self) -> None:
+        for descriptor in get_exportable_formats():
+            with self.subTest(format_key=descriptor.key):
+                with TemporaryDirectory() as directory:
+                    destination = Path(directory) / f"alpha{descriptor.extension}"
+                    written = descriptor.writer(str(destination), Document("alpha", "t", "b"), ExportContext())
+                    self.assertEqual(written, destination)
+                    self.assertIsInstance(written, Path)
+                    self.assertTrue(destination.is_file())
+
+    def test_dep_and_brl_writers_ignore_the_context(self) -> None:
+        context = ExportContext(
+            dual_view_results=(DualViewSegment(result=Mock(raw=[], braille=[], raw_to_braille_pos=[]), source_kind="text"),),
+        )
+        document = Document("alpha", "text", "\u2801")
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            for key in ("dep", "brl"):
+                with self.subTest(format_key=key):
+                    writer = get_format(key).writer
+                    writer(root / "plain" / f"alpha.{key}", document, ExportContext())
+                    writer(root / "context" / f"alpha.{key}", document, context)
+                    if key == "dep":
+                        contents = []
+                        for folder in ("plain", "context"):
+                            with zipfile.ZipFile(root / folder / "alpha.dep") as archive:
+                                contents.append({name: archive.read(name) for name in archive.namelist()})
+                        self.assertEqual(contents[0], contents[1])
+                        self.assertEqual(contents[0], {"alpha.txt": b"text", "alpha.brl": "\u2801".encode("utf-8")})
+                    else:
+                        self.assertEqual(
+                            (root / "plain" / "alpha.brl").read_bytes(),
+                            (root / "context" / "alpha.brl").read_bytes(),
+                        )
+
+    def test_export_context_defaults_to_no_results(self) -> None:
+        self.assertEqual(ExportContext().dual_view_results, ())
+        self.assertEqual(ExportContext(), ExportContext(dual_view_results=()))
 
     def test_import_wildcard_matches_existing_order_and_text(self) -> None:
         self.assertEqual(

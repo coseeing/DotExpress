@@ -27,7 +27,7 @@ from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
 from dictionaries.presenter import DictionaryManagementPresenter
 from documents.controller import DocumentController
-from documents.formats import get_format
+from documents.formats import ExportContext, get_format
 from documents.session import (
     document_name_exists,
     get_adjacent_document_name,
@@ -1218,14 +1218,8 @@ class BrailleFrame(wx.Frame):
 		descriptor = get_format(format_key)
 		if not descriptor.exportable or descriptor.writer is None:
 			raise ValueError(f'Unsupported export format: "{format_key}".')
-		if descriptor.key == "html":
-			descriptor.writer(
-				destination_path,
-				document,
-				dual_view_results=self._dual_view_results_by_document.get(document.name, ()),
-			)
-			return
-		descriptor.writer(destination_path, document)
+		context = ExportContext(dual_view_results=self._dual_view_results_by_document.get(document.name, ()))
+		descriptor.writer(destination_path, document, context)
 
 	def _continue_single_export(self, document: Document, destination_path: Path, format_key: str) -> None:
 		try:

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
+import os
 import tempfile
 import unittest
 import zipfile
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import ANY, DEFAULT, Mock, call, patch
@@ -24,6 +27,8 @@ with _SCOPE.loading():
 setUpModule = _SCOPE.activate
 tearDownModule = _SCOPE.deactivate
 
+import app_paths
+import config
 from documents.controller import DocumentController
 from documents.workspace import BatchIssue, Document, load_document_package, save_document_package
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
@@ -629,6 +634,60 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         self.assertEqual(result, 0)
         log_exception.assert_called_once_with("Failed to clean up dual-view HTML")
         runtime.close.assert_called_once_with()
+
+    def _startup_recorders(self, order: list, prepare_error: Exception | None = None) -> dict:
+        """P2-6: recording fakes for every startup step; each accepts any arguments."""
+
+        def prepare(*args, **kwargs):
+            order.append("prepare")
+            if prepare_error is not None:
+                raise prepare_error
+            return args[0] if args else Mock(dual_view=Path("C:/DotExpress/dual_view"))
+
+        def record(step, result=None):
+            def fake(*args, **kwargs):
+                order.append(step)
+                return result
+
+            return fake
+
+        frame = Mock()
+        frame.Show.side_effect = record("show")
+        return {
+            "prepare_application_directories": prepare,
+            "cleanup_dual_view_html": record("cleanup"),
+            "build_default_translation_runtime": record("runtime", Mock()),
+            "BrailleFrame": record("frame", frame),
+            "start_client_init_background": record("client_init"),
+        }
+
+    def test_app_startup_runs_steps_in_contract_order(self) -> None:
+        order: list[str] = []
+
+        with ExitStack() as stack:
+            for name, fake in self._startup_recorders(order).items():
+                stack.enter_context(patch.object(gui, name, side_effect=fake))
+            message_box = stack.enter_context(patch.object(gui.wx, "MessageBox"))
+            result = gui.BrailleApp().OnInit()
+
+        self.assertTrue(result)
+        self.assertEqual(order, ["prepare", "cleanup", "runtime", "frame", "show", "client_init"])
+        message_box.assert_not_called()
+
+    def test_app_stops_before_cleanup_when_validation_fails(self) -> None:
+        order: list[str] = []
+        error = gui.ApplicationDataError(Path("C:/Program Files/DotExpress/dictionary"), PermissionError("denied"))
+
+        with ExitStack() as stack:
+            for name, fake in self._startup_recorders(order, prepare_error=error).items():
+                stack.enter_context(patch.object(gui, name, side_effect=fake))
+            message_box = stack.enter_context(patch.object(gui.wx, "MessageBox"))
+            result = gui.BrailleApp().OnInit()
+
+        self.assertFalse(result)
+        self.assertEqual(order, ["prepare"])
+        message_box.assert_called_once()
+        self.assertIn(str(error.path), message_box.call_args.args[0])
 
     def test_open_document_refreshes_viewer_but_text_edit_does_not(self) -> None:
         frame = self._make_frame(documents=(Document("beta", "new text", "braille"),))
@@ -3754,6 +3813,134 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
 
         save.assert_called_once_with(ViewSettings(13, "dark", "default"))
         self.assertEqual(text_dialog.mock_calls, [])
+
+
+class ApplicationPathsWiringCharacterizationTest(unittest.TestCase):
+    """P2-6 characterization: the frame keeps all of its application data under one root.
+
+    Every test gets its frame from ``make_frame``, the only part that changes when the
+    application paths and the config store are injected (P2-6 steps 3 and 4).
+    """
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.root = Path(temp_dir.name) / "application"
+        self.root.mkdir()
+        self.config_path = self.root / "config.json"
+
+    def make_frame(self) -> gui.BrailleFrame:
+        """A bare frame whose application data lives under ``self.root``.
+
+        Today the frame resolves its folders and its config file through module-level
+        defaults, so the application root and the import-time config path are patched.
+        """
+        for patcher in (
+            patch.object(app_paths, "get_application_root", return_value=self.root),
+            patch.object(config, "CONFIG_PATH", str(self.config_path)),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return object.__new__(gui.BrailleFrame)
+
+    def write_config(self, data: dict) -> None:
+        self.config_path.write_text(json.dumps(data), encoding="utf-8")
+
+    def root_entries(self) -> list[str]:
+        return sorted(path.name for path in self.root.iterdir())
+
+    def test_initialize_state_keeps_dictionaries_workspace_and_settings_under_the_root(self) -> None:
+        self.write_config(
+            {
+                "conversion": {
+                    "output_mode": "ascii",
+                    "width": 52,
+                    "selected_dictionary": "alpha",
+                    "translation_tables": {"default": "en-ueb-g1.ctb"},
+                },
+                "view": {"font_size": 18, "scheme": "dark", "braille_font": "default"},
+            }
+        )
+        (self.root / "dictionary").mkdir()
+        (self.root / "dictionary" / "alpha.csv").write_text("text,braille,type\n", encoding="utf-8")
+        frame = self.make_frame()
+        frame._document_controller = DocumentController()
+        frame._register_output_font = Mock(return_value=False)
+
+        view = frame._initialize_state()
+
+        self.assertEqual(frame.dictionary_dir, self.root / "dictionary")
+        self.assertEqual(frame._dictionary_presenter.dictionary_dir, self.root / "dictionary")
+        self.assertTrue((self.root / "dictionary" / "default.csv").is_file())
+        self.assertEqual(frame._workspace_service.workspace_dir, self.root / "workspace")
+        self.assertEqual(frame.translation_settings, TranslationSettings("ascii", 52, "alpha"))
+        self.assertEqual(frame.translation_tables, {**gui.DEFAULT_TRANSLATION_TABLES, "default": "en-ueb-g1.ctb"})
+        self.assertEqual(view, ViewSettings(18, "dark", "default"))
+        self.assertIs(frame.view_settings, view)
+        self.assertEqual(self.root_entries(), ["config.json", "dictionary"])
+
+    def test_selecting_a_dictionary_writes_the_config_file_under_the_root(self) -> None:
+        frame = self.make_frame()
+        frame.translation_settings = TranslationSettings("ascii", 52, "alpha")
+
+        frame._set_active_dictionary("點字")
+
+        expected = {
+            "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
+            "conversion": {"selected_dictionary": "點字"},
+        }
+        self.assertEqual(
+            self.config_path.read_text(encoding="utf-8"),
+            json.dumps(expected, ensure_ascii=False, indent=2),
+        )
+        self.assertEqual(frame.translation_settings, TranslationSettings("ascii", 52, "點字"))
+        self.assertEqual(self.root_entries(), ["config.json"])
+
+    def test_dual_view_html_is_written_under_the_root(self) -> None:
+        frame = self.make_frame()
+        frame.GetSize = Mock(return_value=(800, 600))
+        frame._render_dual_view_for_open_document = Mock(return_value="<html>雙視</html>")
+        frame._show_file_error = Mock()
+
+        with patch.object(gui, "open_html_in_browser") as open_browser:
+            frame.on_open_dual_view(None)
+
+        written = sorted((self.root / "dual_view").glob("dual-view-*.html"))
+        self.assertEqual(len(written), 1)
+        self.assertEqual(written[0].read_text(encoding="utf-8"), "<html>雙視</html>")
+        open_browser.assert_called_once_with(written[0], (800, 600))
+        frame._show_file_error.assert_not_called()
+        self.assertEqual(self.root_entries(), ["dual_view"])
+
+    def test_each_conversion_request_reads_the_language_settings_from_the_root_config(self) -> None:
+        frame = self.make_frame()
+        frame.translation_tables = {"default": "zh-tw.ctb"}
+        reads: list[str] = []
+        real_open = open
+
+        def counting_open(file, mode="r", *args, **kwargs):
+            if str(file) == str(self.config_path) and "r" in mode:
+                reads.append(str(file))
+            return real_open(file, mode, *args, **kwargs)
+
+        self.write_config({"language": "en", "language_detection": {"charset_maps": {"latinCharactersLanguage": "fr"}}})
+        with (
+            patch.dict(os.environ),
+            patch.object(config, "_runtime_lang", None),
+            patch("builtins.open", counting_open),
+        ):
+            os.environ.pop(config.LANG_ENV, None)
+            first = frame._build_conversion_request("x", "unicode", 40, Path("d.csv"))
+            reads_after_first = len(reads)
+            self.write_config({"language": "ja"})
+            second = frame._build_conversion_request("x", "unicode", 40, Path("d.csv"))
+
+        self.assertEqual(first.lang, "en")
+        self.assertEqual(first.charset_maps, {**config.DEFAULT_CHARSET_MAPS, "latinCharactersLanguage": "fr"})
+        self.assertEqual(second.lang, "ja")
+        self.assertEqual(second.charset_maps, config.DEFAULT_CHARSET_MAPS)
+        self.assertEqual((reads_after_first, len(reads)), (2, 4))
+        self.assertEqual(self.root_entries(), ["config.json"])
 
 
 if __name__ == "__main__":

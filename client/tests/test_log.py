@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 from unittest.mock import patch
 
+import app_paths
 import log
 
 
@@ -27,6 +28,22 @@ class FileLoggerTest(unittest.TestCase):
 
             handler.close()
             logger.removeHandler(handler)
+
+    def test_default_log_directory_follows_the_application_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "application"
+            logger_name = f"dotexpress.test.{uuid4().hex}"
+            with patch.object(app_paths, "get_application_root", return_value=root):
+                logger = log.get_logger(logger_name, "nested/sample.log")
+                validated_log_directory = app_paths.build_application_paths().log
+
+            handler = next(item for item in logger.handlers if isinstance(item, logging.FileHandler))
+            self.addCleanup(logger.removeHandler, handler)
+            self.addCleanup(handler.close)
+            self.assertEqual(Path(handler.baseFilename), root / "log" / "sample.log")
+            self.assertEqual(Path(handler.baseFilename), validated_log_directory / "sample.log")
+            self.assertIsNone(handler.stream)
+            self.assertFalse(root.exists())
 
 
 if __name__ == "__main__":

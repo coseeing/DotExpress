@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import tempfile
 import unittest
 import gettext
@@ -418,6 +419,79 @@ class ConfigLoadFailureLoggingTest(unittest.TestCase):
             handler.close()
 
         self.assertFalse(missing_log.parent.exists())
+
+
+class _ConfigFunctionsAtPath:
+    """The module-level config functions, each run with ``config.CONFIG_PATH`` set to one path."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+
+    def __getattr__(self, name: str):
+        function = getattr(config, name)
+
+        def call(*args, **kwargs):
+            with patch.object(config, "CONFIG_PATH", str(self.path)):
+                return function(*args, **kwargs)
+
+        return call
+
+
+def make_store(path: Path):
+    """The config API bound to ``path``.
+
+    P2-6: the module-level functions today, ``config.ConfigStore`` from step 2 on.
+    """
+    return _ConfigFunctionsAtPath(path)
+
+
+class ConfigLanguageOverrideCharacterizationTest(unittest.TestCase):
+    """P2-6 characterization: where ``get_lang`` finds the language, and what ``set_lang`` writes."""
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.path = Path(temp_dir.name) / "config.json"
+        self.store = make_store(self.path)
+        self.addCleanup(setattr, config, "_runtime_lang", config._runtime_lang)
+        config._runtime_lang = None
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop(config.LANG_ENV, None)
+
+    def read(self) -> dict:
+        return json.loads(self.path.read_text(encoding="utf-8"))
+
+    def test_language_comes_from_the_environment_then_the_file_then_the_fallback(self) -> None:
+        self.assertEqual(self.store.get_lang(), "zh_TW")
+        self.path.write_text(json.dumps({"language": "en"}), encoding="utf-8")
+        self.assertEqual(self.store.get_lang(), "en")
+        os.environ[config.LANG_ENV] = "ko"
+        self.assertEqual(self.store.get_lang(), "ko")
+
+    def test_runtime_override_wins_without_writing_the_file(self) -> None:
+        self.path.write_text(json.dumps({"language": "en"}), encoding="utf-8")
+        os.environ[config.LANG_ENV] = "ko"
+
+        self.store.set_lang("ja")
+
+        self.assertEqual(self.store.get_lang(), "ja")
+        self.assertEqual(config._runtime_lang, "ja")
+        self.assertEqual(self.read(), {"language": "en"})
+
+    def test_persisted_override_writes_the_top_level_language_with_first_save_defaults(self) -> None:
+        self.store.set_lang("en", persist=True)
+
+        self.assertEqual(
+            self.read(),
+            {
+                "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
+                "language": "en",
+            },
+        )
+        config._runtime_lang = None
+        self.assertEqual(self.store.get_lang(), "en")
 
 
 if __name__ == "__main__":

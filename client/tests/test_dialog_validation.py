@@ -1,17 +1,13 @@
-import sys
-import types
 import unittest
 
+from tests import wx_stub
 
-if "wx" not in sys.modules:
-    wx_stub = types.ModuleType("wx")
-    wx_stub.Dialog = type("Dialog", (), {})
-    wx_stub.ListCtrl = type("ListCtrl", (), {})
-    wx_stub.Window = type("Window", (), {})
-    wx_stub.CommandEvent = type("CommandEvent", (), {})
-    sys.modules["wx"] = wx_stub
+_SCOPE = wx_stub.StubScope(wx_stub.dialog_validation_stubs(), isolate=("dialog",))
+with _SCOPE.loading():
+    from dialog import DictionaryNameDialog, DocumentNameDialog
 
-from dialog import DictionaryNameDialog, DocumentNameDialog
+setUpModule = _SCOPE.activate
+tearDownModule = _SCOPE.deactivate
 
 
 class _TextCtrl:

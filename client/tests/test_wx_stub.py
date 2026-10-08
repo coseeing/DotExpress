@@ -182,5 +182,28 @@ class StubScopeTest(_TempModulesMixin, unittest.TestCase):
         self.assertNotIn("_wxstub_private", scope.loaded)
 
 
+class StubFactoryTest(unittest.TestCase):
+    def assert_fresh(self, factory, names: list[str]) -> dict:
+        first = factory()
+        second = factory()
+
+        self.assertEqual(sorted(first), sorted(names))
+        for name in names:
+            self.assertIsInstance(first[name], types.ModuleType)
+            self.assertIsNot(first[name], second[name])
+        self.assertIsNot(first["wx"].Window, second["wx"].Window)
+        return first
+
+    def test_dialog_validation_stubs_are_fresh_plain_modules(self) -> None:
+        wx = self.assert_fresh(wx_stub.dialog_validation_stubs, ["wx"])["wx"]
+
+        self.assertIs(type(wx), types.ModuleType)
+        self.assertEqual(
+            sorted(name for name in vars(wx) if not name.startswith("__")),
+            ["CommandEvent", "Dialog", "ListCtrl", "Window"],
+        )
+        self.assertFalse(hasattr(wx, "OK"))
+
+
 if __name__ == "__main__":
     unittest.main()

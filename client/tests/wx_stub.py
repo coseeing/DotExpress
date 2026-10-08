@@ -292,3 +292,16 @@ class StubScope:
         snapshot, self._activate_snapshot = self._activate_snapshot, None
         if snapshot is not None:
             self._restore(snapshot)
+
+
+# --- factory: test_dialog_validation ----------------------------------------
+
+
+def dialog_validation_stubs():
+    """Plain ``wx`` with four classes; any other attribute raises AttributeError."""
+    wx = types.ModuleType("wx")
+    wx.Dialog = _new_class("Dialog")
+    wx.ListCtrl = _new_class("ListCtrl")
+    wx.Window = _new_class("Window")
+    wx.CommandEvent = _new_class("CommandEvent")
+    return {"wx": wx}

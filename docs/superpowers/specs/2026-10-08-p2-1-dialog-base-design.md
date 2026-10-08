@@ -14,9 +14,11 @@ Concretely:
 
 This is a behavior-preserving refactor. Every dialog shows the same text, in the same order, with the same focus and the same result. No msgid changes: the source msgid scan stays at 353, and `client/locales` does not change. Quirks found during the investigation are pinned by tests, not fixed (section "Known quirks kept").
 
+Corrected after planning: the plan `docs/superpowers/plans/2026-10-08-p2-1-dialog-base.md` (section "Spec Corrections and Refinements") fixed one fact and refined the test plan; those changes are folded in below.
+
 ## Current State (verified 2026-10-08 on `refactor/p2-1-dialog-base`, HEAD `000239b`, P0-1..P0-6, P1-1..P1-6 and the P1 review fixes merged)
 
-Indentation: `dialog.py` and `gui.py` use tabs; `settings/dialogs.py`, `shared/name_validation.py`, the `ui/` modules added in P1 and the test modules named below use 4 spaces.
+Indentation: `dialog.py` and `gui.py` use tabs; `settings/dialogs.py`, `shared/name_validation.py` and the `ui/` modules added in P1 use 4 spaces. Of the test modules named below, `tests/test_dialog_display.py`, `tests/test_dictionary_management_dialog.py` and `tests/test_dictionary_presenter.py` use tabs (none of them is edited; they only stay green); every test module this task edits or adds uses 4 spaces.
 
 Baseline: `cd client && $PY -m unittest discover -s tests` gives `Ran 818 tests`, `FAILED (failures=1, skipped=9)`; the one failure is the P2-5 case `test_conversion_service ... test_translate_with_language_does_not_duplicate_existing_spaces_around_math`. The roadmap command `$PY -m unittest tests.test_dialog_validation tests.test_dialog_display tests.test_settings_dialogs` runs 40 tests, all green. Msgid scan (`$SP/p12/tools/msgid_scan.py client`): 353 source msgids; the `.pot` has the 4 known orphan import wildcards only.
 
@@ -138,6 +140,8 @@ Each `raise ValueError(msg)` in `normalize_base_name` becomes `raise NameValidat
 
 ### `ui/dialog_base.py`
 
+The module also has a docstring (wx-free mixins shared by `dialog.py` and `settings/dialogs.py`; why they combine with sip classes and stubs) and imports `from __future__ import annotations`, `dataclass`, `ClassVar`, `TypeVar` (`_DialogT = TypeVar("_DialogT")`), `i18n._` and `NameValidationError`.
+
 ```python
 class ContextManagedDialog:
     """``with Dialog(...) as dialog:`` destroys the dialog on exit and never swallows an exception."""
@@ -160,6 +164,7 @@ class NameDialogMessages:
     reserved_name: str = ""       # value for "{name}"
 
     def message_for(self, code: str) -> str:
+        """The translated message for a ``NameValidationError`` code; ``reserved`` may use ``{name}``."""
         if code == "empty":
             return _(self.empty)
         if code == "too_long":
@@ -218,6 +223,7 @@ class SingletonDialogMixin:
 
     @classmethod
     def _raise_existing(cls, prepare=None):
+        """Raise and return the open dialog; ``None`` when there is none or it was destroyed."""
         instance = cls.__dict__.get("_instance")
         if instance is None:
             return None
@@ -261,7 +267,7 @@ class SingletonDialogMixin:
         )
 ```
 
-Why the name check calls the normalizer on the raw text: `normalize_base_name` already runs the dialog's four pre-checks in the same order on the same raw text, then strips, so `normalizer(candidate)` gives the same normalized name and the same failing check as the old pre-checks followed by `normalizer(candidate.strip())`. A throwaway comparison of the old `_normalize_dialog_name` with the new mapping over 3,431 generated names (all strings up to 3 characters over 15 interesting characters, plus device names, `default` in three cases, 31-34 character names, U+3000/U+00A0/U+0085 padding) found no difference for either dialog, in message or normalized name. The `except ValueError` fallback keeps the old breadth: any other `ValueError` from a normalizer still means "invalid".
+Why the name check calls the normalizer on the raw text: `normalize_base_name` already runs the dialog's four pre-checks in the same order on the same raw text, then strips, so `normalizer(candidate)` gives the same normalized name and the same failing check as the old pre-checks followed by `normalizer(candidate.strip())`. A comparison of the old `_normalize_dialog_name` with the new mapping over 3,431 generated names (every string of up to 3 pieces from 15 pieces such as `" "`, `"."`, `"\t"`, U+3000, U+00A0, U+0085, `"?"`, `"x."`, plus 19 words such as device names, `default` in three cases and 31-33 character names, each also with one piece added at either end) found no difference for either dialog, in message or normalized name; it is kept as the frozen oracle test (part A.1). The `except ValueError` fallback keeps the old breadth: any other `ValueError` from a normalizer still means "invalid".
 
 ### `dialog.py`
 
@@ -271,13 +277,15 @@ Why the name check calls the normalizer on the raw text: `normalize_base_name` a
 
 ```python
 class _NameDialog(NameDialogBase, wx.Dialog):
+	"""Name dialog base: shows a name error in an information message box."""
+
 	def _show_name_error(self, message: str) -> None:
 		wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 ```
 
 - `DictionaryNameDialog(_NameDialog)` sets `normalize_name = staticmethod(normalize_dictionary_name)` and `name_messages = NameDialogMessages(empty=N_("Please enter the dictionary name."), too_long=N_("Dictionary name must be 1 to 32 characters."), invalid=N_("Dictionary name is not a valid Windows file name."), reserved=N_('Dictionary name "{name}" is reserved.'), reserved_name=DEFAULT_DICTIONARY_NAME)`. `DocumentNameDialog(_NameDialog)` sets `normalize_document_name` and its three messages (no reserved message). Both lose `_on_ok`, `_validate_name`, `__enter__`, `__exit__`. Constructors, `get_dictionary_name`, `get_document_name` and `_apply_initial_name` do not change.
 - `_normalize_dialog_name` is deleted; the `MAX_DICTIONARY_NAME_LENGTH` import goes (the constant stays in `dictionaries/manager.py`, now without a consumer; see Out of Scope).
-- `ConvertingDialog` is added with its class body copied unchanged (both files use tabs).
+- `ConvertingDialog` is added after `FileIssuesDialog` with its class body copied unchanged (both files use tabs).
 
 ### `settings/dialogs.py`
 
@@ -299,7 +307,7 @@ class TextProcessingDialog(SingletonDialogMixin, SettingsDialog):
         return cls._show_new(cls(parent, script_path=script_path))
 ```
 
-`DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog)` does the same, keeping its `initial_category` check first and passing `prepare=lambda instance: instance.select_category(initial_category)` only when `initial_category is not None`. Both lose `_destroy` and `_is_destroyed_window_error`; `on_ok`/`on_cancel` keep calling `self._destroy()`. Signatures of `show_singleton` do not change. `sync_open_font_size` is not touched (P2-4).
+`DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog)` does the same, keeping its `initial_category` check first and passing `None if initial_category is None else lambda instance: instance.select_category(initial_category)` to `_raise_existing` (no lambda assigned to a name). Both lose `_destroy` and `_is_destroyed_window_error`; `on_ok`/`on_cancel` keep calling `self._destroy()`. Signatures of `show_singleton` do not change. `sync_open_font_size` is not touched (P2-4).
 
 ### `gui.py`
 
@@ -309,7 +317,7 @@ Why `dialog.py` and not a new `ui/` module: `dialog.py` is the home of the wx di
 
 ### Decisions on behavior
 
-- **D1 (dead-window exception type, not observable in the app).** The mixin resolves `PyDeadObjectError` with `getattr`, as `_is_destroyed_window_error` already did, instead of naming `wx.PyDeadObjectError` in the `except` tuple. Where wx defines the type (every test stub) nothing changes. Where it does not (believed: real wxPython 4.2.5), an exception raised while raising the existing dialog is now handled as the code intends (dead -> rebuild, other -> re-raise the original error) instead of becoming `AttributeError`. That path cannot be reached in the app (see Current State). Rejected alternative: a classmethod hook that names `wx.PyDeadObjectError` lazily, which would keep the `AttributeError` on purpose. Windows check listed below.
+- **D1 (dead-window exception type, not observable in the app).** The mixin resolves `PyDeadObjectError` with `getattr`, as `_is_destroyed_window_error` already did, instead of naming `wx.PyDeadObjectError` in the `except` tuple. Where wx defines the type (every test stub) nothing changes. Where it does not (believed: real wxPython 4.2.5), an exception raised while raising the existing dialog is now handled as the code intends (dead -> rebuild, other -> re-raise the original error) instead of becoming `AttributeError`. That path cannot be reached in the app (see Current State). Rejected alternative: a classmethod hook that names `wx.PyDeadObjectError` lazily, which would keep the `AttributeError` on purpose. Shown on Linux by a throwaway probe (not committed) that loads `settings.dialogs` against the settings stubs with `PyDeadObjectError` removed (the stub module's `__getattr__`, which turns any missing name into a fresh plain class, is made to raise `AttributeError` for that name) and makes the open dialog raise from `Iconize`: before step 5 both a dead-window error and an unrelated `RuntimeError` become `AttributeError`; after step 5 the dead one rebuilds the dialog and the unrelated one is re-raised. Windows check listed below.
 - **D2 (`_destroy` owner).** `_destroy` clears `type(self)`'s slot instead of a named class. For the two production classes this is the same class; it differs only for a subclass, which then clears its own slot (the one `show_singleton` set), not the parent's.
 - **D3 (normalizer binding).** `normalize_name` is bound when the class is defined instead of looked up as a module global on every call. Nothing patches `dialog.normalize_dictionary_name` or `dialog.normalize_document_name`.
 - **D4 (translation timing).** The seven name-dialog messages are defined once with `N_()` and translated with `_()` when shown. Same catalog, same text, same msgid set (353).
@@ -326,22 +334,22 @@ Why `dialog.py` and not a new `ui/` module: `dialog.py` is the home of the wx di
 
 ## Test Plan
 
-Characterization first: part A is committed before any production change and is not edited afterwards, except that tests which name `gui.ConvertingDialog` as the class under test switch to `dialog.ConvertingDialog` in the move commit.
+Characterization first: part A is committed before any production change and is not edited afterwards, except that the `ConvertingDialog` tests switch from `gui.ConvertingDialog` to `dialog.ConvertingDialog` in the move commit (only their module-level loading block changes). Part A cannot be red, so a throwaway mutant runner (not committed) applies 13 deliberate one-edit breakages to a copy of `client/` (reserved message lost, too-long reported as invalid, `_on_ok` keeps the raw text, focus before the message box, `__exit__` swallowing, normalizer accepting a trailing period, a dead-window phrase dropped, `Show` before the slot is set, category selected after `Raise`, the category check dropped, `_destroy` clearing any slot, `ConvertingDialog` always vetoing or keeping its close box) and shows that each one makes part A fail.
 
 ### A. Characterization (step 1)
 
 1. `tests/test_dialog_validation.py` (dialog-validation stubs):
-   - Frozen oracle: a verbatim copy of today's `_normalize_dialog_name` lives in the test module (renamed, with a comment that it is the pre-P2-1 reference). For a generated corpus (as above) both dialogs' `_validate_name` must equal the oracle's message, and on a sample the normalized name is checked through `_on_ok` (`SetValue`).
+   - Frozen oracle: a verbatim copy of today's `_normalize_dialog_name` lives in the test module (renamed, with a comment that it is the pre-P2-1 reference). The test first asserts the corpus size (3,431, generated as above), then runs every name through both `_validate_name` and the real `_on_ok` (recording text box, event and message box; plain fake classes, not `Mock`s) for both dialogs and compares the message, or the normalized name written back with `SetValue`, with the oracle.
    - Explicit table, exact zh_TW text: empty, whitespace-only, U+3000-only, control character, trailing space, trailing period, trailing U+3000 accepted (`name　` -> `name`), leading space accepted, 32 vs 33 characters, 33 characters after stripping, `a?b`, `CON`, `con.txt`, `..`, `default`/`Default`/`DEFAULT` (dictionary: reserved message with `default`; document: accepted).
    - `_on_ok` for both dialogs (with `wx.MessageBox`, `wx.OK`, `wx.ICON_INFORMATION` patched onto the stub with `create=True`): invalid input records exactly `MessageBox(message, "資訊", OK | ICON_INFORMATION, parent=dialog)`, then `SetFocus`, no `SetValue`, no `Skip`; `" name"` records `SetValue("name")` then one `Skip`, no message box.
    - Context manager for the seven classes (instances from `object.__new__`, `Destroy` a `Mock`): `with` returns the same object; `Destroy` called once on normal exit and once when the block raises; the exception propagates; `__exit__` returns `None`.
 2. New `tests/test_name_validation.py`: every check of `normalize_base_name` with its exact English message and `ValueError` type, the returned stripped name, reserved casefolding, and `str(error)`/`args`.
 3. `tests/test_settings_dialogs.py`, for both singleton classes: new-instance path (forwarded keyword arguments, slot set before `Show`, returns the instance); live instance path order, with and without `initial_category`; dead instance rebuilt for `PyDeadObjectError`, for `RuntimeError` with each of the four phrases and for `ReferenceError("... has been deleted")`; `ReferenceError` without a phrase and an unrelated `RuntimeError` re-raised with the slot kept; `_destroy` clears only its own instance and always calls `Destroy`; the two classes' slots are independent; unregistered category raises before the slot is touched; a constructor `OSError` leaves the slot `None`.
-4. `ConvertingDialog`: constructor arguments (parent, title, style value), label, sizer flags and border, `EVT_CLOSE` binding, veto only when `CanVeto()`; run against `gui.ConvertingDialog` under the gui stubs (recording `wx.Dialog.__init__`) until the move.
+4. New `tests/test_converting_dialog.py`: constructor arguments (parent, title, style value), label, sizer flags and border, `EVT_CLOSE` binding, veto only when `CanVeto()`. Each test builds the dialog with `object.__new__`, gives it a recording `Bind`, patches the stub base's `wx.Dialog.__init__`, replaces the defining module's `wx` global with a namespace of distinct flag values (so the style expression is observable) and patches its `finalize_dialog_layout`, then runs the real `__init__`. Until the move the module loads `gui` under the gui-frame stubs (the scope of `test_gui_document_flows`); the move commit switches the loading block to `dialog` under the dialog-validation stubs, without editing the test bodies.
 
 ### B. Typed error (step 2)
 
-`NameValidationError` is a `ValueError`; `code` for each check; message unchanged; `normalize_dictionary_name`, `normalize_document_name` and the importer base name raise it with the expected code; the presenter tests stay unchanged and green.
+`NameValidationError` is a `ValueError`; `code` for each check; message unchanged; `normalize_dictionary_name` (`tests/test_dictionary_manager.py`), `normalize_document_name` and the importer base name `documents.importers.base.source_name` (used by the docx, epub and pdf importers; both in `tests/test_document_workspace.py`, the importer test also checking the English message, known quirk 3) raise it with the expected code; the presenter tests stay unchanged and green. The new tests reach `NameValidationError` through `shared.name_validation` (module attribute), so before the class exists only they fail.
 
 ### C. `ui/dialog_base.py` (step 3, new `tests/test_dialog_base.py`, no wx, no stub scope)
 
@@ -351,7 +359,7 @@ Each base combined with (a) a plain `type("Dialog", (), {})` base and (b) `wx_st
 
 No new assertions; parts A and B must stay green unchanged. Guards updated in the same commit as the change they guard: `_GUI_DIALOG_NAMES` gains `ConvertingDialog`.
 
-The plan fixes the exact number of new tests.
+71 new tests (818 -> 889): part A 43 (`tests/test_name_validation.py` 9, `tests/test_dialog_validation.py` 11, `tests/test_settings_dialogs.py` 20, `tests/test_converting_dialog.py` 3), part B 5 (2 in `tests/test_name_validation.py`, 1 in `tests/test_dictionary_manager.py`, 2 in `tests/test_document_workspace.py`), part C 23 (`tests/test_dialog_base.py`), part D 0.
 
 ## Migration Steps (each step one green commit)
 
@@ -364,10 +372,10 @@ The plan fixes the exact number of new tests.
 
 ## Acceptance Criteria
 
-1. Roadmap verification on Linux: `cd client && python -m unittest tests.test_dialog_validation tests.test_dialog_display tests.test_settings_dialogs -v` passes.
-2. Also green: `tests.test_name_validation tests.test_dialog_base tests.test_dictionary_manager tests.test_document_workspace tests.test_dictionary_presenter tests.test_dictionary_management_dialog tests.test_speech_symbols_dialog tests.test_gui_document_flows tests.test_workspace_service tests.test_i18n tests.test_removed_dead_code tests.test_wx_stub`.
-3. Full suite: 818 + the new tests, `failures=1` (P2-5 only), `errors=0`, `skipped=9`. The shuffle harness (`$SP/shuffle_harness.py`, seeds 0-19) shows the same single failure for every seed; `test_dialog_validation`, `test_dialog_display`, `test_speech_symbols_dialog`, `test_dictionary_management_dialog`, `test_settings_dialogs` and `test_gui_document_flows` also pass alone and in both orders of each pair with `test_dialog_base`.
-4. `grep -n "def __enter__\|def __exit__\|_normalize_dialog_name\|\"exceed\"" client/dialog.py` prints nothing; `grep -n "_is_destroyed_window_error\|def _destroy" client/settings/dialogs.py` prints nothing; `grep -n "raise ValueError" client/shared/name_validation.py` prints nothing; `grep -n "class ConvertingDialog\|finalize_dialog_layout" client/gui.py` prints nothing; `grep -rn "in str(exc)" client --include=*.py --exclude-dir=tests` prints nothing.
+1. Roadmap verification on Linux: `cd client && python -m unittest tests.test_dialog_validation tests.test_dialog_display tests.test_settings_dialogs -v` passes (71 tests, up from 40).
+2. Also green: `tests.test_name_validation tests.test_dialog_base tests.test_dictionary_manager tests.test_document_workspace tests.test_dictionary_presenter tests.test_dictionary_management_dialog tests.test_speech_symbols_dialog tests.test_gui_document_flows tests.test_workspace_service tests.test_i18n tests.test_removed_dead_code tests.test_wx_stub tests.test_converting_dialog`.
+3. Full suite: 889 tests (818 + 71), `failures=1` (P2-5 only), `errors=0`, `skipped=9`. The shuffle harness (`$SP/shuffle_harness.py`, seeds 0-19) shows the same single failure for every seed; `test_dialog_validation`, `test_dialog_display`, `test_speech_symbols_dialog`, `test_dictionary_management_dialog`, `test_settings_dialogs`, `test_gui_document_flows` and the new stub-scope module `test_converting_dialog` also pass alone and in both orders of each pair with `test_dialog_base`.
+4. `grep -n "def __enter__\|def __exit__\|_normalize_dialog_name\|\"exceed\"" client/dialog.py` prints nothing; `grep -n "_is_destroyed_window_error\|def _destroy" client/settings/dialogs.py` prints nothing; `grep -n "raise ValueError" client/shared/name_validation.py` prints nothing; `grep -n "class ConvertingDialog\|finalize_dialog_layout" client/gui.py` prints nothing; `grep -rn "in str(exc)" client --include=*.py --exclude-dir=tests --exclude-dir=.venv` prints nothing (the git-ignored `client/.venv`, when present, holds third-party code that matches).
 5. Msgid scan: 353 source msgids, the same 4 only-in-pot orphans, nothing only in source; `git diff main --stat -- client/locales scripts` is empty.
 6. `git diff main --stat -- client/dictionaries client/documents client/conversion client/about.py client/ui` lists only `client/ui/dialog_base.py` (new).
 7. `client/ui/dialog_base.py` passes the AST guard (no `wx`, `gui`, `dialog`, `settings` import).

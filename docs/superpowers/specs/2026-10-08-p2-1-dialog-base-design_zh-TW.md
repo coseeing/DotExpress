@@ -14,9 +14,11 @@
 
 這是保持行為不變的重構。每個對話框顯示相同的文字、相同的順序、相同的焦點與相同的結果。msgid 不變：原始碼 msgid 掃描維持 353，`client/locales` 不變。調查中發現的怪異行為以測試釘住，不修正（見「保留的既有怪異行為」）。
 
+規劃後修正：plan `docs/superpowers/plans/2026-10-08-p2-1-dialog-base.md`（「Spec Corrections and Refinements」一節）修正了一項事實並細化了測試計畫；這些修改已併入下文。
+
 ## 現況（2026-10-08 於 `refactor/p2-1-dialog-base` 驗證，HEAD `000239b`，已合併 P0-1..P0-6、P1-1..P1-6 與 P1 審查修正）
 
-縮排：`dialog.py` 與 `gui.py` 用 tab；`settings/dialogs.py`、`shared/name_validation.py`、P1 新增的 `ui/` 模組與下文提到的測試模組用 4 個空白。
+縮排：`dialog.py` 與 `gui.py` 用 tab；`settings/dialogs.py`、`shared/name_validation.py` 與 P1 新增的 `ui/` 模組用 4 個空白。下文提到的測試模組中，`tests/test_dialog_display.py`、`tests/test_dictionary_management_dialog.py` 與 `tests/test_dictionary_presenter.py` 用 tab（三者都不修改，只需維持綠燈）；本任務修改或新增的每個測試模組都用 4 個空白。
 
 基準：`cd client && $PY -m unittest discover -s tests` 得到 `Ran 818 tests`、`FAILED (failures=1, skipped=9)`；唯一的失敗是 P2-5 的 `test_conversion_service ... test_translate_with_language_does_not_duplicate_existing_spaces_around_math`。路線圖指令 `$PY -m unittest tests.test_dialog_validation tests.test_dialog_display tests.test_settings_dialogs` 跑 40 個測試，全綠。msgid 掃描（`$SP/p12/tools/msgid_scan.py client`）：原始碼 353 個 msgid；`.pot` 只多出 4 個已知的孤兒匯入 wildcard。
 
@@ -138,6 +140,8 @@ class NameValidationError(ValueError):
 
 ### `ui/dialog_base.py`
 
+此模組另有模組 docstring（說明這些是 `dialog.py` 與 `settings/dialogs.py` 共用、不依賴 wx 的 mixin，以及它們為何能與 sip 類別和 stub 組合），並 import `from __future__ import annotations`、`dataclass`、`ClassVar`、`TypeVar`（`_DialogT = TypeVar("_DialogT")`）、`i18n._` 與 `NameValidationError`。
+
 ```python
 class ContextManagedDialog:
     """``with Dialog(...) as dialog:`` destroys the dialog on exit and never swallows an exception."""
@@ -160,6 +164,7 @@ class NameDialogMessages:
     reserved_name: str = ""       # value for "{name}"
 
     def message_for(self, code: str) -> str:
+        """The translated message for a ``NameValidationError`` code; ``reserved`` may use ``{name}``."""
         if code == "empty":
             return _(self.empty)
         if code == "too_long":
@@ -218,6 +223,7 @@ class SingletonDialogMixin:
 
     @classmethod
     def _raise_existing(cls, prepare=None):
+        """Raise and return the open dialog; ``None`` when there is none or it was destroyed."""
         instance = cls.__dict__.get("_instance")
         if instance is None:
             return None
@@ -261,7 +267,7 @@ class SingletonDialogMixin:
         )
 ```
 
-為何名稱檢查直接以原始文字呼叫 normalizer：`normalize_base_name` 本來就以相同順序、對相同的原始文字做了對話框的四項預檢，然後才 strip，所以 `normalizer(candidate)` 與舊的「預檢後再 `normalizer(candidate.strip())`」得到相同的正規化名稱與相同的失敗檢查。以一次性腳本比較舊 `_normalize_dialog_name` 與新對應，跑 3,431 個產生的名稱（15 個關鍵字元組成的所有長度 3 以內字串，加上裝置名稱、三種大小寫的 `default`、31-34 字元名稱、U+3000/U+00A0/U+0085 填充），兩個對話框的訊息與正規化名稱皆無差異。`except ValueError` 的 fallback 保留舊的捕捉範圍：normalizer 丟出的其他 `ValueError` 仍代表「無效」。
+為何名稱檢查直接以原始文字呼叫 normalizer：`normalize_base_name` 本來就以相同順序、對相同的原始文字做了對話框的四項預檢，然後才 strip，所以 `normalizer(candidate)` 與舊的「預檢後再 `normalizer(candidate.strip())`」得到相同的正規化名稱與相同的失敗檢查。比較舊 `_normalize_dialog_name` 與新對應，跑 3,431 個產生的名稱（由 15 個片段，例如 `" "`、`"."`、`"\t"`、U+3000、U+00A0、U+0085、`"?"`、`"x."`，組成的所有 3 段以內字串，加上 19 個詞，例如裝置名稱、三種大小寫的 `default`、31-33 字元名稱，以及每個詞在前或後各加一個片段的變化），兩個對話框的訊息與正規化名稱皆無差異；此比較保留為凍結的 oracle 測試（A.1）。`except ValueError` 的 fallback 保留舊的捕捉範圍：normalizer 丟出的其他 `ValueError` 仍代表「無效」。
 
 ### `dialog.py`
 
@@ -271,13 +277,15 @@ class SingletonDialogMixin:
 
 ```python
 class _NameDialog(NameDialogBase, wx.Dialog):
+	"""Name dialog base: shows a name error in an information message box."""
+
 	def _show_name_error(self, message: str) -> None:
 		wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 ```
 
 - `DictionaryNameDialog(_NameDialog)` 設 `normalize_name = staticmethod(normalize_dictionary_name)` 與 `name_messages = NameDialogMessages(empty=N_("Please enter the dictionary name."), too_long=N_("Dictionary name must be 1 to 32 characters."), invalid=N_("Dictionary name is not a valid Windows file name."), reserved=N_('Dictionary name "{name}" is reserved.'), reserved_name=DEFAULT_DICTIONARY_NAME)`。`DocumentNameDialog(_NameDialog)` 設 `normalize_document_name` 與它的三個訊息（沒有保留訊息）。兩者拿掉 `_on_ok`、`_validate_name`、`__enter__`、`__exit__`。建構子、`get_dictionary_name`、`get_document_name` 與 `_apply_initial_name` 不變。
 - 刪除 `_normalize_dialog_name`；拿掉 `MAX_DICTIONARY_NAME_LENGTH` 的 import（常數留在 `dictionaries/manager.py`，此後沒有使用者；見範圍外）。
-- 新增 `ConvertingDialog`，類別本體原樣複製（兩個檔案都用 tab）。
+- 在 `FileIssuesDialog` 之後新增 `ConvertingDialog`，類別本體原樣複製（兩個檔案都用 tab）。
 
 ### `settings/dialogs.py`
 
@@ -299,7 +307,7 @@ class TextProcessingDialog(SingletonDialogMixin, SettingsDialog):
         return cls._show_new(cls(parent, script_path=script_path))
 ```
 
-`DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog)` 做法相同，仍先做 `initial_category` 檢查，且只有在 `initial_category is not None` 時傳入 `prepare=lambda instance: instance.select_category(initial_category)`。兩者拿掉 `_destroy` 與 `_is_destroyed_window_error`；`on_ok`／`on_cancel` 仍呼叫 `self._destroy()`。`show_singleton` 的簽章不變。`sync_open_font_size` 不動（P2-4）。
+`DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog)` 做法相同，仍先做 `initial_category` 檢查，並把 `None if initial_category is None else lambda instance: instance.select_category(initial_category)` 傳給 `_raise_existing`（不把 lambda 指定給名稱）。兩者拿掉 `_destroy` 與 `_is_destroyed_window_error`；`on_ok`／`on_cancel` 仍呼叫 `self._destroy()`。`show_singleton` 的簽章不變。`sync_open_font_size` 不動（P2-4）。
 
 ### `gui.py`
 
@@ -309,7 +317,7 @@ class TextProcessingDialog(SingletonDialogMixin, SettingsDialog):
 
 ### 行為決策
 
-- **D1（dead-window 例外類型，在 app 中觀察不到）。** mixin 以 `getattr` 取得 `PyDeadObjectError`（與 `_is_destroyed_window_error` 原本的做法一致），而不是在 `except` tuple 中直接寫 `wx.PyDeadObjectError`。wx 有定義該類型時（所有測試 stub）沒有任何改變。沒有定義時（據信：真正的 wxPython 4.2.5），在喚起既有對話框時發生的例外現在會依程式原意處理（已死 -> 重建；其他 -> 重新丟出原本的錯誤），而不是變成 `AttributeError`。這條路徑在 app 中無法到達（見現況）。被否決的替代方案：用 classmethod hook 延遲存取 `wx.PyDeadObjectError`，刻意保留 `AttributeError`。Windows 檢查列於下方。
+- **D1（dead-window 例外類型，在 app 中觀察不到）。** mixin 以 `getattr` 取得 `PyDeadObjectError`（與 `_is_destroyed_window_error` 原本的做法一致），而不是在 `except` tuple 中直接寫 `wx.PyDeadObjectError`。wx 有定義該類型時（所有測試 stub）沒有任何改變。沒有定義時（據信：真正的 wxPython 4.2.5），在喚起既有對話框時發生的例外現在會依程式原意處理（已死 -> 重建；其他 -> 重新丟出原本的錯誤），而不是變成 `AttributeError`。這條路徑在 app 中無法到達（見現況）。被否決的替代方案：用 classmethod hook 延遲存取 `wx.PyDeadObjectError`，刻意保留 `AttributeError`。在 Linux 上以一次性探測腳本（不提交）展示：在 settings stub 下載入 `settings.dialogs` 並移除 `PyDeadObjectError`（stub 模組的 `__getattr__` 會把任何缺少的名稱變成新的普通類別，因此讓它對該名稱丟出 `AttributeError`），再讓開啟中的對話框在 `Iconize` 時丟例外：第 5 步之前，dead-window 錯誤與無關的 `RuntimeError` 都會變成 `AttributeError`；第 5 步之後，前者重建對話框，後者被重新丟出。Windows 檢查列於下方。
 - **D2（`_destroy` 的擁有者）。** `_destroy` 清的是 `type(self)` 的 slot，而非寫死的類別。對兩個正式類別而言是同一個類別；只有子類會不同，此時子類清的是它自己的 slot（也就是 `show_singleton` 設定的那個），而不是父類的。
 - **D3（normalizer 的綁定）。** `normalize_name` 在類別定義時綁定，而非每次呼叫時以模組全域名稱查找。沒有任何地方 patch `dialog.normalize_dictionary_name` 或 `dialog.normalize_document_name`。
 - **D4（翻譯時機）。** 七個名稱對話框訊息以 `N_()` 定義一次，顯示時以 `_()` 翻譯。同一個 catalog、同樣的文字、同樣的 msgid 集合（353）。
@@ -326,22 +334,22 @@ class TextProcessingDialog(SingletonDialogMixin, SettingsDialog):
 
 ## 測試計畫
 
-特徵化優先：A 部分在任何正式程式碼修改之前提交，之後不再修改；唯一例外是在搬移 commit 中，把以 `gui.ConvertingDialog` 作為受測類別的測試改指向 `dialog.ConvertingDialog`。
+特徵化優先：A 部分在任何正式程式碼修改之前提交，之後不再修改；唯一例外是在搬移 commit 中，`ConvertingDialog` 測試從 `gui.ConvertingDialog` 改指向 `dialog.ConvertingDialog`（只改模組層級的載入區塊）。A 部分不可能先紅，因此以一次性 mutant 腳本（不提交）對 `client/` 的副本套用 13 個刻意的單點破壞（遺失保留訊息、過長被報為無效、`_on_ok` 保留原始文字、先設焦點再顯示訊息框、`__exit__` 吞掉例外、normalizer 接受結尾句點、少一個 dead-window 片語、在設定 slot 之前 `Show`、在 `Raise` 之後才選類別、拿掉類別檢查、`_destroy` 清掉任何 slot、`ConvertingDialog` 總是否決或保留關閉鈕），證明每一個都會讓 A 部分失敗。
 
 ### A. 特徵化（第 1 步）
 
 1. `tests/test_dialog_validation.py`（dialog-validation stub）：
-   - 凍結的 oracle：把現在的 `_normalize_dialog_name` 逐字複製到測試模組（改名，並註明它是 P2-1 之前的參考版本）。對一個產生的語料（同上），兩個對話框的 `_validate_name` 必須等於 oracle 的訊息；並抽樣經由 `_on_ok`（`SetValue`）檢查正規化後的名稱。
+   - 凍結的 oracle：把現在的 `_normalize_dialog_name` 逐字複製到測試模組（改名，並註明它是 P2-1 之前的參考版本）。測試先斷言語料大小（3,431，產生方式同上），再讓每個名稱對兩個對話框都經過 `_validate_name` 與真正的 `_on_ok`（記錄用的文字框、事件與訊息框；用單純的 fake 類別而非 `Mock`），並把訊息或以 `SetValue` 寫回的正規化名稱與 oracle 比對。
    - 明確表格，精確比對 zh_TW 文字：空字串、只有空白、只有 U+3000、控制字元、結尾空白、結尾句點、結尾 U+3000 可接受（`name　` -> `name`）、開頭空白可接受、32 與 33 字元、strip 後 33 字元、`a?b`、`CON`、`con.txt`、`..`、`default`/`Default`/`DEFAULT`（字典：顯示含 `default` 的保留訊息；文件：可接受）。
    - 兩個對話框的 `_on_ok`（以 `create=True` 把 `wx.MessageBox`、`wx.OK`、`wx.ICON_INFORMATION` patch 到 stub 上）：無效輸入恰好記錄 `MessageBox(message, "資訊", OK | ICON_INFORMATION, parent=dialog)`，然後 `SetFocus`，沒有 `SetValue`、沒有 `Skip`；`" name"` 記錄 `SetValue("name")` 然後一次 `Skip`，沒有訊息框。
    - 七個類別的 context manager（以 `object.__new__` 建立實例，`Destroy` 為 `Mock`）：`with` 回傳同一個物件；正常離開與區塊丟例外時 `Destroy` 各呼叫一次；例外往外傳；`__exit__` 回傳 `None`。
 2. 新增 `tests/test_name_validation.py`：`normalize_base_name` 的每一項檢查及其精確英文訊息與 `ValueError` 類型、回傳的 strip 後名稱、保留名稱的 casefold、`str(error)`/`args`。
 3. `tests/test_settings_dialogs.py`，兩個 singleton 類別都要：新實例路徑（轉送關鍵字參數、`Show` 之前設定 slot、回傳實例）；既有實例路徑的呼叫順序，有與沒有 `initial_category`；已死實例在 `PyDeadObjectError`、含四種片語之一的 `RuntimeError`、以及 `ReferenceError("... has been deleted")` 時重建；不含片語的 `ReferenceError` 與無關的 `RuntimeError` 重新丟出且 slot 保留；`_destroy` 只清自己的實例且一定呼叫 `Destroy`；兩個類別的 slot 互相獨立；未註冊類別在碰觸 slot 之前丟錯；建構子 `OSError` 時 slot 維持 `None`。
-4. `ConvertingDialog`：建構參數（parent、title、style 值）、label、sizer 旗標與邊距、`EVT_CLOSE` 綁定、只在 `CanVeto()` 時否決；搬移前在 gui stub 下對 `gui.ConvertingDialog` 執行（記錄 `wx.Dialog.__init__`）。
+4. 新增 `tests/test_converting_dialog.py`：建構參數（parent、title、style 值）、label、sizer 旗標與邊距、`EVT_CLOSE` 綁定、只在 `CanVeto()` 時否決。每個測試以 `object.__new__` 建立對話框、給它一個記錄用的 `Bind`、patch stub 基底的 `wx.Dialog.__init__`、把定義模組的 `wx` 全域換成一組旗標值各不相同的 namespace（讓 style 運算式可被觀察）並 patch 其 `finalize_dialog_layout`，然後執行真正的 `__init__`。搬移前此模組在 gui-frame stub（與 `test_gui_document_flows` 相同的 scope）下載入 `gui`；搬移 commit 把載入區塊改成在 dialog-validation stub 下載入 `dialog`，測試本體不改。
 
 ### B. 型別化錯誤（第 2 步）
 
-`NameValidationError` 是 `ValueError`；每項檢查的 `code`；訊息不變；`normalize_dictionary_name`、`normalize_document_name` 與 importer 基底名稱丟出帶預期 code 的此錯誤；presenter 測試不改且維持綠燈。
+`NameValidationError` 是 `ValueError`；每項檢查的 `code`；訊息不變；`normalize_dictionary_name`（`tests/test_dictionary_manager.py`）、`normalize_document_name` 與 importer 基底名稱 `documents.importers.base.source_name`（docx、epub、pdf importer 使用；兩者都在 `tests/test_document_workspace.py`，importer 測試也檢查英文訊息，見保留怪異行為 3）丟出帶預期 code 的此錯誤；presenter 測試不改且維持綠燈。新測試透過 `shared.name_validation`（模組屬性）取得 `NameValidationError`，因此在類別存在之前只有它們失敗。
 
 ### C. `ui/dialog_base.py`（第 3 步，新增 `tests/test_dialog_base.py`，不用 wx、不用 stub scope）
 
@@ -351,7 +359,7 @@ class TextProcessingDialog(SingletonDialogMixin, SettingsDialog):
 
 不新增斷言；A 與 B 部分必須不改且維持綠燈。守門設定與它守護的變更在同一個 commit 更新：`_GUI_DIALOG_NAMES` 加入 `ConvertingDialog`。
 
-新測試的確切數量由 plan 決定。
+新增 71 個測試（818 -> 889）：A 部分 43 個（`tests/test_name_validation.py` 9、`tests/test_dialog_validation.py` 11、`tests/test_settings_dialogs.py` 20、`tests/test_converting_dialog.py` 3），B 部分 5 個（`tests/test_name_validation.py` 2、`tests/test_dictionary_manager.py` 1、`tests/test_document_workspace.py` 2），C 部分 23 個（`tests/test_dialog_base.py`），D 部分 0 個。
 
 ## 遷移步驟（每一步是一個綠燈 commit）
 
@@ -364,10 +372,10 @@ class TextProcessingDialog(SingletonDialogMixin, SettingsDialog):
 
 ## 驗收標準
 
-1. Linux 上的路線圖驗證：`cd client && python -m unittest tests.test_dialog_validation tests.test_dialog_display tests.test_settings_dialogs -v` 通過。
-2. 也必須綠燈：`tests.test_name_validation tests.test_dialog_base tests.test_dictionary_manager tests.test_document_workspace tests.test_dictionary_presenter tests.test_dictionary_management_dialog tests.test_speech_symbols_dialog tests.test_gui_document_flows tests.test_workspace_service tests.test_i18n tests.test_removed_dead_code tests.test_wx_stub`。
-3. 完整測試：818 + 新測試，`failures=1`（只有 P2-5）、`errors=0`、`skipped=9`。shuffle harness（`$SP/shuffle_harness.py`，seed 0-19）每個 seed 都只有同一個失敗；`test_dialog_validation`、`test_dialog_display`、`test_speech_symbols_dialog`、`test_dictionary_management_dialog`、`test_settings_dialogs` 與 `test_gui_document_flows` 單獨執行，以及與 `test_dialog_base` 兩兩以兩種順序執行時也都通過。
-4. `grep -n "def __enter__\|def __exit__\|_normalize_dialog_name\|\"exceed\"" client/dialog.py` 無輸出；`grep -n "_is_destroyed_window_error\|def _destroy" client/settings/dialogs.py` 無輸出；`grep -n "raise ValueError" client/shared/name_validation.py` 無輸出；`grep -n "class ConvertingDialog\|finalize_dialog_layout" client/gui.py` 無輸出；`grep -rn "in str(exc)" client --include=*.py --exclude-dir=tests` 無輸出。
+1. Linux 上的路線圖驗證：`cd client && python -m unittest tests.test_dialog_validation tests.test_dialog_display tests.test_settings_dialogs -v` 通過（71 個測試，原本 40 個）。
+2. 也必須綠燈：`tests.test_name_validation tests.test_dialog_base tests.test_dictionary_manager tests.test_document_workspace tests.test_dictionary_presenter tests.test_dictionary_management_dialog tests.test_speech_symbols_dialog tests.test_gui_document_flows tests.test_workspace_service tests.test_i18n tests.test_removed_dead_code tests.test_wx_stub tests.test_converting_dialog`。
+3. 完整測試：889 個（818 + 71），`failures=1`（只有 P2-5）、`errors=0`、`skipped=9`。shuffle harness（`$SP/shuffle_harness.py`，seed 0-19）每個 seed 都只有同一個失敗；`test_dialog_validation`、`test_dialog_display`、`test_speech_symbols_dialog`、`test_dictionary_management_dialog`、`test_settings_dialogs`、`test_gui_document_flows` 與新的 stub-scope 模組 `test_converting_dialog` 單獨執行，以及與 `test_dialog_base` 兩兩以兩種順序執行時也都通過。
+4. `grep -n "def __enter__\|def __exit__\|_normalize_dialog_name\|\"exceed\"" client/dialog.py` 無輸出；`grep -n "_is_destroyed_window_error\|def _destroy" client/settings/dialogs.py` 無輸出；`grep -n "raise ValueError" client/shared/name_validation.py` 無輸出；`grep -n "class ConvertingDialog\|finalize_dialog_layout" client/gui.py` 無輸出；`grep -rn "in str(exc)" client --include=*.py --exclude-dir=tests --exclude-dir=.venv` 無輸出（被 git 忽略的 `client/.venv` 若存在，其中的第三方程式碼會符合）。
 5. msgid 掃描：原始碼 353 個 msgid、同樣 4 個只在 pot 的孤兒、沒有只在原始碼的項目；`git diff main --stat -- client/locales scripts` 為空。
 6. `git diff main --stat -- client/dictionaries client/documents client/conversion client/about.py client/ui` 只列出 `client/ui/dialog_base.py`（新檔）。
 7. `client/ui/dialog_base.py` 通過 AST 守門（不 import `wx`、`gui`、`dialog`、`settings`）。

@@ -759,26 +759,21 @@ class DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog
             )
         )
 
-    @classmethod
-    def sync_open_font_size(cls, font_size: int) -> None:
-        instance = cls._instance
-        if instance is None:
-            return
-        normalized_view = normalize_view_settings(
-            ViewSettings(
-                font_size,
-                instance.snapshot.view.scheme,
-                instance.snapshot.view.braille_font,
-            )
+    def sync_font_size(self, font_size: int) -> None:
+        """Take a font size changed in the main window (Ctrl+wheel).
+
+        A View panel with an unsaved font size edit keeps it, and then the snapshot is left alone too.
+        """
+        view = normalize_view_settings(
+            ViewSettings(font_size, self.snapshot.view.scheme, self.snapshot.view.braille_font)
         )
-        view_panel = None
-        for panel in instance.panel_instances.values():
-            if isinstance(panel, ViewSettingsPanel):
-                view_panel = panel
-                break
-        if view_panel is not None and getattr(view_panel, "font_size_dirty", False):
+        view_panel = self._view_panel()
+        if view_panel is not None and not view_panel.sync_font_size(view.font_size):
             return
-        instance.snapshot = instance.snapshot.with_view(normalized_view)
-        if view_panel is not None:
-            view_panel.font_size_spin.SetValue(normalized_view.font_size)
-            view_panel.font_size_dirty = False
+        self.snapshot = self.snapshot.with_view(view)
+
+    def _view_panel(self) -> ViewSettingsPanel | None:
+        for panel in self.panel_instances.values():
+            if isinstance(panel, ViewSettingsPanel):
+                return panel
+        return None

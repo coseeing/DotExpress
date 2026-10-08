@@ -4,7 +4,7 @@ import ast
 import sys
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import FunctionType, SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 from tests import wx_stub
@@ -506,22 +506,18 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
                 commit=Mock(),
             )
 
-    def test_sync_open_font_size_updates_snapshot_before_view_panel_exists(self) -> None:
+    def test_sync_font_size_updates_snapshot_before_view_panel_exists(self) -> None:
         from settings.dialogs import DotExpressSettingsDialog
 
         dialog = make_dialog_without_wx_constructor()
         dialog.snapshot = make_snapshot(font_size=12)
         dialog.panel_instances = {}
-        original_instance = DotExpressSettingsDialog._instance
-        DotExpressSettingsDialog._instance = dialog
-        try:
-            DotExpressSettingsDialog.sync_open_font_size(20)
-        finally:
-            DotExpressSettingsDialog._instance = original_instance
+        with patch.object(DotExpressSettingsDialog, "_instance", dialog):
+            sync_open_dialog_font_size(DotExpressSettingsDialog, 20)
 
         self.assertEqual(dialog.snapshot.view.font_size, 20)
 
-    def test_sync_open_font_size_keeps_dirty_view_panel_draft(self) -> None:
+    def test_sync_font_size_keeps_dirty_view_panel_draft(self) -> None:
         from settings.dialogs import DotExpressSettingsDialog, ViewSettingsPanel
 
         dialog = make_dialog_without_wx_constructor()
@@ -530,15 +526,18 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         view_panel.font_size_dirty = True
         view_panel.font_size_spin = Mock()
         dialog.panel_instances = {2: view_panel}
-        original_instance = DotExpressSettingsDialog._instance
-        DotExpressSettingsDialog._instance = dialog
-        try:
-            DotExpressSettingsDialog.sync_open_font_size(20)
-        finally:
-            DotExpressSettingsDialog._instance = original_instance
+        with patch.object(DotExpressSettingsDialog, "_instance", dialog):
+            sync_open_dialog_font_size(DotExpressSettingsDialog, 20)
 
         self.assertEqual(dialog.snapshot.view.font_size, 12)
         view_panel.font_size_spin.SetValue.assert_not_called()
+
+    def test_font_size_sync_is_one_instance_method(self) -> None:
+        from settings.dialogs import DotExpressSettingsDialog
+
+        members = vars(DotExpressSettingsDialog)
+        self.assertEqual([name for name in members if "font_size" in name], ["sync_font_size"])
+        self.assertIs(type(members["sync_font_size"]), FunctionType)
 
     def test_title_format_uses_localizable_template(self) -> None:
         from settings.dialogs import DotExpressSettingsDialog
@@ -1211,7 +1210,9 @@ class TableDisplayNameGuardTest(unittest.TestCase):
 
 def sync_open_dialog_font_size(dialog_class, font_size):
     """Pass a font size to the open dialog of ``dialog_class`` the way the main window does."""
-    dialog_class.sync_open_font_size(font_size)
+    dialog = dialog_class.open_instance()
+    if dialog is not None:
+        dialog.sync_font_size(font_size)
 
 
 class FontSizeSyncCharacterizationTest(unittest.TestCase):

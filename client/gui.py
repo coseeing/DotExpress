@@ -10,18 +10,10 @@ from i18n import _, resource_path
 from app_paths import ApplicationDataError, prepare_application_directories
 from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
-from conversion.jobs import (
-	ConversionCompletionPolicy,
-	ConversionJobFailure,
-	ConversionJobRequest,
-	ConversionJobRunner,
-	ConversionJobSuccess,
-)
+from conversion.presenter import ConversionPresenter, missing_default_table_message
 from conversion.service import (
-	ConversionOutput,
 	ConversionRequest,
 	ConversionStageError,
-	get_public_error_message,
 )
 from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.manager import dictionary_path_for_name, get_dictionary_directory
@@ -220,14 +212,16 @@ class BrailleFrame(wx.Frame):
 		return editors_box
 
 	def _initialize_conversion_state(self) -> None:
-		self._conversion_runner = ConversionJobRunner(
-			runtime=self.translation_runtime,
-			on_success=self._finish_conversion_success,
-			on_failure=self._finish_conversion_failure,
-			call_after=wx.CallAfter,
-		)
 		self._convert_dialog = None
-		self._convert_dialog_timer = None
+		self._conversion_presenter = ConversionPresenter(
+			self,
+			self._document_controller,
+			runtime=self.translation_runtime,
+			build_request=self._build_conversion_request_for_text,
+			get_translation_tables=lambda: self.translation_tables,
+			call_after=wx.CallAfter,
+			call_later=wx.CallLater,
+		)
 
 	def _apply_initial_settings(self, initial_settings: ViewSettings) -> None:
 		self._apply_editor_view_settings(initial_settings)
@@ -551,6 +545,15 @@ class BrailleFrame(wx.Frame):
 			translation_tables=self.translation_tables.copy(),
 			lang=get_lang(),
 			charset_maps=get_charset_maps(),
+		)
+
+	def _build_conversion_request_for_text(self, raw_text: str) -> ConversionRequest:
+		settings = self.translation_settings
+		return self._build_conversion_request(
+			raw_text,
+			settings.output_mode,
+			settings.width,
+			self._get_selected_dictionary_path(),
 		)
 
 	def _format_batch_issue_lines(self, issues: list[BatchIssue]) -> list[str]:
@@ -1031,11 +1034,6 @@ class BrailleFrame(wx.Frame):
 			parent=self,
 		)
 
-	def _missing_default_table_message(self) -> str | None:
-		if self.translation_tables.get("default"):
-			return None
-		return _("Please select a translation table first.")
-
 	def _start_export_conversion(
 		self,
 		document: Document,
@@ -1046,24 +1044,14 @@ class BrailleFrame(wx.Frame):
 		on_error=None,
 		on_missing_table=None,
 	) -> bool:
-		message = self._missing_default_table_message()
+		message = missing_default_table_message(self.translation_tables)
 		if message is not None:
 			if on_missing_table is not None:
 				on_missing_table(message)
 			elif on_error is not None:
 				on_error(message)
 			return False
-		settings = self.translation_settings
-		self._start_conversion(
-			document.text,
-			settings.width,
-			settings.output_mode,
-			self._get_selected_dictionary_path(),
-			on_success=on_success,
-			on_error=on_error,
-			update_output=False,
-			show_success=False,
-		)
+		self._conversion_presenter.convert_for_export(document.text, on_success=on_success, on_error=on_error)
 		return True
 
 	def _export_next_document(
@@ -1122,43 +1110,29 @@ class BrailleFrame(wx.Frame):
 		)
 
 	def on_convert(self, _evt):
-		if self._conversion_runner.is_running():
-			return
-
-		message = self._missing_default_table_message()
-		if message is not None:
-			wx.MessageBox(
-				message,
-				_("Info"),
-				wx.OK | wx.ICON_INFORMATION,
-				parent=self,
-			)
-			return
-		raw_text = self.input_txt.GetValue()
-		settings = self.translation_settings
-		self._start_conversion(
-			raw_text,
-			settings.width,
-			settings.output_mode,
-			self._get_selected_dictionary_path(),
-		)
+		self._conversion_presenter.convert()
 
 	def _on_close(self, evt: wx.CloseEvent):
-		if self._conversion_runner.is_running() and evt.CanVeto():
+		if self._conversion_presenter.is_running() and evt.CanVeto():
 			evt.Veto()
 			return
 		if not self._save_open_document_with_feedback():
 			if evt.CanVeto():
 				evt.Veto()
 			return
-		self._close_converting_dialog()
+		self.close_converting_dialog()
 		if self._dual_view_frame is not None:
 			viewer = self._dual_view_frame
 			self._dual_view_frame = None
 			viewer.Destroy()
 		evt.Skip()
 
-	def _set_conversion_busy(self, busy: bool):
+	# --- ConversionView (conversion/presenter.py) ---------------------------
+
+	def get_source_text(self) -> str:
+		return self.input_txt.GetValue()
+
+	def set_conversion_busy(self, busy: bool) -> None:
 		menu_bar = self.GetMenuBar()
 		if menu_bar is not None:
 			for menu_label in (_("File"), _("Translation")):
@@ -1168,51 +1142,14 @@ class BrailleFrame(wx.Frame):
 		self.document_list.Enable(not busy)
 		self.input_txt.Enable(not busy)
 
-	def _start_conversion(
-		self,
-		raw_text: str,
-		width: int,
-		output_mode: str,
-		dictionary_path: Path,
-		*,
-		on_success=None,
-		on_error=None,
-		update_output: bool = True,
-		show_success: bool = True,
-	):
-		self._set_conversion_busy(True)
-		self._close_converting_dialog()
-		policy = ConversionCompletionPolicy(
-			on_success=on_success,
-			on_error=on_error,
-			update_output=update_output,
-			show_success=show_success,
-		)
-		job_id = self._conversion_runner.start(
-			ConversionJobRequest(
-			conversion_request=self._build_conversion_request(
-				raw_text,
-				output_mode,
-					width,
-					dictionary_path,
-				),
-				completion_policy=policy,
-			)
-		)
-		self._convert_dialog_timer = wx.CallLater(2000, self._show_converting_dialog, job_id)
-
-	def _show_converting_dialog(self, job_id: int):
-		if job_id != self._conversion_runner.active_job_id:
-			return
-		if not self._conversion_runner.is_running():
-			return
+	def show_converting_dialog(self) -> None:
 		if self._convert_dialog is not None:
 			return
 		self._convert_dialog = ConvertingDialog(self)
 		self._convert_dialog.Show()
 		self._convert_dialog.Raise()
 
-	def _close_converting_dialog(self):
+	def close_converting_dialog(self) -> None:
 		if self._convert_dialog is None:
 			return
 		dialog = self._convert_dialog
@@ -1220,77 +1157,18 @@ class BrailleFrame(wx.Frame):
 		dialog.Unbind(wx.EVT_CLOSE)
 		dialog.Destroy()
 
-	def _complete_conversion(
-		self,
-		policy: ConversionCompletionPolicy,
-		conversion_output: ConversionOutput | None = None,
-		error_message: str | None = None,
-		display_text: str | None = None,
-	):
-		if self._convert_dialog_timer is not None:
-			self._convert_dialog_timer.Stop()
-			self._convert_dialog_timer = None
-		self._close_converting_dialog()
-		self._set_conversion_busy(False)
-		on_success = policy.on_success
-		on_error = policy.on_error
-		update_output = policy.update_output
-		show_success = policy.show_success
+	def show_conversion_output(self, text: str) -> None:
+		self.output_txt.SetValue(text)
+		self.output_txt.SetFocus()
 
-		if error_message is not None:
-			if on_error is not None:
-				on_error(error_message)
-			else:
-				wx.MessageBox(
-					error_message,
-					_("Error"),
-					wx.OK | wx.ICON_ERROR,
-					parent=self,
-				)
-			return
+	def refresh_dual_view(self) -> None:
+		self._refresh_dual_view()
 
-		output = conversion_output or ConversionOutput(display_text or "", ())
-		converted_braille = output.display_text
-		if update_output:
-			self.output_txt.SetValue(converted_braille)
-			self.output_txt.SetFocus()
-			controller = self._document_controller
-			open_name = controller.open_document_name
-			if open_name:
-				document = controller.get_document(open_name)
-				if document is not None:
-					controller.replace_document(
-						Document(
-							document.name,
-							self.input_txt.GetValue(),
-							converted_braille,
-						)
-					)
-				controller.set_dual_view_results(open_name, output.dual_view_segments)
-			self._refresh_dual_view()
-		if on_success is not None:
-			on_success(converted_braille)
-		if show_success:
-			wx.MessageBox(_("Conversion completed."), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+	def show_info(self, message: str, caption: str) -> None:
+		wx.MessageBox(message, caption, wx.OK | wx.ICON_INFORMATION, parent=self)
 
-	def _finish_conversion_success(self, result: ConversionJobSuccess) -> None:
-		self._complete_conversion(result.completion_policy, conversion_output=result.conversion_output)
-
-	def _finish_conversion_failure(self, result: ConversionJobFailure) -> None:
-		message_templates = {
-			"ascii": _("ASCII conversion failed: {error}"),
-			"text_processing": _("Text processing failed: {error}"),
-		}
-		message_template = message_templates.get(
-			result.error.stage,
-			_("Translation failed: {error}"),
-		)
-		error_text = _(get_public_error_message(result.error.error))
-		self._complete_conversion(
-			result.completion_policy,
-			error_message=message_template.format(error=error_text),
-		)
-
+	def show_error(self, message: str, caption: str) -> None:
+		wx.MessageBox(message, caption, wx.OK | wx.ICON_ERROR, parent=self)
 
 def _show_application_data_error(error: ApplicationDataError) -> None:
 	wx.MessageBox(

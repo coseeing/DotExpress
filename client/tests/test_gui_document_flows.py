@@ -54,13 +54,9 @@ class GuiDocumentFlowsTest(unittest.TestCase):
     def _make_frame(self, documents=(Document("alpha", "source", None),), open_name="alpha") -> gui.BrailleFrame:
         frame = gui.BrailleFrame.__new__(gui.BrailleFrame)
         frame.translation_runtime = Mock()
-        frame._conversion_runner = Mock()
-        frame._conversion_runner.is_running.return_value = False
-        frame._conversion_runner.start = Mock(return_value=7)
-        frame._convert_dialog_timer = Mock()
+        frame._conversion_presenter = Mock(spec=gui.ConversionPresenter)
+        frame._conversion_presenter.is_running.return_value = False
         frame._convert_dialog = Mock()
-        frame._set_conversion_busy = Mock()
-        frame._close_converting_dialog = Mock()
         frame.input_txt = Mock()
         frame.output_txt = Mock()
         frame._show_export_all_result = Mock()
@@ -709,131 +705,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         log_exception.assert_called_once_with("Failed to clean up dual-view HTML")
         runtime.close.assert_called_once_with()
 
-    def test_start_conversion_builds_request_and_starts_runner(self) -> None:
-        frame = self._make_frame()
-        frame._build_conversion_request = Mock(return_value=Mock())
-        with patch.object(gui.wx, "CallLater", return_value=Mock()) as call_later:
-            frame._start_conversion(
-                "source",
-                40,
-                "unicode",
-                Path("dictionary/default.csv"),
-            )
-
-        frame._build_conversion_request.assert_called_once_with(
-            "source",
-            "unicode",
-            40,
-            Path("dictionary/default.csv"),
-        )
-        frame._conversion_runner.start.assert_called_once_with(
-            gui.ConversionJobRequest(
-                conversion_request=frame._build_conversion_request.return_value,
-                completion_policy=gui.ConversionCompletionPolicy(),
-            )
-        )
-        frame._set_conversion_busy.assert_called_once_with(True)
-        frame._close_converting_dialog.assert_called_once_with()
-        call_later.assert_called_once_with(2000, frame._show_converting_dialog, 7)
-
-    def test_manual_conversion_updates_output_focus_and_shows_completion(self) -> None:
-        frame = self._make_frame()
-        frame.input_txt.GetValue.return_value = "source"
-        policy = gui.ConversionCompletionPolicy()
-        with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._complete_conversion(policy, display_text="braille")
-
-        frame.output_txt.SetValue.assert_called_once_with("braille")
-        frame.output_txt.SetFocus.assert_called_once_with()
-        self.assertEqual(frame._document_controller.get_document("alpha").braille, "braille")
-        message_box.assert_called_once_with(
-            gui._("Conversion completed."),
-            gui._("Info"),
-            gui.wx.OK | gui.wx.ICON_INFORMATION,
-            parent=frame,
-        )
-
-    def test_export_conversion_calls_success_callback_without_manual_message(self) -> None:
-        frame = self._make_frame()
-        on_success = Mock()
-        policy = gui.ConversionCompletionPolicy(
-            on_success=on_success,
-            update_output=False,
-            show_success=False,
-        )
-
-        with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._complete_conversion(policy, display_text="braille")
-
-        on_success.assert_called_once_with("braille")
-        frame.output_txt.SetValue.assert_not_called()
-        frame.output_txt.SetFocus.assert_not_called()
-        message_box.assert_not_called()
-
-    def test_export_conversion_calls_error_callback_without_showing_worker_error(self) -> None:
-        frame = self._make_frame()
-        on_error = Mock()
-        policy = gui.ConversionCompletionPolicy(
-            on_error=on_error,
-            update_output=False,
-            show_success=False,
-        )
-
-        with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._complete_conversion(policy, error_message="boom")
-
-        on_error.assert_called_once_with("boom")
-        message_box.assert_not_called()
-
-    def test_text_processing_failure_uses_its_own_message(self) -> None:
-        frame = self._make_frame()
-        result = gui.ConversionJobFailure(
-            job_id=1,
-            error=gui.ConversionStageError("text_processing", RuntimeError("script boom")),
-            completion_policy=gui.ConversionCompletionPolicy(),
-        )
-        frame._complete_conversion = Mock()
-
-        frame._finish_conversion_failure(result)
-
-        frame._complete_conversion.assert_called_once_with(
-            result.completion_policy,
-            error_message=gui._("Text processing failed: {error}").format(error="script boom"),
-        )
-
-    def test_later_job_uses_its_own_policy_after_previous_completion(self) -> None:
-        frame = self._make_frame()
-        first_policy = gui.ConversionCompletionPolicy(
-            on_success=Mock(),
-            update_output=False,
-            show_success=False,
-        )
-        second_policy = gui.ConversionCompletionPolicy()
-        first_result = gui.ConversionJobSuccess(
-            job_id=1,
-            conversion_output=gui.ConversionOutput("first", ("old",)),
-            completion_policy=first_policy,
-        )
-        second_result = gui.ConversionJobSuccess(
-            job_id=2,
-            conversion_output=gui.ConversionOutput("second", ("new",)),
-            completion_policy=second_policy,
-        )
-
-        with patch.object(gui.wx, "MessageBox") as message_box:
-            frame._finish_conversion_success(first_result)
-            frame._finish_conversion_success(second_result)
-
-        first_policy.on_success.assert_called_once_with("first")
-        frame.output_txt.SetValue.assert_called_once_with("second")
-        frame.output_txt.SetFocus.assert_called_once_with()
-        message_box.assert_called_once_with(
-            gui._("Conversion completed."),
-            gui._("Info"),
-            gui.wx.OK | gui.wx.ICON_INFORMATION,
-            parent=frame,
-        )
-
     def test_export_all_continues_after_conversion_failure(self) -> None:
         frame = self._make_frame()
         written: list[tuple[str, str]] = []
@@ -901,41 +772,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._show_export_all_result.assert_called_once()
         result = frame._show_export_all_result.call_args.args[0]
         self.assertTrue(result.all_succeeded)
-
-    def test_successful_manual_conversion_stores_segments_and_refreshes_open_viewer(self) -> None:
-        frame = self._make_frame()
-        policy = gui.ConversionCompletionPolicy(show_success=False)
-        frame._dual_view_frame = Mock()
-        frame._refresh_dual_view = Mock()
-        conversion_output = gui.ConversionOutput("braille", ("segment",), dual_view_segments=("segment",))
-
-        with patch.object(gui.wx, "MessageBox"):
-            frame._finish_conversion_success(
-                gui.ConversionJobSuccess(
-                    job_id=1,
-                    conversion_output=conversion_output,
-                    completion_policy=policy,
-                )
-            )
-
-        self.assertEqual(frame._document_controller.get_dual_view_results("alpha"), ("segment",))
-        frame._refresh_dual_view.assert_called_once_with()
-
-    def test_export_conversion_does_not_replace_dual_view_cache(self) -> None:
-        frame = self._make_frame()
-        policy = gui.ConversionCompletionPolicy(update_output=False)
-        frame._document_controller.set_dual_view_results("alpha", ("manual",))
-        conversion_output = gui.ConversionOutput("export", ("export-segment",))
-
-        frame._finish_conversion_success(
-            gui.ConversionJobSuccess(
-                job_id=1,
-                conversion_output=conversion_output,
-                completion_policy=policy,
-            )
-        )
-
-        self.assertEqual(frame._document_controller.get_dual_view_results("alpha"), ("manual",))
 
     def test_open_document_refreshes_viewer_but_text_edit_does_not(self) -> None:
         frame = self._make_frame(documents=(Document("beta", "new text", "braille"),))
@@ -1286,88 +1122,6 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         self.assertEqual((second.lang, second.charset_maps), ("zh_TW", second_maps))
         self.assertEqual(get_lang.call_count, 2)
         self.assertEqual(get_charset_maps.call_count, 2)
-
-    def test_convert_without_default_table_shows_info_and_does_not_convert(self) -> None:
-        frame = self._make_frame()
-        frame.translation_tables = {"default": ""}
-        frame._start_conversion = Mock()
-
-        with patch.object(gui.wx, "MessageBox") as message_box:
-            frame.on_convert(None)
-
-        message_box.assert_called_once_with(
-            gui._("Please select a translation table first."),
-            gui._("Info"),
-            gui.wx.OK | gui.wx.ICON_INFORMATION,
-            parent=frame,
-        )
-        frame._start_conversion.assert_not_called()
-
-    def test_convert_with_default_table_starts_conversion_without_message(self) -> None:
-        frame = self._make_frame()
-        frame.translation_tables = {"default": "zh-tw.ctb"}
-        frame.translation_settings = TranslationSettings("ascii", 32, "default")
-        frame.input_txt.GetValue.return_value = "source"
-        frame._get_selected_dictionary_path = Mock(return_value=Path("dictionary/default.csv"))
-        frame._start_conversion = Mock()
-
-        with patch.object(gui.wx, "MessageBox") as message_box:
-            frame.on_convert(None)
-
-        frame._start_conversion.assert_called_once_with(
-            "source",
-            32,
-            "ascii",
-            Path("dictionary/default.csv"),
-        )
-        message_box.assert_not_called()
-
-    def test_export_conversion_with_default_table_starts_background_conversion(self) -> None:
-        frame = self._make_frame()
-        frame.translation_tables = {"default": "zh-tw.ctb"}
-        frame.translation_settings = TranslationSettings("ascii", 32, "default")
-        frame._get_selected_dictionary_path = Mock(return_value=Path("dictionary/default.csv"))
-        frame._start_conversion = Mock()
-        on_success = Mock()
-        on_error = Mock()
-        on_missing_table = Mock()
-
-        started = frame._start_export_conversion(
-            Document("alpha", "text", None),
-            Path("/tmp/export/alpha.brl"),
-            "brl",
-            on_success=on_success,
-            on_error=on_error,
-            on_missing_table=on_missing_table,
-        )
-
-        self.assertTrue(started)
-        frame._start_conversion.assert_called_once_with(
-            "text",
-            32,
-            "ascii",
-            Path("dictionary/default.csv"),
-            on_success=on_success,
-            on_error=on_error,
-            update_output=False,
-            show_success=False,
-        )
-        on_missing_table.assert_not_called()
-        on_error.assert_not_called()
-
-    def test_missing_default_table_message_reports_only_unset_default(self) -> None:
-        frame = self._make_frame()
-        frame.translation_tables = {"default": "zh-tw.ctb"}
-
-        self.assertIsNone(frame._missing_default_table_message())
-
-        for tables in ({}, {"default": ""}, {"default": None}):
-            with self.subTest(tables=tables):
-                frame.translation_tables = tables
-                self.assertEqual(
-                    frame._missing_default_table_message(),
-                    gui._("Please select a translation table first."),
-                )
 
     def test_translation_tables_are_not_module_state(self) -> None:
         self.assertFalse(hasattr(gui, "language_map_translate_table"))
@@ -2104,9 +1858,9 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         frame.SetTitle = lambda title: self.events.append(("title", title))
         frame._dual_view_frame = None
         frame._document_menu_items = {}
-        frame._conversion_runner = Mock()
-        frame._conversion_runner.is_running.return_value = False
-        frame._close_converting_dialog = Mock()
+        frame._conversion_presenter = Mock(spec=gui.ConversionPresenter)
+        frame._conversion_presenter.is_running.return_value = False
+        frame.close_converting_dialog = Mock()
         return frame
 
     def _write_packages(self, *documents: Document) -> None:
@@ -2333,7 +2087,7 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
         event.Veto.assert_called_once_with()
         event.Skip.assert_not_called()
-        frame._close_converting_dialog.assert_not_called()
+        frame.close_converting_dialog.assert_not_called()
 
     # --- rename ------------------------------------------------------------
 
@@ -2955,16 +2709,18 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
 
     def _wire_conversion(self, frame) -> None:
         """Today's conversion wiring with the fakes. The only helper that changes during P1-4."""
-        frame._conversion_runner = gui.ConversionJobRunner(
-            runtime=frame.translation_runtime,
-            on_success=frame._finish_conversion_success,
-            on_failure=frame._finish_conversion_failure,
-            call_after=self.calls,
-            converter=self._convert,
-            thread_factory=self.thread_factory,
-        )
         frame._convert_dialog = None
-        frame._convert_dialog_timer = None
+        frame._conversion_presenter = gui.ConversionPresenter(
+            frame,
+            frame._document_controller,
+            runtime=frame.translation_runtime,
+            build_request=frame._build_conversion_request_for_text,
+            get_translation_tables=lambda: frame.translation_tables,
+            call_after=self.calls,
+            call_later=self.timers,
+            thread_factory=self.thread_factory,
+            converter=self._convert,
+        )
 
     def _make_frame(self, documents, open_name=None, selected_name=None) -> gui.BrailleFrame:
         frame = gui.BrailleFrame.__new__(gui.BrailleFrame)
@@ -3631,6 +3387,201 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         )
         self.assertEqual(frame.output_txt.value, "⠁")
         self.assertEqual((self.export_dir / "p1.brl").read_text(encoding="utf-8"), "⠃")
+
+
+
+class FrameConversionDelegationTest(unittest.TestCase):
+    """The frame wires the conversion presenter and hands it the conversion commands."""
+
+    def _make_frame(self) -> gui.BrailleFrame:
+        frame = object.__new__(gui.BrailleFrame)
+        frame._document_controller = DocumentController()
+        frame.translation_runtime = Mock()
+        frame.translation_tables = {"default": "zh-tw.ctb"}
+        return frame
+
+    def test_initialize_conversion_state_wires_presenter_with_wx_scheduling(self) -> None:
+        frame = self._make_frame()
+
+        with patch.object(gui, "ConversionPresenter") as presenter_class:
+            frame._initialize_conversion_state()
+
+        presenter_class.assert_called_once_with(
+            frame,
+            frame._document_controller,
+            runtime=frame.translation_runtime,
+            build_request=frame._build_conversion_request_for_text,
+            get_translation_tables=ANY,
+            call_after=gui.wx.CallAfter,
+            call_later=gui.wx.CallLater,
+        )
+        self.assertIs(frame._conversion_presenter, presenter_class.return_value)
+        self.assertIsNone(frame._convert_dialog)
+        get_tables = presenter_class.call_args.kwargs["get_translation_tables"]
+        self.assertIs(get_tables(), frame.translation_tables)
+        frame.translation_tables = {"default": "en-ueb-g1.ctb"}
+        self.assertIs(get_tables(), frame.translation_tables)
+
+    def test_build_conversion_request_for_text_reads_current_settings(self) -> None:
+        frame = self._make_frame()
+        frame.translation_settings = TranslationSettings("ascii", 32, "math")
+        frame.dictionary_dir = Path("dictionaries")
+
+        with patch.object(gui, "get_lang", return_value="zh_TW"), patch.object(
+            gui, "get_charset_maps", return_value={"CJKCharactersLanguage": "zh"}
+        ):
+            request = frame._build_conversion_request_for_text("text")
+
+        self.assertEqual(
+            request,
+            ConversionRequest(
+                raw_text="text",
+                output_mode="ascii",
+                width=32,
+                dictionary_path=Path("dictionaries/math.csv"),
+                data_dir=gui.resource_path("data"),
+                translation_tables={"default": "zh-tw.ctb"},
+                lang="zh_TW",
+                charset_maps={"CJKCharactersLanguage": "zh"},
+            ),
+        )
+
+    def test_convert_command_and_ctrl_enter_delegate_to_presenter(self) -> None:
+        frame = self._make_frame()
+        frame._conversion_presenter = Mock(spec=gui.ConversionPresenter)
+        event = Mock()
+        event.GetKeyCode.return_value = 13
+        event.ControlDown.return_value = True
+
+        frame.on_convert(None)
+        frame.on_input_text_key_down(event)
+
+        self.assertEqual(frame._conversion_presenter.mock_calls, [call.convert(), call.convert()])
+        event.Skip.assert_not_called()
+
+    def test_close_asks_presenter_before_saving(self) -> None:
+        frame = self._make_frame()
+        steps = Mock()
+        frame._conversion_presenter = steps.presenter
+        frame._save_open_document_with_feedback = steps.save
+        frame.close_converting_dialog = steps.close_converting_dialog
+        frame._dual_view_frame = None
+        event = steps.event
+
+        steps.presenter.is_running.return_value = True
+        event.CanVeto.return_value = True
+        frame._on_close(event)
+        self.assertEqual(steps.mock_calls, [call.presenter.is_running(), call.event.CanVeto(), call.event.Veto()])
+
+        steps.reset_mock()
+        steps.presenter.is_running.return_value = False
+        steps.save.return_value = True
+        frame._on_close(event)
+        self.assertEqual(
+            steps.mock_calls,
+            [call.presenter.is_running(), call.save(), call.close_converting_dialog(), call.event.Skip()],
+        )
+
+
+class FrameViewMethodsTest(unittest.TestCase):
+    """The frame's small wx methods behind the presenter view protocols."""
+
+    def _make_frame(self, menu_bar=None) -> gui.BrailleFrame:
+        frame = object.__new__(gui.BrailleFrame)
+        frame.steps = Mock()
+        frame.input_txt = frame.steps.input_txt
+        frame.output_txt = frame.steps.output_txt
+        frame.document_list = frame.steps.document_list
+        frame.GetMenuBar = lambda: menu_bar
+        frame._convert_dialog = None
+        return frame
+
+    def test_get_source_text_reads_the_source_editor(self) -> None:
+        frame = self._make_frame()
+        frame.input_txt.GetValue.return_value = "source"
+
+        self.assertEqual(frame.get_source_text(), "source")
+
+    def test_set_conversion_busy_toggles_file_and_translation_menus_list_and_source(self) -> None:
+        menu_bar = Mock()
+        menu_bar.FindMenu.side_effect = lambda title: {gui._("File"): 0, gui._("Translation"): 1}.get(
+            title, gui.wx.NOT_FOUND
+        )
+        frame = self._make_frame(menu_bar)
+        frame.steps.attach_mock(menu_bar, "menu_bar")
+
+        for busy in (True, False):
+            with self.subTest(busy=busy):
+                frame.steps.reset_mock()
+                frame.set_conversion_busy(busy)
+                self.assertEqual(
+                    frame.steps.mock_calls,
+                    [
+                        call.menu_bar.FindMenu(gui._("File")),
+                        call.menu_bar.EnableTop(0, not busy),
+                        call.menu_bar.FindMenu(gui._("Translation")),
+                        call.menu_bar.EnableTop(1, not busy),
+                        call.document_list.Enable(not busy),
+                        call.input_txt.Enable(not busy),
+                    ],
+                )
+
+    def test_set_conversion_busy_without_menu_bar_or_menus_still_toggles_controls(self) -> None:
+        missing = Mock()
+        missing.FindMenu.return_value = gui.wx.NOT_FOUND
+        for menu_bar in (None, missing):
+            with self.subTest(menu_bar=menu_bar):
+                frame = self._make_frame(menu_bar)
+                frame.set_conversion_busy(True)
+                self.assertEqual(
+                    frame.steps.mock_calls,
+                    [call.document_list.Enable(False), call.input_txt.Enable(False)],
+                )
+        missing.EnableTop.assert_not_called()
+
+    def test_converting_dialog_is_shown_once_and_closed_once(self) -> None:
+        frame = self._make_frame()
+        with patch.object(gui, "ConvertingDialog") as dialog_class, patch.object(gui.wx, "EVT_CLOSE", "EVT_CLOSE"):
+            frame.show_converting_dialog()
+            frame.show_converting_dialog()
+            dialog = dialog_class.return_value
+            self.assertEqual(dialog_class.call_args_list, [call(frame)])
+            self.assertEqual(dialog.mock_calls, [call.Show(), call.Raise()])
+
+            frame.close_converting_dialog()
+            frame.close_converting_dialog()
+
+        self.assertEqual(dialog.mock_calls, [call.Show(), call.Raise(), call.Unbind("EVT_CLOSE"), call.Destroy()])
+        self.assertIsNone(frame._convert_dialog)
+
+    def test_show_conversion_output_sets_then_focuses_braille_result(self) -> None:
+        frame = self._make_frame()
+
+        frame.show_conversion_output("⠃")
+
+        self.assertEqual(frame.steps.mock_calls, [call.output_txt.SetValue("⠃"), call.output_txt.SetFocus()])
+
+    def test_refresh_dual_view_uses_the_frame_refresh(self) -> None:
+        frame = self._make_frame()
+        frame._refresh_dual_view = Mock()
+
+        frame.refresh_dual_view()
+
+        frame._refresh_dual_view.assert_called_once_with()
+
+    def test_message_methods_use_one_message_box_each(self) -> None:
+        frame = self._make_frame()
+        with patch.object(gui.wx, "MessageBox") as message_box:
+            frame.show_info("info text", "Info caption")
+            frame.show_error("error text", "Error caption")
+
+        self.assertEqual(
+            message_box.call_args_list,
+            [
+                call("info text", "Info caption", gui.wx.OK | gui.wx.ICON_INFORMATION, parent=frame),
+                call("error text", "Error caption", gui.wx.OK | gui.wx.ICON_ERROR, parent=frame),
+            ],
+        )
 
 
 if __name__ == "__main__":

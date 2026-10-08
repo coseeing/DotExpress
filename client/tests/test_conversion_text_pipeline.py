@@ -6,10 +6,9 @@ from pathlib import Path
 
 from adapters.translation.contracts import TranslationRuntime
 from conversion.output import ConversionRequest, convert_text_with_alignment
-from conversion.text.dictionary_rules import split_bracket_segments
+from conversion.text.dictionary_rules import apply_dictionary, split_bracket_segments
 from conversion.text.pipeline import (
     TextProcessingError,
-    apply_plain_text_rules,
     preprocess_source_text,
     translate_plain_text_segment,
 )
@@ -103,7 +102,7 @@ class ConversionTextPipelineTest(unittest.TestCase):
         self.assertIsInstance(context.exception.error, RuntimeError)
         self.assertEqual(str(context.exception.error), "SystemExit: requested exit")
 
-    def test_apply_plain_text_rules_returns_bracketed_raw_and_replacement(self) -> None:
+    def test_apply_dictionary_returns_bracketed_raw_and_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             directory = Path(tmpdir)
             dictionary_path = self._write_csv(
@@ -114,7 +113,7 @@ class ConversionTextPipelineTest(unittest.TestCase):
             )
             bopomofo_path = self._write_csv(directory, "bopomofo.csv", ["Bopomofo", "Braille"], [])
 
-            result = apply_plain_text_rules(
+            result = apply_dictionary(
                 "abc",
                 dictionary_path=dictionary_path,
                 bopomofo_path=bopomofo_path,
@@ -161,7 +160,7 @@ class ConversionTextPipelineTest(unittest.TestCase):
             )
             bopomofo_path = self._write_csv(directory, "bopomofo.csv", ["Bopomofo", "Braille"], [])
 
-            result = apply_plain_text_rules(
+            result = apply_dictionary(
                 "音樂",
                 dictionary_path=dictionary_path,
                 bopomofo_path=bopomofo_path,

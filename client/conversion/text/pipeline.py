@@ -46,21 +46,6 @@ def preprocess_source_text(
     )
 
 
-def apply_plain_text_rules(
-    text: str,
-    *,
-    dictionary_path: Path,
-    bopomofo_path: Path,
-    processing: Callable[[str], str],
-) -> dict[str, str]:
-    return apply_dictionary(
-        text,
-        dictionary_path=dictionary_path,
-        bopomofo_path=bopomofo_path,
-        processing=processing,
-    )
-
-
 def translate_plain_text_segment(
     text: str,
     dictionary_path: Path,

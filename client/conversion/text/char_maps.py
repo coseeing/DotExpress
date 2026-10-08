@@ -60,21 +60,3 @@ def translate__mapping_char(
         to_field=to_field,
     )
 
-
-def preprocess_bopomofo_characters(text: str, dictionary_path: Path | str) -> str:
-    return map_characters(
-        text,
-        dictionary_path,
-        from_field="Bopomofo",
-        to_field="Braille",
-    )
-
-
-def map_braille_to_ascii(text: str, dictionary_path: Path | str) -> str:
-    return map_characters(
-        text,
-        dictionary_path,
-        from_field="Braille",
-        to_field="Ascii",
-    )
-

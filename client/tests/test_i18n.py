@@ -124,7 +124,7 @@ class SharedSetupConsumerTest(unittest.TestCase):
         self.assert_uses_shared_i18n("about.py", {"_"})
 
     def test_gui_uses_shared_i18n(self) -> None:
-        self.assert_uses_shared_i18n("gui.py", {"_", "resource_path"})
+        self.assert_uses_shared_i18n("gui.py", {"N_", "_", "resource_path"})
 
 
 class DuplicateSetupGuardTest(unittest.TestCase):
@@ -148,6 +148,27 @@ class DuplicateSetupGuardTest(unittest.TestCase):
                     offenders.append(f"{relative}: {match.group(0).strip()}")
 
         self.assertEqual(offenders, [])
+
+
+class ExtractionMarkerTest(unittest.TestCase):
+    def test_gui_menu_translation_markers_use_n_(self) -> None:
+        tree = _module_tree("gui.py")
+        markers = [
+            node.value
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "_MENU_TRANSLATION_MARKERS" for target in node.targets)
+        ]
+
+        self.assertEqual(len(markers), 1)
+        self.assertIsInstance(markers[0], ast.Tuple)
+        callees = [getattr(getattr(element, "func", None), "id", None) for element in markers[0].elts]
+        self.assertEqual(callees, ["N_"] * 48)
+
+    def test_generate_pot_extracts_n_keyword(self) -> None:
+        script = (CLIENT_ROOT.parent / "scripts" / "generate-pot.bat").read_text(encoding="utf-8")
+
+        self.assertIn("xgettext --language=Python --keyword=_ --keyword=N_ --files-from=", script)
 
 
 if __name__ == "__main__":

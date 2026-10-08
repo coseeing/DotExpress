@@ -423,5 +423,103 @@ class ConversionServiceTest(unittest.TestCase):
         self.assertEqual(output.translation_results, ())
         self.assertEqual(output.dual_view_segments, ())
 
+
+class DictionaryConversionTestCase(unittest.TestCase):
+    """Real pipeline over a temporary dictionary and data directory (no tests of its own)."""
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.test_dir = Path(self._tmpdir.name)
+        self.data_dir = self.test_dir / "data"
+        self.data_dir.mkdir()
+        (self.data_dir / "BopomofoChar2Braille.csv").write_text("Bopomofo,Braille\n", encoding="utf-8")
+        (self.data_dir / "Bopomofo2Braille.csv").write_text("Bopomofo,Braille\n", encoding="utf-8")
+        self.dictionary_dir = self.test_dir / "dictionary"
+        self.dictionary_dir.mkdir()
+        self.dictionary_path = self.dictionary_dir / "default.csv"
+
+    def _convert(self, raw_text: str, runtime: TranslationRuntime) -> ConversionOutput:
+        request = ConversionRequest(
+            raw_text=raw_text,
+            output_mode="unicode",
+            width=40,
+            dictionary_path=self.dictionary_path,
+            data_dir=self.data_dir,
+            translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
+        )
+        return convert_text_with_alignment(request, runtime=runtime)
+
+    def _runtime(self) -> TranslationRuntime:
+        return TranslationRuntime(text_translator=FakeTextTranslator(), math_translator=FakeMathTranslator())
+
+
+class DictionaryErrorTimingTest(DictionaryConversionTestCase):
+    """When a broken or edited dictionary is read, and which stage reports it."""
+
+    def test_headerless_dictionary_fails_text_at_the_translation_stage(self) -> None:
+        self.dictionary_path.write_text("", encoding="utf-8")
+
+        with self.assertRaises(ConversionStageError) as context:
+            self._convert("abc", self._runtime())
+
+        self.assertEqual(context.exception.stage, "translation")
+        self.assertIs(type(context.exception.error), ValueError)
+        self.assertEqual(str(context.exception.error), "CSV must contain header row.")
+
+    def test_headerless_dictionary_does_not_fail_math_only_or_empty_input(self) -> None:
+        self.dictionary_path.write_text("", encoding="utf-8")
+        for raw_text, segment_count in (("$x$", 1), ("", 0)):
+            with self.subTest(raw_text=raw_text):
+                output = self._convert(raw_text, self._runtime())
+
+                self.assertEqual(len(output.dual_view_segments), segment_count)
+
+    def test_failing_preprocessing_script_is_reported_before_a_broken_dictionary(self) -> None:
+        self.dictionary_path.write_text("", encoding="utf-8")
+        (self.dictionary_dir / "preprocessing.py").write_text(
+            "def main(text):\n    raise RuntimeError('script boom')\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(ConversionStageError) as context:
+            self._convert("abc", self._runtime())
+
+        self.assertEqual(context.exception.stage, "text_processing")
+        self.assertEqual(str(context.exception.error), "script boom")
+
+    def test_math_before_the_first_text_is_translated_before_the_dictionary_error(self) -> None:
+        self.dictionary_path.write_text("", encoding="utf-8")
+        runtime = self._runtime()
+
+        with self.assertRaises(ConversionStageError) as context:
+            self._convert("$x$abc", runtime)
+
+        self.assertEqual(str(context.exception.error), "CSV must contain header row.")
+        self.assertEqual(runtime.math_translator.calls, [("x", "Nemeth", LANG)])
+
+    def test_next_conversion_reads_the_rewritten_dictionary(self) -> None:
+        texts = []
+        for target in ("X", "Y"):
+            self.dictionary_path.write_text(f"text,braille,type\n甲,{target},Braille\n", encoding="utf-8")
+            runtime = self._runtime()
+            self._convert("甲", runtime)
+            texts.append([call[0] for call in runtime.text_translator.calls])
+
+        self.assertEqual(texts, [["X"], ["Y"]])
+
+    def test_next_conversion_after_the_dictionary_is_deleted_applies_no_rule(self) -> None:
+        self.dictionary_path.write_text("text,braille,type\n甲,X,Braille\n", encoding="utf-8")
+        self._convert("甲", self._runtime())
+        self.dictionary_path.unlink()
+        runtime = self._runtime()
+
+        self._convert("甲", runtime)
+
+        self.assertEqual(runtime.text_translator.calls, [("甲", "zh-tw.ctb", "甲", False)])
+
+
 if __name__ == "__main__":
     unittest.main()

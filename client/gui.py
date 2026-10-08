@@ -29,8 +29,6 @@ from dictionaries.presenter import DictionaryManagementPresenter
 from documents.controller import DocumentController
 from documents.formats import ExportContext, build_export_wildcard, get_format
 from documents.session import (
-    document_name_exists,
-    get_adjacent_document_name,
     format_window_title,
 )
 from documents.workspace import (
@@ -157,6 +155,7 @@ class BrailleFrame(wx.Frame):
 	def __init__(self, *args, runtime: TranslationRuntime, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.translation_runtime = runtime
+		self._document_controller = DocumentController()
 
 		self._initialize_frame()
 		initial_settings = self._initialize_state()
@@ -165,45 +164,6 @@ class BrailleFrame(wx.Frame):
 		self._apply_initial_settings(initial_settings)
 		self._bind_events()
 		self._load_startup_documents()
-
-	def _get_document_controller(self) -> DocumentController:
-		controller = self.__dict__.get("_document_controller")
-		if controller is None:
-			controller = DocumentController()
-			self._document_controller = controller
-		return controller
-
-	@property
-	def documents(self) -> list[Document]:
-		return self._get_document_controller().documents
-
-	@documents.setter
-	def documents(self, value: list[Document]) -> None:
-		self._get_document_controller().documents = value
-
-	@property
-	def _open_document_name(self) -> str | None:
-		return self._get_document_controller().open_name
-
-	@_open_document_name.setter
-	def _open_document_name(self, value: str | None) -> None:
-		self._get_document_controller().open_name = value
-
-	@property
-	def _selected_document_name(self) -> str | None:
-		return self._get_document_controller().selected_name
-
-	@_selected_document_name.setter
-	def _selected_document_name(self, value: str | None) -> None:
-		self._get_document_controller().selected_name = value
-
-	@property
-	def _dual_view_results_by_document(self) -> dict[str, tuple[object, ...]]:
-		return self._get_document_controller().dual_view_results_by_document
-
-	@_dual_view_results_by_document.setter
-	def _dual_view_results_by_document(self, value: dict[str, tuple[object, ...]]) -> None:
-		self._get_document_controller().dual_view_results_by_document = value
 
 	def _initialize_frame(self) -> None:
 		self.SetSize((900, 600))
@@ -220,13 +180,8 @@ class BrailleFrame(wx.Frame):
 		self.translation_settings = load_translation_settings(self._dictionary_presenter.dictionary_names)
 		self.translation_tables = load_translation_tables() or DEFAULT_TRANSLATION_TABLES.copy()
 		self.workspace_dir = get_workspace_directory()
-		self._document_controller = DocumentController()
-		self.documents = []
 		self._simbraille_font_available = self._register_output_font()
-		self._selected_document_name = None
-		self._open_document_name = None
 		self._dual_view_frame: DualViewFrame | None = None
-		self._dual_view_results_by_document = {}
 
 		self.view_settings = load_view_settings()
 		return self.view_settings
@@ -361,17 +316,17 @@ class BrailleFrame(wx.Frame):
 
 	def _sync_document_menu_state(self, menu_items: dict[str, wx.MenuItem] | None = None) -> None:
 		target_items = menu_items if menu_items is not None else getattr(self, "_document_menu_items", None)
-		if not target_items or not hasattr(self, "documents") or not hasattr(self, "_selected_document_name"):
+		if not target_items:
 			return
 		selected_document = self._get_selected_document() if "document_list" in self.__dict__ else None
 		menu_state = get_document_menu_enabled_state(
 			has_selection=selected_document is not None,
-			has_documents=bool(self.documents),
+			has_documents=self._document_controller.has_documents,
 		)
 		apply_document_menu_state(target_items, menu_state)
 
 	def _update_window_title(self) -> None:
-		self.SetTitle(_(format_window_title(self._open_document_name)))
+		self.SetTitle(_(format_window_title(self._document_controller.open_document_name)))
 
 	def _create_dual_view_frame(self) -> DualViewFrame:
 		return DualViewFrame(self, title=_("Dual View"), on_closed=self._on_dual_view_closed)
@@ -381,7 +336,8 @@ class BrailleFrame(wx.Frame):
 			self._dual_view_frame = None
 
 	def _render_dual_view_for_open_document(self) -> str:
-		results = self._dual_view_results_by_document.get(self._open_document_name or "", ())
+		controller = self._document_controller
+		results = controller.get_dual_view_results(controller.open_document_name)
 		return render_dual_view_html(
 			build_dual_view_model(results),
 			empty_message=_("No conversion data is available for this document."),
@@ -514,9 +470,6 @@ class BrailleFrame(wx.Frame):
 			parent=parent or self,
 		)
 
-	def _get_document_names(self) -> list[str]:
-		return self._get_document_controller().document_names
-
 	def on_open_coseeing_website(self, _evt: wx.CommandEvent) -> None:
 		try:
 			webbrowser.open(about.url)
@@ -555,43 +508,30 @@ class BrailleFrame(wx.Frame):
 			viewer.raise_without_activating()
 		event.Skip()
 
-	def _sort_documents(self) -> None:
-		self._get_document_controller().sort_documents()
-
-	def _get_document_by_name(self, name: str | None) -> Document | None:
-		return self._get_document_controller().get_document(name)
-
-	def _replace_document(self, updated_document: Document) -> None:
-		self._get_document_controller().replace_document(updated_document)
-
-	def _document_name_exists(self, name: str, exclude_name: str | None = None) -> bool:
-		return document_name_exists(self._get_document_controller().documents, name, exclude_name=exclude_name)
-
 	def _clear_document_selection(self) -> None:
 		selection = self.document_list.GetFirstSelected()
 		while selection != wx.NOT_FOUND:
 			self.document_list.Select(selection, on=0)
 			selection = self.document_list.GetFirstSelected()
-		self._selected_document_name = None
+		self._document_controller.select_document(None)
 		self._sync_document_menu_state()
 
 	def _refresh_document_list(self, preferred_name: str | None = None) -> None:
-		self._sort_documents()
+		controller = self._document_controller
+		controller.sort_documents()
 		self.document_list.DeleteAllItems()
-		documents = self.documents
-		for document in documents:
-			self.document_list.InsertItem(self.document_list.GetItemCount(), document.name)
-		if not documents:
-			self._selected_document_name = None
+		names = controller.document_names
+		for name in names:
+			self.document_list.InsertItem(self.document_list.GetItemCount(), name)
+		if not names:
+			controller.select_document(None)
 			self._sync_document_menu_state()
 			return
-		selected_name = preferred_name if preferred_name in self._get_document_names() else documents[0].name
-		self._selected_document_name = selected_name
-		for index, document in enumerate(documents):
-			if document.name == selected_name:
-				self.document_list.Select(index)
-				self.document_list.Focus(index)
-				break
+		selected_name = preferred_name if preferred_name in names else names[0]
+		controller.select_document(selected_name)
+		index = names.index(selected_name)
+		self.document_list.Select(index)
+		self.document_list.Focus(index)
 		self._sync_document_menu_state()
 
 	def _clear_document_editors(self) -> None:
@@ -683,7 +623,7 @@ class BrailleFrame(wx.Frame):
 		DotExpressSettingsDialog.sync_open_font_size(self.view_settings.font_size)
 
 	def _open_document_by_name(self, name: str | None) -> None:
-		document = self._get_document_controller().open_document(name)
+		document = self._document_controller.open_document(name)
 		if document is None:
 			self._clear_document_editors()
 			self._update_window_title()
@@ -691,16 +631,12 @@ class BrailleFrame(wx.Frame):
 			return
 		self._load_document_into_editors(document)
 		self._reset_input_cursor_to_start()
-		self._refresh_document_list(self._selected_document_name)
+		self._refresh_document_list(self._document_controller.selected_document_name)
 		self._update_window_title()
 		self._refresh_dual_view()
 
 	def _open_adjacent_document(self, step: int) -> None:
-		target_name = get_adjacent_document_name(
-			self.documents,
-			self._open_document_name or self._selected_document_name,
-			step,
-		)
+		target_name = self._document_controller.adjacent_document_name(step)
 		if not target_name:
 			return
 		if not self._save_open_document_with_feedback():
@@ -709,9 +645,10 @@ class BrailleFrame(wx.Frame):
 		self.input_txt.SetFocus()
 
 	def _save_open_document(self) -> None:
-		if not self._open_document_name:
+		open_name = self._document_controller.open_document_name
+		if not open_name:
 			return
-		document = self._get_document_by_name(self._open_document_name)
+		document = self._document_controller.get_document(open_name)
 		if document is None:
 			return
 		updated_document = prepare_document_for_save(
@@ -719,7 +656,7 @@ class BrailleFrame(wx.Frame):
 			text=self.input_txt.GetValue(),
 			braille=self.output_txt.GetValue(),
 		)
-		self._replace_document(updated_document)
+		self._document_controller.replace_document(updated_document)
 		save_document_package(document_package_path_for_name(updated_document.name, self.workspace_dir), updated_document)
 
 	def _save_open_document_with_feedback(self) -> bool:
@@ -758,7 +695,7 @@ class BrailleFrame(wx.Frame):
 		except OSError as exc:
 			self._show_file_error(_("Failed to save document: {error}"), exc)
 			return False
-		self.documents.append(document)
+		self._document_controller.add_document(document)
 		self._refresh_document_list(document.name)
 		self._open_document_by_name(document.name)
 		if focus_input:
@@ -777,7 +714,7 @@ class BrailleFrame(wx.Frame):
 				if dialog.ShowModal() != wx.ID_OK:
 					return None
 				document_name = normalize_document_name(dialog.get_document_name())
-			if self._document_name_exists(document_name, exclude_name=exclude_name):
+			if self._document_controller.document_name_exists(document_name, exclude_name=exclude_name):
 				wx.MessageBox(
 					_('Document "{name}" already exists.').format(name=document_name),
 					_("Error"),
@@ -798,9 +735,9 @@ class BrailleFrame(wx.Frame):
 		)
 
 	def _ensure_open_document_exists(self) -> None:
-		documents = self.documents
-		if documents:
-			self._open_document_by_name(documents[0].name)
+		first_name = self._document_controller.first_document_name
+		if first_name is not None:
+			self._open_document_by_name(first_name)
 			return
 		self._create_default_document()
 
@@ -819,29 +756,25 @@ class BrailleFrame(wx.Frame):
 	def _load_workspace_documents_at_startup(self) -> None:
 		self.workspace_dir = ensure_workspace_directory(self.workspace_dir)
 		documents, invalid_paths = load_workspace_documents(self.workspace_dir)
-		self.documents = documents
+		self._document_controller.load_documents(documents)
 		self._refresh_document_list()
 		self._review_invalid_workspace_files(invalid_paths)
 		self._ensure_open_document_exists()
 		self._update_window_title()
 
 	def _get_selected_document_name(self) -> str | None:
+		controller = self._document_controller
 		if "document_list" not in self.__dict__:
-			return self._selected_document_name
-		selection = self.document_list.GetFirstSelected()
-		if selection == wx.NOT_FOUND or selection >= len(self.documents):
-			return self._selected_document_name
-		return self.documents[selection].name
+			return controller.selected_document_name
+		name = controller.document_name_at(self.document_list.GetFirstSelected())
+		return name if name is not None else controller.selected_document_name
 
 	def _get_selected_document(self) -> Document | None:
-		return self._get_document_by_name(self._get_selected_document_name())
+		return self._document_controller.get_document(self._get_selected_document_name())
 
 	def on_document_selection_changed(self, event: wx.ListEvent) -> None:
-		selection = self.document_list.GetFirstSelected()
-		if selection == wx.NOT_FOUND or selection >= len(self.documents):
-			self._selected_document_name = None
-		else:
-			self._selected_document_name = self.documents[selection].name
+		controller = self._document_controller
+		controller.select_document(controller.document_name_at(self.document_list.GetFirstSelected()))
 		self._sync_document_menu_state()
 		event.Skip()
 
@@ -853,10 +786,11 @@ class BrailleFrame(wx.Frame):
 		client_position = self.document_list.ScreenToClient(position) if position != wx.DefaultPosition else wx.Point(0, 0)
 		item_index, _flags = self.document_list.HitTest(client_position)
 		selected_index = self.document_list.GetFirstSelected()
-		if item_index != wx.NOT_FOUND and item_index < len(self.documents):
+		item_name = self._document_controller.document_name_at(item_index)
+		if item_name is not None:
 			self.document_list.Select(item_index)
 			self.document_list.Focus(item_index)
-			self._selected_document_name = self.documents[item_index].name
+			self._document_controller.select_document(item_name)
 		elif position == wx.DefaultPosition and selected_index != wx.NOT_FOUND:
 			item_index = selected_index
 		else:
@@ -888,12 +822,12 @@ class BrailleFrame(wx.Frame):
 
 	def on_rename_document(self, _evt) -> None:
 		selected_name = self._get_selected_document_name()
-		selected_document = self._get_document_by_name(selected_name)
+		selected_document = self._document_controller.get_document(selected_name)
 		if selected_document is None:
 			return
 		if not self._save_open_document_with_feedback():
 			return
-		selected_document = self._get_document_by_name(selected_name)
+		selected_document = self._document_controller.get_document(selected_name)
 		if selected_document is None:
 			return
 		new_name = self._prompt_for_document_name(
@@ -941,10 +875,11 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to delete document: {error}"), exc)
 			return
 		delete_decision = self._document_controller.delete_document(selected_document.name)
-		self._refresh_document_list(self._selected_document_name)
-		if self.documents:
-			if delete_decision.was_open and self._open_document_name:
-				self._open_document_by_name(self._open_document_name)
+		self._refresh_document_list(self._document_controller.selected_document_name)
+		if self._document_controller.has_documents:
+			open_name = self._document_controller.open_document_name
+			if delete_decision.was_open and open_name:
+				self._open_document_by_name(open_name)
 		else:
 			self._update_window_title()
 			self._clear_document_editors()
@@ -952,7 +887,7 @@ class BrailleFrame(wx.Frame):
 		self._refresh_dual_view()
 
 	def on_delete_all_documents(self, _evt) -> None:
-		if not self.documents:
+		if not self._document_controller.has_documents:
 			return
 		if not self._save_open_document_with_feedback():
 			return
@@ -964,7 +899,7 @@ class BrailleFrame(wx.Frame):
 		)
 		if confirmation != wx.YES:
 			return
-		for document in list(self.documents):
+		for document in self._document_controller.documents_snapshot():
 			try:
 				package_path = document_package_path_for_name(document.name, self.workspace_dir)
 				if package_path.exists():
@@ -975,8 +910,8 @@ class BrailleFrame(wx.Frame):
 				self._document_controller.restore_documents_after_delete_all_failure(remaining_documents)
 				self._refresh_document_list()
 				self._review_invalid_workspace_files(invalid_paths)
-				if self.documents:
-					self._open_document_by_name(self.documents[0].name)
+				if self._document_controller.has_documents:
+					self._open_document_by_name(self._document_controller.first_document_name)
 				else:
 					self._clear_document_editors()
 				self._refresh_dual_view()
@@ -1009,14 +944,15 @@ class BrailleFrame(wx.Frame):
 		documents, issues = batch_import_documents(
 			source_paths,
 			format_key=format_key,
-			existing_names=set(self._get_document_names()),
+			existing_names=set(self._document_controller.document_names),
 		)
 		saved_documents, save_issues = self._persist_documents(documents)
-		self.documents.extend(saved_documents)
+		self._document_controller.add_documents(saved_documents)
 		if len(saved_documents) == 1:
 			self._open_document_by_name(saved_documents[0].name)
 		else:
-			self._refresh_document_list(self._open_document_name or self._selected_document_name)
+			controller = self._document_controller
+			self._refresh_document_list(controller.open_document_name or controller.selected_document_name)
 		self._show_file_issues_dialog(
 			_("Import Issues"),
 			_("Some files were skipped during import."),
@@ -1033,7 +969,7 @@ class BrailleFrame(wx.Frame):
 		self._export_document_with_dialog(selected_document, format_key)
 
 	def on_export_all_documents(self, format_key: str) -> None:
-		if not self.documents:
+		if not self._document_controller.has_documents:
 			return
 		if not self._save_open_document_with_feedback():
 			return
@@ -1042,10 +978,11 @@ class BrailleFrame(wx.Frame):
 				return
 			destination_dir = Path(dir_dialog.GetPath())
 		suffix = get_format(format_key).extension
-		conflicts = [destination_dir / f"{document.name}{suffix}" for document in self.documents if (destination_dir / f"{document.name}{suffix}").exists()]
+		documents = self._document_controller.documents_snapshot()
+		conflicts = [destination_dir / f"{document.name}{suffix}" for document in documents if (destination_dir / f"{document.name}{suffix}").exists()]
 		if conflicts and not self._confirm_overwrite_all(conflicts):
 			return
-		self._export_next_document(list(self.documents), destination_dir, format_key, ExportBatchResult())
+		self._export_next_document(documents, destination_dir, format_key, ExportBatchResult())
 
 	def on_editor_mousewheel(self, event: wx.MouseEvent) -> None:
 		step = get_font_size_step_from_wheel(event.GetWheelRotation(), event.ControlDown())
@@ -1072,7 +1009,8 @@ class BrailleFrame(wx.Frame):
 	def on_output_text_key_down(self, event: wx.KeyEvent) -> None:
 		if is_brl_export_shortcut(event.GetKeyCode(), event.ControlDown()):
 			if self._save_open_document_with_feedback():
-				document = self._get_document_by_name(self._open_document_name)
+				controller = self._document_controller
+				document = controller.get_document(controller.open_document_name)
 				if document is not None:
 					self._export_document_with_dialog(document, get_format("brl").key)
 			self.output_txt.SetFocus()
@@ -1127,7 +1065,7 @@ class BrailleFrame(wx.Frame):
 		descriptor = get_format(format_key)
 		if not descriptor.exportable or descriptor.writer is None:
 			raise ValueError(f'Unsupported export format: "{format_key}".')
-		context = ExportContext(dual_view_results=self._dual_view_results_by_document.get(document.name, ()))
+		context = ExportContext(dual_view_results=self._document_controller.get_dual_view_results(document.name))
 		descriptor.writer(destination_path, document, context)
 
 	def _continue_single_export(self, document: Document, destination_path: Path, format_key: str) -> None:
@@ -1366,17 +1304,19 @@ class BrailleFrame(wx.Frame):
 		if update_output:
 			self.output_txt.SetValue(converted_braille)
 			self.output_txt.SetFocus()
-			if self._open_document_name:
-				document = self._get_document_by_name(self._open_document_name)
+			controller = self._document_controller
+			open_name = controller.open_document_name
+			if open_name:
+				document = controller.get_document(open_name)
 				if document is not None:
-					self._replace_document(
+					controller.replace_document(
 						Document(
 							document.name,
 							self.input_txt.GetValue(),
 							converted_braille,
 						)
 					)
-				self._dual_view_results_by_document[self._open_document_name] = output.dual_view_segments
+				controller.set_dual_view_results(open_name, output.dual_view_segments)
 			self._refresh_dual_view()
 		if on_success is not None:
 			on_success(converted_braille)

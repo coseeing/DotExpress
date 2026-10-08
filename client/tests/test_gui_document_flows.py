@@ -7,7 +7,7 @@ import zipfile
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call, patch
+from unittest.mock import DEFAULT, Mock, call, patch
 
 from tests import wx_stub
 from tests.menu_recording import DOCUMENT_MENU_BUILD_LOG, MenuRecorder, enable_log, fake_translate
@@ -48,7 +48,7 @@ def make_snapshot(
 
 
 class GuiDocumentFlowsTest(unittest.TestCase):
-    def _make_frame(self) -> gui.BrailleFrame:
+    def _make_frame(self, documents=(Document("alpha", "source", None),), open_name="alpha") -> gui.BrailleFrame:
         frame = gui.BrailleFrame.__new__(gui.BrailleFrame)
         frame.translation_runtime = Mock()
         frame._conversion_runner = Mock()
@@ -62,11 +62,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame.output_txt = Mock()
         frame._show_export_all_result = Mock()
         frame._dual_view_frame = None
-        frame._dual_view_results_by_document = {}
-        frame._open_document_name = "alpha"
-        frame._documents_by_name = {"alpha": Document("alpha", "source", None)}
-        frame._get_document_by_name = lambda name: frame._documents_by_name.get(name)
-        frame._replace_document = lambda document: frame._documents_by_name.__setitem__(document.name, document)
+        frame._document_controller = DocumentController(documents=list(documents), open_name=open_name)
         frame.translation_tables = dict(gui.DEFAULT_TRANSLATION_TABLES)
         return frame
 
@@ -86,7 +82,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame = self._make_frame()
         document = Document("alpha", "text", "braille")
         cached_results = (Mock(),)
-        frame._dual_view_results_by_document["alpha"] = cached_results
+        frame._document_controller.set_dual_view_results("alpha", cached_results)
         writer = Mock()
         descriptor = replace(get_format("dep"), writer=writer)
 
@@ -103,7 +99,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         frame = self._make_frame()
         document = Document("alpha", "text", "braille")
         cached_results = (Mock(),)
-        frame._dual_view_results_by_document["alpha"] = cached_results
+        frame._document_controller.set_dual_view_results("alpha", cached_results)
         writer = Mock()
         descriptor = replace(get_format("html"), writer=writer)
 
@@ -147,7 +143,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
         get_format_mock.assert_called_once_with("brl")
 
     def test_sync_document_menu_state_before_document_list_exists(self) -> None:
-        frame = self._make_frame()
+        frame = self._make_frame(documents=())
         menu_items = {
             "open": Mock(),
             "delete": Mock(),
@@ -173,7 +169,7 @@ class GuiDocumentFlowsTest(unittest.TestCase):
 
     def test_open_dual_view_creates_refreshes_and_shows_viewer(self) -> None:
         frame = self._make_frame()
-        frame._dual_view_results_by_document["alpha"] = ("segment",)
+        frame._document_controller.set_dual_view_results("alpha", ("segment",))
         viewer = Mock()
         frame._create_dual_view_frame = Mock(return_value=viewer)
         frame._render_dual_view_for_open_document = Mock(return_value="<html>alpha</html>")
@@ -229,6 +225,53 @@ class GuiDocumentFlowsTest(unittest.TestCase):
 
         log_exception.assert_called_once_with("Failed to open dual view")
         frame._show_file_error.assert_called_once_with(gui._("Failed to open dual view: {error}"), error)
+
+
+class DocumentControllerOwnershipTest(unittest.TestCase):
+    STARTUP_STEPS = (
+        "_initialize_state",
+        "_create_main_layout",
+        "_initialize_conversion_state",
+        "_apply_initial_settings",
+        "_bind_events",
+        "_load_startup_documents",
+    )
+
+    def test_frame_creates_its_controller_before_building_the_menu_bar(self) -> None:
+        seen = []
+
+        def initialize_frame(frame) -> None:
+            seen.append(frame.__dict__.get("_document_controller"))
+
+        with (
+            patch.object(gui.BrailleFrame, "_initialize_frame", autospec=True, side_effect=initialize_frame),
+            patch.multiple(gui.BrailleFrame, **{name: DEFAULT for name in self.STARTUP_STEPS}),
+        ):
+            frame = gui.BrailleFrame(None, runtime=Mock())
+
+        self.assertEqual(len(seen), 1)
+        self.assertIsInstance(seen[0], gui.DocumentController)
+        self.assertIs(frame._document_controller, seen[0])
+        self.assertEqual(seen[0].documents, [])
+
+    def test_initialize_state_keeps_the_frame_controller(self) -> None:
+        frame = object.__new__(gui.BrailleFrame)
+        controller = DocumentController(documents=[Document("alpha", "a", "1")], open_name="alpha")
+        frame._document_controller = controller
+        frame._register_output_font = Mock(return_value=False)
+        with (
+            patch.object(gui, "get_dictionary_directory", return_value=Path("dictionary")),
+            patch.object(gui, "DictionaryManagementPresenter", return_value=Mock(dictionary_names=["default"])),
+            patch.object(gui, "load_translation_settings", return_value=TranslationSettings("unicode", 40, "default")),
+            patch.object(gui, "get_workspace_directory", return_value=Path("workspace")),
+            patch.object(gui, "load_view_settings", return_value=ViewSettings(40, "light", "default")),
+            patch.object(gui, "load_translation_tables", return_value={}),
+        ):
+            frame._initialize_state()
+
+        self.assertIs(frame._document_controller, controller)
+        self.assertEqual(controller.document_names, ["alpha"])
+        self.assertEqual(controller.open_document_name, "alpha")
 
 
 class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
@@ -431,7 +474,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
         frame.output_txt.SetValue.assert_called_once_with("braille")
         frame.output_txt.SetFocus.assert_called_once_with()
-        self.assertEqual(frame._documents_by_name["alpha"].braille, "braille")
+        self.assertEqual(frame._document_controller.get_document("alpha").braille, "braille")
         message_box.assert_called_once_with(
             gui._("Conversion completed."),
             gui._("Info"),
@@ -604,13 +647,13 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
                 )
             )
 
-        self.assertEqual(frame._dual_view_results_by_document["alpha"], ("segment",))
+        self.assertEqual(frame._document_controller.get_dual_view_results("alpha"), ("segment",))
         frame._refresh_dual_view.assert_called_once_with()
 
     def test_export_conversion_does_not_replace_dual_view_cache(self) -> None:
         frame = self._make_frame()
         policy = gui.ConversionCompletionPolicy(update_output=False)
-        frame._dual_view_results_by_document["alpha"] = ("manual",)
+        frame._document_controller.set_dual_view_results("alpha", ("manual",))
         conversion_output = gui.ConversionOutput("export", ("export-segment",))
 
         frame._finish_conversion_success(
@@ -621,11 +664,10 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             )
         )
 
-        self.assertEqual(frame._dual_view_results_by_document["alpha"], ("manual",))
+        self.assertEqual(frame._document_controller.get_dual_view_results("alpha"), ("manual",))
 
     def test_open_document_refreshes_viewer_but_text_edit_does_not(self) -> None:
-        frame = self._make_frame()
-        frame.documents = [Document("beta", "new text", "braille")]
+        frame = self._make_frame(documents=(Document("beta", "new text", "braille"),))
         frame._dual_view_frame = Mock()
         frame._refresh_dual_view = Mock()
         frame._load_document_into_editors = Mock()
@@ -637,8 +679,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._refresh_dual_view.assert_called_once_with()
 
     def test_open_document_moves_input_cursor_to_start(self) -> None:
-        frame = self._make_frame()
-        frame.documents = [Document("beta", "new text", "braille")]
+        frame = self._make_frame(documents=(Document("beta", "new text", "braille"),))
         frame._refresh_dual_view = Mock()
         frame._refresh_document_list = Mock()
         frame._update_window_title = Mock()
@@ -651,14 +692,15 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame.input_txt.ShowPosition.assert_called_once_with(0)
 
     def test_char_hook_cycles_forward_to_first_document_from_last(self) -> None:
-        frame = self._make_frame()
-        frame.documents = [
-            Document("alpha", "a", "1"),
-            Document("beta", "b", "2"),
-            Document("zoo", "z", "3"),
-        ]
-        frame._open_document_name = "zoo"
-        frame._selected_document_name = "zoo"
+        frame = self._make_frame(
+            documents=(
+                Document("alpha", "a", "1"),
+                Document("beta", "b", "2"),
+                Document("zoo", "z", "3"),
+            ),
+            open_name="zoo",
+        )
+        frame._document_controller.select_document("zoo")
         frame._save_open_document_with_feedback = Mock(return_value=True)
         frame._open_document_by_name = Mock()
         event = Mock()
@@ -672,14 +714,15 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         event.Skip.assert_not_called()
 
     def test_char_hook_cycles_backward_to_last_document_from_first(self) -> None:
-        frame = self._make_frame()
-        frame.documents = [
-            Document("alpha", "a", "1"),
-            Document("beta", "b", "2"),
-            Document("zoo", "z", "3"),
-        ]
-        frame._open_document_name = "alpha"
-        frame._selected_document_name = "alpha"
+        frame = self._make_frame(
+            documents=(
+                Document("alpha", "a", "1"),
+                Document("beta", "b", "2"),
+                Document("zoo", "z", "3"),
+            ),
+            open_name="alpha",
+        )
+        frame._document_controller.select_document("alpha")
         frame._save_open_document_with_feedback = Mock(return_value=True)
         frame._open_document_by_name = Mock()
         event = Mock()
@@ -707,17 +750,16 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         event.Skip.assert_called_once_with()
 
     def test_delete_all_partial_failure_reconciles_dual_view_cache_and_refreshes_viewer(self) -> None:
-        frame = self._make_frame()
-        frame.documents = [
-            Document("alpha", "text-a", "braille-a"),
-            Document("beta", "text-b", "braille-b"),
-        ]
+        frame = self._make_frame(
+            documents=(
+                Document("alpha", "text-a", "braille-a"),
+                Document("beta", "text-b", "braille-b"),
+            ),
+        )
         frame.workspace_dir = Path("/workspace")
-        frame._dual_view_results_by_document = {
-            "alpha": ("stale-alpha",),
-            "beta": ("fresh-beta",),
-            "ghost": ("stale-ghost",),
-        }
+        frame._document_controller.set_dual_view_results("alpha", ("stale-alpha",))
+        frame._document_controller.set_dual_view_results("beta", ("fresh-beta",))
+        frame._document_controller.set_dual_view_results("ghost", ("stale-ghost",))
         frame._save_open_document_with_feedback = Mock(return_value=True)
         frame._show_file_error = Mock()
         frame._refresh_document_list = Mock()
@@ -740,7 +782,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         ):
             frame.on_delete_all_documents(None)
 
-        self.assertEqual(frame._dual_view_results_by_document, {"beta": ("fresh-beta",)})
+        self.assertEqual(frame._document_controller.dual_view_results_by_document, {"beta": ("fresh-beta",)})
         frame._refresh_dual_view.assert_called_once_with()
         frame._open_document_by_name.assert_called_once_with("beta")
 
@@ -1074,8 +1116,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
                 self.assertFalse(hasattr(gui.BrailleFrame, name))
 
     def test_save_open_document_saves_prepared_document(self) -> None:
-        frame = self._make_frame()
-        frame._documents_by_name = {"alpha": Document("alpha", "source", "old braille")}
+        frame = self._make_frame(documents=(Document("alpha", "source", "old braille"),))
         frame.workspace_dir = Path("workspace")
         frame.input_txt.GetValue.return_value = "edited"
         frame.output_txt.GetValue.return_value = "edited braille"
@@ -1084,7 +1125,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             frame._save_open_document()
 
         expected = Document("alpha", "edited", "edited braille")
-        self.assertEqual(frame._documents_by_name["alpha"], expected)
+        self.assertEqual(frame._document_controller.get_document("alpha"), expected)
         save_package.assert_called_once_with(
             gui.document_package_path_for_name("alpha", Path("workspace")),
             expected,
@@ -1260,7 +1301,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
     )
 
     def _make_menu_frame(self):
-        frame = self._make_frame()
+        frame = self._make_frame(documents=())
         frame.handler_calls = Mock()
         for name in self.DOCUMENT_HANDLER_NAMES:
             setattr(frame, name, getattr(frame.handler_calls, name))
@@ -1274,8 +1315,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
         )
 
     def _select_first_of(self, frame, *names: str) -> None:
-        frame.documents = [Document(name, "text", None) for name in names]
-        frame._documents_by_name = {document.name: document for document in frame.documents}
+        frame._document_controller.load_documents([Document(name, "text", None) for name in names])
         frame.document_list = Mock()
         frame.document_list.GetFirstSelected.return_value = 0
 
@@ -1345,7 +1385,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
     def test_context_menu_on_item_selects_it_and_pops_up_below_it(self) -> None:
         frame = self._make_menu_frame()
         self._select_first_of(frame, "alpha")
-        frame._selected_document_name = None
+        frame._document_controller.select_document(None)
         recorder = MenuRecorder()
         document_list = frame.document_list
         document_list.ScreenToClient.return_value = gui.wx.Point(5, 6)
@@ -1370,12 +1410,12 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
         document_list.HitTest.assert_called_once_with(gui.wx.Point(5, 6))
         document_list.Select.assert_called_once_with(0)
         document_list.Focus.assert_called_once_with(0)
-        self.assertEqual(frame._selected_document_name, "alpha")
+        self.assertEqual(frame._document_controller.selected_document_name, "alpha")
 
     def test_keyboard_context_menu_without_selection_clears_it(self) -> None:
         frame = self._make_menu_frame()
         self._select_first_of(frame, "alpha", "beta")
-        frame._selected_document_name = "alpha"
+        frame._document_controller.select_document("alpha")
         frame._document_menu_items = {}
         recorder = MenuRecorder()
         document_list = frame.document_list
@@ -1399,7 +1439,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
         document_list.ScreenToClient.assert_not_called()
         document_list.Select.assert_not_called()
         document_list.GetItemRect.assert_not_called()
-        self.assertIsNone(frame._selected_document_name)
+        self.assertIsNone(frame._document_controller.selected_document_name)
 
     def test_menu_bar_menus_items_and_handlers(self) -> None:
         frame = self._make_menu_frame()
@@ -1526,7 +1566,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
                 source_kind="text",
             ),
         )
-        frame._dual_view_results_by_document["alpha"] = results
+        frame._document_controller.set_dual_view_results("alpha", results)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
@@ -1560,7 +1600,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
                 source_kind="text",
             ),
         )
-        frame._dual_view_results_by_document["alpha"] = results
+        frame._document_controller.set_dual_view_results("alpha", results)
         frame._start_export_conversion = Mock(side_effect=AssertionError("conversion should not run"))
         documents = [Document("alpha", "text", "a"), Document("beta", "text", "b")]
 
@@ -1595,7 +1635,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
 
         self.assertEqual(
             steps.mock_calls,
-            [call.save(), call.export(frame._documents_by_name["alpha"], "brl"), call.output_txt.SetFocus()],
+            [call.save(), call.export(frame._document_controller.get_document("alpha"), "brl"), call.output_txt.SetFocus()],
         )
         event.Skip.assert_not_called()
 

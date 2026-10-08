@@ -216,6 +216,36 @@ class LoadedDictionaryRules:
         }
 
 
+class DictionaryRulesLoader:
+    """Loads one conversion's dictionary rules on first use and keeps them for that conversion.
+
+    Creating a loader reads nothing. A failed load is not kept, so the next
+    load() reads the files again. Not thread-safe: one loader serves one
+    conversion on one worker thread, and nothing is cached across conversions.
+    """
+
+    def __init__(
+        self,
+        dictionary_path: Path | str,
+        bopomofo_path: Path | str,
+        *,
+        processing: Callable[[str], str],
+    ) -> None:
+        self._dictionary_path = dictionary_path
+        self._bopomofo_path = bopomofo_path
+        self._processing = processing
+        self._rules: LoadedDictionaryRules | None = None
+
+    def load(self) -> LoadedDictionaryRules:
+        if self._rules is None:
+            self._rules = LoadedDictionaryRules.from_paths(
+                self._dictionary_path,
+                self._bopomofo_path,
+                processing=self._processing,
+            )
+        return self._rules
+
+
 def apply_dictionary(
     text: str,
     dictionary_path: Path | str,

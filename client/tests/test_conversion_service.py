@@ -521,5 +521,28 @@ class DictionaryErrorTimingTest(DictionaryConversionTestCase):
         self.assertEqual(runtime.text_translator.calls, [("甲", "zh-tw.ctb", "甲", False)])
 
 
+class DictionarySnapshotTest(DictionaryConversionTestCase):
+    def test_one_conversion_uses_one_dictionary_snapshot(self) -> None:
+        dictionary_path = self.dictionary_path
+        dictionary_path.write_text("text,braille,type\n甲,X,Braille\n", encoding="utf-8")
+
+        class RewritingTextTranslator(FakeTextTranslator):
+            """Rewrites the dictionary (as an external editor would) after the first item."""
+
+            def translate(self, text, **kwargs):
+                result = super().translate(text, **kwargs)
+                if len(self.calls) == 1:
+                    dictionary_path.write_text("text,braille,type\n甲,Y,Braille\n", encoding="utf-8")
+                return result
+
+        runtime = TranslationRuntime(text_translator=RewritingTextTranslator(), math_translator=FakeMathTranslator())
+        self._convert("甲$x$甲$y$甲", runtime)
+        next_runtime = self._runtime()
+        self._convert("甲$x$甲$y$甲", next_runtime)
+
+        self.assertEqual([call[0] for call in runtime.text_translator.calls if call[2] == "甲"], ["X", "X", "X"])
+        self.assertEqual([call[0] for call in next_runtime.text_translator.calls if call[2] == "甲"], ["Y", "Y", "Y"])
+
+
 if __name__ == "__main__":
     unittest.main()

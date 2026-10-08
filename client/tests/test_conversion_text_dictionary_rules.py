@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from conversion.text import dictionary_rules
 from conversion.text.dictionary_rules import (
+    DictionaryRulesLoader,
     LoadedDictionaryRules,
     apply_dictionary,
     split_bracket_segments,
@@ -544,6 +545,49 @@ class LoadedDictionaryRulesTest(DictionaryFilesTestCase):
     def test_empty_rules_return_the_text_unchanged(self) -> None:
         self.assertEqual(LoadedDictionaryRules().apply("台灣"), {"raw": "台灣", "replacement": "台灣"})
         self.assertEqual(LoadedDictionaryRules().apply(""), {"raw": "", "replacement": ""})
+
+
+class DictionaryRulesLoaderTest(DictionaryFilesTestCase):
+    def test_constructing_a_loader_reads_nothing(self) -> None:
+        with OpenRecorder() as recorder, patch.object(
+            LoadedDictionaryRules, "from_paths", wraps=LoadedDictionaryRules.from_paths
+        ) as from_paths:
+            DictionaryRulesLoader(self.dictionary_path, self.bopomofo_path, processing=_raise_value_error)
+
+        self.assertEqual(recorder.names, [])
+        self.assertEqual(from_paths.call_count, 0)
+
+    def test_load_reads_the_rules_once_and_returns_the_same_object(self) -> None:
+        self.dictionary_path.write_text(DICTIONARY_HEADER + "甲,X,\n", encoding="utf-8")
+        self.bopomofo_path.write_bytes(VALID_BOPOMOFO)
+        loader = DictionaryRulesLoader(self.dictionary_path, self.bopomofo_path, processing=_identity)
+
+        with OpenRecorder() as recorder, patch.object(
+            LoadedDictionaryRules, "from_paths", wraps=LoadedDictionaryRules.from_paths
+        ) as from_paths:
+            loaded = [loader.load() for _ in range(3)]
+
+        self.assertEqual(from_paths.call_count, 1)
+        self.assertIs(loaded[1], loaded[0])
+        self.assertIs(loaded[2], loaded[0])
+        self.assertEqual(recorder.names, ["bopomofo.csv", "dictionary.csv"])
+        self.assertEqual(loaded[0].apply("甲"), {"raw": r"\[甲\]", "replacement": r"\[X\]"})
+
+    def test_a_failed_load_is_retried_by_the_next_load(self) -> None:
+        self.dictionary_path.write_bytes(b"")
+        self.bopomofo_path.write_bytes(VALID_BOPOMOFO)
+        loader = DictionaryRulesLoader(self.dictionary_path, self.bopomofo_path, processing=_identity)
+
+        with patch.object(
+            LoadedDictionaryRules, "from_paths", wraps=LoadedDictionaryRules.from_paths
+        ) as from_paths:
+            with self.assertRaisesRegex(ValueError, "^CSV must contain header row\\.$"):
+                loader.load()
+            self.dictionary_path.write_text(DICTIONARY_HEADER + "甲,X,\n", encoding="utf-8")
+            rules = loader.load()
+
+        self.assertEqual(from_paths.call_count, 2)
+        self.assertEqual(rules.replacement_rules, (("甲", r"\[X\]"),))
 
 if __name__ == "__main__":
     unittest.main()

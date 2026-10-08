@@ -35,7 +35,6 @@ from documents.workspace import (
     BatchIssue,
     DEFAULT_DOCUMENT_NAME,
     Document,
-    batch_import_documents,
     create_default_document,
     document_package_path_for_name,
 	get_workspace_directory,
@@ -729,18 +728,6 @@ class BrailleFrame(wx.Frame):
 			return
 		self._create_default_document()
 
-	def _persist_documents(self, documents: list[Document]) -> tuple[list[Document], list[BatchIssue]]:
-		saved_documents: list[Document] = []
-		issues: list[BatchIssue] = []
-		for document in documents:
-			try:
-				save_document_package(document_package_path_for_name(document.name, self._workspace_service.workspace_dir), document)
-			except OSError as exc:
-				issues.append(BatchIssue(path=document_package_path_for_name(document.name, self._workspace_service.workspace_dir), reason=str(exc)))
-				continue
-			saved_documents.append(document)
-		return saved_documents, issues
-
 	def _load_workspace_documents_at_startup(self) -> None:
 		invalid_paths = self._workspace_service.load_documents()
 		self._refresh_document_list()
@@ -927,22 +914,16 @@ class BrailleFrame(wx.Frame):
 				filter_index = ALL_SUPPORTED_FILTER_INDEX
 			format_key = import_filters[filter_index].key
 			source_paths = [Path(path) for path in file_dialog.GetPaths()]
-		documents, issues = batch_import_documents(
-			source_paths,
-			format_key=format_key,
-			existing_names=set(self._document_controller.document_names),
-		)
-		saved_documents, save_issues = self._persist_documents(documents)
-		self._document_controller.add_documents(saved_documents)
-		if len(saved_documents) == 1:
-			self._open_document_by_name(saved_documents[0].name)
+		result = self._workspace_service.import_files(source_paths, format_key=format_key)
+		if len(result.saved) == 1:
+			self._open_document_by_name(result.saved[0].name)
 		else:
 			controller = self._document_controller
 			self._refresh_document_list(controller.open_document_name or controller.selected_document_name)
 		self._show_file_issues_dialog(
 			_("Import Issues"),
 			_("Some files were skipped during import."),
-			issues + save_issues,
+			result.issues,
 		)
 
 	def on_export_document(self, format_key: str) -> None:

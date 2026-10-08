@@ -24,8 +24,8 @@ setUpModule = _SCOPE.activate
 tearDownModule = _SCOPE.deactivate
 
 from documents.controller import DocumentController
-from documents.workspace import Document, load_document_package, save_document_package
-from documents.workspace_service import DocumentWorkspaceService
+from documents.workspace import BatchIssue, Document, load_document_package, save_document_package
+from documents.workspace_service import DocumentWorkspaceService, ImportResult
 from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
 from settings.translation import TranslationSettings
@@ -398,6 +398,39 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         dialog_class.assert_called_once_with(frame, invalid_paths)
         frame._workspace_service.delete_invalid_files.assert_called_once_with(invalid_paths, on_error=ANY)
         frame._show_file_error.assert_called_once_with(gui._("Failed to delete invalid workspace file: {error}"), error)
+
+    def test_import_hands_chosen_files_to_service_and_shows_its_result(self) -> None:
+        frame = self._make_frame([Document("alpha", "a", "1")], open_name="alpha")
+        issue = BatchIssue(path=Path("x.txt"), reason="bad")
+        frame._workspace_service.import_files.return_value = ImportResult(
+            saved=[Document("beta", "b", None)],
+            issues=[issue],
+        )
+        dialog = Mock()
+        dialog.__enter__ = Mock(return_value=dialog)
+        dialog.__exit__ = Mock(return_value=False)
+        dialog.ShowModal.return_value = gui.wx.ID_OK
+        dialog.GetFilterIndex.return_value = gui.ALL_SUPPORTED_FILTER_INDEX
+        dialog.GetPaths.return_value = [str(self.workspace / "beta.txt")]
+
+        with patch.object(gui.wx, "FileDialog", Mock(return_value=dialog)):
+            frame.on_import_document(None)
+
+        frame._workspace_service.import_files.assert_called_once_with(
+            [self.workspace / "beta.txt"],
+            format_key=gui.get_import_filters()[gui.ALL_SUPPORTED_FILTER_INDEX].key,
+        )
+        self.assertEqual(
+            frame.ui.mock_calls,
+            [
+                call._open_document_by_name("beta"),
+                call._show_file_issues_dialog(
+                    gui._("Import Issues"),
+                    gui._("Some files were skipped during import."),
+                    [issue],
+                ),
+            ],
+        )
 
 
 class BrailleAppLifecycleTest(GuiDocumentFlowsTest):

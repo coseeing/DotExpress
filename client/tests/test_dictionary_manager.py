@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from shared import name_validation
 from dictionaries.manager import (
     DEFAULT_DICTIONARY_NAME,
     DEFAULT_HEADER,
@@ -86,6 +87,14 @@ class DictionaryManagerTest(unittest.TestCase):
 
     def test_normalize_dictionary_name_accepts_32_characters(self) -> None:
         self.assertEqual(normalize_dictionary_name("a" * 32), "a" * 32)
+
+    def test_normalize_dictionary_name_raises_typed_errors(self) -> None:
+        cases = (("", "empty"), ("CON", "invalid"), ("name.", "invalid"), ("a" * 33, "too_long"), (" Default", "reserved"))
+        for value, code in cases:
+            with self.subTest(value=value):
+                with self.assertRaises(name_validation.NameValidationError) as caught:
+                    normalize_dictionary_name(value)
+                self.assertEqual(caught.exception.code, code)
 
     def test_export_dictionary_copies_selected_dictionary_to_destination(self) -> None:
         source_path = create_dictionary(self.dictionary_dir, "math")

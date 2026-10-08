@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 MAX_NAME_LENGTH = 32
 WINDOWS_INVALID_CHARS = set('<>:"/\\|?*')
 WINDOWS_RESERVED_DEVICE_NAMES = {
@@ -28,6 +30,16 @@ WINDOWS_RESERVED_DEVICE_NAMES = {
 }
 WINDOWS_RESERVED_DEVICE_NAMES_CASEFOLDED = {name.casefold() for name in WINDOWS_RESERVED_DEVICE_NAMES}
 
+NameValidationCode = Literal["empty", "invalid", "too_long", "reserved"]
+
+
+class NameValidationError(ValueError):
+    """``normalize_base_name`` rejected a name: ``code`` says why, ``str(error)`` is the English message."""
+
+    def __init__(self, code: NameValidationCode, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
 
 def _is_windows_reserved_device_name(name: str) -> bool:
     root_name = name.split(".", 1)[0]
@@ -50,16 +62,16 @@ def _is_windows_legal_name(name: str) -> bool:
 
 def normalize_base_name(name: str, *, reserved_names: set[str] | None = None) -> str:
     if not name or not name.strip():
-        raise ValueError("Name cannot be empty.")
+        raise NameValidationError("empty", "Name cannot be empty.")
     if any(ord(char) < 32 for char in name):
-        raise ValueError("Name contains invalid characters.")
+        raise NameValidationError("invalid", "Name contains invalid characters.")
     if name.endswith((" ", ".")):
-        raise ValueError("Name cannot end with a period or space.")
+        raise NameValidationError("invalid", "Name cannot end with a period or space.")
     normalized = name.strip()
     if len(normalized) > MAX_NAME_LENGTH:
-        raise ValueError(f"Name cannot exceed {MAX_NAME_LENGTH} characters.")
+        raise NameValidationError("too_long", f"Name cannot exceed {MAX_NAME_LENGTH} characters.")
     if not _is_windows_legal_name(normalized):
-        raise ValueError("Name contains invalid characters.")
+        raise NameValidationError("invalid", "Name contains invalid characters.")
     if reserved_names and normalized.casefold() in {reserved.casefold() for reserved in reserved_names}:
-        raise ValueError(f"Name '{normalized}' is reserved.")
+        raise NameValidationError("reserved", f"Name '{normalized}' is reserved.")
     return normalized

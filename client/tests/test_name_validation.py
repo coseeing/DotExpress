@@ -1,5 +1,6 @@
 import unittest
 
+from shared import name_validation
 from shared.name_validation import normalize_base_name
 
 EMPTY = "Name cannot be empty."
@@ -85,6 +86,38 @@ class NormalizeBaseNameTest(unittest.TestCase):
                 error = self.assert_rejected(name, message)
                 self.assertIsInstance(error, ValueError)
                 self.assertEqual(error.args, (message,))
+
+
+class NameValidationErrorTest(unittest.TestCase):
+    def test_each_check_raises_a_name_validation_error_with_its_code(self) -> None:
+        cases = (
+            ("", "empty", EMPTY),
+            (" \t ", "empty", EMPTY),
+            ("a\tb", "invalid", INVALID),
+            ("name.", "invalid", TRAILING),
+            ("name ", "invalid", TRAILING),
+            ("a" * 33, "too_long", TOO_LONG),
+            ("a?b", "invalid", INVALID),
+            ("CON", "invalid", INVALID),
+            ("\u3000..\u3000", "invalid", INVALID),
+            (" Default", "reserved", "Name 'Default' is reserved."),
+        )
+        for name, code, message in cases:
+            with self.subTest(name=name):
+                with self.assertRaises(name_validation.NameValidationError) as caught:
+                    normalize_base_name(name, reserved_names={"default"})
+                self.assertIs(type(caught.exception), name_validation.NameValidationError)
+                self.assertEqual(caught.exception.code, code)
+                self.assertEqual(str(caught.exception), message)
+                self.assertEqual(caught.exception.args, (message,))
+
+    def test_name_validation_error_is_a_value_error_that_keeps_its_message(self) -> None:
+        error = name_validation.NameValidationError("too_long", "Name cannot exceed 32 characters.")
+
+        self.assertIsInstance(error, ValueError)
+        self.assertEqual(error.code, "too_long")
+        self.assertEqual(error.args, ("Name cannot exceed 32 characters.",))
+        self.assertEqual(str(error), "Name cannot exceed 32 characters.")
 
 
 if __name__ == "__main__":

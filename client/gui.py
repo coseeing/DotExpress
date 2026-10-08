@@ -140,19 +140,8 @@ VIEW_SCHEMES = {
 }
 CSV_WILDCARD = "CSV files (*.csv)|*.csv"
 DEP_WILDCARD = "DotExpress files (*.dep)|*.dep"
-TXT_WILDCARD = "Text files (*.txt)|*.txt"
-PDF_WILDCARD = "PDF files (*.pdf)|*.pdf"
-DOCX_WILDCARD = "Word documents (*.docx)|*.docx"
-EPUB_WILDCARD = "EPUB books (*.epub)|*.epub"
 BRL_WILDCARD = "Braille files (*.brl)|*.brl"
 HTML_WILDCARD = "HTML files (*.html)|*.html"
-IMPORT_WILDCARDS = {
-	"dep": DEP_WILDCARD,
-	"txt": TXT_WILDCARD,
-	"pdf": PDF_WILDCARD,
-	"docx": DOCX_WILDCARD,
-	"epub": EPUB_WILDCARD,
-}
 
 
 def resource_path(relative_path: str) -> Path:
@@ -535,13 +524,6 @@ class BrailleFrame(wx.Frame):
 			logger.exception("Failed to open dual view")
 			self._show_file_error(_("Failed to open dual view: {error}"), error)
 
-	def _rename_dual_view_result(self, old_name: str, new_name: str) -> None:
-		if old_name in self._dual_view_results_by_document:
-			self._dual_view_results_by_document[new_name] = self._dual_view_results_by_document.pop(old_name)
-
-	def _delete_dual_view_result(self, name: str) -> None:
-		self._dual_view_results_by_document.pop(name, None)
-
 	def _set_control_accessible_name(
 		self,
 		control: wx.Window,
@@ -550,13 +532,6 @@ class BrailleFrame(wx.Frame):
 	) -> None:
 		control.SetName(name)
 		control.SetAccessible(NamedControlAccessible(control, name, description))
-
-	def _create_labeled_group(self, parent: wx.Window, label: str) -> tuple[wx.StaticBoxSizer, wx.StaticBox, wx.BoxSizer]:
-		group = wx.StaticBoxSizer(wx.VERTICAL, parent, label=label)
-		box = group.GetStaticBox()
-		row = wx.BoxSizer(wx.HORIZONTAL)
-		group.Add(row, 0, wx.EXPAND | wx.ALL, 8)
-		return group, box, row
 
 	def _get_section_controls(self) -> dict[str, tuple[wx.Window, ...]]:
 		return {
@@ -757,13 +732,6 @@ class BrailleFrame(wx.Frame):
 	def _reset_input_cursor_to_start(self) -> None:
 		self.input_txt.SetInsertionPoint(0)
 		self.input_txt.ShowPosition(0)
-
-	def _get_txt_wildcard(self) -> str:
-		return _(TXT_WILDCARD)
-
-	def _get_import_wildcard(self, format_key: str) -> str:
-		descriptor = get_format(format_key)
-		return _(f"{descriptor.wildcard_label} (*{descriptor.extension})|*{descriptor.extension}")
 
 	def _get_brl_wildcard(self) -> str:
 		return _(BRL_WILDCARD)

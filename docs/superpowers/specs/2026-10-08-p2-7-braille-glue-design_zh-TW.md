@@ -14,6 +14,8 @@
 
 這是重構。不顯示也不朗讀任何新內容，msgid 不變（353 個，同一集合），轉換輸出相同，golden fixture 不變，`<root>/log/` 中的檔案收到相同的紀錄，DotExpress 不擁有的 NVDA 衍生檔（`client/braille/tables/__tables.py`、`client/braille/liblouis/__init__.py`、`vendor/nvda/` 中除了改寫後 helper 之外的一切）都不動。唯一可觀察的差異在**原始碼執行**時的主控台（打包版以 `--noconsole` 建置，沒有主控台）：見 D2。
 
+規劃後更正：plan `docs/superpowers/plans/2026-10-08-p2-7-braille-glue.md`（「Spec Corrections and Refinements」一節）修正了三項事實（驗收標準 9 的 grep 也會刻意比對到三行已納入版控的內容：D5 的 `return _tablesDirs.get(source)`、`scripts/sync-nvda.py` 中 `_adapt_helper` 的 marker，以及 NVDA 原封不動的 `vendor/nvda/liblouis/python/louisHelper.py`；`tests/test_dual_view_frame.py` 用 tab，不是 4 空白；`TranslationRuntime.close()` 位於 `contracts.py:35-40`），並細化了設計（24 個新 client 測試與 2 個新 scripts 測試、既有的 `MathCATError` provider 測試改經由 `adapter_factory=` 沿用、一個釘住預設 adapter factory 的測試、context manager 形式的特性測試 helper、不需提早 return 即冪等的 `MathCATAdapter.close()`、D9 的 `except BaseException`、D11 改用 `unittest.addModuleCleanup`、全新 clone 下的驗收標準 7、重新產生的 helper 等於雛形）；以下已併入這些修改。
+
 ## 關鍵發現：`louis_helper.py` 是產生出來的檔案
 
 Roadmap 把 `client/braille/louis_helper.py` 列為要修改的檔案，而 `storage/refactor.md` 第 7 節第 6 點要求先確認 `scripts\sync-nvda.py` 是否會覆蓋它，若會，就改 adapter 層。結果是會：
@@ -80,7 +82,7 @@ Roadmap 把 `client/braille/louis_helper.py` 列為要修改的檔案，而 `sto
 | `adapters/translation/mathcat.py`（4 空白） | `MathCATMathTranslator(*, translate_math)`：呼叫 `translate_math(source, braille_code=, language=)` 並建立單一 token 的 `TranslationResult`。沒有 `close()`。 |
 | `adapters/translation/provider.py:85-100`（4 空白） | `create_default_math_translator(*, platform=None)`：非 `win32` -> `RuntimeUnavailableError`；否則 import、`get_shared_mathcat_adapter().initialize()`，把 `ImportError`／`OSError`／`MathCATError` 轉成 `RuntimeUnavailableError`，回傳 `MathCATMathTranslator(translate_math=translate_math_segment)`。 |
 | `adapters/translation/provider.py:16-18, 30-60` | 當 translator 有可呼叫的 `close` 時，`build_translation_runtime` 把 `translator.close` 加為關閉 callback。目前只有 `LiblouisTextTranslator.close`（`helper.terminate()`）符合。 |
-| `adapters/translation/contracts.py:158-170` | `TranslationRuntime.close()`：冪等，以反序執行 callback。 |
+| `adapters/translation/contracts.py:35-40` | `TranslationRuntime.close()`：冪等，以反序執行 callback。 |
 | `gui.py:1086-1096` | `OnExit`：清理 dual-view，然後 `runtime.close()`。`main.py:18-39`（demo）在 `finally` 中關閉 runtime。 |
 
 也就是說，共用 adapter 在 Windows 上於建立 runtime 時產生，所有數學轉換都用它，從不關閉，其 DLL 目錄在整個 process 生命週期都保持註冊。單例的使用者：`provider.py:9, 96`、`math_service.py:46-48`、`tests/test_translation_runtime_provider.py:253`（patch `provider.get_shared_mathcat_adapter`）、`tests/test_math_service.py:31`（patch `conversion.mathcat_adapter.get_shared_mathcat_adapter`）。`translate_math_segment`／`mathml_to_nemeth_braille` 的呼叫者：只有 provider 與 `tests/test_math_service.py`。`tests/test_math_translation_adapter.py` 與 `tests/test_translation_golden.py:125` 也會建立 `MathCATMathTranslator(translate_math=...)`。
@@ -107,12 +109,12 @@ Roadmap 把 `client/braille/louis_helper.py` 列為要修改的檔案，而 `sto
 | D3 | `louis_helper` 的修改做在 `scripts/sync-nvda.py` 的 `_adapt_helper()`：(a) `"from logHandler import log\n"` 的替換拿掉 `logging.basicConfig(...)` 區塊，保留 `import logging`、`log = logging.getLogger(__name__)`、`BASE_DIR`、`WINFUNCTYPE`；(b) `"path = brailleTables._tablesDirs.get(registeredTable.source)\n"` 的替換改為 `"path = braille_tables.get_table_directory(registeredTable.source)\n"`。接著把 `vendor/nvda/liblouis/runtime/louis_helper.py` 重寫為 `_adapt_helper(Path("include/nvda/source/louisHelper.py").read_text(encoding="utf-8"))`，UTF-8、`\n` 換行，與 `synchronize()` 寫出的方式完全相同。`vendor/` 中其他都不變（`SOURCE.json` 列出相同檔案與 commit）。被忽略的 `client/braille/louis_helper.py` 不手改；在 Windows 上由 `scripts\install.bat` 更新。 | Helper 是產生檔（見關鍵發現）；手改會在下次 `clean-liblouis`／`install` 時遺失，而 `client/braille/louis_helper.py` 也無法 commit。改寫表是 DotExpress 對 NVDA 檔案的 adapter 層，正是 `storage/refactor.md` 第 7 節第 6 點所要求的。只單獨重新產生 helper，是因為完整 sync 也會還原手改過的 `build/sconscript`（既有偏差）。用同一個函式重新產生，保證快照等於 sync 會為該檔寫出的內容；有測試釘住。 |
 | D4 | 保留 `getDefaultTableForCurLang(tableType, lang)` 及其測試。在 docstring 加一行，說明它為了與 NVDA `brailleTables` 對齊而保留，DotExpress 中沒有呼叫者。 | 刪除它會讓 `addTable` 的 `inputForLangs`／`outputForLangs`（由不可修改的 `__tables.py` 傳入）填兩個沒人讀的 dict，並擴大與上游的差異，卻沒有任何執行期好處。把它接上（例如作為某語言的預設表格）會改變使用者拿到的表格，是本任務以外的行為變更。記錄下來，避免之後的 review 重新提起。 |
 | D5 | 在 `braille/tables/__init__.py` 的 `getTable`／`listTables` 後面加入 `get_table_directory(source: str) -> str \| None`。內容：`return _tablesDirs.get(source)`，於呼叫時讀模組全域變數。依 roadmap 的命名與 `AGENTS.md` 對新函式的要求使用 snake_case；NVDA 風格的 camelCase 名稱不動。 | 對每個來源的結果都與舊的私有存取相同，包括 `terminate()` 之後（builtin 父 map 仍在）以及之後加入子 map 的情況。`louis_helper` 只需要資料夾，不需要整個 map。 |
-| D6 | `MathCATAdapter.close()`：冪等。若有 `_dll_directory_handle` 就關閉並設為 `None`，丟掉 `_libmathcat`，設定 `_closed` 旗標（新的 dataclass 欄位，預設 `False`）。`close()` 之後，`initialize()` 與 `get_braille_for_mathml()` 拋出 `MathCATError("MathCAT adapter is closed")`，且不載入任何東西。`sys.modules["libmathcat_py"]` 不動（擴充模組無法卸載）。 | 讓 runtime 有實際可釋放的東西：以 `os.add_dll_directory` 加入的 DLL 搜尋路徑項目。關閉檢查放在兩個公開方法中（不放在 `_load_libmathcat`），這樣覆寫 `_load_libmathcat` 的既有測試子類別也能測到。關閉後明確失敗，可避免晚到的呼叫者悄悄再次加入 DLL 目錄。 |
+| D6 | `MathCATAdapter.close()`：不需提早 return 即冪等。它設定 `_closed` 旗標（新的 dataclass 欄位，預設 `False`），先取出 `_dll_directory_handle` 並設為 `None` 再關閉它，並丟掉 `_libmathcat`，所以第二次呼叫已無東西可關（`if self._closed: return` 的防護會是死碼）。`close()` 之後，`initialize()` 與 `get_braille_for_mathml()` 拋出 `MathCATError("MathCAT adapter is closed")`，且不載入任何東西：私有的 `_ensure_open()` 在 `initialize()` 一開始、以及 `get_braille_for_mathml()` 的 `try` 之前執行。`sys.modules["libmathcat_py"]` 不動（擴充模組無法卸載）。 | 讓 runtime 有實際可釋放的東西：以 `os.add_dll_directory` 加入的 DLL 搜尋路徑項目。關閉檢查放在兩個公開方法中（不放在 `_load_libmathcat`），這樣覆寫 `_load_libmathcat` 的既有測試子類別也能測到。關閉後明確失敗，可避免晚到的呼叫者悄悄再次加入 DLL 目錄。 |
 | D7 | 刪除 `_SHARED_ADAPTER` 與 `get_shared_mathcat_adapter()`。`mathml_to_nemeth_braille(mathml, braille_code=DEFAULT, *, language, mathcat)` 與 `translate_math_segment(latex, braille_code=DEFAULT, *, language, mathcat)` 以必填 keyword 接收 adapter（任何具有 `get_braille_for_mathml(mathml, braille_code=..., *, language=...)` 的物件；在 `TYPE_CHECKING` 下標註為 `MathCATAdapter`）。`math_service` 在執行期不再 import `conversion.mathcat_adapter`。 | Provider 擁有 adapter 之後，隱藏的單例會成為沒人關閉的第二個擁有者。唯一的正式呼叫者是 provider。`math_service` 仍不涉及原生載入（import 隔離測試照樣通過）。 |
 | D8 | `MathCATMathTranslator(*, translate_math, close=None)`。`close()` 在有給 callback 時呼叫它，否則什麼都不做。`translate()` 不變。 | 既有的建構方式（`test_math_translation_adapter.py`、golden 測試）不必修改。`build_translation_runtime` 本來就會把可呼叫的 `close` 變成關閉 callback，所以 provider 的串接不用改。 |
-| D9 | `create_default_math_translator(*, platform=None, adapter_factory=None)`。沒給 factory 時使用私有的 `_create_mathcat_adapter()`，回傳 `MathCATAdapter(resource_root=get_default_mathcat_resource_root())`。順序：平台檢查；import（`MathCATMathTranslator`、`translate_math_segment`）；`adapter = adapter_factory()`；`adapter.initialize()`；若 `initialize()` 拋出任何例外，先執行 `adapter.close()` 再讓例外繼續（`ImportError`／`OSError`／`MathCATError` 照舊轉成 `RuntimeUnavailableError`，其他錯誤照舊往外拋）。成功時回傳 `MathCATMathTranslator(translate_math=functools.partial(translate_math_segment, mathcat=adapter), close=adapter.close)`。 | 每個 runtime 一個 adapter，由同一個擁有者建立、初始化與關閉。載入失敗不再讓其 DLL 目錄留在註冊中。錯誤對應與 fallback 記錄不變。測試改用 `adapter_factory`，取代對 `provider.get_shared_mathcat_adapter` 的 patch。 |
+| D9 | `create_default_math_translator(*, platform=None, adapter_factory=None)`。沒給 factory 時使用私有的 `_create_mathcat_adapter()`，回傳 `MathCATAdapter(resource_root=get_default_mathcat_resource_root())`。順序：平台檢查；import（`MathCATMathTranslator`、`translate_math_segment`）；`adapter = adapter_factory()`；`adapter.initialize()`；若 `initialize()` 拋出任何例外，先執行 `adapter.close()` 再讓例外繼續（在既有的 `try` 內以 `except BaseException:` 關閉後重新拋出；factory 呼叫也位於同一個 `try` 內，如同原本的單例查詢；`ImportError`／`OSError`／`MathCATError` 照舊轉成 `RuntimeUnavailableError`，其他錯誤照舊往外拋）。成功時回傳 `MathCATMathTranslator(translate_math=functools.partial(translate_math_segment, mathcat=adapter), close=adapter.close)`。 | 每個 runtime 一個 adapter，由同一個擁有者建立、初始化與關閉。載入失敗不再讓其 DLL 目錄留在註冊中。錯誤對應與 fallback 記錄不變。測試改用 `adapter_factory`，取代對 `provider.get_shared_mathcat_adapter` 的 patch。 |
 | D10 | 關閉順序依 `TranslationRuntime.close()`：callback 以註冊的反序執行，所以先關 MathCAT adapter，再做 liblouis `terminate()`。`OnExit` 與 demo 其他部分不變。 | 兩個 runtime 彼此獨立；這是契約本來就定義的順序。目前數學端沒有 callback。 |
-| D11 | 測試 log 隔離：新增測試輔助模組 `client/tests/file_log_isolation.py`，提供一個函式：對指定的 logger 名稱，把每個 logger 的 handler 換成 `logging.NullHandler`、設 `propagate = False`，cleanup 時放回原本完全相同的 handler 與 `propagate`。不論 logger 是否已存在都可用。上述四個模組在模組層級 fixture（`setUpModule`／`tearDownModule`，若模組需要也可用 class fixture）中呼叫它，所以每個模組結束時都還原狀態。不改任何正式模組。 | 只動測試，app 不變。它屬於這裡，因為它是 P2-6 交接指派給 P2-7 的 logging 清理的另一半。替換 handler（而不是 patch `log._log_directory`）之所以可行，是因為 handler 在 import 時就已綁定；它也能承受 `StubScope` 的 eviction：重新 import 的模組再次呼叫 `get_logger`，看到已有 handler 就保留。對 log 呼叫做斷言的測試（`patch.object(dual_view.logger, "debug")`、`RecordingLogger`）照常運作，因為它們替換的是 logger 或其方法，不是 handler。此 commit 獨立，若 reviewer 希望放到別處，可單獨拿掉。 |
+| D11 | 測試 log 隔離：新增測試輔助模組 `client/tests/file_log_isolation.py`，提供一個函式：對指定的 logger 名稱，把每個 logger 的 handler 換成 `logging.NullHandler`、設 `propagate = False`，cleanup 時放回原本完全相同的 handler 與 `propagate`。不論 logger 是否已存在都可用。`isolate_file_logs(*names)` 回傳還原函式；上述四個模組都在 `setUpModule` 中以 `unittest.addModuleCleanup` 註冊它（它在 `tearDownModule` 之後執行，`setUpModule` 中途失敗時也會執行），所以每個模組結束時都還原狀態。`tests/test_dual_view_frame.py` 的 `setUpModule = _SCOPE.activate` 改成一個先啟用 scope、再隔離 `dotexpress.dual_view` 的函式。輔助模組以 `tests.file_log_isolation` 的形式 import（與 `tests.wx_stub` 相同），所以在 `discover`、`python -m unittest tests.x` 與 shuffle harness 下都能運作。不改任何正式模組。 | 只動測試，app 不變。它屬於這裡，因為它是 P2-6 交接指派給 P2-7 的 logging 清理的另一半。替換 handler（而不是 patch `log._log_directory`）之所以可行，是因為 handler 在 import 時就已綁定；它也能承受 `StubScope` 的 eviction：重新 import 的模組再次呼叫 `get_logger`，看到已有 handler 就保留。對 log 呼叫做斷言的測試（`patch.object(dual_view.logger, "debug")`、`RecordingLogger`）照常運作，因為它們替換的是 logger 或其方法，不是 handler。此 commit 獨立，若 reviewer 希望放到別處，可單獨拿掉。 |
 
 ## 各檔設計
 
@@ -129,7 +131,7 @@ Roadmap 把 `client/braille/louis_helper.py` 列為要修改的檔案，而 `sto
 
 ### `vendor/nvda/liblouis/runtime/louis_helper.py`（產生檔、tab、LF）
 
-依 D3 重新產生。預期 diff（已在 scratchpad 做出雛形）：五行的 `logging.basicConfig(...)` 區塊（22-26 行）消失，原 65 行（新 60 行）變成 `path = braille_tables.get_table_directory(registeredTable.source)`。其他不變。
+依 D3 重新產生。預期 diff（已在 scratchpad 做出雛形）：五行的 `logging.basicConfig(...)` 區塊（22-26 行）消失，原 65 行（新 60 行）變成 `path = braille_tables.get_table_directory(registeredTable.source)`。其他不變。重新產生的檔案等於雛形（`$SP/p27spec/helper_new.py`）。
 
 ### `conversion/mathcat_adapter.py`（tab）
 
@@ -147,7 +149,7 @@ D8。
 
 D9。頂層 import 改為 `from conversion.mathcat_adapter import MathCATAdapter, MathCATError, get_default_mathcat_resource_root`（import 時仍不做原生載入）。`create_default_text_translator` 不動。
 
-### 測試（所有動到的測試模組皆為 4 空白）
+### 測試（4 空白，但 `tests/test_dual_view_frame.py` 用 tab）
 
 見測試計畫。
 
@@ -157,7 +159,7 @@ D9。頂層 import 改為 `from conversion.mathcat_adapter import MathCATAdapter
 
 1. **特性測試**（在任何正式程式碼變更之前就是綠的）：
    - 新檔 `client/tests/test_braille_glue.py` 以假的 `braille.liblouis` 載入 `vendor/nvda/liblouis/runtime/louis_helper.py`（如現況所述；結束後還原 `sys.modules`、`braille.liblouis` 屬性，以及 root logger 的 handler 與 level）。它釘住 `_resolveTableInner`：已註冊表格解析到其來源的資料夾（以 patch `braille.tables._tables` 與 `braille.tables._tablesDirs` 驅動，新舊 helper 都會經由它們讀取）、未註冊名稱退回 `TABLES_DIR`（patch 為暫存資料夾）、有 `base` 時從 `dirname(base)` 開始搜尋、找不到的表格拋出列出已搜尋資料夾的 `LookupError`。
-   - `tests/test_translation_runtime_provider.py` 新增一個測試，以 `platform="win32"` 包著一個記錄用的假 adapter 建立預設數學 translator，經由一個本地 helper。目前 helper patch `provider.get_shared_mathcat_adapter` 與 `conversion.mathcat_adapter.get_shared_mathcat_adapter`；第 4 步只把 helper 內容改為 `adapter_factory=`。它釘住：任何翻譯前 `initialize()` 恰好一次；`translate("1", braille_code="Nemeth", language="en")` 會呼叫 `get_braille_for_mathml(latex_to_mathml("1"), braille_code="Nemeth", language="en")`，並把假 adapter 的點字格作為單一 token 回傳。
+   - `tests/test_translation_runtime_provider.py` 新增一個測試，以 `platform="win32"` 包著一個記錄用的假 adapter 建立預設數學 translator，經由一個本地 helper `default_math_translator(adapter)`。它是 context manager，因為目前 `translate_math_segment` 每次呼叫都會查詢單例，所以測試翻譯時 patch 必須仍然有效。目前 helper patch `provider.get_shared_mathcat_adapter` 與 `conversion.mathcat_adapter.get_shared_mathcat_adapter`；第 4 步只把 helper 內容改為 `adapter_factory=`。它釘住：任何翻譯前 `initialize()` 恰好一次；`translate("1", braille_code="Nemeth", language="en")` 會呼叫 `get_braille_for_mathml(latex_to_mathml("1"), braille_code="Nemeth", language="en")`，並把假 adapter 的點字格作為單一 token 回傳。
 2. **`braille.tables`**（D1、D4、D5）及其新測試。
 3. **Helper 改寫**（D3）：`sync-nvda.py`、重新產生的快照、新的 `scripts/tests` 與 client 測試。
 4. **MathCAT 注入**（D6-D10）：adapter、math service、translator、provider 及其測試。`tests/test_math_service.py` 與 `tests/test_translation_runtime_provider.py:248-255` 刻意修改（它們 patch 了被刪的單例），改為傳入 `mathcat=`／`adapter_factory=`。
@@ -165,7 +167,7 @@ D9。頂層 import 改為 `from conversion.mathcat_adapter import MathCATAdapter
 
 ## 測試計畫
 
-約 25 個新測試；確切清單與數量由 plan 決定。除非另註，全都在 Linux 執行。
+24 個新 client 測試與 2 個新 scripts 測試（client 1071 -> 1095，scripts 25 -> 27）：第 1 步新增 5 個，第 2 步 4 個，第 3 步 3 個 client 與 2 個 scripts 測試，第 4 步 10 個，第 5 步 2 個。除非另註，全都在 Linux 執行。拋棄式的 mutant 執行（不 commit）顯示這些測試能抓到現有程式碼的 6 種破壞（第 1 步）、快照與資料夾查詢的 4 種（第 3 步），以及新 MathCAT 生命週期的 7 種（第 4 步）；plan 列出明細。
 
 **特性測試（第 1 步）**：上述四個 resolver 測試與預設數學 translator 串接測試。
 
@@ -183,7 +185,7 @@ D9。頂層 import 改為 `from conversion.mathcat_adapter import MathCATAdapter
 **MathCAT（第 4 步）**：
 - `tests/test_mathcat_adapter.py`：`close()` 即使呼叫兩次也恰好關閉假 DLL 目錄 handle 一次，並清除 `_libmathcat`；`close()` 之後 `initialize()` 與 `get_braille_for_mathml()` 拋出 `MathCATError`，且不呼叫 `_load_libmathcat`；對從未初始化的 adapter 呼叫 `close()` 不會失敗。
 - `tests/test_math_translation_adapter.py`：`close()` 呼叫給定的 callback；沒給時不做事。
-- `tests/test_translation_runtime_provider.py`：兩次呼叫 `create_default_math_translator(platform="win32", adapter_factory=...)` 使用兩個不同的 adapter（沒有單例）；以預設 factory（兩者都注入）建立的 runtime 執行 `runtime.close()` 時，MathCAT adapter 恰好關閉一次，且在文字 helper 的 `terminate()` 之前；`initialize()` 拋出 `MathCATError` 的 adapter 會被關閉，呼叫者得到 `RuntimeUnavailableError`；拋出 `ValueError` 的 adapter 會被關閉，且 `ValueError` 往外拋。
+- `tests/test_translation_runtime_provider.py`：兩次呼叫 `create_default_math_translator(platform="win32", adapter_factory=...)` 使用兩個不同的 adapter（沒有單例）；以預設 factory（兩者都注入）建立的 runtime 執行 `runtime.close()` 時，MathCAT adapter 恰好關閉一次，且在文字 helper 的 `terminate()` 之前；既有的 `test_default_math_factory_normalizes_native_runtime_errors` 經由 `adapter_factory=` 傳入一個 `initialize()` 會拋出 `MathCATError` 的記錄用 adapter，並新增檢查該 adapter 恰好關閉一次，而呼叫者得到 `RuntimeUnavailableError`；拋出 `ValueError` 的 adapter 會被關閉，且 `ValueError` 往外拋；`_create_mathcat_adapter()` 每次呼叫都以隨附的資源根目錄回傳新的 `MathCATAdapter`，沒給 factory 時就使用它。
 - `tests/test_math_service.py`：兩個既有測試改傳假的 `mathcat=`，不再 patch 單例；新增一個測試，確認 `mathml_to_nemeth_braille` 以 `braille_code` 與 `language` 呼叫給定的 adapter。
 
 **Log 隔離（第 5 步）**：輔助函式的測試（handler 與 `propagate` 完全還原；對尚無 handler 的 logger 名稱也可用）；四個模組使用它。驗收標準 6 檢查效果。
@@ -192,21 +194,21 @@ D9。頂層 import 改為 `from conversion.mathcat_adapter import MathCATAdapter
 
 在所示路徑執行；`$SP`／`$PY` 同上。
 
-1. `cd client && $PY -m unittest discover -s tests`：只有已知的 P2-5 失敗；測試數 = 1071 + 新測試；skip 數不變（9）。
+1. `cd client && $PY -m unittest discover -s tests`：只有已知的 P2-5 失敗；測試數 = 1071 + 24 = 1095；skip 數不變（9）。
 2. `cd client && for s in $(seq 1 20); do $PY $SP/shuffle_harness.py $s; done`：每個 seed 都只回報 P2-5 失敗。
-3. 在 repo 根目錄，`$PY -m unittest discover -s scripts/tests`：全部通過（25 + 新增）。
+3. 在 repo 根目錄，`$PY -m unittest discover -s scripts/tests`：全部通過（25 + 2 = 27）。
 4. 在 repo 根目錄，`$PY $SP/p12/tools/msgid_scan.py client` 回報 `source msgids: 353`，集合相同。
 5. 兩個 fixture 的 sha256 不變。
 6. App 資料：P2-6 的快照（`$SP/p26impl/snap.sh`：`config.json`／`workspace/` 是否存在、`dictionary/` 下每個檔案的 sha256、`dual_view/` 的非原始碼項目、`log/` 中的檔名）在標準 1-2 前後完全相同，**而且** `client/log/` 中每個檔案的 sha256 前後相同（新增：測試不再追加寫入）。
-7. `git diff main --stat -- client/braille/tables/__tables.py vendor/nvda/liblouis/SOURCE.json vendor/nvda/liblouis/build vendor/nvda/liblouis/python vendor/nvda/mathcat` 為空，且被忽略的 `client/braille/liblouis/__init__.py` 與 `client/braille/louis_helper.py` 的 sha256 不變（第 1 步之前先記錄）。
+7. `git diff main --stat -- client/braille/tables/__tables.py vendor/nvda/liblouis/SOURCE.json vendor/nvda/liblouis/build vendor/nvda/liblouis/python vendor/nvda/mathcat` 為空，且被忽略的 `client/braille/liblouis/__init__.py` 與 `client/braille/louis_helper.py` 的 sha256 不變（第 1 步之前先記錄）。在全新 clone 中這兩個被忽略的檔案不存在（只有 `scripts\install.bat` 會產生它們）；不論哪種情況，都與第 1 步之前的紀錄比對。
 8. `client/braille/tables/__init__.py` 每一行仍為 `\r\n`，且 `git diff main -- client/braille/tables/__init__.py` 只出現 D1、D4、D5 的行。
-9. `command grep -rn "basicConfig\|_tablesDirs\.get\|get_shared_mathcat_adapter\|_SHARED_ADAPTER" client scripts vendor --include=*.py --exclude-dir=.venv` 只找到被忽略、尚未重新安裝的 `client/braille/louis_helper.py`（直到 Windows install 更新它為止），以及刻意提到這些名稱的測試文字。
-10. `git diff main --stat` 只動到：`client/braille/tables/__init__.py`、`scripts/sync-nvda.py`、`vendor/nvda/liblouis/runtime/louis_helper.py`、`client/conversion/mathcat_adapter.py`、`client/conversion/math_service.py`、`client/adapters/translation/mathcat.py`、`client/adapters/translation/provider.py`、測試計畫中列出的測試模組（加上 `client/tests/file_log_isolation.py` 與 D11 的四個模組）、`scripts/tests/test_sync_nvda_liblouis.py`（或新的 scripts 測試模組），以及 spec 與 plan 檔。
+9. `command grep -rn "basicConfig\|_tablesDirs\.get\|get_shared_mathcat_adapter\|_SHARED_ADAPTER" client scripts vendor --include=*.py --exclude-dir=.venv` 恰好找到：三行刻意比對到 `_tablesDirs\.get` 的已納入版控內容（`client/braille/tables/__init__.py` 的 `return _tablesDirs.get(source)`，即 D5 規定的內容；`scripts/sync-nvda.py` 中 NVDA 端的 marker `brailleTables._tablesDirs.get(...)`，`_adapt_helper` 仍須在 NVDA 原始碼中找到它；以及 NVDA 原封不動的副本 `vendor/nvda/liblouis/python/louisHelper.py:53`，驗收標準 7 禁止修改它）、刻意提到 `basicConfig` 的測試文字（`client/tests/test_braille_glue.py`、`scripts/tests/test_sync_nvda_liblouis.py`），以及被忽略、尚未重新安裝的 `client/braille/louis_helper.py` 的兩行（直到 Windows install 更新它為止；全新 clone 中不存在）。沒有任何內容符合 `get_shared_mathcat_adapter` 或 `_SHARED_ADAPTER`。
+10. `git diff main --stat` 只動到：`client/braille/tables/__init__.py`、`scripts/sync-nvda.py`、`vendor/nvda/liblouis/runtime/louis_helper.py`、`client/conversion/mathcat_adapter.py`、`client/conversion/math_service.py`、`client/adapters/translation/mathcat.py`、`client/adapters/translation/provider.py`、測試計畫中列出的測試模組（加上 `client/tests/file_log_isolation.py` 與 D11 的四個模組）、`scripts/tests/test_sync_nvda_liblouis.py`、新的 `scripts/tests/test_vendor_helper_snapshot.py`，以及 spec 與 plan 檔。
 
 ## Windows 待驗證項目（此處無法執行）
 
-- 更新產生的 helper：`scripts\install.bat`（或 `scripts\clean-rebuild-dotexpress.bat`），然後確認 `client\braille\louis_helper.py` 與 `vendor\nvda\liblouis\runtime\louis_helper.py` 相同。
-- `cd client && python -m unittest tests.test_liblouis_runtime tests.test_translation_runtime_provider tests.test_mathcat_adapter -v`（roadmap 的指令加上 adapter 測試）。`test_table_resolver_finds_bundled_table` 與 `test_chinese_default_table_translates` 會經過 `get_table_directory`。
+- 更新產生的 helper：`scripts\install.bat`（或 `scripts\clean-rebuild-dotexpress.bat`），然後確認 `client\braille\louis_helper.py` 與 `vendor\nvda\liblouis\runtime\louis_helper.py` 相同（`fc /b`）。不要為此執行 `py scripts\sync-nvda.py`（它會還原 `build/sconscript`）。
+- `cd client && python -m unittest tests.test_liblouis_runtime tests.test_translation_runtime_provider tests.test_mathcat_adapter tests.test_braille_glue -v`（roadmap 的指令加上 adapter 與膠水測試）。`test_table_resolver_finds_bundled_table` 與 `test_chinese_default_table_translates` 會經過 `get_table_directory`。
 - 原始碼執行（在主控台中 `python gui.py`）：app 啟動，轉換一份含中文、英文與數學的文件，結束時沒有 traceback；主控台不再出現 root logger 帶時間戳的 `INFO` 行（預期如此，D2）。
 - 打包版：轉換同一份文件，將 BRL 輸出與 `main` 的建置比對（逐位元組相同），結束，並確認 `log\translation.log` 沒有新的 fallback 警告、`log\math.log` 沒有新的錯誤。
 - 在數學轉換進行中結束：不會當掉（MathCAT adapter 現在會先關閉；見風險）。

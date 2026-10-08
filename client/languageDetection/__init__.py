@@ -2,8 +2,7 @@
 
 from collections import defaultdict
 from io import StringIO
-from typing import Optional
-import config
+from typing import Mapping, Optional
 
 # import config
 # from synthDriverHandler import getSynth
@@ -70,7 +69,9 @@ class LangChangeCommand:
 class LanguageDetector(object):
 	""" Provides functionality to add guessed language commands to NVDA speech sequences.
 	Unicode ranges and user configuration are used to guess the language."""
-	def __init__(self, availableLanguages, char_langinfo=None):
+	def __init__(self, availableLanguages, *, default_lang: str, charset_maps: Mapping[str, str], char_langinfo=None):
+		self.default_lang = default_lang
+		self.charset_maps = dict(charset_maps)
 		self.char_langinfo = char_langinfo or {}
 		# 保留原始語言清單（含地區碼），供輸出時還原完整語系
 		self.availableLanguagesFull = tuple(availableLanguages)
@@ -180,7 +181,7 @@ class LanguageDetector(object):
 		sb = StringIO()
 		charset = None
 		# defaultLang = getSynth().language
-		defaultLang = config.get_lang()
+		defaultLang = self.default_lang
 		curLang = defaultLang
 		tmpLang = curLang.split("_")[0]
 		leading = True
@@ -337,8 +338,8 @@ class LanguageDetector(object):
 		# See if we have any configured language for this charset.
 		if charset in _configKeys:
 			configKey = _configKeys[charset]
-			lang = config.get_charset_maps()[configKey]
-			return lang
+			if configKey in self.charset_maps:
+				return self.charset_maps[configKey]
 		return langs[0]
 
 	def _preferred_full_lang(self, base: str, curLang: Optional[str] = None) -> str:
@@ -346,19 +347,16 @@ class LanguageDetector(object):
 
 		優先順序：
 		1) 若 curLang 與 base 符合且含地區碼，回傳 curLang。
-		2) 若 config.get_lang() 與 base 符合，回傳該完整值。
+		2) 若 default_lang 與 base 符合，回傳該完整值。
 		3) 在初始化傳入的 availableLanguages 中尋找以 base_ 開頭的第一個；找不到則回傳 base 或與 base 完全相等者。
 		"""
 		# 1) 目前語系（含地區碼）優先
 		if curLang and curLang.split("_")[0] == base and "_" in curLang:
 			return curLang
-		# 2) 全域設定偏好
-		try:
-			pref = config.get_lang()
-			if pref and pref.split("_")[0] == base:
-				return pref
-		except Exception:
-			pass
+		# 2) 預設語系（default_lang）偏好
+		pref = self.default_lang
+		if pref and pref.split("_")[0] == base:
+			return pref
 		# 3) 從可用清單中選擇最佳匹配
 		best = None
 		for lang in self.availableLanguagesFull:

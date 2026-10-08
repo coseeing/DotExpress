@@ -58,7 +58,11 @@ def translate_plain_text_segment(
     from languageDetection import LangChangeCommand, LanguageDetector
 
     language = [key for key, value in translation_tables.items() if key not in {"default", "math"} and value != ""]
-    language_detector = LanguageDetector(language)
+    language_detector = LanguageDetector(
+        language,
+        default_lang=config.get_lang(),
+        charset_maps=config.get_charset_maps(),
+    )
     sequence = list(language_detector.add_detected_language_commands([text]))
 
     default_lang = config.get_lang().replace("-", "_").split("_", 1)[0]

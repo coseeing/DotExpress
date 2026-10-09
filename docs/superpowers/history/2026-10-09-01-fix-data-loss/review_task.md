@@ -215,3 +215,11 @@
 - M-6：`5757cd9` test: skip fsync in dictionary editor trace replay —— `_EditorHarness.open()` 期間以 no-op 取代 `os.fsync`，`test_atomic_write` 仍用真 fsync；全套 5.1–5.7 s → 3.5–3.6 s；trace fixture sha256 不變。
 - 驗證：全套 `Ran 1141`, `failures=1`（P2-5）, `skipped=7`；20 個 shuffle seed 皆僅 P2-5；msgid 353；兩個 fixture 不變；app-data snapshot 不變。
 - 未處理（交由使用者決定）：新發現的 P2 資料遺失風險 `save_document_package` 原地截斷寫入，建議與 defect 3 一併處理；其餘 Minor 與 follow-up 如上。
+
+## Windows 驗證結果（2026-10-09）
+
+完整記錄：`docs/superpowers/history/2026-10-09-03-windows-verification/results.md`。
+
+- 17：`Ran 253`。NTFS 上的 F-1 測試（含 `MoveDocumentPackageTest`、case-only rename）全部通過。`test_case_only_rename_still_renames` 依預期 error。另有 2 個 HTML 匯出 CRLF failure，屬於測試假設，已由 W-2（`4b4a2b6`）修正。
+- 22：`Ran 162`，`OK (skipped=3)`（A8–A10 POSIX only）。
+- 18–21、23–29：需要 packaged build 或人工操作，尚待執行。在這些項目通過之前，I-2 維持不變：不要在 release note 宣稱 Windows 上已修復。

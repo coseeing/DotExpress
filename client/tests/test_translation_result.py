@@ -1,219 +1,236 @@
+import unittest
+
 from translate import TranslationResult
 
 
 BLANK = chr(0x2800)
 
 
-def test_bind_contracted_tokens_merges_source_characters_with_one_braille_cell() -> None:
-	result = TranslationResult(
-		list("A the test"),
-		["⠠", "⠁", BLANK, "⠮", BLANK, "⠞", "⠑", "⠌"],
-		[0, 0, 1, 2, 5, 6, 7, 8],
-		[0, 2, 3, 3, 3, 4, 5, 6, 7, 7],
-	)
+class BindContractedTokensTest(unittest.TestCase):
+	def test_bind_contracted_tokens_merges_source_characters_with_one_braille_cell(self) -> None:
+		result = TranslationResult(
+			list("A the test"),
+			["⠠", "⠁", BLANK, "⠮", BLANK, "⠞", "⠑", "⠌"],
+			[0, 0, 1, 2, 5, 6, 7, 8],
+			[0, 2, 3, 3, 3, 4, 5, 6, 7, 7],
+		)
 
-	result.bind_contracted_tokens()
+		result.bind_contracted_tokens()
 
-	assert result.raw == ["A", " ", "the", " ", "t", "e", "st"]
-	assert result.braille_to_raw_pos == [0, 0, 1, 2, 3, 4, 5, 6]
-	assert result.raw_to_braille_pos == [0, 2, 3, 4, 5, 6, 7]
-
-
-def test_bind_word_tokens_lead_punct() -> None:
-	"""開頭字元測試"""
-	result = TranslationResult(
-		list("「嶼我共視"),
-		["⠁", "⠂", "⠃", "⠄"],
-		[0, 1, 2, 3],
-		[0, 1, 2, 3],
-	)
-	result.bind_word_tokens()
-	assert result.raw == [
-		"「嶼",
-		"我",
-		"共",
-		"視",
-	]
+		self.assertEqual(result.raw, ["A", " ", "the", " ", "t", "e", "st"])
+		self.assertEqual(result.braille_to_raw_pos, [0, 0, 1, 2, 3, 4, 5, 6])
+		self.assertEqual(result.raw_to_braille_pos, [0, 2, 3, 4, 5, 6, 7])
 
 
-def test_bind_word_tokens_lead_punct_continue() -> None:
-	"""連續開頭字元測試"""
-	result = TranslationResult(
-		list("「「嶼我共視"),
-		["⠁", "⠂", "⠃", "⠄", "⠅"],
-		[0, 1, 2, 3, 4],
-		[0, 1, 2, 3, 4],
-	)
-	result.bind_word_tokens()
-	assert result.raw == [
-		"「「嶼",
-		"我",
-		"共",
-		"視",
-	]
+class BindWordTokensTest(unittest.TestCase):
+	def test_bind_word_tokens_lead_punct(self) -> None:
+		"""開頭字元測試"""
+		# One cell and one position per source character, as every producer builds them.
+		result = TranslationResult(
+			list("「嶼我共視"),
+			["⠁", "⠂", "⠃", "⠄", "⠅"],
+			[0, 1, 2, 3, 4],
+			[0, 1, 2, 3, 4],
+		)
+		result.bind_word_tokens()
+		self.assertEqual(result.raw, [
+			"「嶼",
+			"我",
+			"共",
+			"視",
+		])
+
+	def test_bind_word_tokens_lead_punct_continue(self) -> None:
+		"""連續開頭字元測試"""
+		# One cell and one position per source character, as every producer builds them.
+		result = TranslationResult(
+			list("「「嶼我共視"),
+			["⠁", "⠂", "⠃", "⠄", "⠅", "⠆"],
+			[0, 1, 2, 3, 4, 5],
+			[0, 1, 2, 3, 4, 5],
+		)
+		result.bind_word_tokens()
+		self.assertEqual(result.raw, [
+			"「「嶼",
+			"我",
+			"共",
+			"視",
+		])
+
+	def test_bind_word_tokens_tail_punct(self) -> None:
+		"""尾隨字元測試"""
+		result = TranslationResult(
+			list("嶼我共視」"),
+			["⠁", "⠂", "⠃", "⠄", "⠅"],
+			[0, 1, 2, 3, 4],
+			[0, 1, 2, 3, 4],
+		)
+		result.bind_word_tokens()
+		self.assertEqual(result.raw, [
+			"嶼",
+			"我",
+			"共",
+			"視」",
+		])
+
+	def test_bind_word_tokens_tail_punct_continue(self) -> None:
+		"""連續尾隨字元測試"""
+		result = TranslationResult(
+			list("嶼我共視。」"),
+			["⠁", "⠂", "⠃", "⠄", "⠅", "⠆"],
+			[0, 1, 2, 3, 4, 5],
+			[0, 1, 2, 3, 4, 5],
+		)
+		result.bind_word_tokens()
+		self.assertEqual(result.raw, [
+			"嶼",
+			"我",
+			"共",
+			"視。」",
+		])
+
+	def test_bind_word_tokens_complex(self) -> None:
+		result = TranslationResult(
+			list("Hello,. We are Coseeing. Coseeing is a community dedicated to championing digital accessibility."),
+			["⠁"] * 94,
+			list(range(94)),
+			list(range(94)),
+		)
+		result.bind_word_tokens()
+		self.assertEqual(result.raw, [
+			"Hello,.",
+			" ",
+			"We",
+			" ",
+			"are",
+			" ",
+			"Coseeing.",
+			" ",
+			"Coseeing",
+			" ",
+			"is",
+			" ",
+			"a",
+			" ",
+			"community",
+			" ",
+			"dedicated",
+			" ",
+			"to",
+			" ",
+			"championing",
+			" ",
+			"digital",
+			" ",
+			"accessibility.",
+		])
 
 
-def test_bind_word_tokens_tail_punct() -> None:
-	"""尾隨字元測試"""
-	result = TranslationResult(
-		list("嶼我共視」"),
-		["⠁", "⠂", "⠃", "⠄", "⠅"],
-		[0, 1, 2, 3, 4],
-		[0, 1, 2, 3, 4],
-	)
-	result.bind_word_tokens()
-	assert result.raw == [
-		"嶼",
-		"我",
-		"共",
-		"視」",
-	]
+class RecleanTokenTest(unittest.TestCase):
+	def test_bind_word_tokens_left_right_continue(self) -> None:
+		"""右符號後接左符號插入空格"""
+		result = TranslationResult(
+			["「", "嶼", "我", "」", "「", "共", "視", "」"],
+			["⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈"],
+			[0, 1, 2, 3, 4, 5, 6, 7],
+			[0, 1, 2, 3, 4, 5, 6, 7],
+		)
+		result.reclean_token()
+		self.assertEqual(result.raw, [
+			"「",
+			"嶼",
+			"我",
+			"」",
+			" ",
+			"「",
+			"共",
+			"視",
+			"」",
+		])
+
+	def test_bind_word_tokens_left_right_continue2(self) -> None:
+		"""右符號後接左符號插入空格"""
+		result = TranslationResult(
+			["『嶼", "我』", "「共", "視」"],
+			["⠁", "⠂", "⠃", "⠄"],
+			[0, 0, 1, 2],
+			[0, 2, 3, 4],
+		)
+		result.reclean_token()
+		self.assertEqual(result.raw, [
+			"『嶼",
+			"我』",
+			" ",
+			"「共",
+			"視」",
+		])
 
 
-def test_bind_word_tokens_tail_punct_continue() -> None:
-	"""連續尾隨字元測試"""
-	result = TranslationResult(
-		list("嶼我共視。」"),
-		["⠁", "⠂", "⠃", "⠄", "⠅", "⠆"],
-		[0, 1, 2, 3, 4, 5],
-		[0, 1, 2, 3, 4, 5],
-	)
-	result.bind_word_tokens()
-	assert result.raw == [
-		"嶼",
-		"我",
-		"共",
-		"視。」",
-	]
+class WrapTest(unittest.TestCase):
+	def test_end_right_end_sentence_blank(self) -> None:
+		"""右符號/句尾符號加空白: pins the branch where the token's braille already ends
+		in a blank cell, so wrap adds no separator (every cell here is blank)."""
+		result = TranslationResult(
+			["「嶼我共視是一個關心數位無障礙」", "\n", "「嶼我共視是一個關心數位無障礙」"],
+			[BLANK] * 40,
+			[0] * 40,
+			[0, 20, 20],
+		)
+		self.assertEqual(result.wrap(40)[1], "「嶼我共視是一個關心數位無障礙」\n「嶼我共視是一個關心數位無障礙」")
+
+	def test_end_right_end_sentence_blank2(self) -> None:
+		"""右符號/句尾符號加空白"""
+		# Non-blank cells: a token whose braille ends in a blank cell gets no separator.
+		result = TranslationResult(
+			["「嶼我共視 是個關心數位無障礙」", "\n", "「嶼我共視 是個關心數位無障礙」"],
+			["⠁"] * 38,
+			[0] * 38,
+			[0, 19, 19],
+		)
+		self.assertEqual(result.wrap(40)[1], "「嶼我共視 是個關心數位無障礙」 \n「嶼我共視 是個關心數位無障礙」")
+
+	def test_end_right_end_sentence_blank3(self) -> None:
+		"""右符號/句尾符號加空白"""
+		# Non-blank cells: a token whose braille ends in a blank cell gets no separator.
+		result = TranslationResult(
+			["「嶼我」", "『共視』"],
+			["⠁"] * 8,
+			[0] * 8,
+			[0, 4],
+		)
+		self.assertEqual(result.wrap(40)[1], "「嶼我」 『共視』")
+
+	def test_remove_start_line_blank(self) -> None:
+		"""行中的空格在排版後如果在行首需移除"""
+		# The first token fills the line (40 cells), so the space starts line 2.
+		result = TranslationResult(
+			["Coseeing is a community dedicated to an", " ", "I see"],
+			[BLANK] * 46,
+			[0] * 46,
+			[0, 40, 41],
+		)
+		self.assertEqual(result.wrap(40)[1], "Coseeing is a community dedicated to an\nI see")
+
+	def test_space_that_fits_at_the_line_end_stays_there(self) -> None:
+		# The original fixture of test_remove_start_line_blank: 39 + 1 cells fill line 1.
+		result = TranslationResult(
+			["Coseeing is a community dedicated to an", " ", "I see"],
+			[BLANK] * 45,
+			[0] * 45,
+			[0, 39, 40],
+		)
+		self.assertEqual(result.wrap(40)[1], "Coseeing is a community dedicated to an \nI see")
+
+	def test_remove_start_line_blank2(self) -> None:
+		"""行首的空格在排版後必定在行首，但不能移除"""
+		result = TranslationResult(
+			[" ", " ", " ", "Coseeing is a community dedicated to", " ", "I see"],
+			[BLANK] * 45,
+			[0] * 45,
+			[0, 1, 2, 3, 40, 41],
+		)
+		self.assertEqual(result.wrap(40)[1], "   Coseeing is a community dedicated to\nI see")
 
 
-def test_bind_word_tokens_left_right_continue() -> None:
-	"""右符號後接左符號插入空格"""
-	result = TranslationResult(
-		["「", "嶼", "我", "」", "「", "共", "視", "」"],
-		["⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈"],
-		[0, 1, 2, 3, 4, 5, 6, 7],
-		[0, 1, 2, 3, 4, 5, 6, 7],
-	)
-	result.reclean_token()
-	assert result.raw == [
-		"「",
-		"嶼",
-		"我",
-		"」",
-		" ",
-		"「",
-		"共",
-		"視",
-		"」",
-	]
-
-
-def test_bind_word_tokens_left_right_continue2() -> None:
-	"""右符號後接左符號插入空格"""
-	result = TranslationResult(
-		["『嶼", "我』", "「共", "視」"],
-		["⠁", "⠂", "⠃", "⠄"],
-		[0, 0, 1, 2],
-		[0, 2, 3, 4],
-	)
-	result.reclean_token()
-	assert result.raw == [
-		"『嶼",
-		"我』",
-		" ",
-		"「共",
-		"視」",
-	]
-
-
-def test_end_right_end_sentence_blank() -> None:
-	"""右符號/句尾符號加空白"""
-	result = TranslationResult(
-		["「嶼我共視是一個關心數位無障礙」", "\n", "「嶼我共視是一個關心數位無障礙」"],
-		[BLANK] * 40,
-		[0] * 40,
-		[0, 20, 20],
-	)
-	assert result.wrap(40)[1] == "「嶼我共視是一個關心數位無障礙」\n「嶼我共視是一個關心數位無障礙」"
-
-
-def test_end_right_end_sentence_blank2() -> None:
-	"""右符號/句尾符號加空白"""
-	result = TranslationResult(
-		["「嶼我共視 是個關心數位無障礙」", "\n", "「嶼我共視 是個關心數位無障礙」"],
-		[BLANK] * 38,
-		[0] * 38,
-		[0, 19, 19],
-	)
-	assert result.wrap(40)[1] == "「嶼我共視 是個關心數位無障礙」 \n「嶼我共視 是個關心數位無障礙」"
-
-
-def test_end_right_end_sentence_blank3() -> None:
-	"""右符號/句尾符號加空白"""
-	result = TranslationResult(
-		["「嶼我」", "『共視』"],
-		[BLANK] * 8,
-		[0] * 8,
-		[0, 4],
-	)
-	assert result.wrap(40)[1] == "「嶼我」 『共視』"
-
-
-def test_remove_start_line_blank() -> None:
-	"""行中的空格在排版後如果在行首需移除"""
-	result = TranslationResult(
-		["Coseeing is a community dedicated to an", " ", "I see"],
-		[BLANK] * 45,
-		[0] * 45,
-		[0, 39, 40],
-	)
-	assert result.wrap(40)[1] == "Coseeing is a community dedicated to an\nI see"
-
-
-def test_remove_start_line_blank2() -> None:
-	"""行首的空格在排版後必定在行首，但不能移除"""
-	result = TranslationResult(
-		[" ", " ", " ", "Coseeing is a community dedicated to", " ", "I see"],
-		[BLANK] * 45,
-		[0] * 45,
-		[0, 1, 2, 3, 40, 41],
-	)
-	assert result.wrap(40)[1] == "   Coseeing is a community dedicated to\nI see"
-
-
-def test_bind_word_tokens_complex() -> None:
-	result = TranslationResult(
-		list("Hello,. We are Coseeing. Coseeing is a community dedicated to championing digital accessibility."),
-		["⠁"] * 94,
-		list(range(94)),
-		list(range(94)),
-	)
-	result.bind_word_tokens()
-	assert result.raw == [
-		"Hello,.",
-		" ",
-		"We",
-		" ",
-		"are",
-		" ",
-		"Coseeing.",
-		" ",
-		"Coseeing",
-		" ",
-		"is",
-		" ",
-		"a",
-		" ",
-		"community",
-		" ",
-		"dedicated",
-		" ",
-		"to",
-		" ",
-		"championing",
-		" ",
-		"digital",
-		" ",
-		"accessibility.",
-	]
+if __name__ == "__main__":
+	unittest.main()

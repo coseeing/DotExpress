@@ -47,7 +47,7 @@ class _UnusablePackageFiles:
     def _fail(self, *_args) -> None:
         raise AssertionError("a regular rename used package_files")
 
-    exists = write = replace = remove = temporary_path = _fail
+    exists = write = replace = remove = copy_permissions = temporary_path = _fail
 
 
 class DocumentWorkspaceServiceTest(unittest.TestCase):

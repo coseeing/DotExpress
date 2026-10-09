@@ -87,13 +87,24 @@ class WriteTextAtomicallyTest(unittest.TestCase):
 
     def test_data_is_flushed_to_disk_before_the_replace(self) -> None:
         calls = Mock()
+        real_fsync = os.fsync
+        sizes_at_fsync = []
 
-        with patch("os.fsync", wraps=os.fsync) as fsync, patch("os.replace", wraps=os.replace) as replace:
+        def fsync_recording_the_size(descriptor: int) -> None:
+            # fsync only reaches what the stream has already handed to the descriptor;
+            # text still buffered in the stream would not be on disk before the replace.
+            sizes_at_fsync.append(os.fstat(descriptor).st_size)
+            real_fsync(descriptor)
+
+        with patch("os.fsync", side_effect=fsync_recording_the_size) as fsync, patch(
+            "os.replace", wraps=os.replace
+        ) as replace:
             calls.attach_mock(fsync, "fsync")
             calls.attach_mock(replace, "replace")
             atomic_write.write_text_atomically(self.path, _write_line)
 
         self.assertEqual([name for name, _args, _kwargs in calls.mock_calls], ["fsync", "replace"])
+        self.assertEqual(sizes_at_fsync, [len(b"a,b\r\n")])
         self.assertEqual(self.path.read_bytes(), b"a,b\r\n")
 
     @unittest.skipUnless(os.name == "posix", "POSIX permission bits")

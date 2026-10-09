@@ -37,6 +37,7 @@
 11. **守衛（測試計畫 F）。** `test_tokenizer_and_line_wrap_do_not_import_alignment` 加入時就會通過（它是守衛，不是紅燈測試）。步驟 10 之前，`conversion/contracts.py` 從 `translate` import `TranslationResult`。
 12. **Windows 驗證第 4 項。** `D:\dxtest\N` 只有 `DotExpress.exe`；packaged build 的輸出改與 `docs/superpowers/history/2026-10-09-03-windows-verification/baseline/p25_*.brl` 比對，N 與 B 都與它逐位元組相同。
 13. **測試數量。** 步驟 10 之後在 Windows 上為 `Ran 1208`、`FAILED (errors=1, skipped=5)`（只有 F-W6）。各 commit：1157、1158、1171、1179、1180、1183、1186、1200、1204、1208。真實 golden 模組 13 個測試；等價模組 8 個；tokenizer 模組 14 個；line wrap 模組 4 個。
+14. **packaged build 保留 `translate` shim（D7；P2-5 審查 I-1 之後加入）。** 一旦沒有正式模組 import `translate`，PyInstaller 就不會把它打包進 exe，import 它的使用者前處理腳本只會在打包版失敗。`scripts/build-dotexpress.bat` 加上 `--hidden-import translate`（它重新產生的、被 git 忽略的 `client/DotExpress.spec` 因此列出 `hiddenimports=['translate']`），並由 `test_packaged_build_keeps_the_translate_shim` 檢查這個批次檔。這是唯一的 `scripts/` 與打包設定變更；它取代「維持不變的部分」與驗收條件 7 中相關的字句。
 
 ## 待使用者決定（已於 2026-10-09 決定，見上）
 
@@ -174,7 +175,7 @@ from conversion.alignment import TranslationResult
 __all__ = ["TranslationResult"]
 ```
 
-保留給測試、Windows 歷史腳本，以及 repository 以外任何 import `translate` 的程式。正式模組改為 import `conversion.alignment`（各 adapter、`conversion/wrapping.py`、`conversion/preprocessing/literal_braille.py`、`conversion/contracts.py`）；由守衛維持。`test_import_does_not_import_liblouis_helper` 仍成立（`translate` 有 `TranslationResult`、沒有 `translate`、沒有 `translate_as_single_token`、不載入原生模組）。`SharedConstantsTest.test_construction_does_not_build_language_blocks` 改為 patch `conversion.tokenizer.build_language_blocks`，而不是 `translate.build_language_blocks`（shim 上已沒有這個屬性）。
+保留給測試、Windows 歷史腳本，以及 repository 以外任何 import `translate` 的程式，包括使用者前處理腳本（由 `conversion/preprocessing/user_script.py` 在打包版內執行）。沒有正式模組 import 它，所以 PyInstaller 本來不會把它放進 frozen build；`scripts/build-dotexpress.bat` 以 `--hidden-import translate` 保留它（規劃後更正第 14 項）。正式模組改為 import `conversion.alignment`（各 adapter、`conversion/wrapping.py`、`conversion/preprocessing/literal_braille.py`、`conversion/contracts.py`）；由守衛維持。`test_import_does_not_import_liblouis_helper` 仍成立（`translate` 有 `TranslationResult`、沒有 `translate`、沒有 `translate_as_single_token`、不載入原生模組）。`SharedConstantsTest.test_construction_does_not_build_language_blocks` 改為 patch `conversion.tokenizer.build_language_blocks`，而不是 `translate.build_language_blocks`（shim 上已沒有這個屬性）。
 
 ### D8. contracts 移入 `conversion`（P2 審查 M-1）
 

@@ -37,6 +37,7 @@ Corrected after planning: the plan `docs/superpowers/plans/2026-10-09-p2-5-trans
 11. **Guards (Test Plan F).** `test_tokenizer_and_line_wrap_do_not_import_alignment` passes when it is added (a guard, not a red test). Until step 10, `conversion/contracts.py` imports `TranslationResult` from `translate`.
 12. **Windows verification 4.** `D:\dxtest\N` holds only `DotExpress.exe`; the packaged outputs are compared with `docs/superpowers/history/2026-10-09-03-windows-verification/baseline/p25_*.brl`, which N and B matched byte for byte.
 13. **Counts.** After step 10: `Ran 1208`, `FAILED (errors=1, skipped=5)` on Windows (F-W6 only). Per commit: 1157, 1158, 1171, 1179, 1180, 1183, 1186, 1200, 1204, 1208. The real-golden module has 13 tests; the equivalence module 8; the tokenizer module 14; the line-wrap module 4.
+14. **The packaged build keeps the `translate` shim (D7; added after the P2-5 review, finding I-1).** Once no production module imports `translate`, PyInstaller leaves it out of the exe, and a user preprocessing script that imports it would fail only in the packaged app. `scripts/build-dotexpress.bat` passes `--hidden-import translate` (the git-ignored `client/DotExpress.spec` it regenerates then lists `hiddenimports=['translate']`), and `test_packaged_build_keeps_the_translate_shim` checks the batch file. This is the only `scripts/` and packaging change; it overrides those words in "What Stays Identical" and acceptance criterion 7.
 
 ## Open Questions for the User (decided 2026-10-09, see above)
 
@@ -174,7 +175,7 @@ from conversion.alignment import TranslationResult
 __all__ = ["TranslationResult"]
 ```
 
-Kept for tests, the Windows history scripts and anything outside the repository that imports `translate`. Production modules import `conversion.alignment` (adapters, `conversion/wrapping.py`, `conversion/preprocessing/literal_braille.py`, `conversion/contracts.py`); a guard keeps it that way. `test_import_does_not_import_liblouis_helper` still holds (`translate` has `TranslationResult`, no `translate`, no `translate_as_single_token`, loads no native module). `SharedConstantsTest.test_construction_does_not_build_language_blocks` patches `conversion.tokenizer.build_language_blocks` instead of `translate.build_language_blocks` (the attribute no longer exists on the shim).
+Kept for tests, the Windows history scripts and anything outside the repository that imports `translate`, including user preprocessing scripts, which `conversion/preprocessing/user_script.py` runs inside the packaged app. No production module imports it, so PyInstaller would leave it out of the frozen build; `scripts/build-dotexpress.bat` passes `--hidden-import translate` to keep it there (Corrected after planning 14). Production modules import `conversion.alignment` (adapters, `conversion/wrapping.py`, `conversion/preprocessing/literal_braille.py`, `conversion/contracts.py`); a guard keeps it that way. `test_import_does_not_import_liblouis_helper` still holds (`translate` has `TranslationResult`, no `translate`, no `translate_as_single_token`, loads no native module). `SharedConstantsTest.test_construction_does_not_build_language_blocks` patches `conversion.tokenizer.build_language_blocks` instead of `translate.build_language_blocks` (the attribute no longer exists on the shim).
 
 ### D8. Contracts move into `conversion` (P2 review M-1)
 

@@ -8,5 +8,6 @@ pyinstaller --onefile --name=DotExpress ^
 --add-data "data;data" ^
 --add-data "locales;locales" ^
 --collect-data "latex2mathml" ^
+--hidden-import translate ^
 gui.py
 popd

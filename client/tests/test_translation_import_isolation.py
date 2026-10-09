@@ -130,6 +130,13 @@ assert not loaded, f"dual_view modules were imported: {loaded}"
 
         self.assertEqual(found, [], "import TranslationResult from conversion.alignment")
 
+    def test_packaged_build_keeps_the_translate_shim(self) -> None:
+        # No production module imports translate, so PyInstaller bundles it only when
+        # asked; a user preprocessing script run inside the exe may still import it.
+        script = (CLIENT_DIR.parent / "scripts" / "build-dotexpress.bat").read_text(encoding="utf-8")
+
+        self.assertIn("--hidden-import translate ^", script)
+
     def test_alignment_modules_load_no_config_adapters_or_native_code(self) -> None:
         script = """
 import sys

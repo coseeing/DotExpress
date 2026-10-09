@@ -9,7 +9,12 @@ class LiblouisRuntimeTests(unittest.TestCase):
     @classmethod
     def _expected_liblouis_version(cls) -> str:
         configure_ac = Path(__file__).parents[2] / "include" / "liblouis" / "configure.ac"
-        match = re.search(r'AC_INIT\(\[liblouis\],\s*\[([^\]]+)\]', configure_ac.read_text(encoding="utf-8"))
+        # Upstream spells it AC_INIT([Liblouis], ...) (W-2).
+        match = re.search(
+            r'AC_INIT\(\[liblouis\],\s*\[([^\]]+)\]',
+            configure_ac.read_text(encoding="utf-8"),
+            re.IGNORECASE,
+        )
         if not match:
             raise AssertionError("Could not determine expected liblouis version from include/liblouis/configure.ac")
         return match.group(1)

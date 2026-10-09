@@ -120,7 +120,9 @@ class DictionaryEntryListModel:
 		"""Whether a row other than ``exclude_entry`` has exactly this source text.
 
 		Preserved rows compare their raw, unstripped text (the source R3 uses), so a
-		hidden ``"x "`` does not block ``"x"``.
+		hidden ``"x "`` does not block ``"x"``. Callers pass a validated entry: an
+		empty ``text`` would match a preserved blank-text row, but the entry dialog
+		strips and requires a source text, so no UI path reaches that case.
 		"""
 		return any(row.text == text and row is not exclude_entry for row in self._rows)
 

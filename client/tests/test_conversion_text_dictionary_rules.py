@@ -175,19 +175,16 @@ def _error_cases() -> tuple[ErrorCase, ...]:
         ErrorCase("Bopomofo file missing", VALID_DICTIONARY, None, FileNotFoundError, None),
         ErrorCase("Bopomofo file empty", VALID_DICTIONARY, b"", ValueError, NO_HEADER),
         ErrorCase("Bopomofo columns missing", VALID_DICTIONARY, b"Bopomofo,Ascii\n", ValueError, BOPOMOFO_COLUMNS),
-        ErrorCase(
-            "Bopomofo header with BOM",
-            VALID_DICTIONARY,
-            "\ufeffBopomofo,Braille\n".encode("utf-8"),
-            ValueError,
-            BOPOMOFO_COLUMNS,
-        ),
+        # F-2: a UTF-8 BOM before the header is ignored now (see
+        # test_from_paths_ignores_a_utf8_bom_in_both_files); a file that is only a BOM has no header.
+        ErrorCase("Bopomofo file is only a BOM", VALID_DICTIONARY, b"\xef\xbb\xbf", ValueError, NO_HEADER),
         ErrorCase("Bopomofo file not UTF-8", VALID_DICTIONARY, b"Bopomofo,Braille\n\xff,x\n", UnicodeDecodeError, None),
         ErrorCase("dictionary empty", b"", VALID_BOPOMOFO, ValueError, NO_HEADER),
         ErrorCase("dictionary columns missing", b"text,braille\n", VALID_BOPOMOFO, ValueError, DICTIONARY_COLUMNS),
+        ErrorCase("dictionary is only a BOM", b"\xef\xbb\xbf", VALID_BOPOMOFO, ValueError, NO_HEADER),
         ErrorCase(
-            "dictionary header with BOM",
-            "\ufefftext,braille,type\n".encode("utf-8"),
+            "dictionary with a doubled BOM",
+            b"\xef\xbb\xbf\xef\xbb\xbftext,braille,type\n",
             VALID_BOPOMOFO,
             ValueError,
             DICTIONARY_COLUMNS,
@@ -507,6 +504,25 @@ class LoadedDictionaryRulesTest(DictionaryFilesTestCase):
 
                 if case.message is not None:
                     self.assertEqual(str(context.exception), case.message)
+
+    def test_from_paths_ignores_a_utf8_bom_in_both_files(self) -> None:
+        dictionary = DICTIONARY_HEADER + "台,⠞,Braille\n都,ㄉㄨˋ,Bopomofo\n"
+        plain_dictionary = self.tmp_path / "plain_dictionary.csv"
+        plain_bopomofo = self.tmp_path / "plain_bopomofo.csv"
+        plain_dictionary.write_text(dictionary, encoding="utf-8")
+        plain_bopomofo.write_text(TEST_BOPOMOFO, encoding="utf-8")
+        self.dictionary_path.write_text(dictionary, encoding="utf-8-sig")
+        self.bopomofo_path.write_text(TEST_BOPOMOFO, encoding="utf-8-sig")
+        self.assertTrue(self.dictionary_path.read_bytes().startswith(b"\xef\xbb\xbf"))
+        self.assertTrue(self.bopomofo_path.read_bytes().startswith(b"\xef\xbb\xbf"))
+
+        plain = LoadedDictionaryRules.from_paths(plain_dictionary, plain_bopomofo, processing=_identity)
+        with_bom = LoadedDictionaryRules.from_paths(self.dictionary_path, self.bopomofo_path, processing=_identity)
+
+        self.assertNotEqual(plain, LoadedDictionaryRules())
+        self.assertEqual(with_bom, plain)
+        self.assertEqual(with_bom.apply("台都"), plain.apply("台都"))
+        self.assertNotEqual(plain.apply("台都")["replacement"], "台都")
 
     def test_missing_dictionary_gives_empty_rules_without_opening_the_bopomofo_file(self) -> None:
         with OpenRecorder() as recorder:

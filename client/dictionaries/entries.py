@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from i18n import _
+from shared.atomic_write import write_text_atomically
 from text.zhuyin import normalize_zhuyin_sequence
 
 
@@ -50,7 +51,7 @@ def load_dictionary_entries(dictionary_path: Path) -> list[DictionaryEntry]:
 		return []
 
 	entries: list[DictionaryEntry] = []
-	with dictionary_path.open("r", newline="", encoding="utf-8") as fp:
+	with dictionary_path.open("r", newline="", encoding="utf-8-sig") as fp:
 		reader = csv.DictReader(fp)
 		for row in reader:
 			entry = DictionaryEntry(
@@ -70,8 +71,10 @@ def load_dictionary_entries(dictionary_path: Path) -> list[DictionaryEntry]:
 
 
 def save_dictionary_entries(dictionary_path: Path, entries: list[DictionaryEntry]) -> None:
+	"""Replace the file atomically; on an error it is unchanged."""
 	dictionary_path.parent.mkdir(parents=True, exist_ok=True)
-	with dictionary_path.open("w", newline="", encoding="utf-8") as fp:
+
+	def _write(fp) -> None:
 		writer = csv.DictWriter(fp, fieldnames=["text", "braille", "type"])
 		writer.writeheader()
 		for entry in entries:
@@ -82,3 +85,5 @@ def save_dictionary_entries(dictionary_path: Path, entries: list[DictionaryEntry
 					"type": entry.entry_type,
 				}
 			)
+
+	write_text_atomically(dictionary_path, _write, encoding="utf-8", newline="")

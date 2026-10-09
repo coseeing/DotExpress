@@ -144,12 +144,13 @@ class LoadedDictionaryRules:
         """Read the dictionary and Bopomofo rule files.
 
         A missing dictionary gives empty rules without opening the Bopomofo file.
+        A leading UTF-8 BOM is ignored.
         """
         dictionary_path = Path(dictionary_path)
         if not dictionary_path.exists():
             return cls()
 
-        with Path(bopomofo_path).open("r", newline="", encoding="utf-8") as f_b:
+        with Path(bopomofo_path).open("r", newline="", encoding="utf-8-sig") as f_b:
             reader = csv.DictReader(f_b)
             if reader.fieldnames is None:
                 raise ValueError("CSV must contain header row.")
@@ -165,7 +166,7 @@ class LoadedDictionaryRules:
                 replacements_bopomofo.append((source, target))
         bopomofo_trie = _build_trie(replacements_bopomofo)
 
-        with dictionary_path.open("r", newline="", encoding="utf-8") as f_d:
+        with dictionary_path.open("r", newline="", encoding="utf-8-sig") as f_d:
             reader = csv.DictReader(f_d)
             if reader.fieldnames is None:
                 raise ValueError("CSV must contain header row.")

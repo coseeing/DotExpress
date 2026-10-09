@@ -446,6 +446,10 @@ class _EditorHarness:
         return self.path.read_bytes().decode("utf-8")
 
 
+def _listing(directory: Path) -> list[str]:
+    return sorted(child.name for child in directory.iterdir())
+
+
 def _write_rows(path: Path, rows) -> None:
     with path.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
@@ -820,14 +824,15 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
 
         self.assertEqual(harness.take_log(), [["Dialog.__init__", TITLE, DIALOG_STYLE]])
 
-    def test_bom_dictionary_opens_empty_and_ok_overwrites_it_with_the_header(self) -> None:
-        # KNOWN BUG (P2-2 spec, Q1; data loss), pinned as it is today, NOT desired: the
-        # BOM makes the header "\ufefftext", every row is skipped, OK writes the header only.
+    def test_bom_dictionary_opens_with_its_rows_and_ok_saves_them_without_the_bom(self) -> None:
+        # Was the P2-2 Q1 KNOWN BUG (data loss), fixed by F-2: the BOM made the header
+        # "\ufefftext", the editor showed no rows and OK wrote the header only.
         harness = self.open_editor(data=b"\xef\xbb\xbftext,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\n")
 
-        self.assertEqual(harness.rows(), [])
+        self.assertEqual(harness.rows(), [ALPHA_CELLS])
         self.assertTrue(harness.press_ok())
-        self.assertEqual(harness.saved_csv(), HEADER)
+        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\n")
+        self.assertFalse(harness.path.read_bytes().startswith(b"\xef\xbb\xbf"))
 
     def test_only_ok_gets_a_handler_and_both_standard_buttons_are_localized(self) -> None:
         harness = self.open_editor([ALPHA])
@@ -1319,12 +1324,84 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
         harness.click("Add")
         harness.path.unlink()
         harness.path.mkdir()
-        try:
-            harness.path.open("w", encoding="utf-8")
-        except OSError as error:
-            expected_error = error  # its text differs between Linux and Windows
-        else:
-            self.fail("opening a directory for writing did not fail")
+        harness.take_log()
+
+        skipped = harness.press_ok()
+
+        self.assertFalse(skipped)
+        log = harness.take_log()
+        self.assertEqual([[kind, title, flags] for kind, _message, title, flags in log], [["MessageBox", ERROR_TITLE, ERROR_FLAGS]])
+        # Installing the temporary file onto the directory fails; the error text differs
+        # between Linux and Windows, but both name the dictionary last (F-2 spec D5).
+        message = log[0][1]
+        self.assertTrue(message.startswith("\u5132\u5b58\u5931\u6557\uff1a"), message)
+        self.assertTrue(message.endswith(" -> " + repr(str(harness.path))), message)
+        self.assertEqual(harness.message_box_parents, [harness.dialog])
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS])
+        self.assertEqual(_listing(harness.path.parent), ["dictionary.csv"])
+        self.assertTrue(harness.path.is_dir())
+        harness.path.rmdir()
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
+
+    def test_replace_failure_shows_the_message_keeps_the_file_and_a_later_ok_succeeds(self) -> None:
+        harness = self.open_editor([ALPHA])
+        original = harness.path.read_bytes()
+        harness.script_entry("Beta", "\u2803")
+        harness.click("Add")
+        harness.take_log()
+
+        with patch("os.replace", side_effect=PermissionError(13, "denied")):
+            skipped = harness.press_ok()
+
+        self.assertFalse(skipped)
+        self.assertEqual(
+            harness.take_log(),
+            [["MessageBox", "\u5132\u5b58\u5931\u6557\uff1a[Errno 13] denied", ERROR_TITLE, ERROR_FLAGS]],
+        )
+        self.assertEqual(harness.path.read_bytes(), original)
+        self.assertEqual(_listing(harness.path.parent), ["dictionary.csv"])
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS])
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
+
+    def test_dictionary_without_write_access_shows_the_message_and_keeps_the_file(self) -> None:
+        # A read-only dictionary failed in the old in-place open("w"); the atomic save
+        # keeps that verdict and its message instead of renaming over the file.
+        harness = self.open_editor([ALPHA])
+        original = harness.path.read_bytes()
+        harness.script_entry("Beta", "\u2803")
+        harness.click("Add")
+        harness.take_log()
+
+        with patch("os.access", return_value=False):
+            skipped = harness.press_ok()
+
+        self.assertFalse(skipped)
+        self.assertEqual(
+            harness.take_log(),
+            [[
+                "MessageBox",
+                "\u5132\u5b58\u5931\u6557\uff1a[Errno 13] Permission denied: " + repr(str(harness.path)),
+                ERROR_TITLE,
+                ERROR_FLAGS,
+            ]],
+        )
+        self.assertEqual(harness.message_box_parents, [harness.dialog])
+        self.assertEqual(harness.path.read_bytes(), original)
+        self.assertEqual(_listing(harness.path.parent), ["dictionary.csv"])
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS])
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
+
+    def test_unencodable_entry_shows_the_message_and_leaves_the_file_unchanged(self) -> None:
+        # Was the P2-2 Q3/Q7 KNOWN BUG (data loss), fixed by F-2: a non-OSError escaped
+        # the OK handler without a message and the file was left truncated before the
+        # failing row. The same edit is kept as the regression scenario.
+        harness = self.open_editor([ALPHA, BETA])
+        original = harness.path.read_bytes()
+        harness.script_entry("\ud800", "\u2801")
+        harness.click("Edit")
         harness.take_log()
 
         skipped = harness.press_ok()
@@ -1332,29 +1409,17 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
         self.assertFalse(skipped)
         self.assertEqual(
             harness.take_log(),
-            [["MessageBox", "\u5132\u5b58\u5931\u6557\uff1a" + str(expected_error), ERROR_TITLE, ERROR_FLAGS]],
+            [[
+                "MessageBox",
+                "\u5132\u5b58\u5931\u6557\uff1a'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+                ERROR_TITLE,
+                ERROR_FLAGS,
+            ]],
         )
         self.assertEqual(harness.message_box_parents, [harness.dialog])
-        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS])
-        harness.path.rmdir()
-        self.assertTrue(harness.press_ok())
-        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
-
-    def test_non_os_error_from_the_writer_propagates_and_leaves_a_truncated_file(self) -> None:
-        harness = self.open_editor([ALPHA, BETA])
-        harness.script_entry("\ud800", "\u2801")
-        harness.click("Edit")
-        harness.take_log()
-
-        # KNOWN BUG (P2-2 spec, Q7), pinned as it is today, NOT desired: a non-OSError
-        # escapes the OK handler without a message.
-        with self.assertRaises(UnicodeEncodeError):
-            harness.press_ok()
-
-        self.assertEqual(harness.take_log(), [])
-        # KNOWN BUG (P2-2 spec, Q3; data loss), pinned as it is today, NOT desired: the
-        # file was truncated before the failing row, so Beta is gone from disk.
-        self.assertEqual(harness.saved_csv(), HEADER)
+        self.assertEqual(harness.path.read_bytes(), original)
+        self.assertEqual(_listing(harness.path.parent), ["dictionary.csv"])
+        self.assertEqual(harness.rows(), [["\ud800", "\u2801", GENERAL], BETA_CELLS])
 
 
 # --- the dialog delegates to the model (P2-2 part C) -------------------------

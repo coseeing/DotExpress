@@ -11,7 +11,7 @@ def _load_char_mapping(
     dictionary_path = Path(dictionary_path)
     mapping: dict[int, str | None] = {}
 
-    with dictionary_path.open("r", newline="", encoding="utf-8") as f:
+    with dictionary_path.open("r", newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         if reader.fieldnames is None:
             raise ValueError("CSV must contain header row.")

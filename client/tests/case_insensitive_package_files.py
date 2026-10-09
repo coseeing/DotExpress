@@ -37,6 +37,9 @@ class CaseInsensitivePackageFiles(PackageFiles):
                 return path.parent / name
         return path
 
+    def ensure_writable(self, path: Path) -> None:
+        super().ensure_writable(self.resolve(path))
+
     def exists(self, path: Path) -> bool:
         return self.resolve(path).exists()
 

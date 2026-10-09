@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import importlib
 import inspect
 import json
@@ -16,7 +17,9 @@ from unittest.mock import ANY, DEFAULT, Mock, call, patch
 from tests import wx_stub
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
+from tests.file_log_isolation import isolate_file_logs
 from tests.menu_recording import DOCUMENT_MENU_BUILD_LOG, MenuRecorder, enable_log, fake_translate
+from tests.windows_file_handles import make_read_only
 
 _SCOPE = wx_stub.StubScope(
     wx_stub.gui_frame_stubs(),
@@ -26,13 +29,18 @@ with _SCOPE.loading():
     gui = importlib.import_module("gui")
     from settings.dialogs import TranslationSettingsPanel
 
-setUpModule = _SCOPE.activate
+
+def setUpModule() -> None:
+    _SCOPE.activate()
+    unittest.addModuleCleanup(isolate_file_logs("dotexpress.gui"))
+
+
 tearDownModule = _SCOPE.deactivate
 
 import app_paths
 import config
 from documents.controller import DocumentController
-from documents.workspace import BatchIssue, Document, load_document_package, save_document_package
+from documents.workspace import BatchIssue, Document, PackageFiles, load_document_package, save_document_package
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
 from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
@@ -1641,6 +1649,18 @@ class _FakeDocumentList:
         return self.selected
 
 
+class _FailingReplacePackageFiles(PackageFiles):
+    """The real file operations, except that moving the file named ``source_name`` raises."""
+
+    def __init__(self, *, source_name: str) -> None:
+        self.source_name = source_name
+
+    def replace(self, source: Path, destination: Path) -> None:
+        if Path(source).name == self.source_name:
+            raise PermissionError(errno.EACCES, "injected", str(source), None, str(destination))
+        super().replace(source, destination)
+
+
 class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
     """Pins today's document flows: disk effects, dialogs, state; must pass unchanged through P1-3.
 
@@ -1902,6 +1922,33 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._state(frame), before)
         self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("a", "1"))
 
+    def test_add_failure_that_is_not_an_os_error_shows_the_message(self) -> None:
+        # F-3 (D9): every Exception from creating the package is reported.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        before = self._state(frame)
+        self.names = ["beta"]
+
+        with patch.object(frame._workspace_service, "create_document", side_effect=ValueError("boom")):
+            frame.on_add_document(None)
+
+        self.assertEqual(
+            self.events,
+            [
+                ("DocumentNameDialog", gui._("Add Document"), ""),
+                (
+                    "MessageBox",
+                    gui._("Failed to save document: {error}").format(error="boom"),
+                    gui._("Error"),
+                    gui.wx.OK | gui.wx.ICON_ERROR,
+                    frame,
+                ),
+            ],
+        )
+        self.assertEqual(self._state(frame), before)
+        self.assertEqual(self._listing(), ["alpha.dep"])
+
     def test_default_document_is_pending_opened_and_focused(self) -> None:
         frame = self._make_workspace_frame()
 
@@ -1967,6 +2014,22 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self.events[2:], [("title", "good - DotExpress"), ("title", "good - DotExpress")])
         self.assertEqual(self._listing(), ["a-blocked.dep", "good.dep"])
 
+    def test_startup_ignores_leftover_temporary_files(self) -> None:
+        # F-3 (D13): temporary files a crash can leave next to the packages are neither
+        # listed nor offered for deletion; they stay on disk untouched.
+        self._write_packages(Document("good", "g", "1"))
+        leftovers = [".good.dep.0123456789abcdef.tmp", ".good.dep.k2j1abcd.tmp"]
+        for name in leftovers:
+            (self.workspace / name).write_bytes(b"not a zip")
+        self.delete_invalid = True
+        frame = self._make_workspace_frame()
+
+        frame._load_workspace_documents_at_startup()
+
+        self.assertEqual(self.events, [("title", "good - DotExpress"), ("title", "good - DotExpress")])
+        self.assertEqual(self._listing(), sorted(leftovers + ["good.dep"]))
+        self.assertEqual(frame._document_controller.document_names, ["good"])
+
     # --- save --------------------------------------------------------------
 
     def test_save_open_document_keeps_pending_document_pending(self) -> None:
@@ -2006,6 +2069,43 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         event.Veto.assert_called_once_with()
         event.Skip.assert_not_called()
         frame.close_converting_dialog.assert_not_called()
+
+    def test_save_failure_that_is_not_an_os_error_shows_the_message_and_keeps_the_package(self) -> None:
+        # F-3 (D9): a lone surrogate cannot be encoded. The message appears instead of an
+        # escaping exception; the package keeps its bytes and memory keeps the edit.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("x\ud800")
+
+        self.assertFalse(frame._save_open_document_with_feedback())
+
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "x\ud800", "1")])
+
+    def test_close_vetoes_and_keeps_the_package_when_save_raises_a_non_os_error(self) -> None:
+        # Before F-3 the exception escaped _on_close: no message, and the window neither
+        # closed nor said why.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("\ud800")
+        event = Mock()
+        event.CanVeto.return_value = True
+
+        frame._on_close(event)
+
+        event.Veto.assert_called_once_with()
+        event.Skip.assert_not_called()
+        frame.close_converting_dialog.assert_not_called()
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
 
     # --- rename ------------------------------------------------------------
 
@@ -2068,25 +2168,138 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._package("alpha"), alpha)
         self.assertEqual(self._state(frame), before)
 
-    def test_rename_unlink_failure_leaves_both_packages_and_state(self) -> None:
-        # KNOWN BUG (P1-3 spec, known defect 3), pinned as it is today, NOT desired
-        # behavior: the new package is written, the old unlink fails, and both stay
-        # on disk while memory keeps only the old name. A later fix task flips this.
+    def test_rename_that_cannot_move_the_old_package_aside_keeps_one_package_and_state(self) -> None:
+        # Was the KNOWN BUG test of P1-3 known defect 3 (the new package was written, the
+        # old one could not be removed, and both stayed on disk while memory kept only
+        # the old name), fixed by F-3: the old package is moved aside before the new one
+        # is installed, so a failure there leaves only the old package.
         alpha = Document("alpha", "a", "1")
         beta = Document("beta", "b", "2")
-        self._write_packages(alpha)
-        self._block("beta")
+        self._write_packages(alpha, beta)
+        beta_bytes = (self.workspace / "beta.dep").read_bytes()
+        frame = self._make_workspace_frame([alpha, beta], open_name="alpha", selected_name="beta")
+        frame._workspace_service = DocumentWorkspaceService(
+            frame._document_controller,
+            self.workspace,
+            package_files=_FailingReplacePackageFiles(source_name="beta.dep"),
+        )
+        before = self._state(frame)
+        self.names = ["gamma"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+        self.assertEqual(len(self.events), 2)
+        self.assertEqual(self.events[0], ("DocumentNameDialog", gui._("Rename Document"), "beta"))
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "beta.dep", frame)
+        self.assertEqual((self.workspace / "beta.dep").read_bytes(), beta_bytes)
+        self.assertEqual(self._state(frame), before)
+
+    @unittest.skipUnless(os.name == "nt", "Windows read-only attribute")
+    def test_rename_of_a_read_only_package_is_refused_with_the_save_message(self) -> None:
+        # F-3 (D7, Q2): the same [Errno 13] text Save gives; before F-3 a regular rename
+        # failed with [WinError 5] after writing gamma.dep, so both packages stayed.
+        alpha = Document("alpha", "a", "1")
+        beta = Document("beta", "b", "2")
+        self._write_packages(alpha, beta)
+        beta_path = self.workspace / "beta.dep"
+        beta_bytes = beta_path.read_bytes()
+        make_read_only(self, beta_path)
         frame = self._make_workspace_frame([alpha, beta], open_name="alpha", selected_name="beta")
         before = self._state(frame)
         self.names = ["gamma"]
 
         frame.on_rename_document(None)
 
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
         self.assertEqual(len(self.events), 2)
         self._assert_error_box(self.events[1], "Failed to save document: {error}", "beta.dep", frame)
-        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep", "gamma.dep"])
-        self.assertEqual(self._package("gamma"), Document("gamma", "b", "2"))
+        self.assertIn(f"[Errno 13] Permission denied: {str(beta_path)!r}", self.events[1][1])
+        self.assertEqual(beta_path.read_bytes(), beta_bytes)
         self.assertEqual(self._state(frame), before)
+
+    def test_rename_failure_that_is_not_an_os_error_shows_the_message_and_keeps_state(self) -> None:
+        # F-3 (D9): renaming the non-open beta, whose text in memory cannot be encoded.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha, Document("beta", "b", "2"))
+        beta_bytes = (self.workspace / "beta.dep").read_bytes()
+        frame = self._make_workspace_frame([alpha, Document("beta", "\ud800", "2")], open_name="alpha", selected_name="beta")
+        before = self._state(frame)
+        self.names = ["gamma"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self.assertEqual((self.workspace / "beta.dep").read_bytes(), beta_bytes)
+        self.assertEqual(self._state(frame), before)
+
+    # --- logging at the save boundary (F-3 review M-3) ----------------------
+
+    def _assert_logged_with_traceback(self, logs, error_type: type[BaseException]) -> None:
+        self.assertEqual(len(logs.records), 1)
+        record = logs.records[0]
+        self.assertEqual(record.levelname, "ERROR")
+        self.assertIs(record.exc_info[0], error_type)
+        self.assertIn("Traceback (most recent call last)", logs.output[0])
+
+    def test_save_failure_that_is_not_an_os_error_is_logged_with_its_traceback(self) -> None:
+        # The packaged build has no console: gui.log is the only trace of an
+        # unexpected error behind the "Failed to save document" box.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("x\ud800")
+
+        with self.assertLogs(gui.logger, level="ERROR") as logs:
+            self.assertFalse(frame._save_open_document_with_feedback())
+
+        self._assert_logged_with_traceback(logs, UnicodeEncodeError)
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "surrogates not allowed", frame)
+
+    def test_add_failure_that_is_not_an_os_error_is_logged_with_its_traceback(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.names = ["beta"]
+
+        with (
+            patch.object(frame._workspace_service, "create_document", side_effect=ValueError("boom")),
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
+            frame.on_add_document(None)
+
+        self._assert_logged_with_traceback(logs, ValueError)
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "boom", frame)
+
+    def test_rename_failure_that_is_not_an_os_error_is_logged_with_its_traceback(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha, Document("beta", "b", "2"))
+        frame = self._make_workspace_frame([alpha, Document("beta", "\ud800", "2")], open_name="alpha", selected_name="beta")
+        self.names = ["gamma"]
+
+        with self.assertLogs(gui.logger, level="ERROR") as logs:
+            frame.on_rename_document(None)
+
+        self._assert_logged_with_traceback(logs, UnicodeEncodeError)
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "surrogates not allowed", frame)
+
+    def test_save_failure_from_an_os_error_is_not_logged(self) -> None:
+        # Locked, read-only or full disks are expected; the message box already
+        # names the path and the system error, so gui.log stays free of them.
+        self._block("alpha")
+        frame = self._make_workspace_frame([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("edited")
+
+        with self.assertNoLogs(gui.logger):
+            self.assertFalse(frame._save_open_document_with_feedback())
+
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "alpha.dep", frame)
 
     def test_rename_cancelled_or_unchanged_does_nothing(self) -> None:
         for answer in (None, "alpha"):

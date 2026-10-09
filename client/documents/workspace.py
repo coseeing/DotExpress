@@ -9,8 +9,10 @@ import shutil
 import tempfile
 import zipfile
 from collections.abc import Callable
+from typing import BinaryIO
 
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
+from shared.atomic_write import ensure_writable, write_bytes_atomically
 from shared.name_validation import normalize_base_name
 
 DEP_EXTENSION = ".dep"
@@ -51,33 +53,58 @@ def document_package_path_for_name(name: str, workspace_dir: Path) -> Path:
     return Path(workspace_dir) / f"{name}{DEP_EXTENSION}"
 
 
+def _normalized(document: Document) -> Document:
+    return Document(name=normalize_document_name(document.name), text=document.text, braille=document.braille)
+
+
+def _write_package(stream: BinaryIO, document: Document, *, include_pending_metadata: bool) -> None:
+    """Write the normalized ``document`` as a package archive to ``stream``, which stays open."""
+    with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(f"{document.name}{TXT_EXTENSION}", document.text)
+        archive.writestr(f"{document.name}{BRL_EXTENSION}", document.braille or "")
+        if document.braille is None and include_pending_metadata:
+            metadata_name = f"{document.name}{PENDING_METADATA_SUFFIX}"
+            archive.writestr(metadata_name, json.dumps({"braille_pending": True}, ensure_ascii=False))
+
+
 def save_document_package(
     path: Path | str,
     document: Document,
     *,
     include_pending_metadata: bool = True,
 ) -> Path:
+    """Write ``document`` as the package at ``path`` through a temporary file (F-3).
+
+    On return the package holds ``document``; on an exception it is unchanged (or still
+    absent) and no temporary file is left. A package the user may not write raises
+    ``PermissionError`` and is left alone, as the old in-place write did.
+    """
     package_path = Path(path)
-    normalized_name = normalize_document_name(document.name)
-    document = Document(name=normalized_name, text=document.text, braille=document.braille)
+    document = _normalized(document)
     package_path.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(f"{document.name}{TXT_EXTENSION}", document.text)
-        archive.writestr(f"{document.name}{BRL_EXTENSION}", document.braille or "")
-        if document.braille is None and include_pending_metadata:
-            metadata_name = f"{document.name}{PENDING_METADATA_SUFFIX}"
-            archive.writestr(metadata_name, json.dumps({"braille_pending": True}, ensure_ascii=False))
+    write_bytes_atomically(
+        package_path,
+        lambda stream: _write_package(stream, document, include_pending_metadata=include_pending_metadata),
+    )
     return package_path
 
 
 class PackageFiles:
     """The file operations ``move_document_package`` uses; tests pass a model or a fault injector."""
 
+    def ensure_writable(self, path: Path) -> None:
+        """Raise ``PermissionError`` if the package at ``path`` exists and the user may not write it."""
+        ensure_writable(path)
+
     def exists(self, path: Path) -> bool:
         return Path(path).exists()
 
     def write(self, path: Path, document: Document) -> None:
-        save_document_package(path, document)
+        """Write the package into the new private file ``path`` and flush it to disk."""
+        with open(path, "wb") as stream:
+            _write_package(stream, _normalized(document), include_pending_metadata=True)
+            stream.flush()
+            os.fsync(stream.fileno())
 
     def replace(self, source: Path, destination: Path) -> None:
         os.replace(source, destination)
@@ -91,7 +118,11 @@ class PackageFiles:
             shutil.copymode(source, destination)
 
     def temporary_path(self, directory: Path, name: str) -> Path:
-        """Create a new empty hidden file ``.<name>.<random>.tmp`` in ``directory`` (created if missing)."""
+        """Create a new empty file ``.<name>.<random>.tmp`` in ``directory`` (created if missing).
+
+        The leading dot does not hide it on Windows; ``*.dep`` never matches it, so the
+        workspace never loads it as a package.
+        """
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(dir=directory, prefix=f".{name}.", suffix=".tmp", delete=False) as temporary:
@@ -107,6 +138,8 @@ def move_document_package(
 ) -> None:
     """Write ``document`` as the package at ``new_path`` and remove the package at ``old_path``.
 
+    Every rename uses this sequence, case-only or not (F-3).
+
     Safe when both paths name the same file, as a case-only rename does on a case-insensitive
     file system: nothing is written to, replaced onto or removed under a name that can alias
     the other package. The new package is staged in a temporary file, the old one is moved
@@ -118,9 +151,13 @@ def move_document_package(
     left, unless putting the old package back fails too: then it stays in its ``.tmp`` file.
     Failing to remove the moved-aside old package after the install is ignored; that
     leftover ``.tmp`` file is never loaded as a package.
+
+    An old package the user may not write (a read-only file) raises ``PermissionError``
+    before anything is created or moved, as saving it does (F-3).
     """
     old_path = Path(old_path)
     new_path = Path(new_path)
+    files.ensure_writable(old_path)
     staged_path = files.temporary_path(new_path.parent, new_path.name)
     try:
         files.write(staged_path, document)

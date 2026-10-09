@@ -204,6 +204,86 @@ class GlueSourceTest(unittest.TestCase):
         self.assertEqual(accesses, [])
 
 
+LIBLOUIS_BINDING = "braille.liblouis"
+
+
+def _is_liblouis_binding(module: str | None) -> bool:
+    return module == LIBLOUIS_BINDING or (module or "").startswith(LIBLOUIS_BINDING + ".")
+
+
+def direct_liblouis_imports(source: str | bytes) -> list[int]:
+    """Line numbers where ``source`` imports ``braille.liblouis`` itself instead of ``braille.louis_helper``."""
+    lines = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            hit = any(_is_liblouis_binding(alias.name) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            hit = node.level == 0 and (
+                _is_liblouis_binding(node.module)
+                or (node.module == "braille" and any(alias.name == "liblouis" for alias in node.names))
+            )
+        elif isinstance(node, ast.Call):
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            hit = (
+                name in {"import_module", "__import__"}
+                and bool(node.args)
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+                and _is_liblouis_binding(node.args[0].value)
+            )
+        else:
+            continue
+        if hit:
+            lines.append(node.lineno)
+    return sorted(lines)
+
+
+class LiblouisImportGuardTest(unittest.TestCase):
+    """Tests load the binding only through ``braille.louis_helper`` (W-1).
+
+    The generated binding loads ``liblouis.dll`` by bare name. Imported on its own on
+    Windows 11 it gets the older System32 DLL, fails on a missing export, and that DLL
+    stays loaded, so every later load in the process (the helper's too) gets it again.
+    The helper adds the bundled DLL's directory first.
+    """
+
+    def test_detector_flags_every_direct_import_form(self) -> None:
+        flagged = [
+            ("from braille import liblouis", 1),
+            ("from braille import tables, liblouis as louis", 1),
+            ("import braille.liblouis", 1),
+            ("import os, braille.liblouis as louis", 1),
+            ("from braille.liblouis import translateString", 1),
+            ("import importlib\nimportlib.import_module('braille.liblouis')", 2),
+            ("__import__('braille.liblouis')", 1),
+            ("try:\n\tfrom braille import liblouis\nexcept Exception:\n\tpass", 2),
+        ]
+        for source, line in flagged:
+            with self.subTest(source=source):
+                self.assertEqual(direct_liblouis_imports(source), [line])
+        not_imports = [
+            "from braille import louis_helper",
+            "from braille.louis_helper import louis",
+            "from adapters.translation.liblouis import LiblouisTextTranslator",
+            "import braille.tables",
+            "import sys\nsys.modules['braille.liblouis'] = object()",
+            "assert 'braille.liblouis' not in sys.modules",
+        ]
+        for source in not_imports:
+            with self.subTest(source=source):
+                self.assertEqual(direct_liblouis_imports(source), [])
+
+    def test_test_modules_load_liblouis_only_through_louis_helper(self) -> None:
+        found = [
+            f"{path.name}:{line}"
+            for path in sorted((CLIENT_DIR / "tests").glob("*.py"))
+            for line in direct_liblouis_imports(path.read_bytes())
+        ]
+
+        self.assertEqual(found, [], "import braille.louis_helper and use louis_helper.louis instead")
+
+
 class TableDirectoryTest(unittest.TestCase):
     def test_builtin_source_is_the_tables_dir(self) -> None:
         self.assertEqual(tables.get_table_directory(tables.TableSource.BUILTIN), tables.TABLES_DIR)

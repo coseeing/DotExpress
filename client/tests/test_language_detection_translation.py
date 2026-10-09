@@ -5,8 +5,10 @@ from typing import Iterable
 if not hasattr(ctypes, "WINFUNCTYPE"):
 	raise unittest.SkipTest("liblouis bindings require WINFUNCTYPE on this platform")
 
+# Probe through the helper: it adds the bundled DLL's directory first. A bare
+# braille.liblouis import loads System32's older liblouis.dll on Windows 11 (W-1).
 try:
-	from braille import liblouis  # noqa: F401
+	from braille import louis_helper  # noqa: F401
 except Exception as exc:
 	raise unittest.SkipTest(f"liblouis bindings unavailable: {exc}") from exc
 

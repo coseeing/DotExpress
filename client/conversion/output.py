@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from adapters.translation.contracts import TranslationRuntime
+from conversion.contracts import TranslationRuntime
 from conversion.preprocessing.user_script import preprocessing_script_path
 from conversion.text.char_maps import translate__mapping_char
 from conversion.text.pipeline import TextProcessingError, preprocess_source_text

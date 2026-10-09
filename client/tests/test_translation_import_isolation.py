@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 CLIENT_DIR = Path(__file__).resolve().parents[1]
-HIGHER_LAYERS = {"documents", "ui", "gui", "dialog", "settings", "dictionaries", "dual_view"}
+HIGHER_LAYERS = {"adapters", "documents", "ui", "gui", "dialog", "settings", "dictionaries", "dual_view"}
 
 
 class TranslationImportIsolationTest(unittest.TestCase):
@@ -93,6 +93,22 @@ assert not loaded, f"dual_view modules were imported: {loaded}"
                         found.append(f"{path.relative_to(CLIENT_DIR).as_posix()}:{node.lineno} {name}")
 
         self.assertEqual(found, [])
+
+    def test_adapter_contracts_reexport_the_conversion_ports(self) -> None:
+        import adapters.translation
+        import adapters.translation.contracts
+        import conversion.contracts
+
+        for name in ("BrailleTextTranslator", "MathSegmentTranslator", "TranslationRuntime"):
+            with self.subTest(name=name):
+                port = getattr(conversion.contracts, name)
+                self.assertEqual(port.__module__, "conversion.contracts")
+                self.assertIs(getattr(adapters.translation.contracts, name), port)
+                self.assertIs(getattr(adapters.translation, name), port)
+        error = adapters.translation.contracts.RuntimeUnavailableError
+        self.assertEqual(error.__module__, "adapters.translation.contracts")
+        self.assertIs(adapters.translation.RuntimeUnavailableError, error)
+        self.assertFalse(hasattr(conversion.contracts, "RuntimeUnavailableError"))
 
     def test_dual_view_does_not_import_conversion_or_config(self) -> None:
         script = """

@@ -14,7 +14,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from adapters.translation.contracts import TranslationRuntime
+from conversion.contracts import TranslationRuntime
 from conversion.jobs import (
     ConversionJobFailure,
     ConversionJobRunner,

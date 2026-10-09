@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import threading
 from typing import Callable
 
-from adapters.translation.contracts import TranslationRuntime
+from conversion.contracts import TranslationRuntime
 from conversion.service import (
 	ConversionOutput,
 	ConversionRequest,

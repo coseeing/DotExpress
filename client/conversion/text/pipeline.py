@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Callable
 
-from adapters.translation.contracts import TranslationRuntime
+from conversion.contracts import TranslationRuntime
 from conversion.preprocessing.user_script import execute_preprocessing_script
 from conversion.preprocessing.literal_braille import (
     build_literal_translation_result,

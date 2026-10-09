@@ -21,6 +21,17 @@
 
 非目標：在編輯器中顯示、編輯或修復隱藏列；告訴使用者它們存在（Q2）；改變轉換對它們的處理（Q3）；Q2 的其餘部分（沒修改的確定仍會 strip 顯示的列、把未知類型改寫成 `General`、丟掉 BOM、多餘欄位與超出 header 的欄位，並正規化換行與引號）；只在有變更時才寫檔；匯入／匯出／改名（它們本來就保留每一列，D8）。
 
+## 規劃後更正（2026-10-09）
+
+規劃（`docs/superpowers/plans/2026-10-09-f4-keep-invalid-bopomofo-rows.md`，已在 scratch clone 上 dry run）沒有發現決策 D1-D9、「現況」或三個遷移步驟的數量（1212、1218、1226）有錯。以下記錄已決定的開放問題，以及計畫細化本規格之處。兩者不同時以本節為準。
+
+1. **Q1-Q3 已決定**：由協調者採用建議的預設（2026-10-09）；使用者可在合併前推翻任一項。**Q1：拒絕**，使用既有的重複訊息（D5）。**Q2：F-4 不告知**；隱藏列在編輯器中看不到、字典管理也不計入，這是已知缺陷，留給後續 UX 任務（需要新 msgid）。**Q3：轉換不變**（D7，`client/conversion/` 底下不改）；讓轉換忽略不合法的列是後續工作，與 P1-6 defect 2 一起處理。
+2. **Model 測試使用四列。** `PreservedRowsTest` 由 `alpha, kept, beta, blank` 組成，其中 `blank` 是位於最後的保留列 `PreservedDictionaryRow("", "\u2803", "General")`。M2 刪除第二個項目（`beta`）再新增 `gamma`：列為 `(alpha, kept, blank, gamma)`。M3 把 `beta` 換成 `delta`：`(alpha, kept, delta, blank)`。M4 用同一個 model；M1 另外以 `|` 篩選。若只用三列且操作索引 0，「新項目插在最後的保留列之前」與「依可見索引刪除／取代」的錯誤都不會被發現。
+3. **測試細節。** E1-E3 是新類別 `DictionaryEntriesDialogHiddenRowsTest`；E1 另外檢查沒有留下暫存檔，E3 檢查顯示的列不變。S3 另外確認內嵌的位元組與 `dict_badbopo.csv` 的 sha256 相同；S6 兩個方向都比較。測試資料常數在需要它的模組中各自定義（不新增 helper 模組，驗收標準 5 仍成立）；新的測試程式碼與既有測試一樣只用 ASCII，非 ASCII 資料以 `\u` 跳脫。
+4. **Mutation 檢查：19 個 mutant**，每個都會被抓到（計畫 Task 4）。「`remove` 以相等比較在列中比對到保留列」以「在 `PreservedDictionaryRow` 加上逐欄位的 `__eq__`」檢查，只有 S6 抓得到：經由編輯器，項目與保留列的欄位永遠不會完全相同（分類取決於欄位），所以 S6 就是防線。mutation 工具以 `-B` 執行 Python，因為還原後的檔案可能與前一個 mutant 大小相同、修改時間在同一秒，會用到 mutant 的快取 bytecode。
+5. **F-3 之後的數量。** F-3 已以 `b793704` 合併進 `main`；`main` 本身是 `Ran 1253`、`FAILED (errors=1, skipped=7)`（F-3 的審查又加了測試）。把 `main` 合併進 F-4 之後：`Ran 1268`、`FAILED (errors=1, skipped=7)`，只有 F-W6。取代「與 F-3 的互動」中的「預期 `Ran 1263`（1211 + F-3 的 37 + F-4 的 15）」。F-3 也改了 `client/gui.py`（`_show_document_save_error` helper 與 logging）和 `client/tests/test_gui_document_flows.py`；都與 F-4 的檔案無關，合併不會衝突。
+6. **Windows 驗證。** 歷史資料夾為 `docs/superpowers/history/2026-10-09-06-f4-keep-invalid-bopomofo-rows/`；新項目維持編號 35。`rerun.py` 只接受腳本名稱（每個腳本的 build 與資料夾是固定的），並有 `--check` 模式，只印出替換後的行而不執行。第 23 項在 `D:\dxtest\auto23-f4-B` 與 `D:\dxtest\auto23-f4-N-f4` 執行（腳本把 build 代號放進資料夾名稱）；第 24、25、29 項使用 `D:\dxtest\auto24-f4`。第 35 項新增 `肚子`／`ㄉㄨˋㄗ˙`／注音 的步驟透過真的項目對話框自動化，不是人工。第 23 項 dict23 的輸出是 `sha ef319c2140b1465e`（2026-10-09-03 的結果 `ef319c21…`）。
+
 ## 現況（2026-10-09 於 `fix/f4-keep-invalid-bopomofo-rows`、HEAD `4953772` 驗證，Windows 11 26200）
 
 `$PY` 是 `D:\workspace\DotExpress\client\.venv\Scripts\python.exe`（Python 3.13）；`$SP` 是本 session 的 scratchpad，本 spec 的原型放在 `$SP/f4spec/`（不 commit）。worktree 沒有 git-ignored 的 liblouis runtime 與 MathCAT；依 F-3 plan Task 0 從 main checkout 複製（`client/braille/liblouis.dll`、`client/braille/louis_helper.py`、`client/braille/liblouis/`、`client/mathcat/`、`include/liblouis/configure.ac`；兩邊 submodule 都是 `2aa5f84b`；`git status` 保持乾淨）後，`cd client && $PY -m unittest discover -s tests` 得到 `Ran 1211 tests`、`FAILED (errors=1, skipped=5)`；那個 error 是 F-W6（`test_dictionary_name_prompt ... test_case_only_rename_still_renames`）。`client` tree `c609d363`。msgid：`source msgids: 353 sha256 24dbc6290122197c04282f665e73ebc3b02b6b4bdef1e072448f91c5c105277c`。Fixture（`git show HEAD:<path> | sha256sum`）：`dictionary_entries_trace.json` `f493da52376c8eac32a50c33b7f11870451360bed4bf26c1db339ccd2c66c2cf`、`translation_golden.json` `e67d95a1ae001d928b657f16468494d0e98beeea5a6425283090b34030211ccd`。`dict_badbopo.csv` sha256 `c432457361b0997a2aa8441666a67c3cad4ff8220a42687aee4e35799bbc6eb4`。
@@ -249,13 +260,13 @@ F-3 修改 `client/shared/atomic_write.py`（共用核心、`write_bytes_atomica
 - **在 golden trace 底下修改 model**（低）。`_entries` 改為推導；trace 與 60 多個編輯器測試釘住每個可觀察行為；trace 判準的修改只限最後一步的兩個指定行。
 - **效能**（極低）。每次篩選或編輯對檔案的列做一次 list comprehension。
 
-## 給使用者的開放問題
+## 給使用者的開放問題（已於 2026-10-09 決定，見「規劃後更正」）
 
-**Q1. 新增的項目與某個隱藏列的來源文字相同。** **建議：以既有的重複訊息拒絕（D5）。** 其他做法：(a) 接受並附加；隱藏列仍在檔案較前面，轉換繼續使用它，所以新項目沒有作用；(b) 讓新項目原地取代隱藏列，這等於讓編輯器間接刪除隱藏列（與方案 A 的「不能刪除」矛盾），也需要規則決定取代哪一個隱藏列。
+**Q1. 新增的項目與某個隱藏列的來源文字相同。** **建議：以既有的重複訊息拒絕（D5）。** 其他做法：(a) 接受並附加；隱藏列仍在檔案較前面，轉換繼續使用它，所以新項目沒有作用；(b) 讓新項目原地取代隱藏列，這等於讓編輯器間接刪除隱藏列（與方案 A 的「不能刪除」矛盾），也需要規則決定取代哪一個隱藏列。**已決定：拒絕。** **由協調者採用建議的預設決定；使用者可在合併前推翻。**
 
-**Q2. 告知使用者有隱藏列**（例如在編輯器顯示「有 2 列無法顯示，已原樣保留」，或在字典管理顯示 `1 (+2)`）。**建議：不在 F-4 做**；需要新 msgid 與 `.po`／`.mo` 更新，而且對停止資料遺失不是必要的。列為後續 UX 任務。
+**Q2. 告知使用者有隱藏列**（例如在編輯器顯示「有 2 列無法顯示，已原樣保留」，或在字典管理顯示 `1 (+2)`）。**建議：不在 F-4 做**；需要新 msgid 與 `.po`／`.mo` 更新，而且對停止資料遺失不是必要的。列為後續 UX 任務。**已決定：F-4 不告知**（已知缺陷；後續 UX 任務）。 **由協調者採用建議的預設決定；使用者可在合併前推翻。**
 
-**Q3. 轉換繼續使用不合法的注音列**（經由 R3 的 fallback，D7）。brief 預期轉譯會忽略它們；實際上今天不會，F-4 之後也不會。**建議：F-4 不改轉換**；忽略它們會改變既有字典的轉換結果，若要做，應與 P1-6 defect 2（被吞掉的 `processing` 例外）一起處理。
+**Q3. 轉換繼續使用不合法的注音列**（經由 R3 的 fallback，D7）。brief 預期轉譯會忽略它們；實際上今天不會，F-4 之後也不會。**建議：F-4 不改轉換**；忽略它們會改變既有字典的轉換結果，若要做，應與 P1-6 defect 2（被吞掉的 `processing` 例外）一起處理。**已決定：F-4 不改轉換**（與 P1-6 defect 2 一起列為後續工作）。 **由協調者採用建議的預設決定；使用者可在合併前推翻。**
 
 ## 範圍外／後續工作
 

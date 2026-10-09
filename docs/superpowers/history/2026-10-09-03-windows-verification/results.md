@@ -96,7 +96,7 @@ client\.venv\Scripts\python.exe docs\superpowers\history\2026-10-09-03-windows-v
 
 ## 5. 尚待人工執行（需 packaged build、NVDA 或互動操作）
 
-逐步操作與記錄欄見同資料夾的 `test.md`。
+逐步操作與記錄欄見同資料夾的 `test.md`。其中 0.1、7、18–21、23–29 已用 GUI 自動化執行，結果與新發現（F-W9～F-W13）見 `auto-results.md`。
 
 - **7**：packaged build 轉換 `p25_doc.txt`，比對 BRL sha256 是否等於 §3 C 的值（若不同，先確認寬度、翻譯表與字典設定一致）。
 - **9–16**：packaged build 的路徑、對話框、字典編輯器、設定面板、字型同步、轉換與退出、選單與匯出、P0-5／P0-6 流程。

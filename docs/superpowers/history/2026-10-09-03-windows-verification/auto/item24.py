@@ -1,0 +1,27 @@
+import sys, os, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dx, docs as D, dicts as X
+d = r"D:\dxtest\auto24"; dd = os.path.join(d, "dictionary")
+app, w = dx.launch(r"D:\dxtest\N\DotExpress.exe", d)
+for src in ("bom_excel", "bom_notepad", "bom_lf"):
+	mgr = X.windows(app, w).get("字典管理") or X.open_mgr(app, w)
+	print(src, "import:", X.import_named(app, w, mgr, rf"D:\dxtest\data\{src}.csv"))
+	mgr = X.windows(app, w).get("字典管理") or X.open_mgr(app, w)
+	print(src, "mgr:", [r for r in X.mgr_items(mgr)[1] if r[0] == src])
+	p = os.path.join(dd, src + ".csv")
+	print(src, "imported has BOM:", open(p, "rb").read()[:3] == b"\xef\xbb\xbf")
+	ed = X.open_editor(app, w, mgr, src)
+	print(src, "rows:", X.editor_rows(ed))
+	print(src, "ok:", X.editor_ok(app, w, ed))
+	b = open(p, "rb").read()
+	print(src, "after OK: BOM", b[:3] == b"\xef\xbb\xbf", "bytes", b)
+mgr = X.windows(app, w).get("字典管理")
+if mgr: X.close_mgr(app, w, mgr)
+D.select(w, "new")
+for name, word, cells in (("default", "甲乙丙丁", None), ("bom_excel", "甲乙", "⠁⠃"), ("bom_notepad", "丙丁", "⠉⠙"), ("bom_lf", "戊己", "⠑⠋")):
+	X.set_dictionary(app, w, name)
+	D.set_input(w, word)
+	out, msgs = X.convert(app, w)
+	print("convert with", name, repr(word), "->", repr(out), "uses dict:", (cells in out) if cells else "-", msgs)
+X.set_dictionary(app, w, "default")
+print("close:", D.close(app, w))

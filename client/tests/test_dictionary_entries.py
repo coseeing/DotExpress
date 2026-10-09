@@ -85,6 +85,35 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 			[{"text": "Alpha", "braille": "\u2801", "type": "UnexpectedType"}],
 		)
 
+	def test_save_writes_utf8_without_a_bom(self) -> None:
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			save_dictionary_entries(path, [DictionaryEntry("Alpha", "\u2801", "General")])
+
+			data = path.read_bytes()
+
+		self.assertEqual(data, b"text,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\n")
+
+	def test_save_failure_leaves_the_existing_file_unchanged(self) -> None:
+		# Regression record of the P2-2 Q3 data loss (fixed by F-2): the file used to be
+		# truncated before the failing row was written.
+		original = b"text,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\nBeta,\xe2\xa0\x83,General\r\n"
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			path.write_bytes(original)
+
+			with self.assertRaises(UnicodeEncodeError):
+				save_dictionary_entries(
+					path,
+					[DictionaryEntry("Alpha", "\u2801", "General"), DictionaryEntry("\ud800", "\u2803", "General")],
+				)
+
+			data = path.read_bytes()
+			listing = sorted(child.name for child in Path(temp_dir).iterdir())
+
+		self.assertEqual(data, original)
+		self.assertEqual(listing, ["sample.csv"])
+
 
 if __name__ == "__main__":
 	unittest.main()

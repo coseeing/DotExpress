@@ -491,7 +491,7 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 	def _on_ok(self, event: wx.CommandEvent) -> None:
 		try:
 			self._model.save(self.dictionary_path)
-		except IOError as exc:
+		except Exception as exc:
 			wx.MessageBox(_("Failed to save: {error}").format(error=exc), _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
 			return
 		event.Skip()

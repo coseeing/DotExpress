@@ -895,7 +895,7 @@ msgstr "套用"
 
 #: dialog.py:68
 msgid "Close"
-msgstr ""
+msgstr "關閉"
 
 #: dialog.py:112
 msgid "Edit Dictionary Entry"

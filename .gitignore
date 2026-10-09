@@ -13,6 +13,10 @@ server/.venv/
 server/data/
 AGENTS.md
 
+# SCons build outputs
+/.sconsign.dblite
+/vendor/nvda/liblouis/dist/
+
 # Version-controlled build inputs
 /build/*
 !/build/liblouis-static.nmake

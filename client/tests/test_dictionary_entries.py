@@ -1,15 +1,61 @@
 import csv
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
 
+from conversion.text.dictionary_rules import LoadedDictionaryRules
 from dictionaries.entries import (
 	DictionaryEntry,
+	PreservedDictionaryRow,
 	load_dictionary_entries,
+	load_dictionary_rows,
 	normalize_entry_type,
 	save_dictionary_entries,
 	validate_dictionary_entry,
 )
+from text.zhuyin import normalize_zhuyin_sequence
+
+BOPOMOFO_DATA = Path(__file__).resolve().parents[1] / "data" / "Bopomofo2Braille.csv"
+
+# dict_badbopo.csv of the Windows verification (F-W11): one Braille row and two Bopomofo
+# rows whose sequences do not parse; UTF-8 without a BOM, CRLF.
+DICT_BADBOPO = (
+	"text,braille,type\r\n"
+	"\u81fa\u5317,\u281e\u283a,Braille\r\n"
+	"\u809a\u5b50,\u3109\u3128\u02cb|\u3117\u02d9,Bopomofo\r\n"
+	"\u6578\u5b78,\u3115\u3128\u02cb \u3112\u3129\u311d\u02ca,Bopomofo\r\n"
+).encode("utf-8")
+DICT_BADBOPO_SHA256 = "c432457361b0997a2aa8441666a67c3cad4ff8220a42687aee4e35799bbc6eb4"
+
+# Every kind of row the editor does not show, between two entries (F-4): a blank and a
+# whitespace-only source text, an invalid Bopomofo sequence with spaces around it, a
+# first-tone sequence whose tone space the editor would strip, a row with a missing
+# field, and a quoted row whose fields hold a comma, quotes and a line break.
+MIXED_CSV = (
+	"text,braille,type\r\n"
+	"Alpha,\u2801,General\r\n"
+	",\u2803,General\r\n"
+	"  ,\u2803,General\r\n"
+	"\u809a\u5b50, \u3109\u3128\u02cb|\u3117\u02d9 ,Bopomofo\r\n"
+	"\u5abd,\u3107\u311a ,Bopomofo\r\n"
+	",\u2803\r\n"
+	'"q,""x""","a\r\nb",Bopomofo\r\n'
+	"Beta,\u2803,General\r\n"
+).encode("utf-8")
+MIXED_ROWS = [
+	DictionaryEntry("Alpha", "\u2801", "General"),
+	PreservedDictionaryRow("", "\u2803", "General"),
+	PreservedDictionaryRow("  ", "\u2803", "General"),
+	PreservedDictionaryRow("\u809a\u5b50", " \u3109\u3128\u02cb|\u3117\u02d9 ", "Bopomofo"),
+	PreservedDictionaryRow("\u5abd", "\u3107\u311a ", "Bopomofo"),
+	PreservedDictionaryRow("", "\u2803", ""),
+	PreservedDictionaryRow('q,"x"', "a\r\nb", "Bopomofo"),
+	DictionaryEntry("Beta", "\u2803", "General"),
+]
+# What saving MIXED_ROWS writes: the same bytes, except that the row with a missing
+# field gets its empty third field.
+MIXED_CSV_SAVED = MIXED_CSV.replace(",\u2803\r\n".encode("utf-8"), ",\u2803,\r\n".encode("utf-8"))
 
 
 class NormalizeEntryTypeTest(unittest.TestCase):
@@ -122,6 +168,74 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 
 		self.assertEqual(data, original)
 		self.assertEqual(listing, ["sample.csv"])
+
+	def test_load_rows_keeps_the_rows_the_editor_does_not_show_in_file_order(self) -> None:
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			path.write_bytes(MIXED_CSV)
+
+			rows = load_dictionary_rows(path)
+
+		self.assertEqual(rows, MIXED_ROWS)
+
+	def test_save_writes_preserved_rows_unchanged_at_their_place(self) -> None:
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+
+			save_dictionary_entries(path, MIXED_ROWS)
+
+			data = path.read_bytes()
+
+		self.assertEqual(data, MIXED_CSV_SAVED)
+
+	def test_round_trip_of_a_file_with_invalid_bopomofo_rows_is_byte_identical(self) -> None:
+		# F-W11: the editor's OK used to delete the two Bopomofo rows (4 lines -> 2).
+		self.assertEqual(hashlib.sha256(DICT_BADBOPO).hexdigest(), DICT_BADBOPO_SHA256)
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "dict_badbopo.csv"
+			path.write_bytes(DICT_BADBOPO)
+
+			save_dictionary_entries(path, load_dictionary_rows(path))
+
+			data = path.read_bytes()
+
+		self.assertEqual(data, DICT_BADBOPO)
+
+	def test_round_trip_normalizes_only_the_bom_line_ends_and_quoting(self) -> None:
+		# An invalid one-symbol sequence, quoted, with LF line ends and a BOM.
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			path.write_bytes(b"\xef\xbb\xbf" + 'text,braille,type\n"\u809a\u5b50","\u3109",Bopomofo\n'.encode("utf-8"))
+
+			save_dictionary_entries(path, load_dictionary_rows(path))
+
+			data = path.read_bytes()
+
+		self.assertEqual(data, "text,braille,type\r\n\u809a\u5b50,\u3109,Bopomofo\r\n".encode("utf-8"))
+
+	def test_round_trip_keeps_the_conversion_rules(self) -> None:
+		# Conversion also uses the rows the editor hides (an invalid Bopomofo sequence
+		# falls back to its raw symbols), so a load/save round trip must not change them.
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			path.write_bytes(MIXED_CSV)
+			before = LoadedDictionaryRules.from_paths(path, BOPOMOFO_DATA, processing=normalize_zhuyin_sequence)
+
+			save_dictionary_entries(path, load_dictionary_rows(path))
+
+			after = LoadedDictionaryRules.from_paths(path, BOPOMOFO_DATA, processing=normalize_zhuyin_sequence)
+
+		self.assertEqual(after, before)
+		self.assertIn("\u809a\u5b50", [source for source, _replacement in before.replacement_rules])
+
+	def test_a_preserved_row_is_never_equal_to_an_entry(self) -> None:
+		# The model removes and reselects entries by equality; a hidden row must never match.
+		preserved = PreservedDictionaryRow("Alpha", "\u2801", "General")
+		entry = DictionaryEntry("Alpha", "\u2801", "General")
+
+		self.assertNotEqual(preserved, entry)
+		self.assertNotEqual(entry, preserved)
+		self.assertEqual([entry].count(preserved), 0)
 
 
 if __name__ == "__main__":

@@ -1,10 +1,16 @@
 """wx-free model of the dictionary entries editor (the "Custom Dictionary Manager" in ``dialog.py``).
 
-The model owns the full entry list in file order, the filter text and the
+The model owns every row of the file in file order, the filter text and the
 visible (filtered) list. The dialog owns the widgets and the selected row: it
 passes the selected visible index into each call and renders the returned
 ``EntryListUpdate``. Nothing here imports wx or i18n; the dialog shows the
 messages.
+
+Rows that are not a ``DictionaryEntry`` (``PreservedDictionaryRow``: a blank
+source text, or a Bopomofo sequence that does not parse) are never shown,
+filtered, edited or removed: they keep their place in the file and ``save``
+writes them back unchanged (F-4). ``entries`` and the visible list hold the
+entries only.
 
 Comparison rules, kept from the pre-P2-2 dialog (a file may hold identical rows):
 
@@ -12,8 +18,9 @@ Comparison rules, kept from the pre-P2-2 dialog (a file may hold identical rows)
   previous one wins;
 * ``replace`` swaps the full-list item that *is* the visible entry (identity);
 * ``remove`` removes the first full-list entry *equal* to the visible one;
-* the duplicate check compares ``text`` exactly (case-sensitive) over the full
-  list, hidden rows included, and excludes the edited entry by identity.
+* the duplicate check compares ``text`` exactly (case-sensitive) over every
+  row, entries hidden by the filter and preserved rows included, and excludes
+  the edited entry by identity.
 """
 
 from __future__ import annotations
@@ -25,7 +32,8 @@ from pathlib import Path
 from dictionaries.entries import (
 	ENTRY_TYPE_LABELS,
 	DictionaryEntry,
-	load_dictionary_entries,
+	DictionaryRow,
+	load_dictionary_rows,
 	save_dictionary_entries,
 )
 
@@ -49,19 +57,28 @@ class EntryListUpdate:
 class DictionaryEntryListModel:
 	"""Full list, filter and visible list of one dictionary CSV."""
 
-	def __init__(self, entries: Iterable[DictionaryEntry] = ()) -> None:
-		self._entries: list[DictionaryEntry] = list(entries)
+	def __init__(self, rows: Iterable[DictionaryRow] = ()) -> None:
+		self._rows: list[DictionaryRow] = list(rows)
 		self._filter_text = ""
 		self._visible: list[DictionaryEntry] = list(self._entries)
 
 	@classmethod
 	def load(cls, path: Path) -> DictionaryEntryListModel:
-		"""Read ``path`` with ``load_dictionary_entries``; errors propagate."""
-		return cls(load_dictionary_entries(path))
+		"""Read every row of ``path`` with ``load_dictionary_rows``; errors propagate."""
+		return cls(load_dictionary_rows(path))
 
 	def save(self, path: Path) -> None:
-		"""Write the full list (not only the visible rows); errors propagate."""
-		save_dictionary_entries(path, self._entries)
+		"""Write every row (preserved rows unchanged, in place); errors propagate."""
+		save_dictionary_entries(path, self._rows)
+
+	@property
+	def _entries(self) -> list[DictionaryEntry]:
+		return [row for row in self._rows if isinstance(row, DictionaryEntry)]
+
+	@property
+	def rows(self) -> tuple[DictionaryRow, ...]:
+		"""Every row of the file in file order, preserved rows included."""
+		return tuple(self._rows)
 
 	@property
 	def entries(self) -> tuple[DictionaryEntry, ...]:
@@ -100,7 +117,14 @@ class DictionaryEntryListModel:
 		return normalized_filter in entry.text.casefold() or normalized_filter in entry.braille.casefold()
 
 	def source_text_exists(self, text: str, exclude_entry: DictionaryEntry | None = None) -> bool:
-		return any(entry.text == text and entry is not exclude_entry for entry in self._entries)
+		"""Whether a row other than ``exclude_entry`` has exactly this source text.
+
+		Preserved rows compare their raw, unstripped text (the source R3 uses), so a
+		hidden ``"x "`` does not block ``"x"``. Callers pass a validated entry: an
+		empty ``text`` would match a preserved blank-text row, but the entry dialog
+		strips and requires a source text, so no UI path reaches that case.
+		"""
+		return any(row.text == text and row is not exclude_entry for row in self._rows)
 
 	def apply_filter(self, filter_text: str, selected_index: int | None = None) -> EntryListUpdate:
 		preferred_entry = self.visible_entry(selected_index)
@@ -111,7 +135,7 @@ class DictionaryEntryListModel:
 	def add(self, entry: DictionaryEntry) -> EntryListUpdate:
 		if self.source_text_exists(entry.text):
 			raise DuplicateEntryError(entry.text)
-		self._entries.append(entry)
+		self._rows.append(entry)
 		filter_cleared = bool(self._filter_text) and not self.matches(entry, self._filter_text)
 		if filter_cleared:
 			self._filter_text = ""
@@ -122,14 +146,14 @@ class DictionaryEntryListModel:
 		current_entry = self._visible_at(visible_index)
 		if self.source_text_exists(entry.text, exclude_entry=current_entry):
 			raise DuplicateEntryError(entry.text)
-		full_index = next(index for index, candidate in enumerate(self._entries) if candidate is current_entry)
-		self._entries[full_index] = entry
+		full_index = next(index for index, candidate in enumerate(self._rows) if candidate is current_entry)
+		self._rows[full_index] = entry
 		self._refilter()
 		return EntryListUpdate(self._selection_after(entry, visible_index))
 
 	def remove(self, visible_index: int) -> EntryListUpdate:
 		current_entry = self._visible_at(visible_index)
-		self._entries.remove(current_entry)
+		self._rows.remove(current_entry)
 		self._refilter()
 		return EntryListUpdate(self._selection_after(current_entry, visible_index))
 

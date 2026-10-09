@@ -16,6 +16,15 @@ tearDownModule = _DIALOG_SCOPE.deactivate
 
 DictionaryManagementDialog = dialog.DictionaryManagementDialog
 
+# dict_badbopo.csv of the Windows verification (F-W11): one Braille row and two Bopomofo
+# rows whose sequences do not parse; UTF-8 without a BOM, CRLF.
+DICT_BADBOPO = (
+	"text,braille,type\r\n"
+	"\u81fa\u5317,\u281e\u283a,Braille\r\n"
+	"\u809a\u5b50,\u3109\u3128\u02cb|\u3117\u02d9,Bopomofo\r\n"
+	"\u6578\u5b78,\u3115\u3128\u02cb \u3112\u3129\u311d\u02ca,Bopomofo\r\n"
+).encode("utf-8")
+
 
 class _FakeListCtrl:
 	def __init__(self, width: int = 500):
@@ -129,6 +138,18 @@ class DictionaryManagementVirtualListTest(unittest.TestCase):
 			target.refresh_dictionaries(["alpha"], "alpha")
 
 		self.assertEqual(target._get_item_text(0, 0), "alpha")
+		self.assertEqual(target._get_item_text(0, 1), "1")
+
+	def test_rows_the_editor_does_not_show_are_not_counted(self):
+		# F-4 (D6): the count is the number of rows the entries editor shows. It keeps the
+		# two Bopomofo rows whose sequences do not parse hidden, so they are not counted.
+		with tempfile.TemporaryDirectory() as temp_dir:
+			(Path(temp_dir) / "dict_badbopo.csv").write_bytes(DICT_BADBOPO)
+			target = _make_dialog(temp_dir, ["dict_badbopo"])
+
+			target.refresh_dictionaries(["dict_badbopo"], "dict_badbopo")
+
+		self.assertEqual(target._get_item_text(0, 0), "dict_badbopo")
 		self.assertEqual(target._get_item_text(0, 1), "1")
 
 	def test_missing_dictionary_has_zero_entries(self):

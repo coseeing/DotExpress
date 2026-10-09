@@ -3,12 +3,30 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dictionaries.entries import DictionaryEntry
+from dictionaries.entries import DictionaryEntry, PreservedDictionaryRow
 from dictionaries.entry_list_model import DictionaryEntryListModel, DuplicateEntryError, EntryListUpdate
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "dictionaries" / "entry_list_model.py"
 GENERAL = "\u4e00\u822c"
 BOPOMOFO = "\u6ce8\u97f3"
+DUZI = "\u809a\u5b50"
+INVALID_DUZI = "\u3109\u3128\u02cb|\u3117\u02d9"  # "|" is not a Bopomofo symbol
+VALID_DUZI = "\u3109\u3128\u02cb\u3117\u02d9"
+# MIXED_CSV of test_dictionary_entries (F-4): two entries around every kind of row the
+# editor does not show, and what saving it writes (the row with a missing field gets
+# its empty third field).
+MIXED_CSV = (
+	"text,braille,type\r\n"
+	"Alpha,\u2801,General\r\n"
+	",\u2803,General\r\n"
+	"  ,\u2803,General\r\n"
+	"\u809a\u5b50, \u3109\u3128\u02cb|\u3117\u02d9 ,Bopomofo\r\n"
+	"\u5abd,\u3107\u311a ,Bopomofo\r\n"
+	",\u2803\r\n"
+	'"q,""x""","a\r\nb",Bopomofo\r\n'
+	"Beta,\u2803,General\r\n"
+).encode("utf-8")
+MIXED_CSV_SAVED = MIXED_CSV.replace(",\u2803\r\n".encode("utf-8"), ",\u2803,\r\n".encode("utf-8"))
 
 
 def _entry(text: str, braille: str = "\u2801", entry_type: str = "General") -> DictionaryEntry:
@@ -354,6 +372,71 @@ class RemoveTest(_ModelTestCase):
 				)
 
 
+class PreservedRowsTest(_ModelTestCase):
+	"""Rows the editor does not show stay hidden, keep their place and count as duplicates (F-4)."""
+
+	def setUp(self) -> None:
+		self.alpha = _entry("Alpha", "\u2801")
+		self.kept = PreservedDictionaryRow(DUZI, INVALID_DUZI, "Bopomofo")
+		self.beta = _entry("Beta", "\u2803")
+		self.blank = PreservedDictionaryRow("", "\u2803", "General")
+		self.model = DictionaryEntryListModel([self.alpha, self.kept, self.beta, self.blank])
+
+	def test_preserved_rows_are_not_entries_and_never_visible(self) -> None:
+		self.assertUnchanged(self.model, [self.alpha, self.beta], [self.alpha, self.beta], "")
+		self.assertSameObjects(self.model.rows, [self.alpha, self.kept, self.beta, self.blank])
+		for filter_text in (INVALID_DUZI[0], DUZI[0], "|"):
+			with self.subTest(filter_text=filter_text):
+				self.assertEqual(self.model.apply_filter(filter_text), EntryListUpdate(None))
+				self.assertEqual(self.model.visible_entries, ())
+
+	def test_remove_and_add_leave_preserved_rows_in_place(self) -> None:
+		gamma = _entry("Gamma", "\u281b")
+
+		self.assertEqual(self.model.remove(1), EntryListUpdate(0))
+		self.assertEqual(self.model.add(gamma), EntryListUpdate(1))
+
+		# The new entry goes to the end of the file, after the trailing preserved row.
+		self.assertSameObjects(self.model.rows, [self.alpha, self.kept, self.blank, gamma])
+		self.assertSameObjects(self.model.entries, [self.alpha, gamma])
+
+	def test_replace_leaves_preserved_rows_in_place(self) -> None:
+		delta = _entry("Delta", "\u2819")
+
+		self.assertEqual(self.model.replace(1, delta), EntryListUpdate(1))
+
+		self.assertSameObjects(self.model.rows, [self.alpha, self.kept, delta, self.blank])
+
+	def test_add_or_replace_with_the_source_text_of_a_preserved_row_is_a_duplicate(self) -> None:
+		valid = _entry(DUZI, VALID_DUZI, "Bopomofo")
+		changes = (("add", lambda: self.model.add(valid)), ("replace", lambda: self.model.replace(1, valid)))
+		for name, change in changes:
+			with self.subTest(change=name):
+				with self.assertRaises(DuplicateEntryError) as caught:
+					change()
+
+				self.assertEqual(caught.exception.identifier, DUZI)
+				self.assertSameObjects(self.model.rows, [self.alpha, self.kept, self.beta, self.blank])
+
+	def test_remove_of_an_entry_leaves_a_preserved_row_with_the_same_source_text(self) -> None:
+		# Only a file can hold both rows (D5); remove must not match the hidden row by its text.
+		visible = _entry(DUZI, "⠁")
+		model = DictionaryEntryListModel([self.alpha, self.kept, visible])
+
+		self.assertEqual(model.remove(1), EntryListUpdate(0))
+
+		self.assertSameObjects(model.rows, [self.alpha, self.kept])
+
+	def test_a_preserved_row_blocks_only_its_raw_unstripped_source_text(self) -> None:
+		spaced = PreservedDictionaryRow(DUZI + " ", INVALID_DUZI, "Bopomofo")
+		valid = _entry(DUZI, VALID_DUZI, "Bopomofo")
+		model = DictionaryEntryListModel([self.alpha, spaced])
+
+		self.assertEqual(model.add(valid), EntryListUpdate(1))
+
+		self.assertSameObjects(model.rows, [self.alpha, spaced, valid])
+
+
 class LoadSaveTest(unittest.TestCase):
 	def setUp(self) -> None:
 		temp_dir = tempfile.TemporaryDirectory()
@@ -385,6 +468,15 @@ class LoadSaveTest(unittest.TestCase):
 
 		with self.assertRaises(UnicodeDecodeError):
 			DictionaryEntryListModel.load(path)
+
+	def test_save_of_an_unchanged_model_writes_preserved_rows_back_in_place(self) -> None:
+		source = self.directory / "source.csv"
+		source.write_bytes(MIXED_CSV)
+		target = self.directory / "target.csv"
+
+		DictionaryEntryListModel.load(source).save(target)
+
+		self.assertEqual(target.read_bytes(), MIXED_CSV_SAVED)
 
 
 class ImportGuardTest(unittest.TestCase):

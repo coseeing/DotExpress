@@ -118,6 +118,14 @@ GENERAL = "\u4e00\u822c"  # General
 BOPOMOFO = "\u6ce8\u97f3"  # Bopomofo
 UNICODE_BRAILLE = "Unicode \u9ede\u5b57"  # Unicode Braille
 HEADER = "text,braille,type\r\n"
+# dict_badbopo.csv of the Windows verification (F-W11): one Braille row and two Bopomofo
+# rows whose sequences do not parse, which the editor does not show; UTF-8, CRLF.
+BADBOPO_HIDDEN_ROWS = (
+    "\u809a\u5b50,\u3109\u3128\u02cb|\u3117\u02d9,Bopomofo\r\n"
+    "\u6578\u5b78,\u3115\u3128\u02cb \u3112\u3129\u311d\u02ca,Bopomofo\r\n"
+)
+DICT_BADBOPO = (HEADER + "\u81fa\u5317,\u281e\u283a,Braille\r\n" + BADBOPO_HIDDEN_ROWS).encode("utf-8")
+TAIPEI_CELLS = ["\u81fa\u5317", "\u281e\u283a", UNICODE_BRAILLE]
 
 
 def _duplicate_message(identifier: str) -> str:
@@ -1309,9 +1317,11 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
             HEADER + "Beta,\u2803,General\r\nAlpha,\u2801,General\r\nGamma,\u281b,Braille\r\n",
         )
 
-    def test_unchanged_dictionary_is_rewritten_in_normalized_form(self) -> None:
+    def test_unchanged_dictionary_keeps_hidden_rows_and_is_rewritten_in_normalized_form(self) -> None:
         # KNOWN BUG (P2-2 spec, Q2), pinned as it is today, NOT desired: OK always
-        # rewrites the file and drops what the loader skipped or stripped.
+        # rewrites the file, stripping the shown rows and writing an unknown type as
+        # General. Since F-4 the rows the editor does not show (blank source text,
+        # invalid Bopomofo) are written back unchanged at their place.
         data = (
             "text,braille,type\n"
             " Alpha ,  \u2801 ,General\n"
@@ -1323,7 +1333,10 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
 
         self.assertTrue(harness.press_ok())
 
-        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
+        self.assertEqual(
+            harness.saved_csv(),
+            HEADER + "Alpha,\u2801,General\r\n,\u2803,General\r\nZhuyin,invalid,Bopomofo\r\nBeta,\u2803,General\r\n",
+        )
 
     def test_missing_parent_directory_is_created(self) -> None:
         path = self.make_path("nested") / "deeper" / "dictionary.csv"
@@ -1442,6 +1455,44 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
 # --- the dialog delegates to the model (P2-2 part C) -------------------------
 
 
+class DictionaryEntriesDialogHiddenRowsTest(_EditorTestCase):
+    """Rows the editor cannot show are kept, hidden, through OK (F-4, F-W11)."""
+
+    def test_invalid_bopomofo_rows_are_hidden_and_ok_keeps_the_file_byte_identical(self) -> None:
+        # F-W11: OK used to delete the two Bopomofo rows the editor cannot show (4 lines -> 2).
+        harness = self.open_editor(data=DICT_BADBOPO)
+
+        self.assertEqual(harness.rows(), [TAIPEI_CELLS])
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.path.read_bytes(), DICT_BADBOPO)
+        self.assertEqual(_listing(harness.path.parent), ["dictionary.csv"])
+
+    def test_deleting_every_shown_row_keeps_the_hidden_rows(self) -> None:
+        harness = self.open_editor(data=DICT_BADBOPO)
+        harness.select(0)
+        harness.click("Delete")
+
+        self.assertEqual(harness.rows(), [])
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.saved_csv(), HEADER + BADBOPO_HIDDEN_ROWS)
+
+    def test_adding_the_source_text_of_a_hidden_row_shows_the_duplicate_message(self) -> None:
+        harness = self.open_editor(data=DICT_BADBOPO)
+        harness.script_entry("\u809a\u5b50", "\u3109\u3128\u02cb\u3117\u02d9", "Bopomofo")
+
+        harness.click("Add")
+
+        self.assertEqual(
+            harness.take_log(),
+            [["AddSymbolDialog", None], ["MessageBox", _duplicate_message("\u809a\u5b50"), ERROR_TITLE, ERROR_FLAGS]],
+        )
+        self.assertEqual(harness.rows(), [TAIPEI_CELLS])
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(harness.path.read_bytes(), DICT_BADBOPO)
+
+
 class DictionaryEntriesDialogModelTest(_EditorTestCase):
     def test_dictionary_path_is_required(self) -> None:
         parameter = inspect.signature(DictionaryEntriesDialog.__init__).parameters["dictionary_path"]
@@ -1476,6 +1527,10 @@ _TRACE_BRAILLE = ("\u2801", "ab", "", "SS", "\u2803")
 _TRACE_TYPES = ("General", "Bopomofo", "Braille")
 _TRACE_FILTERS = ("", "", "a", "A", "b", "ab", "ss", "STRASSE", "\u00df", " ", "\u2801", "x", "General")
 _TRACE_KINDS = ("filter", "filter", "select", "select", "deselect", "add", "add", "edit", "activate", "delete")
+# The two TRACE_CSV rows the editor does not show (blank source text, invalid Bopomofo).
+# The fixture was recorded before F-4, when OK dropped them; since F-4 OK writes them
+# back unchanged, so the replay checks them and removes them before comparing.
+_TRACE_KEPT_ROWS = (",\u2803,General", "zz,ab,Bopomofo")
 
 
 def _random_trace_action(rng: random.Random, harness: _EditorHarness, index: int) -> list:
@@ -1587,6 +1642,11 @@ class DictionaryEntriesTraceTest(unittest.TestCase):
                         Path(temp_dir) / f"trace{seed}.csv",
                         lambda _harness, index, expected=expected: expected[index + 1]["action"],
                     )
+                    # Line by line, not by substring: an entry row such as "ab,\u2803,General"
+                    # ends with the first kept row.
+                    lines = actual[-1]["csv"].split("\r\n")
+                    self.assertEqual([line for line in lines if line in _TRACE_KEPT_ROWS], list(_TRACE_KEPT_ROWS))
+                    actual[-1]["csv"] = "\r\n".join(line for line in lines if line not in _TRACE_KEPT_ROWS)
                     for index, (got, want) in enumerate(zip(actual, expected)):
                         self.assertEqual(got, want, f"seed {seed}, step {index}: {want['action']}")
 

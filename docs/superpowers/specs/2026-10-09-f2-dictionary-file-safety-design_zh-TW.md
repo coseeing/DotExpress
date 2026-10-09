@@ -16,6 +16,17 @@
 
 這是刻意的行為變更，只限於 BOM 檔案與存檔失敗。沒有新的使用者可見字串，msgid 不變（353，集合相同）。P2-2 Q2（未修改的字典也以正規化形式重寫）、Q4–Q6 與 Q8 維持原狀。
 
+## 修正（2026-10-09，plan 與實作之後）
+
+以下各節已納入這些修正；本清單說明相對於第一版（commit `1f9aae8`）改了什麼、為什麼。
+
+1. **保留權限位元（orchestrator 的修訂；取代原本接受的 mode `0600`）。** 在 POSIX 上，安裝後的字典保留被取代檔案的權限位元（`stat.S_IMODE(os.stat(path).st_mode)`，在 `os.replace` 之前以 `os.chmod` 設到暫存檔上；`os.stat` 會跟隨符號連結）。新檔得到 `0o666 & ~umask`，也就是一般 `open(path, "w")` 給的 mode。Windows 上不複製任何東西（`os.chmod` 只切換唯讀屬性）。
+2. **由 kernel 套用 umask；從不讀取 umask（orchestrator 精修 1）。** plan 第一版以 `os.umask(0)` 來回呼叫讀取 umask，而 umask 是整個行程共用的，會與任何同時建立檔案的其他執行緒競爭。改為由 helper 自己建立暫存檔：`os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o666)`，名稱為目標目錄下自訂的 `.<name>.<random>.tmp`（`<random>` 為 `secrets.token_hex(8)`），遇到 `FileExistsError` 就換一個名稱（試 100 次，之後拋出 `FileExistsError`）。因此不再使用 `tempfile.NamedTemporaryFile`（D4）。一個守門測試會在任何正式程式模組呼叫 `os.umask` 時失敗。
+3. **使用者不能寫入的目標維持原本的結果（orchestrator 精修 2）。** rename 只需要資料夾可寫，所以若不檢查，OK 會取代舊的原地 `open("w")` 會拒絕的 `0444`（或 Windows 唯讀）字典。寫入之前，若目標存在且 `not os.access(target, os.W_OK)`，helper 拋出 `PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(target))`（`[Errno 13] Permission denied: '<path>'`，與 `open("w")` 的文字相同），且不建立任何檔案；編輯器透過不變的 `Failed to save: {error}` handler 顯示它。有特權的使用者（root）以前可以原地寫入這種檔案，現在仍然可以。
+4. **由 `open(..., opener=...)` 擁有檔案描述元（實作時發現）。** 以 `os.fdopen` 包裝 `os.open` 的描述元、失敗時再關閉它是錯的：建立文字串流失敗時（例如未知的編碼）`os.fdopen` 已經自行關閉描述元，所以第二次 `os.close` 會以 `EBADF` 蓋掉真正的錯誤，還可能關掉無關的描述元。helper 改以 `open(candidate, "w", encoding=encoding, newline=newline, opener=...)` 開啟暫存檔；opener 執行修正 2 的 `os.open`，並在檔案一存在就記下暫存路徑，所以之後任何失敗都會移除它。獨立 commit，先紅後綠。
+5. **紅燈階段與名稱（plan）。** 遷移步驟 1 的第一個紅燈是一個載入錯誤（`ModuleNotFoundError: No module named 'shared.atomic_write'`），不是每個測試各一個失敗。步驟 2 有四個 spec 測試是紅燈，不是三個：更新後的 OS 錯誤測試在舊訊息上也會失敗，因為舊訊息沒有 ` -> '<path>'` 後綴。`apply_dictionary` 表格測試的實際名稱是 `DictionaryFileSemanticsTest.test_malformed_files_raise_the_recorded_errors`。重複的 BOM（D1）由 `_error_cases()` 的第 11 列「dictionary with a doubled BOM」釘住（前後都是欄位訊息）；表格列是 subtest，測試數不變。
+6. **數量。** 新增 24 個測試而非 15 個（測試計畫）：`Ran 1138` 而非 1129；Linux 上 skip 維持 7（三個僅限 POSIX 的 helper 測試在這裡執行，在 Windows 上 skip）。各 commit：1114、1128、1132、1137、1138。mutant 為 25 個而非 12 個（驗收標準 10）。
+
 ## 現況（2026-10-09 於 `fix/f2-dictionary-file-safety`、HEAD `aced6f8` 驗證）
 
 `$SP` 為 session scratchpad，`$PY` 為 `$SP/venv/bin/python`。
@@ -99,19 +110,20 @@ def write_text_atomically(
 ) -> None:
 ```
 
-行為：
-1. 建立 `tempfile.NamedTemporaryFile("w", encoding=encoding, newline=newline, dir=<path 所在目錄>, prefix=f".{name}.", suffix=".tmp", delete=False)`（既有程式碼已用過兩次的模式）。目錄必須已存在；helper 不建立目錄（由呼叫端建立，`save_dictionary_entries` 本來就會）。
-2. 在呼叫 `write(stream)` **之前**記下暫存路徑，接著 `stream.flush()` 與 `os.fsync(stream.fileno())`，然後關檔。
-3. `os.replace(temporary, path)`，以 `os.replace` 形式呼叫（呼叫時才查屬性，讓測試可以 patch `os.replace`，不受 `wx_stub` 模組副本影響）。
+行為（已修正，見修正 1–4）：
+0. 若 `path` 存在且 `not os.access(path, os.W_OK)`，拋出 `PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(path))`；不建立任何檔案。
+1. 以 `open(candidate, "w", encoding=encoding, newline=newline, opener=...)` 在 `path` 所在目錄開啟新的暫存檔 `.<name>.<random>.tmp`。opener 呼叫 `os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o666)`：永遠不重用既有檔案，且由 kernel 套用 umask，與 `open(path, "w")` 相同。`<random>` 為 `secrets.token_hex(8)`；遇到 `FileExistsError` 就換名稱，試 100 次後拋出 `FileExistsError`。目錄必須已存在；helper 不建立目錄（由呼叫端建立，`save_dictionary_entries` 本來就會）。
+2. opener 在檔案一存在就記下暫存路徑，因此在 `write(stream)` **之前**（也在建立文字串流可能失敗之前）；接著 `stream.flush()` 與 `os.fsync(stream.fileno())`，然後關檔。描述元由 `open` 擁有，任何失敗時都由它關閉。
+3. 在 POSIX 上，若 `path` 存在，`os.chmod(temporary, stat.S_IMODE(os.stat(path).st_mode))`。接著 `os.replace(temporary, path)`，以 `os.replace` 形式呼叫（呼叫時才查屬性，讓測試可以 patch `os.replace`，不受 `wx_stub` 模組副本影響；`os.access`、`os.fsync` 與 `os.chmod` 亦同）。
 4. 在 `finally` 中，若尚未安裝，就移除暫存檔（`unlink(missing_ok=True)`）；原本的例外原封不動傳出。涵蓋所有 `BaseException`（包括 `KeyboardInterrupt`）。移除失敗不會蓋掉原例外：原例外仍然傳出（`unlink` 的錯誤以 `contextlib.suppress(OSError)` 吞掉）。
 
-保證（docstring）：正常返回時 `path` 的內容正好是 `write` 產生的內容；拋出例外時 `path` 不變（位元組相同，或仍不存在），且不留下暫存檔，除非移除暫存檔本身失敗。
+保證（docstring）：正常返回時 `path` 的內容正好是 `write` 產生的內容；拋出例外時 `path` 不變（位元組相同，或仍不存在），且不留下暫存檔，除非移除暫存檔本身失敗。權限與一般 `open(path, "w")` 相同：使用者不能寫入的目標拋出 `PermissionError` 且不被動到；新檔得到 `0o666 & ~umask`；在 POSIX 上被取代檔案的權限位元會保留。行程的 umask 從不被讀取或修改。
 
 納入 `fsync`，因為這次變更的重點就是字典永遠不會只寫一半；沒有它，某些檔案系統在 rename 之後立刻斷電可能留下空檔。字典很小，代價是每次 OK 一次 flush。
 
-位置：放在 `shared/`，因為 helper 是通用的（目前給字典用，之後可能給前處理腳本等），而且 `shared` 不是 `wx_stub` 的 restore root，所以每份 `dictionaries.entries` 副本都使用同一個模組。`save_preprocessing_script` 與 `PackageFiles` **不**遷移（範圍；見後續事項）。
+位置：放在 `shared/`，因為 helper 是通用的（目前給字典用，之後可能給前處理腳本等），而且 `shared` 不是 `wx_stub` 的 restore root，所以每份 `dictionaries.entries` 副本都使用同一個模組。`save_preprocessing_script` 與 `PackageFiles` **不**遷移（範圍；見後續事項）。helper 不使用 `tempfile.NamedTemporaryFile`（修正 2）：它以 mode `0600` 建立檔案，而事後設定新檔的 mode 需要知道 umask，umask 只能透過設定它來讀取。
 
-**D5. `save_dictionary_entries` 透過 helper 寫入。** 保留 `dictionary_path.parent.mkdir(parents=True, exist_ok=True)`，接著呼叫 `write_text_atomically(dictionary_path, <以 DictWriter 寫表頭與各列>, encoding="utf-8", newline="")`。位元組與現在相同。可見的後果：`os.replace` 拋出的 `OSError` 會同時列出暫存路徑與字典路徑（`... '<dir>\.default.csv.k2j1.tmp' -> '<dir>\default.csv'`）；建立暫存檔時拋出的則列出暫存路徑。訊息範本不變。因此 `test_os_error_shows_the_message_keeps_the_edits_and_a_later_ok_succeeds` 改為檢查訊息以 `儲存失敗：` 開頭、以 ` -> ` + `repr(str(path))` 結尾（CPython 在 Linux 與 Windows 都以 `%R -> %R` 格式化雙路徑的 `OSError`），不再用 `path.open("w")` 重建訊息。
+**D5. `save_dictionary_entries` 透過 helper 寫入。** 保留 `dictionary_path.parent.mkdir(parents=True, exist_ok=True)`，接著呼叫 `write_text_atomically(dictionary_path, <以 DictWriter 寫表頭與各列>, encoding="utf-8", newline="")`。位元組與現在相同。可見的後果：`os.replace` 拋出的 `OSError` 會同時列出暫存路徑與字典路徑（`... '<dir>\.default.csv.k2j1.tmp' -> '<dir>\default.csv'`）；建立暫存檔時拋出的則列出暫存路徑；使用者不能寫入的字典得到 `[Errno 13] Permission denied: '<path>'`，與舊的 `open("w")` 相同（修正 3）。訊息範本不變。因此 `test_os_error_shows_the_message_keeps_the_edits_and_a_later_ok_succeeds` 改為檢查訊息以 `儲存失敗：` 開頭、以 ` -> ` + `repr(str(path))` 結尾（CPython 在 Linux 與 Windows 都以 `%R -> %R` 格式化雙路徑的 `OSError`），不再用 `path.open("w")` 重建訊息。
 
 **D6. 寫入端只改編輯器的存檔。** `manager.py` 的四個寫入端與 `save_dictionary_entries` 沒有共用程式碼（兩個以 `csv.writer` 寫表頭、兩個 `shutil.copyfile`），也從不覆寫既有的受管字典：最壞情況是留下不完整的**新**檔（建立／匯入失敗後的空的或不完整的 `name.csv`），或在使用者選定路徑留下不完整的匯出檔。這是一致性問題，不是使用者建立的字典遺失。列為後續事項；之後把兩個寫表頭的函式改用 helper 各只需一行。
 
@@ -123,7 +135,7 @@ def write_text_atomically(
 
 ### `client/shared/atomic_write.py`（新檔，4 spaces）
 
-依 D4 實作 `write_text_atomically`；import `os`、`tempfile`、`contextlib`、`Path`、`Callable`、`TextIO`。模組 docstring：一段說明保證，以及暫存檔為同目錄下的 `.<name>.<random>.tmp`。
+依 D4 實作 `write_text_atomically`，另有兩個私有 helper：`_open_temporary_file(destination, opener, encoding, newline)`（換名稱的迴圈）與 `_existing_mode(destination)`（權限位元，或 `None`）。import `contextlib`、`errno`、`os`、`secrets`、`stat`、`Path`、`Callable`、`TextIO`。模組 docstring：保證、暫存檔為同目錄下的 `.<name>.<random>.tmp`，以及權限規則。
 
 ### `client/dictionaries/entries.py`（tabs）
 
@@ -170,6 +182,17 @@ def write_text_atomically(
 6. `test_failure_without_an_existing_file_creates_nothing`：同 3 但沒有既有檔；清單 `[]`。
 7. `test_data_is_flushed_to_disk_before_the_replace`：以共用的 `Mock` parent 包裝（`wraps=`）`os.fsync` 與 `os.replace`；呼叫順序為先 `fsync` 後 `replace`。
 
+因修正而新增（A8–A15）：
+
+- A8 `test_keeps_the_permission_bits_of_an_existing_file`（僅 POSIX）：既有的 `0o640` 檔案仍為 `0o640`。
+- A9 `test_a_new_file_gets_the_default_mode_for_the_umask`（僅 POSIX）：測試自行設定 umask `0o002`（以 `addCleanup` 還原），新檔為 `0o664`。`0o640` 與 `0o664` 都不同於 `0o600`（`mkstemp`）與 `0o644`（常見預設），所以沒有任何常數能同時通過兩者。
+- A10 `test_a_read_only_file_gets_the_same_verdict_as_writing_it_in_place`（僅 POSIX）：一個 `0o444` 檔案；測試先以 `"r+b"` 開啟它，得知舊的原地寫入會有什麼結果。被拒（一般使用者）：`PermissionError`，`errno.EACCES`，`filename` 為目標，位元組不變。被允許（具 `CAP_DAC_OVERRIDE` 的 root）：安裝新文字。兩種情況 mode 都維持 `0o444`，清單只有 `d.csv`。本機以 root 執行，所以被拒的分支另外以 `setpriv --bounding-set=-dac_override,-dac_read_search` 執行過。
+- A11 `test_a_file_without_write_access_raises_permission_error_and_is_kept`（所有平台）：`os.access` patch 為 `False`；它被以 `os.W_OK` 詢問目標；錯誤文字正好是 `[Errno 13] Permission denied: '<path>'`；位元組不變；沒有 `.tmp`。
+- A12 `test_an_unknown_encoding_raises_it_and_leaves_no_temporary_file`：`encoding="no-such-codec"`；傳出 `LookupError`（不是 `EBADF`）；位元組不變；沒有 `.tmp`（修正 4）。
+- A13 `test_a_taken_temporary_name_is_skipped_and_kept`：`secrets.token_hex` patch 為先給 `aaaa`、再給 `bbbb`，且 `.d.csv.aaaa.tmp` 已存在：寫入成功，抽了兩個名稱，另一個檔案沒被動到（名稱以 `O_EXCL` 建立，從不重用）。
+- A14 `test_gives_up_when_every_temporary_name_is_taken`：所有名稱都已被占用：試了不只一次後拋出 `FileExistsError`；目標與另一個檔案都不變。
+- A15 `ProductionCodeDoesNotSetTheUmaskTest.test_no_production_module_calls_os_umask`：以 AST 掃描 `client/` 中 `.venv` 與 `tests` 以外的每個模組，找不到 `.umask` 屬性，也找不到 `from ... import umask`（且 `shared/atomic_write.py` 在掃描範圍內）。
+
 ### B. 字典存取（`client/tests/test_dictionary_entries.py`，`DictionaryEntryStorageTest`）
 
 8. `test_load_ignores_a_utf8_bom`：`b"\xef\xbb\xbftext,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\n"` 得到 `[DictionaryEntry("Alpha", "\u2801", "General")]`。
@@ -199,14 +222,16 @@ def write_text_atomically(
 - 翻轉 Q3/Q7：`test_non_os_error_from_the_writer_propagates_and_leaves_a_truncated_file` 改為 `test_unencodable_entry_shows_the_message_and_leaves_the_file_unchanged`：相同設定（`"\ud800"` 編輯，即回歸情境）；先讀出原位元組；OK 回傳 `False`；log 正好是 `[["MessageBox", "儲存失敗：'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed", ERROR_TITLE, ERROR_FLAGS]]`（由 `UnicodeEncodeError` 文字組成；Python 的訊息，Linux 與 Windows 相同）；檔案位元組相同；目錄只有 `dictionary.csv`；列表仍顯示編輯內容。註解：原為 Q3/Q7 `KNOWN BUG`。
 - 依 D5 更新 `test_os_error_shows_the_message_keeps_the_edits_and_a_later_ok_succeeds`（前綴與 ` -> 'path'` 後綴；另外：目錄只有 `dictionary.csv` 這個目錄，沒有 `.tmp`）。
 15. `test_replace_failure_shows_the_message_keeps_the_file_and_a_later_ok_succeeds`：新增 Beta，`patch("os.replace", side_effect=PermissionError(13, "denied"))`；OK 回傳 `False`；訊息 `儲存失敗：[Errno 13] denied`；位元組相同；沒有 `.tmp`；patch 結束後 OK 回傳 `True` 並存下 Alpha 與 Beta。
+16. `test_dictionary_without_write_access_shows_the_message_and_keeps_the_file`（修正 3）：同 15，但把 `os.access` patch 為 `False`；訊息為 `儲存失敗：[Errno 13] Permission denied: '<path>'`，parent 為對話框，檔案不變，沒有 `.tmp`，列保留，之後 OK 成功。
 
-淨數量：A 7、B 3、C 1、D 1、E 1、F 1、G 1 = 新增 15；翻轉與更新都是一對一取代。總數 `1114 + 15 = 1129`。
+淨數量：A 15、B 3、C 1、D 1、E 1、F 1、G 2 = 新增 24；翻轉與更新都是一對一取代。總數 `1114 + 24 = 1138`。
 
 ## 遷移步驟（每步一個綠燈 commit，先紅後綠）
 
-1. `fix: add an atomic text-write helper` —— `shared/atomic_write.py` 與測試 A 1–7（紅：`ModuleNotFoundError`）。尚無使用者。
-2. `fix: save dictionary entries atomically` —— D5 與 D7；測試 B 9–10、G 翻轉 Q3/Q7、G 更新、G 15。先紅：B 10、翻轉後的 Q3/Q7 測試與 G 15 在舊程式碼上失敗（截斷的檔案／逃出的例外／舊路徑從不拋出 `PermissionError`）。B 9 原本就通過（它釘住 D2）。
-3. `fix: read dictionary and data CSVs with utf-8-sig` —— R1–R5 套用 D1；測試 B 8、C（表格變更與 11）、D 12、E 13、F 14、G 翻轉 Q1。先紅：每個新測試在 `utf-8` 下失敗，翻轉後的 Q1 測試也失敗。
+1. `fix: add an atomic text-write helper` —— `shared/atomic_write.py` 與測試 A 1–11、A13–A15（紅：`ModuleNotFoundError`；接著在 D4 最初的 `NamedTemporaryFile` 版本上，A8–A11、A13 與 A14 失敗）。尚無使用者。1128 個測試。
+2. `fix: save dictionary entries atomically` —— D5 與 D7；測試 B 9–10、G 翻轉 Q3/Q7、G 更新、G 15。先紅：B 10、翻轉後的 Q3/Q7 測試與 G 15 在舊程式碼上失敗（截斷的檔案／逃出的例外／舊路徑從不拋出 `PermissionError`）。B 9 原本就通過（它釘住 D2）。G 16 也在此加入（紅：舊的原地寫入從不詢問 `os.access`，所以 OK 成功、沒有訊息）。1132 個測試。
+3. `fix: read dictionary and data CSVs with utf-8-sig` —— R1–R5 套用 D1；測試 B 8、C（表格變更與 11）、D 12、E 13、F 14、G 翻轉 Q1。先紅：每個新測試在 `utf-8` 下失敗，翻轉後的 Q1 測試也失敗。1137 個測試。
+4. `fix: let open() own the atomic write's temporary descriptor` —— 修正 4；測試 A12（紅：`OSError: [Errno 9] Bad file descriptor` 蓋掉 `LookupError`）。1138 個測試。
 
 每個 commit 以 brief 規定的 `Co-Authored-By` 行結尾。沒有 commit 修改 `.po`／`.mo`、fixture、`gui.py` 或 `entry_list_model.py`。
 
@@ -214,7 +239,7 @@ def write_text_atomically(
 
 在所示路徑執行；`$SP`／`$PY` 同上。
 
-1. `cd client && $PY -m unittest discover -s tests`：`Ran 1129 tests`、`FAILED (failures=1, skipped=7)`，唯一的失敗是已知的 P2-5 案例。
+1. `cd client && $PY -m unittest discover -s tests`：`Ran 1138 tests`、`FAILED (failures=1, skipped=7)`，唯一的失敗是已知的 P2-5 案例。
 2. `cd client && for s in $(seq 1 20); do $PY $SP/shuffle_harness.py $s; done`：每個 seed 只回報 P2-5 失敗。
 3. 聚焦：`cd client && $PY -m unittest tests.test_atomic_write tests.test_dictionary_entries tests.test_dictionary_entries_dialog tests.test_dictionary_manager tests.test_dictionary_management_dialog tests.test_conversion_text_dictionary_rules tests.test_conversion_text_char_maps -v` 通過。
 4. 在 repo 根目錄，`$PY $SP/p12/tools/msgid_scan.py client` 回報 `source msgids: 353`，集合相同；`git diff main -- client/locales` 為空。
@@ -223,19 +248,22 @@ def write_text_atomically(
 7. `grep -rn "KNOWN BUG (P2-2 spec, Q[137]" client/tests` 找不到結果；Q2、Q4、Q5、Q6、Q8 的標記不變。
 8. `grep -rn "csv.DictReader" client --include=*.py --exclude-dir=.venv --exclude-dir=tests` 列出五個讀取端 R1–R5，且 `grep -rn "utf-8-sig" client --include=*.py --exclude-dir=.venv --exclude-dir=tests` 正好列出它們的五個 `open` 呼叫。
 9. `git diff main --stat` 只涉及 `client/shared/atomic_write.py`、`client/dictionaries/entries.py`、`client/dictionaries/manager.py`、`client/conversion/text/dictionary_rules.py`、`client/conversion/text/char_maps.py`、`client/dialog.py`、上述測試檔，以及 spec／plan 檔。
-10. Mutation 檢查（plan）：每個 mutant 至少被一個測試抓到：R1–R5 各自改回 `utf-8`（5 個）；`save_dictionary_entries` 改回直接 `open("w")`；helper 只在 `OSError` 時清理；在 `write` 之後才記下暫存路徑；沒有 `fsync`；暫存檔放在系統暫存目錄；輸出編碼改為 `utf-8-sig`；對話框只捕捉 `OSError`。
+10. Mutation 檢查（plan）：每個 mutant 至少被一個測試抓到：R1–R5 各自改回 `utf-8`（5 個）；`save_dictionary_entries` 改回直接 `open("w")`；helper 只在 `OSError` 時清理；在 `write` 之後才記下暫存路徑；沒有 `fsync`；暫存檔放在系統暫存目錄；輸出編碼改為 `utf-8-sig`；對話框只捕捉 `OSError`。因修正而新增（13 個）：不設定權限位元；不保留既有的 mode；新檔以 `0o644` 或 `0o600` 而非 `0o666` 建立（2 個）；以 `os.umask` 來回呼叫讀取 umask（只有守門測試 A15 抓得到）；沒有 `O_EXCL`；名稱被占用時不重試；只試一次；`os.fdopen` 之後重複關閉描述元；沒有寫入權限檢查；對不存在的檔案也做檢查；`PermissionError` 不帶路徑。共 25 個。
 
 ## Windows 驗證待辦（此處無法執行）
 
-- 在 Windows 執行 `cd client && python -m unittest tests.test_atomic_write tests.test_dictionary_entries_dialog tests.test_dictionary_entries -v`：取代到目錄上的測試現在會在 `os.replace` 以 `PermissionError [WinError 5]` 失敗；其訊息仍必須以 ` -> '<path>'` 結尾。
+- 在 Windows 執行 `cd client && python -m unittest tests.test_atomic_write tests.test_dictionary_entries_dialog tests.test_dictionary_entries -v`：取代到目錄上的測試現在會在 `os.replace` 以 `PermissionError [WinError 5]` 失敗；其訊息仍必須以 ` -> '<path>'` 結尾。A8、A9 與 A10 回報 `skipped`（僅 POSIX）；A11 與 G 16 會執行（patch 了 `os.access`）；A4 的暫存路徑為 `.d.csv.<random>.tmp` 形式；有設定 `O_BINARY`，所以位元組正好是寫入的 `\r\n`。
 - 打包後的程式，手動：用 Excel 存成「CSV UTF-8」、用記事本存成 UTF-8（含 BOM）各一份字典；匯入；字典管理顯示條目數；編輯器顯示其列；OK 後列仍在；轉換會使用它們。
 - 用 Excel 開啟一份字典（Excel 會鎖住它），在編輯器按 OK：出現 `儲存失敗：` 訊息、編輯保留、檔案不變；關閉 Excel 後再按 OK 成功。字典資料夾中不留下 `.default.csv.*.tmp`。
 - 開啟即時防毒時，連續編輯並按 OK 十次；記錄任何暫時性失敗（D8）。
+- 在檔案總管把字典設為唯讀，按 OK：出現 `儲存失敗：[Errno 13] Permission denied: '<path>'`（來自 `os.access` 檢查，修正 3），檔案不變，不留下 `.tmp`；取消唯讀屬性後 OK 成功，檔案為預設屬性。
 
 ## 風險
 
 - **Windows 共用模式**（低到中，D8）。開著 CSV 但沒有 `FILE_SHARE_DELETE` 的程式，現在會讓 OK 在舊的原地寫入會成功的情況下失敗。失敗是可見且安全的（訊息、編輯保留、檔案不變），再按一次 OK 即重試。Excel 會完全鎖住檔案，以前同樣失敗。
-- **檔案中繼資料**（低）。安裝的是新檔：在 Windows 上取得資料夾繼承的 ACL 與預設屬性；在 POSIX 上 mode 為 `0600`（NamedTemporaryFile），不是舊的 mode。字典路徑上的符號連結會被一般檔案取代。字典資料夾是每位使用者的 app 資料，預期都不影響；前處理腳本已是相同行為。
+- **檔案中繼資料**（低，因修正 1 縮小）。安裝的是新檔：在 POSIX 上保留舊的權限位元（或得到 umask 預設值），但不保留擁有者、ACL 或延伸屬性；在 Windows 上取得資料夾繼承的 ACL 與預設屬性。字典路徑上的符號連結會被一般檔案取代（帶有連結目標的 mode）。字典資料夾是每位使用者的 app 資料，預期都不影響。
+- **寫入權限檢查**（低，修正 3）。`os.access` 在 rename 之前詢問；若目標在兩者之間變成唯讀，仍會被取代。在 Windows 上 `os.access(W_OK)` 只看唯讀屬性；拒絕寫入的 ACL 檢查不到，之後 `os.replace` 是否失敗取決於資料夾與檔案的刪除權限（Windows 驗證待辦；任何失敗都走相同的訊息流程）。`os.access` 使用實際使用者 ID，對本 app 而言就是有效使用者 ID。
+- **自行產生暫存檔名稱**（低，修正 2）。取代 `tempfile` 的換名迴圈：`O_EXCL` 保證不會開啟或覆寫既有檔案，名稱帶 64 位元亂數，100 個名稱都被占用後存檔以 `FileExistsError` 失敗（顯示為 `儲存失敗：...`）。
 - **當機後遺留 `.tmp`**（低）。在建立與安裝暫存檔之間當機，會留下 `.<name>.csv.<random>.tmp`。`list_dictionary_names` 以 `*.csv` glob，所以它永遠不會被列出或載入；無害，可手動刪除。
 - **捕捉範圍較廣**（低，D7）。存檔時的程式錯誤現在顯示訊息而不是 traceback；traceback 不再印出。在這個邊界可接受，而且無論如何檔案都完好。
 - **BOM 檔案的行為變更**（刻意）。原本顯示為空且讓轉換失敗的 BOM 字典現在可用；第一次 OK 後以不帶 BOM 的形式存檔（D2）。

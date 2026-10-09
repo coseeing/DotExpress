@@ -16,6 +16,17 @@ After this task:
 
 This is a behavior change on purpose, limited to BOM files and save failures. No new user-facing string, no msgid change (353, same set). P2-2 Q2 (an unchanged dictionary is rewritten in normalized form), Q4-Q6 and Q8 stay as they are.
 
+## Corrections (2026-10-09, after the plan and the implementation)
+
+The sections below already include these corrections; this list says what changed against the first version (commit `1f9aae8`) and why.
+
+1. **Permission bits are kept (orchestrator amendment; supersedes the accepted mode `0600`).** On POSIX the installed dictionary keeps the permission bits of the file it replaces (`stat.S_IMODE(os.stat(path).st_mode)`, set on the temporary file with `os.chmod` before `os.replace`; `os.stat` follows a symbolic link). A new file gets `0o666 & ~umask`, the mode a plain `open(path, "w")` gives. On Windows nothing is copied (`os.chmod` only toggles the read-only attribute).
+2. **The kernel applies the umask; the umask is never read (orchestrator refinement 1).** The plan's first version read the umask with an `os.umask(0)` round trip, which is process-wide and races with any other thread creating a file. Instead the helper creates the temporary file itself with `os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o666)` under its own name `.<name>.<random>.tmp` in the target's directory (`<random>` is `secrets.token_hex(8)`), trying another name on `FileExistsError` (100 attempts, then `FileExistsError`). `tempfile.NamedTemporaryFile` is therefore not used (D4). A guard test fails if any production module calls `os.umask`.
+3. **A target the user may not write keeps its old verdict (orchestrator refinement 2).** A rename needs only a writable folder, so without a check OK would replace a `0444` (or Windows read-only) dictionary that the old in-place `open("w")` refused. Before writing, if the target exists and `not os.access(target, os.W_OK)`, the helper raises `PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(target))` (`[Errno 13] Permission denied: '<path>'`, the text `open("w")` gave) and creates nothing; the editor shows it through the unchanged `Failed to save: {error}` handler. A privileged user (root) could write such a file in place before and still can.
+4. **`open(..., opener=...)` owns the descriptor (found while implementing).** Wrapping the `os.open` descriptor with `os.fdopen` and closing it on failure is wrong: `os.fdopen` already closes the descriptor when building the text stream fails (for example an unknown encoding), so a second `os.close` raised `EBADF` over the real error and could close an unrelated descriptor. The helper opens the temporary file with `open(candidate, "w", encoding=encoding, newline=newline, opener=...)`; the opener performs the `os.open` of correction 2 and records the temporary path as soon as the file exists, so every later failure removes it. Separate commit, red first.
+5. **Red stages and names (plan).** Migration step 1's first red is one loader error (`ModuleNotFoundError: No module named 'shared.atomic_write'`), not one failure per test. Step 2 is red for four of the spec's tests, not three: the updated OS-error test also fails on the old message, which has no ` -> '<path>'` suffix. The `apply_dictionary` table test is `DictionaryFileSemanticsTest.test_malformed_files_raise_the_recorded_errors`. The doubled BOM (D1) is pinned by an 11th `_error_cases()` row, "dictionary with a doubled BOM" (column message before and after); table rows are subtests, so the test count does not change.
+6. **Counts.** 24 new tests instead of 15 (Test Plan): `Ran 1138` instead of 1129; the skips stay 7 on Linux (the three POSIX-only helper tests run here and skip on Windows). Per commit: 1114, 1128, 1132, 1137, 1138. 25 mutants instead of 12 (Acceptance Criteria 10).
+
 ## Current State (verified 2026-10-09 on `fix/f2-dictionary-file-safety`, HEAD `aced6f8`)
 
 `$SP` is the session scratchpad, `$PY` is `$SP/venv/bin/python`.
@@ -99,19 +110,20 @@ def write_text_atomically(
 ) -> None:
 ```
 
-Behavior:
-1. Create `tempfile.NamedTemporaryFile("w", encoding=encoding, newline=newline, dir=<path's directory>, prefix=f".{name}.", suffix=".tmp", delete=False)` (the pattern already used twice). The directory must exist; the helper does not create it (callers do, as `save_dictionary_entries` already does).
-2. Record the temporary path **before** calling `write(stream)`, then `stream.flush()` and `os.fsync(stream.fileno())`, then close.
-3. `os.replace(temporary, path)`, called as `os.replace` (attribute lookup at call time, so tests can patch `os.replace` independent of `wx_stub` module copies).
+Behavior (corrected, see Corrections 1-4):
+0. If `path` exists and `not os.access(path, os.W_OK)`, raise `PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(path))`; nothing is created.
+1. Open a new temporary file `.<name>.<random>.tmp` in `path`'s directory with `open(candidate, "w", encoding=encoding, newline=newline, opener=...)`. The opener calls `os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o666)`: an existing file is never reused, and the kernel applies the umask, as for `open(path, "w")`. `<random>` is `secrets.token_hex(8)`; on `FileExistsError` another name is tried, 100 times, then `FileExistsError` propagates. The directory must exist; the helper does not create it (callers do, as `save_dictionary_entries` already does).
+2. The opener records the temporary path as soon as the file exists, so **before** `write(stream)` (and before a failure building the text stream); then `stream.flush()` and `os.fsync(stream.fileno())`, then close. `open` owns the descriptor and closes it on every failure.
+3. On POSIX, if `path` exists, `os.chmod(temporary, stat.S_IMODE(os.stat(path).st_mode))`. Then `os.replace(temporary, path)`, called as `os.replace` (attribute lookup at call time, so tests can patch `os.replace` independent of `wx_stub` module copies; `os.access`, `os.fsync` and `os.chmod` likewise).
 4. In a `finally`, if the install did not happen, remove the temporary file (`unlink(missing_ok=True)`); the original exception propagates unchanged. This covers every `BaseException` (also `KeyboardInterrupt`). A failure of that removal is not masked: the original exception still propagates (the `unlink` error is suppressed with `contextlib.suppress(OSError)`).
 
-Guarantee (docstring): on return `path` holds exactly what `write` produced; on an exception `path` is unchanged (same bytes, or still absent) and no temporary file is left, unless removing it failed.
+Guarantee (docstring): on return `path` holds exactly what `write` produced; on an exception `path` is unchanged (same bytes, or still absent) and no temporary file is left, unless removing it failed. Permissions follow a plain `open(path, "w")`: a target the user may not write raises `PermissionError` and is left alone; a new file gets `0o666 & ~umask`; on POSIX a replaced file's permission bits are kept. The process umask is never read or changed.
 
 `fsync` is included because the point of the change is that a dictionary is never left half-written; without it a power loss right after the rename can leave an empty file on some file systems. Dictionaries are small, so the cost is one flush per OK.
 
-Location: `shared/` because the helper is generic (dictionaries now, possibly the preprocessing script and others later) and `shared` is not a `wx_stub` restore root, so every copy of `dictionaries.entries` uses the same module. `save_preprocessing_script` and `PackageFiles` are **not** migrated (scope; Follow-ups).
+Location: `shared/` because the helper is generic (dictionaries now, possibly the preprocessing script and others later) and `shared` is not a `wx_stub` restore root, so every copy of `dictionaries.entries` uses the same module. `save_preprocessing_script` and `PackageFiles` are **not** migrated (scope; Follow-ups). The helper does not use `tempfile.NamedTemporaryFile` (Corrections 2): it would create the file with mode `0600`, and setting the new-file mode afterwards needs the umask, which can only be read by setting it.
 
-**D5. `save_dictionary_entries` writes through the helper.** It keeps `dictionary_path.parent.mkdir(parents=True, exist_ok=True)`, then calls `write_text_atomically(dictionary_path, <write header and rows with DictWriter>, encoding="utf-8", newline="")`. Same bytes as today. Visible consequence: an `OSError` raised by `os.replace` names the temporary path and the dictionary (`... '<dir>\.default.csv.k2j1.tmp' -> '<dir>\default.csv'`); one raised while creating the temporary file names the temporary path. The message template is unchanged. `test_os_error_shows_the_message_keeps_the_edits_and_a_later_ok_succeeds` therefore checks that the message starts with `儲存失敗：` and ends with ` -> ` + `repr(str(path))` (CPython formats two-path `OSError`s as `%R -> %R` on Linux and Windows), instead of rebuilding it from `path.open("w")`.
+**D5. `save_dictionary_entries` writes through the helper.** It keeps `dictionary_path.parent.mkdir(parents=True, exist_ok=True)`, then calls `write_text_atomically(dictionary_path, <write header and rows with DictWriter>, encoding="utf-8", newline="")`. Same bytes as today. Visible consequence: an `OSError` raised by `os.replace` names the temporary path and the dictionary (`... '<dir>\.default.csv.k2j1.tmp' -> '<dir>\default.csv'`); one raised while creating the temporary file names the temporary path; a dictionary the user may not write gives `[Errno 13] Permission denied: '<path>'`, as the old `open("w")` did (Corrections 3). The message template is unchanged. `test_os_error_shows_the_message_keeps_the_edits_and_a_later_ok_succeeds` therefore checks that the message starts with `儲存失敗：` and ends with ` -> ` + `repr(str(path))` (CPython formats two-path `OSError`s as `%R -> %R` on Linux and Windows), instead of rebuilding it from `path.open("w")`.
 
 **D6. Only the editor's save changes on the write side.** The four `manager.py` writers do not share code with `save_dictionary_entries` (two `csv.writer` header writes, two `shutil.copyfile`) and never overwrite an existing managed dictionary: their worst failure leaves a partial **new** file (an empty or partial `name.csv` after a failed create/import) or a partial export at the user's chosen path. That is a consistency problem, not loss of a dictionary the user built. Listed as a follow-up; switching them to the helper later is a one-line change each for the two header writers.
 
@@ -123,7 +135,7 @@ Location: `shared/` because the helper is generic (dictionaries now, possibly th
 
 ### `client/shared/atomic_write.py` (new, 4 spaces)
 
-`write_text_atomically` as in D4; imports `os`, `tempfile`, `contextlib`, `Path`, `Callable`, `TextIO`. Module docstring: one paragraph stating the guarantee and that the temporary file is `.<name>.<random>.tmp` in the same directory.
+`write_text_atomically` as in D4, with two private helpers: `_open_temporary_file(destination, opener, encoding, newline)` (the name loop) and `_existing_mode(destination)` (the permission bits, or `None`). Imports `contextlib`, `errno`, `os`, `secrets`, `stat`, `Path`, `Callable`, `TextIO`. Module docstring: the guarantee, that the temporary file is `.<name>.<random>.tmp` in the same directory, and the permission rules.
 
 ### `client/dictionaries/entries.py` (tabs)
 
@@ -170,6 +182,17 @@ New test code follows each file's indentation (tabs in `test_dictionary_entries.
 6. `test_failure_without_an_existing_file_creates_nothing`: as 3 with no file; listing `[]`.
 7. `test_data_is_flushed_to_disk_before_the_replace`: `os.fsync` and `os.replace` wrapped (`wraps=`) on a shared `Mock` parent; call order is `fsync` then `replace`.
 
+Added by the corrections (A8-A15):
+
+- A8 `test_keeps_the_permission_bits_of_an_existing_file` (POSIX only): an existing `0o640` file stays `0o640`.
+- A9 `test_a_new_file_gets_the_default_mode_for_the_umask` (POSIX only): with umask `0o002` set by the test (restored by `addCleanup`), a new file is `0o664`. `0o640` and `0o664` differ from `0o600` (`mkstemp`) and from `0o644` (the usual default), so no constant passes both.
+- A10 `test_a_read_only_file_gets_the_same_verdict_as_writing_it_in_place` (POSIX only): a `0o444` file; the test first opens it with `"r+b"` to learn what the old in-place write would have done. Refused (a normal user): `PermissionError` with `errno.EACCES` and the target as `filename`, bytes unchanged. Allowed (root with `CAP_DAC_OVERRIDE`): the new text is installed. Either way the mode stays `0o444` and only `d.csv` is listed. This machine runs as root, so the refused branch was also run with `setpriv --bounding-set=-dac_override,-dac_read_search`.
+- A11 `test_a_file_without_write_access_raises_permission_error_and_is_kept` (every platform): `os.access` patched to `False`; it was asked about the target with `os.W_OK`; the error text is exactly `[Errno 13] Permission denied: '<path>'`; bytes unchanged; no `.tmp`.
+- A12 `test_an_unknown_encoding_raises_it_and_leaves_no_temporary_file`: `encoding="no-such-codec"`; `LookupError` (not `EBADF`) propagates; bytes unchanged; no `.tmp` (Corrections 4).
+- A13 `test_a_taken_temporary_name_is_skipped_and_kept`: `secrets.token_hex` patched to give `aaaa`, then `bbbb`, with `.d.csv.aaaa.tmp` already present: the write succeeds, two names were drawn, and the other file is untouched (the name is created with `O_EXCL`, never reused).
+- A14 `test_gives_up_when_every_temporary_name_is_taken`: every name taken: `FileExistsError` after more than one attempt; target and the other file unchanged.
+- A15 `ProductionCodeDoesNotSetTheUmaskTest.test_no_production_module_calls_os_umask`: an AST scan of every `client/` module outside `.venv` and `tests` finds no `.umask` attribute and no `from ... import umask` (and `shared/atomic_write.py` is among the scanned files).
+
 ### B. Dictionary storage (`client/tests/test_dictionary_entries.py`, `DictionaryEntryStorageTest`)
 
 8. `test_load_ignores_a_utf8_bom`: `b"\xef\xbb\xbftext,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\n"` gives `[DictionaryEntry("Alpha", "\u2801", "General")]`.
@@ -199,14 +222,16 @@ New test code follows each file's indentation (tabs in `test_dictionary_entries.
 - Flip Q3/Q7: `test_non_os_error_from_the_writer_propagates_and_leaves_a_truncated_file` becomes `test_unencodable_entry_shows_the_message_and_leaves_the_file_unchanged`: same setup (the `"\ud800"` edit, the regression scenario); the original bytes are read first; OK returns `False`; the log is exactly `[["MessageBox", "儲存失敗：'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed", ERROR_TITLE, ERROR_FLAGS]]` (built from the `UnicodeEncodeError` text; Python's message, the same on Linux and Windows); the file bytes are identical; the directory holds only `dictionary.csv`; the rows still show the edit. Comment: was the Q3/Q7 `KNOWN BUG`.
 - Update `test_os_error_shows_the_message_keeps_the_edits_and_a_later_ok_succeeds` as in D5 (prefix and ` -> 'path'` suffix; plus: the directory holds only the `dictionary.csv` directory, no `.tmp`).
 15. `test_replace_failure_shows_the_message_keeps_the_file_and_a_later_ok_succeeds`: Add Beta, `patch("os.replace", side_effect=PermissionError(13, "denied"))`; OK returns `False`; message `儲存失敗：[Errno 13] denied`; bytes identical; no `.tmp`; after the patch ends, OK returns `True` and saves Alpha and Beta.
+16. `test_dictionary_without_write_access_shows_the_message_and_keeps_the_file` (Corrections 3): as 15 with `os.access` patched to `False`; the message is `儲存失敗：[Errno 13] Permission denied: '<path>'`, the dialog is the parent, the file is unchanged, no `.tmp`, the rows are kept, and a later OK succeeds.
 
-Net count: A 7, B 3, C 1, D 1, E 1, F 1, G 1 = 15 new; the flips and the update replace tests one for one. Total `1114 + 15 = 1129`.
+Net count: A 15, B 3, C 1, D 1, E 1, F 1, G 2 = 24 new; the flips and the update replace tests one for one. Total `1114 + 24 = 1138`.
 
 ## Migration Steps (each step one green commit, red first)
 
-1. `fix: add an atomic text-write helper` — `shared/atomic_write.py` with tests A 1-7 (red: `ModuleNotFoundError`). Nothing uses it yet.
-2. `fix: save dictionary entries atomically` — D5 and D7; tests B 9-10, G flip Q3/Q7, G update, G 15. Red first: B 10, the flipped Q3/Q7 test and G 15 fail on the old code (truncated file / escaping exception / `PermissionError` never raised by the old path). B 9 already passes (it pins D2).
-3. `fix: read dictionary and data CSVs with utf-8-sig` — D1 in R1-R5; tests B 8, C (table change and 11), D 12, E 13, F 14, G flip Q1. Red first: each new test fails on `utf-8`, and the flipped Q1 test fails.
+1. `fix: add an atomic text-write helper` — `shared/atomic_write.py` with tests A 1-11 and A13-A15 (red: `ModuleNotFoundError`; then, with the first `NamedTemporaryFile` version of D4, A8-A11, A13 and A14 fail). Nothing uses it yet. 1128 tests.
+2. `fix: save dictionary entries atomically` — D5 and D7; tests B 9-10, G flip Q3/Q7, G update, G 15. Red first: B 10, the flipped Q3/Q7 test and G 15 fail on the old code (truncated file / escaping exception / `PermissionError` never raised by the old path). B 9 already passes (it pins D2). G 16 is added here too (red: the old in-place write never asks `os.access`, so OK succeeds and no message appears). 1132 tests.
+3. `fix: read dictionary and data CSVs with utf-8-sig` — D1 in R1-R5; tests B 8, C (table change and 11), D 12, E 13, F 14, G flip Q1. Red first: each new test fails on `utf-8`, and the flipped Q1 test fails. 1137 tests.
+4. `fix: let open() own the atomic write's temporary descriptor` — Corrections 4; test A12 (red: `OSError: [Errno 9] Bad file descriptor` over the `LookupError`). 1138 tests.
 
 Each commit ends with the `Co-Authored-By` line from the brief. No commit changes `.po`/`.mo` files, fixtures, `gui.py` or `entry_list_model.py`.
 
@@ -214,7 +239,7 @@ Each commit ends with the `Co-Authored-By` line from the brief. No commit change
 
 Run from the paths shown; `$SP`/`$PY` as above.
 
-1. `cd client && $PY -m unittest discover -s tests`: `Ran 1129 tests`, `FAILED (failures=1, skipped=7)`, the one failure being the known P2-5 case.
+1. `cd client && $PY -m unittest discover -s tests`: `Ran 1138 tests`, `FAILED (failures=1, skipped=7)`, the one failure being the known P2-5 case.
 2. `cd client && for s in $(seq 1 20); do $PY $SP/shuffle_harness.py $s; done`: every seed reports only the P2-5 failure.
 3. Focused: `cd client && $PY -m unittest tests.test_atomic_write tests.test_dictionary_entries tests.test_dictionary_entries_dialog tests.test_dictionary_manager tests.test_dictionary_management_dialog tests.test_conversion_text_dictionary_rules tests.test_conversion_text_char_maps -v` passes.
 4. From the repo root, `$PY $SP/p12/tools/msgid_scan.py client` reports `source msgids: 353`, same set; `git diff main -- client/locales` is empty.
@@ -223,19 +248,22 @@ Run from the paths shown; `$SP`/`$PY` as above.
 7. `grep -rn "KNOWN BUG (P2-2 spec, Q[137]" client/tests` finds nothing; the Q2, Q4, Q5, Q6, Q8 markers are unchanged.
 8. `grep -rn "csv.DictReader" client --include=*.py --exclude-dir=.venv --exclude-dir=tests` lists the five readers R1-R5, and `grep -rn "utf-8-sig" client --include=*.py --exclude-dir=.venv --exclude-dir=tests` lists exactly their five `open` calls.
 9. `git diff main --stat` touches only `client/shared/atomic_write.py`, `client/dictionaries/entries.py`, `client/dictionaries/manager.py`, `client/conversion/text/dictionary_rules.py`, `client/conversion/text/char_maps.py`, `client/dialog.py`, the test files named above, and the spec/plan files.
-10. Mutation check (plan): each mutant is caught by at least one test: each of R1-R5 back to `utf-8` (5); `save_dictionary_entries` back to a direct `open("w")`; the helper cleaning up only on `OSError`; recording the temporary path after `write`; no `fsync`; the temporary file in the system temp directory; output encoding `utf-8-sig`; the dialog catching `OSError` only.
+10. Mutation check (plan): each mutant is caught by at least one test: each of R1-R5 back to `utf-8` (5); `save_dictionary_entries` back to a direct `open("w")`; the helper cleaning up only on `OSError`; recording the temporary path after `write`; no `fsync`; the temporary file in the system temp directory; output encoding `utf-8-sig`; the dialog catching `OSError` only. Added by the corrections (13): the permission bits not set; the existing mode not kept; a new file created `0o644` or `0o600` instead of `0o666` (2); the umask read by an `os.umask` round trip (only the guard A15 catches it); no `O_EXCL`; a taken name not retried; a single attempt; the descriptor closed twice after `os.fdopen`; no write-access check; the check applied to a missing file; the `PermissionError` without the path. 25 in all.
 
 ## Windows Verification Debt (cannot run here)
 
-- `cd client && python -m unittest tests.test_atomic_write tests.test_dictionary_entries_dialog tests.test_dictionary_entries -v` on Windows: the replace-onto-a-directory test now fails in `os.replace` with `PermissionError [WinError 5]`; its message must still end with ` -> '<path>'`.
+- `cd client && python -m unittest tests.test_atomic_write tests.test_dictionary_entries_dialog tests.test_dictionary_entries -v` on Windows: the replace-onto-a-directory test now fails in `os.replace` with `PermissionError [WinError 5]`; its message must still end with ` -> '<path>'`. A8, A9 and A10 report `skipped` (POSIX only); A11 and G 16 run (patched `os.access`); A4's temporary path has the `.d.csv.<random>.tmp` form; `O_BINARY` is set, so the bytes are exactly `\r\n` as written.
 - Packaged build, by hand: save a dictionary from Excel as "CSV UTF-8" and from Notepad (UTF-8 with BOM); Import it; Dictionary Management shows its entry count; the editor shows its rows; OK keeps them; a conversion uses them.
 - Open a dictionary in Excel (which locks it), press OK in the editor: the `儲存失敗：` message appears, the edits stay, the file is unchanged; close Excel, OK again succeeds. No `.default.csv.*.tmp` remains in the dictionary folder.
 - With real-time antivirus on, edit and OK a dictionary ten times in a row; record any transient failure (D8).
+- Mark a dictionary read-only in Explorer, press OK: `儲存失敗：[Errno 13] Permission denied: '<path>'` appears (from the `os.access` check, Corrections 3), the file is unchanged, no `.tmp` remains; clear the attribute, OK succeeds and the file keeps default attributes.
 
 ## Risks
 
 - **Windows sharing modes** (low-medium, D8). Programs that keep the CSV open without `FILE_SHARE_DELETE` now make OK fail where the old in-place write succeeded. The failure is visible and safe (message, edits kept, file unchanged), and a second OK retries. Excel locks the file entirely, which failed before too.
-- **File metadata** (low). The installed file is a new file: on Windows it takes the folder's inherited ACL and default attributes; on POSIX its mode is `0600` (NamedTemporaryFile), not the old mode. A symbolic link at the dictionary path is replaced by a regular file. The dictionary folder is per-user app data, so none of this is expected to matter; the preprocessing script already behaves the same way.
+- **File metadata** (low, narrowed by Corrections 1). The installed file is a new file: on POSIX it keeps the old permission bits (or gets the umask default), but not the owner, ACLs or extended attributes; on Windows it takes the folder's inherited ACL and default attributes. A symbolic link at the dictionary path is replaced by a regular file (with the link target's mode). The dictionary folder is per-user app data, so none of this is expected to matter.
+- **The write-access check** (low, Corrections 3). `os.access` is asked before the rename; a target made read-only in between is still replaced. On Windows `os.access(W_OK)` sees only the read-only attribute; an ACL that denies writing is not seen by the check, and whether `os.replace` then fails depends on the folder's and file's delete rights (Windows debt; any failure takes the same message flow). `os.access` uses the real user ID, which is the effective one for this app.
+- **Own temporary-name generation** (low, Corrections 2). Replaces `tempfile`'s name loop: `O_EXCL` guarantees that no existing file is opened or overwritten, names carry 64 random bits, and after 100 taken names the save fails with `FileExistsError` (shown as `儲存失敗：...`).
 - **Leftover `.tmp` after a crash** (low). A crash between creating and installing the temporary file leaves `.<name>.csv.<random>.tmp`. `list_dictionary_names` globs `*.csv`, so it is never listed or loaded; it is harmless and removable by hand.
 - **Broader catch** (low, D7). A programming error during save now shows a message instead of a traceback; the traceback is no longer printed. Acceptable at this boundary, and the file is intact either way.
 - **Behavior change for BOM files** (intended). A BOM dictionary that showed empty and failed conversions now works; on the first OK it is saved without BOM (D2).

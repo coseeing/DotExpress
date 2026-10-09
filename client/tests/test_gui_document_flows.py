@@ -63,6 +63,11 @@ def make_snapshot(
     )
 
 
+def text_file_bytes(text: str) -> bytes:
+    """Bytes ``Path.write_text(text, encoding="utf-8")`` writes: newlines become ``os.linesep`` (W-2)."""
+    return text.replace("\n", os.linesep).encode("utf-8")
+
+
 class GuiDocumentFlowsTest(unittest.TestCase):
     def _make_frame(self, documents=(Document("alpha", "source", None),), open_name="alpha") -> gui.BrailleFrame:
         frame = gui.BrailleFrame.__new__(gui.BrailleFrame)
@@ -1498,12 +1503,12 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
 
             frame._export_coordinator.write_document(root / "alpha.html", Document("alpha", "text", "b"), "html")
             cached_html = render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml))
-            self.assertEqual((root / "alpha.html").read_bytes(), cached_html.encode("utf-8"))
+            self.assertEqual((root / "alpha.html").read_bytes(), text_file_bytes(cached_html))
             self.assertIn('<span class="source">a</span>', cached_html)
 
             frame._export_coordinator.write_document(root / "beta.html", Document("beta", "text", "b"), "html")
             empty_html = render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml))
-            self.assertEqual((root / "beta.html").read_bytes(), empty_html.encode("utf-8"))
+            self.assertEqual((root / "beta.html").read_bytes(), text_file_bytes(empty_html))
             self.assertNotEqual(cached_html, empty_html)
 
             with self.assertRaises(OSError):
@@ -1531,7 +1536,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "alpha.html"
             frame._export_coordinator.write_document(path, Document("alpha", "text", "b"), "html")
-            self.assertEqual(path.read_bytes(), expected.encode("utf-8"))
+            self.assertEqual(path.read_bytes(), text_file_bytes(expected))
 
     def test_export_all_html_uses_each_document_cache(self) -> None:
         frame = self._make_export_frame()

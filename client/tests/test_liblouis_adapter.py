@@ -1,3 +1,4 @@
+import os
 import unittest
 
 from adapters.translation.liblouis import LiblouisTextTranslator
@@ -31,7 +32,8 @@ class LiblouisTextTranslatorTest(unittest.TestCase):
             raw="ab",
         )
 
-        self.assertEqual(self.helper.translate_calls, [(["/tables/en.ctb"], "ab", 4)])
+        # The adapter joins with os.path.join: "/tables\\en.ctb" on Windows (W-2).
+        self.assertEqual(self.helper.translate_calls, [([os.path.join("/tables", "en.ctb")], "ab", 4)])
         self.assertEqual(result.raw, ["a", "b"])
         self.assertEqual(result.braille, ["⠁", "⠃"])
         self.assertEqual(result.braille_to_raw_pos, [0, 1])

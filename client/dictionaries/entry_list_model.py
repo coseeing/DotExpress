@@ -117,6 +117,11 @@ class DictionaryEntryListModel:
 		return normalized_filter in entry.text.casefold() or normalized_filter in entry.braille.casefold()
 
 	def source_text_exists(self, text: str, exclude_entry: DictionaryEntry | None = None) -> bool:
+		"""Whether a row other than ``exclude_entry`` has exactly this source text.
+
+		Preserved rows compare their raw, unstripped text (the source R3 uses), so a
+		hidden ``"x "`` does not block ``"x"``.
+		"""
 		return any(row.text == text and row is not exclude_entry for row in self._rows)
 
 	def apply_filter(self, filter_text: str, selected_index: int | None = None) -> EntryListUpdate:

@@ -418,6 +418,24 @@ class PreservedRowsTest(_ModelTestCase):
 				self.assertEqual(caught.exception.identifier, DUZI)
 				self.assertSameObjects(self.model.rows, [self.alpha, self.kept, self.beta, self.blank])
 
+	def test_remove_of_an_entry_leaves_a_preserved_row_with_the_same_source_text(self) -> None:
+		# Only a file can hold both rows (D5); remove must not match the hidden row by its text.
+		visible = _entry(DUZI, "⠁")
+		model = DictionaryEntryListModel([self.alpha, self.kept, visible])
+
+		self.assertEqual(model.remove(1), EntryListUpdate(0))
+
+		self.assertSameObjects(model.rows, [self.alpha, self.kept])
+
+	def test_a_preserved_row_blocks_only_its_raw_unstripped_source_text(self) -> None:
+		spaced = PreservedDictionaryRow(DUZI + " ", INVALID_DUZI, "Bopomofo")
+		valid = _entry(DUZI, VALID_DUZI, "Bopomofo")
+		model = DictionaryEntryListModel([self.alpha, spaced])
+
+		self.assertEqual(model.add(valid), EntryListUpdate(1))
+
+		self.assertSameObjects(model.rows, [self.alpha, spaced, valid])
+
 
 class LoadSaveTest(unittest.TestCase):
 	def setUp(self) -> None:

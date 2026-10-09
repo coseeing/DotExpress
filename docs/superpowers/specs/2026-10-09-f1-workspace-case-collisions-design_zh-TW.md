@@ -66,7 +66,7 @@
 
 暫存檔名沿用 `conversion/preprocessing/user_script.py:53-74`（`save_preprocessing_script`）的既有模式（`tempfile.NamedTemporaryFile(dir=..., prefix=f".{name}.", suffix=".tmp", delete=False)`，立即關閉）。會先建立目錄（`mkdir(parents=True, exist_ok=True)`），與 `save_document_package` 相同，因此舊包不存在時只改大小寫的重新命名仍可運作。第 2–3 步的 `OSError` 文字會包含暫存路徑（例如 `[WinError 32] ...: '...\Alpha.dep' -> '...\.Alpha.dep.k2j1.tmp'`），以既有的 `Failed to save document: {error}` 範本顯示。
 
-**D5. 檔案操作的接縫：注入，而非 patch。** 此流程使用的五個基本操作（`exists`、`write`、`replace`、`remove` 與 `temporary_path`）放在一個小類別 `PackageFiles` 上，內含真正的實作。`move_document_package(..., files=...)` 接收它，`DocumentWorkspaceService.__init__` 接受選用的關鍵字參數 `package_files: PackageFiles | None = None`（預設 `PackageFiles()`）。測試傳入不分大小寫的模型（見測試計畫）或注入錯誤的子類別。採用注入而不是 `mock.patch` 模組全域名稱，因為 `documents` 在 `wx_stub` 的 restore roots 中：patch `sys.modules` 裡的 `documents.workspace` 的測試，可能碰不到 service 實際呼叫的那個模組物件。沒有任何 `isinstance` 檢查；任何具備這五個方法的物件都可以。
+**D5. 檔案操作的接縫：注入，而非 patch。** 此流程使用的五個基本操作（`exists`、`write`、`replace`、`remove` 與 `temporary_path`）放在一個小類別 `PackageFiles` 上，內含真正的實作。`move_document_package(..., files=...)` 接收它，`DocumentWorkspaceService.__init__` 接受選用的關鍵字參數 `package_files: PackageFiles | None = None`（預設 `PackageFiles()`）。測試傳入不分大小寫的模型（見測試計畫）或注入錯誤的物件（子類別，或包住 `PackageFiles()` 的委派包裝）。採用注入而不是 `mock.patch` 模組全域名稱，因為 `documents` 在 `wx_stub` 的 restore roots 中：patch `sys.modules` 裡的 `documents.workspace` 的測試，可能碰不到 service 實際呼叫的那個模組物件。沒有任何 `isinstance` 檢查；任何具備這五個方法的物件都可以。
 
 **D6. 不納入已知 defect 3。** 讓所有重新命名都使用 `move_document_package` 可以修好 defect 3（移開失敗時只留下舊包，controller 不變）。但它無法在不做新決定的情況下順帶修好，所以不納入：
 - 一般重新命名的錯誤文字會指名暫存路徑，而不是 `beta.dep`；
@@ -118,7 +118,7 @@
 
 ### A. 不分大小寫的檔案模型（新檔 `client/tests/case_insensitive_package_files.py`，不是測試模組）
 
-`CaseInsensitivePackageFiles(PackageFiles)` 在真實的暫存目錄上運作，並針對傳入的路徑模擬不分大小寫、保留大小寫的檔案系統（NTFS／APFS）。路徑若在同一目錄中有 casefold 相等的既有項目，就解析到該項目。
+`CaseInsensitivePackageFiles(PackageFiles)` 在真實的暫存目錄上運作，並針對傳入的路徑模擬不分大小寫、保留大小寫的檔案系統（NTFS／APFS）。路徑若在同一目錄中有 casefold 相等的既有項目，就解析到該項目。名稱取自目錄列表（先找完全相同的名稱，再找 casefold 相符者），並以字串比較，絕不透過 `Path` 相等或 `exists()`：在 Windows 上兩者都忽略大小寫，如此模型在任何主機上的行為都相同。基於同樣理由，C 與 E 中的錯誤注入器比對的是 `path.name` 字串。
 
 - `exists`／`write`／`remove`：作用在解析後的項目上。`Alpha.dep` 存在時寫入 `alpha.dep`，會重寫 `Alpha.dep` 並保留其拼寫。
 - `replace(source, destination)`：兩者解析到同一項目時，把該項目改名為 destination 的拼寫（`MoveFileEx`／`rename(2)` 對只改大小寫的改名所做的事）；destination 解析到另一個既有項目時，取代該項目的內容並保留其拼寫（悲觀解讀）；否則就是一般的 `os.replace`。建構子旗標 `replace_keeps_existing_spelling=True` 讓測試也能跑另一種解讀（以 destination 拼寫為準），藉此證明流程不依賴它。
@@ -128,7 +128,7 @@
 
 1. 寫入大小寫變體會重寫既有項目並保留其拼寫；之後 `load_workspace_documents` 把它列為無效（defect 2 的機制）。
 2. 透過模型執行今天的重新命名流程（`write(new)`，因 `exists(old)` 再 `remove(old)`）會留下空目錄（defect 1 的情境，保留為舊失敗的回歸紀錄）。
-3. 把項目 `replace` 到自己的大小寫變體會把它改名。
+3. 把項目 `replace` 到自己的大小寫變體會把它改名。旗標的兩種值各跑一次：`alpha.dep` 存在時把 `beta.dep` replace 到 `ALPHA.dep`，只留下一個項目，`alpha.dep`（旗標為 true）或 `ALPHA.dep`（旗標為 false），內容是 beta 的位元組：D4 從不 replace 到另一個項目的大小寫變體上，所以只靠 B 4 測不到這個旗標。
 4. 在模型上執行 `move_document_package`，只改大小寫 `Alpha` 改 `alpha`，`replace_keeps_existing_spelling` 兩種值各跑一次（subTest）：列表正好是 `["alpha.dep"]`，成員 `alpha.brl`／`alpha.txt`，`load_document_package` 回傳該文件。
 
 ### C. 真實檔案系統上的 `move_document_package`（`client/tests/test_document_workspace.py`）
@@ -137,7 +137,7 @@
 6. 不同名稱（`alpha` 改 `gamma`）：列表 `["gamma.dep"]`。
 7. 舊包不存在且工作區目錄不存在：目錄被建立，寫入 `alpha.dep`。
 8. 點字待轉換（`braille=None`）：有 `alpha.meta.json`，載入後 `braille=None`。
-9. 暫存寫入以 `OSError` 失敗（注入錯誤的 `PackageFiles` 子類別）：拋出；舊包位元組不變；沒有殘留 `.tmp`。
+9. 暫存寫入以 `OSError` 失敗（錯誤注入器 `_FailingPackageFiles`，11-13 也使用：它是包住 `workspace.PackageFiles()` 的委派包裝，於呼叫時才查找，而非子類別，因此在第 1 步的實作存在之前模組仍可匯入，每個新測試各自失敗）：拋出；舊包位元組不變；沒有殘留 `.tmp`。
 10. 暫存寫入以非 `OSError` 失敗（`Document("alpha", "\ud800", "1")` 造成 `UnicodeEncodeError`）：結果相同。
 11. 移開失敗：拋出；舊包不變；沒有殘留 `.tmp`。
 12. 安裝失敗：拋出；`Alpha.dep` 以原拼寫與位元組回來；沒有殘留 `.tmp`。
@@ -150,10 +150,11 @@
 
 ### E. Service（`client/tests/test_workspace_service.py`）
 
-16. 真實檔案系統上只改大小寫的重新命名會更新 controller（文件、開啟、選取、dual-view 鍵），且只留下 `alpha.dep`。
+16. 真實檔案系統上只改大小寫的重新命名會更新 controller（文件、開啟、選取、dual-view 鍵），且只留下 `alpha.dep`；第二份文件 `beta` 不受影響（17 亦同）。
 17. 以 `package_files=CaseInsensitivePackageFiles()` 只改大小寫的重新命名：在模型上結果相同（Linux 上代替 Windows 的驗證）。
-18. 只改大小寫的重新命名在安裝時失敗：拋出；controller 狀態不變；`Alpha.dep` 完好。
+18. 只改大小寫的重新命名在安裝時失敗（`PackageFiles` 子類別 `_FailingInstallPackageFiles`）：拋出；controller 狀態不變；`Alpha.dep` 完好。
 19. 一般重新命名不會碰 `package_files`（傳入方法都丟 `AssertionError` 的物件）：改名成功，證明一般重新命名維持今天的路徑。兩個 defect-3 測試不變。
+22. （實作時新增，超出計畫。）在模型上端對端：以記錄用的 `CaseInsensitivePackageFiles` 子類別作為 `package_files`，執行 service 真正的只改大小寫重新命名 `Alpha` 改 `alpha`，再以新的 controller 與 service 載入工作區（下次啟動）：沒有無效路徑，文件是 `alpha`（文字與點字相同）與 `beta`，列表是 `["alpha.dep", "beta.dep"]` 且成員為 `alpha.*`，而且模型記錄到安裝至 `alpha.dep`。最後這項檢查讓它在 Linux 上缺少只改大小寫分支時變紅：舊路徑從不呼叫 `package_files`，而且在區分大小寫的檔案系統上是正確的。
 
 ### F. GUI 流程（`client/tests/test_gui_document_flows.py`）
 
@@ -163,7 +164,9 @@
 - 21. 新增 `test_rename_to_a_case_variant_of_another_document_is_refused`：`alpha` 與 `beta` 存在，重新命名 `beta`，`self.names = ["Alpha", None]`；錯誤框指名 `Alpha`；對話框以 `Alpha` 預填重新開啟；兩份包與 controller 狀態都不變。
 - 移除已無人使用的 `_skip_unless_case_sensitive`。
 
-淨數量：B 4、C 10、E 4、F 新增 2；D 與合併為一對一取代，但兩次合併使 4 個測試變成 2 個。總數 `1095 + 4 + 10 + 4 + 2 + 2 - 4 = 1113`。計畫可以修正確切數字，但必須說明差異。
+淨數量：B 4、C 10、E 5（16-19 與 22）、F 新增 2；D 與合併為一對一取代，但兩次合併使 4 個測試變成 2 個。總數 `1095 + 4 + 10 + 5 + 2 + 2 - 4 = 1114`（計畫的 1113 加上測試 22）。
+
+**測試名稱。** B 1 `test_writing_a_case_variant_rewrites_the_existing_entry_and_keeps_its_spelling`、B 2 `test_the_old_rename_sequence_deletes_a_case_only_renamed_package`、B 3 `test_replace_resolves_case_variants`、B 4 `test_move_document_package_keeps_a_case_only_renamed_package`；C 5-14（類別 `MoveDocumentPackageTest`）`test_case_only_move_leaves_only_the_new_spelling`、`test_move_to_a_different_name`、`test_missing_old_package_and_directory_writes_the_new_package`、`test_pending_braille_keeps_its_metadata`、`test_staging_write_failure_keeps_the_old_package`、`test_staging_error_that_is_not_an_os_error_keeps_the_old_package`、`test_move_aside_failure_keeps_the_old_package`、`test_install_failure_puts_the_old_package_back`、`test_clean_up_failure_is_ignored_and_leaves_a_tmp_file_the_workspace_ignores`、`test_temporary_path_creates_the_directory_and_is_not_a_package`；E 16 `test_case_only_rename_moves_the_package_and_updates_the_controller`、E 17 `test_case_only_rename_on_a_case_insensitive_file_model`、E 18 `test_case_only_rename_install_failure_propagates_and_keeps_state`、E 19 `test_regular_rename_does_not_use_package_files`、E 22 `test_case_only_rename_on_a_case_insensitive_file_model_survives_a_reload`；D 15、F 20 與 F 21 如上。
 
 **Skip。** 在 Linux 上兩個 `..._on_case_insensitive_file_system_...` 的 skip 會消失，因為合併後的測試在任何檔案系統上都會執行，而不分大小寫的行為由模型涵蓋：`skipped=7`（liblouis 測試）。在 Windows／macOS 上合併後的測試會在真實的不分大小寫檔案系統上執行。
 
@@ -172,7 +175,7 @@
 1. `fix:` 在 `documents/workspace.py` 新增 `PackageFiles` 與 `move_document_package`，附測試 C 5-14（先紅後綠）。此時還沒有人呼叫這個 helper。
 2. `test:` 模型（A）及其自我測試 B 1-4。B 1-3 記錄舊的失敗情境；B 4 在模型上執行新 helper。
 3. `fix:` casefold 的 `document_name_exists`（D1），翻轉 D 15、合併 F 中的新增測試，並加入 F 21（先紅）。
-4. `fix:` `DocumentWorkspaceService.rename_document` 的只改大小寫分支與 `package_files` 參數（D3、D5），附 E 16-19、合併後的重新命名測試與 F 20（先紅）；移除 `_skip_unless_case_sensitive`。
+4. `fix:` `DocumentWorkspaceService.rename_document` 的只改大小寫分支與 `package_files` 參數（D3、D5），附 E 16-19 與 22、合併後的重新命名測試與 F 20；移除 `_skip_unless_case_sensitive`。先紅分兩階段，因為在區分大小寫的檔案系統上今天先寫入再 unlink 的重新命名是正確的：合併後的重新命名測試與 E 16 在修正前於 Linux 上就已通過（只在 Windows 與 macOS 上是紅的，屬 Windows 待驗證事項）。注入 `package_files` 的測試（E 17-19、E 22、F 20）先以 `TypeError` error；只加入建構子關鍵字參數後，E 18（`OSError not raised`）與 E 22（模型沒有安裝任何東西）仍失敗，證明只改大小寫的重新命名尚未使用安全流程。舊的資料遺失本身由 B 2 在模型上記錄。
 
 每個 commit 結尾加上 brief 規定的 `Co-Authored-By` 行。沒有任何 commit 修改 `gui.py`、`.po`／`.mo`、fixture 或 `documents/controller.py`。
 
@@ -180,7 +183,7 @@
 
 在所示路徑執行；`$SP`／`$PY` 同上。
 
-1. `cd client && $PY -m unittest discover -s tests`：只有已知的 P2-5 失敗；`Ran 1113 tests`（或計畫中有說明理由的數字）；`skipped=7`。
+1. `cd client && $PY -m unittest discover -s tests`：只有已知的 P2-5 失敗；`Ran 1114 tests`（計畫的 1113 加上測試 22）；`skipped=7`。
 2. `cd client && for s in $(seq 1 20); do $PY $SP/shuffle_harness.py $s; done`：每個 seed 都只回報 P2-5 失敗。
 3. 聚焦：`cd client && $PY -m unittest tests.test_case_insensitive_package_files tests.test_document_workspace tests.test_document_controller tests.test_workspace_service tests.test_gui_document_flows -v` 通過，且 `tests.test_gui_document_flows` 沒有 skip。
 4. 在 repo 根目錄，`$PY $SP/p12/tools/msgid_scan.py client` 回報 `source msgids: 353`，集合相同；`client/locales` 不變。
@@ -188,12 +191,13 @@
 6. App data：`$SP/p26impl/snap.sh` 的輸出在條件 1-2 前後相同。
 7. `grep -rn "KNOWN BUG (P1-3 spec, known defect [12]" client/tests` 找不到任何結果；`grep -rn "KNOWN BUG (P1-3 spec, known defect 3" client/tests` 仍找到兩個未變的 defect-3 測試。
 8. `git diff main --stat` 只動到 `client/documents/session.py`、`client/documents/workspace.py`、`client/documents/workspace_service.py`、測試計畫中列出的測試檔（含新模型與其測試模組），以及 spec 與 plan 檔。
+9. 突變檢查（計畫 Task 5 step 7，`f1_mutants.py`）：12 個突變（移除只改大小寫分支、分支中使用舊流程、沒有移開、完全相等的重複檢查、casefold 的排除、安裝失敗時不還原、清理時拋例外、只在 `OSError` 時清理暫存、移開失敗時遺漏暫存檔、`.dep` 暫存名稱、不建立目錄、一般重新命名改走 move）每一個都至少被一個測試抓到。在 Linux 上，移除只改大小寫分支由 E 18 與 E 22 抓到（在 Windows 上合併後的 GUI 測試也會抓到）。
 
 ## Windows 待驗證事項（此處無法執行）
 
-- 在 Windows（可行的話也在 macOS）執行 `cd client && python -m unittest tests.test_gui_document_flows tests.test_workspace_service tests.test_document_workspace -v`：`test_case_only_rename_keeps_the_document` 與 `test_add_case_variant_is_refused_as_a_duplicate` 在真實的不分大小寫檔案系統上執行且必須通過；之後 `dir` 顯示小寫的 `alpha.dep`。
+- 在 Windows（可行的話也在 macOS）執行 `cd client && python -m unittest tests.test_gui_document_flows tests.test_workspace_service tests.test_document_workspace tests.test_case_insensitive_package_files -v`：`test_case_only_rename_keeps_the_document`、`test_case_only_rename_moves_the_package_and_updates_the_controller` 與 `test_add_case_variant_is_refused_as_a_duplicate` 在真實的不分大小寫檔案系統上執行且必須通過（前兩個在舊程式碼上會失敗）；`MoveDocumentPackageTest` 與模型自我測試在那裡必須原樣通過（名稱以字串比較）；之後 `dir` 顯示小寫的 `alpha.dep`。
 - 封裝版手動測試：建立 `Alpha`、輸入文字、改名為 `alpha`、重新啟動：文件仍在且內容完整，檔案總管顯示 `alpha.dep`。新增 `ALPHA`：出現重複錯誤，磁碟上沒有任何變化。把另一份文件改名為 `Alpha`：同上。
-- 包被其他程式開啟時（例如壓縮工具）只改大小寫的重新命名：出現錯誤框，`Alpha` 仍在列表中，重新啟動後 `Alpha.dep` 不變。
+- 包被其他程式開啟時（例如壓縮工具）只改大小寫的重新命名：出現錯誤框，`Alpha` 仍在列表中，重新啟動後 `Alpha.dep` 不變；沒有殘留 `.tmp` 檔（或者，若還原失敗，留下一個存有舊包的 `.Alpha.dep.*.tmp`）。
 - 既有、無關：`tests.test_dictionary_name_prompt ... test_case_only_rename_still_renames` 在不分大小寫的檔案系統上預期會 error（沒有 skip）；記錄結果。
 - 沒有選單、對話框或字串變更：不需要截圖，也不需要執行 `generate-pot.bat`。
 

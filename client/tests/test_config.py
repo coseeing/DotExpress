@@ -214,22 +214,6 @@ class ConfigTest(unittest.TestCase):
             "DotExpress 檔案 (*.dep)|*.dep",
         )
         self.assertEqual(
-            translation.gettext("Text files (*.txt)|*.txt"),
-            "文字檔 (*.txt)|*.txt",
-        )
-        self.assertEqual(
-            translation.gettext("PDF files (*.pdf)|*.pdf"),
-            "PDF 檔案 (*.pdf)|*.pdf",
-        )
-        self.assertEqual(
-            translation.gettext("Word documents (*.docx)|*.docx"),
-            "Word 文件 (*.docx)|*.docx",
-        )
-        self.assertEqual(
-            translation.gettext("EPUB books (*.epub)|*.epub"),
-            "EPUB 電子書 (*.epub)|*.epub",
-        )
-        self.assertEqual(
             translation.gettext("Braille files (*.brl)|*.brl"),
             "點字檔 (*.brl)|*.brl",
         )

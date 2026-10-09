@@ -13,6 +13,11 @@ class LiblouisBuildContractTests(unittest.TestCase):
         self.assertIn("*.pyd", text)
         self.assertIn("!vendor/nvda/mathcat/assets/libmathcat_py.pyd", text)
 
+    def test_root_gitignore_excludes_scons_outputs(self):
+        text = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("/.sconsign.dblite", text)
+        self.assertIn("/vendor/nvda/liblouis/dist/", text)
+
     def test_client_gitignore_owns_client_specific_ignore_rules(self):
         root_text = (ROOT / ".gitignore").read_text(encoding="utf-8")
         client_text = (ROOT / "client" / ".gitignore").read_text(encoding="utf-8")
@@ -23,6 +28,7 @@ class LiblouisBuildContractTests(unittest.TestCase):
             "log/",
             ".venv/",
             "workspace/",
+            "/config.json",
             "DotExpress.spec",
             "braille/liblouis.dll",
             "braille/liblouis.lib",

@@ -2,6 +2,7 @@ import gettext
 import unittest
 from pathlib import Path
 
+from documents.formats import build_import_wildcard
 from documents.importers.docx_importer import import_docx
 from documents.importers.epub_importer import import_epub
 from documents.importers.pdf_importer import import_pdf
@@ -39,9 +40,13 @@ class ImportFixtureSmokeTest(unittest.TestCase):
     def test_zh_tw_catalog_loads_import_wildcard_translations(self) -> None:
         translation = gettext.translation("dotexpress", localedir=str(LOCALE_DIR), languages=["zh_TW"])
 
-        self.assertEqual(translation.gettext("PDF files (*.pdf)|*.pdf"), "PDF 檔案 (*.pdf)|*.pdf")
-        self.assertEqual(translation.gettext("Word documents (*.docx)|*.docx"), "Word 文件 (*.docx)|*.docx")
-        self.assertEqual(translation.gettext("EPUB books (*.epub)|*.epub"), "EPUB 電子書 (*.epub)|*.epub")
+        # The import dialog builds its filters from the format labels; the old
+        # "PDF files (*.pdf)|*.pdf"-style msgids are obsolete since P1-2.
+        self.assertEqual(
+            build_import_wildcard(translation.gettext),
+            "DEP (*.dep)|*.dep|DOCX (*.docx)|*.docx|EPUB (*.epub)|*.epub|PDF (*.pdf)|*.pdf|TXT (*.txt)|*.txt|"
+            "所有支援的檔案 (*.dep;*.docx;*.epub;*.pdf;*.txt)|*.dep;*.docx;*.epub;*.pdf;*.txt",
+        )
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ dictionary/
 log/
 .venv/
 workspace/
+/config.json
 DotExpress.spec
 __pycache__/
 braille-old/

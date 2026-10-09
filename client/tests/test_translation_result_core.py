@@ -319,6 +319,15 @@ class LinearTrimTest(unittest.TestCase):
         fallback.assert_called_once_with(shuffled)
         self.assertEqual(well_formed.braille, ["⠁", "⠃"])
 
+    def test_cells_before_the_first_token_start_are_kept(self) -> None:
+        # Expected values computed once with tests/legacy_translation_result.py.
+        result = TranslationResult(["中", "文"], ["⠀", "⠀", "⠃", "⠀", "⠉", "⠀"], [0, 0, 0, 0, 1, 1], [2, 4])
+
+        with patch.object(TranslationResult, "_reclean_braille_endspace_stepwise", side_effect=AssertionError("stepwise")):
+            result.reclean_braille_endspace()
+
+        self.assertEqual(lists_of(result), (["中", "文"], ["⠀", "⠀", "⠃", "⠉"], [0, 0, 0, 1], [2, 3]))
+
 
 class LinearSeparatorTest(unittest.TestCase):
     def test_inserting_ten_thousand_separators_takes_linear_time(self) -> None:
@@ -360,6 +369,25 @@ class LinearSeparatorTest(unittest.TestCase):
 
         self.assertEqual([call.args[1:] for call in insert.call_args_list], [(1, " ", "⠀"), (4, " ", "⠀")])
         self.assertEqual(result.raw, ["我」", " ", "「共", "）", " ", "（"])
+
+    def test_arbitrary_cell_token_indices_shift_as_one_by_one(self) -> None:
+        # The well-formed check does not look at braille_to_raw_pos values: negative and
+        # too large ones take the fast path. Expected values computed once with
+        # tests/legacy_translation_result.py.
+        result = TranslationResult(["我」", "「共", "）", "（"], ["⠁", "⠂", "⠃", "⠄", "⠅", "⠆"], [9, -1, 0, 9, -2, 1], [0, 1, 3, 4])
+
+        with patch.object(TranslationResult, "insert_token", side_effect=AssertionError("one by one")):
+            result.reclean_token()
+
+        self.assertEqual(
+            lists_of(result),
+            (
+                ["我」", " ", "「共", "）", " ", "（"],
+                ["⠁", "⠀", "⠂", "⠃", "⠄", "⠀", "⠅", "⠆"],
+                [9, 1, -1, 0, 10, 4, -2, 2],
+                [0, 1, 2, 4, 5, 6],
+            ),
+        )
 
 
 if __name__ == "__main__":

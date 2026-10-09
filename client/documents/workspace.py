@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import zipfile
 from collections.abc import Callable
@@ -84,6 +85,11 @@ class PackageFiles:
     def remove(self, path: Path) -> None:
         Path(path).unlink(missing_ok=True)
 
+    def copy_permissions(self, source: Path, destination: Path) -> None:
+        """Give ``destination`` the permission bits of ``source``; POSIX only, a no-op elsewhere."""
+        if os.name == "posix":
+            shutil.copymode(source, destination)
+
     def temporary_path(self, directory: Path, name: str) -> Path:
         """Create a new empty hidden file ``.<name>.<random>.tmp`` in ``directory`` (created if missing)."""
         directory = Path(directory)
@@ -107,10 +113,11 @@ def move_document_package(
     aside to another temporary file, then the staged file takes the exact name ``new_path``.
 
     On return the package exists only at ``new_path``, with that spelling, and holds
-    ``document``. On an exception the old package is back at ``old_path`` with its spelling
-    and bytes and no temporary file is left, unless putting the old package back fails too:
-    then it stays in its ``.tmp`` file. Failing to remove the moved-aside old package after the
-    install is ignored; that leftover ``.tmp`` file is never loaded as a package.
+    ``document``; on POSIX it keeps the old package's permission bits. On an exception the
+    old package is back at ``old_path`` with its spelling and bytes and no temporary file is
+    left, unless putting the old package back fails too: then it stays in its ``.tmp`` file.
+    Failing to remove the moved-aside old package after the install is ignored; that
+    leftover ``.tmp`` file is never loaded as a package.
     """
     old_path = Path(old_path)
     new_path = Path(new_path)
@@ -134,6 +141,8 @@ def move_document_package(
                 files.remove(aside_path)
         raise
     try:
+        if aside_path is not None:
+            files.copy_permissions(aside_path, staged_path)
         files.replace(staged_path, new_path)
     except BaseException:
         if aside_path is not None:

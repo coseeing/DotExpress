@@ -1,3 +1,5 @@
+import os
+import stat
 import tempfile
 import unittest
 import zipfile
@@ -346,6 +348,10 @@ class _FailingPackageFiles:
         self._check("remove", path)
         self._files.remove(path)
 
+    def copy_permissions(self, source, destination) -> None:
+        self._check("copy_permissions", source, destination)
+        self._files.copy_permissions(source, destination)
+
     def temporary_path(self, directory, name) -> Path:
         return self._files.temporary_path(directory, name)
 
@@ -412,6 +418,17 @@ class MoveDocumentPackageTest(unittest.TestCase):
         self.assertEqual(self._members("alpha"), ["alpha.brl", "alpha.meta.json", "alpha.txt"])
         self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a", None))
 
+    @unittest.skipUnless(os.name == "posix", "POSIX permission bits")
+    def test_case_only_move_keeps_the_permission_bits_of_the_old_package(self) -> None:
+        self._write_alpha()
+        os.chmod(self._path("Alpha"), 0o640)
+
+        self._move("Alpha", Document("alpha", "a", "1"))
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(oct(stat.S_IMODE(os.stat(self._path("alpha")).st_mode)), oct(0o640))
+        self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a", "1"))
+
     def test_staging_write_failure_keeps_the_old_package(self) -> None:
         before = self._write_alpha()
 
@@ -446,6 +463,15 @@ class MoveDocumentPackageTest(unittest.TestCase):
 
         with self.assertRaises(OSError):
             self._move("Alpha", Document("alpha", "a", "1"), files)
+
+        self.assertEqual(self._listing(), ["Alpha.dep"])
+        self.assertEqual(self._path("Alpha").read_bytes(), before)
+
+    def test_permission_copy_failure_puts_the_old_package_back(self) -> None:
+        before = self._write_alpha()
+
+        with self.assertRaises(OSError):
+            self._move("Alpha", Document("alpha", "a", "1"), _FailingPackageFiles("copy_permissions"))
 
         self.assertEqual(self._listing(), ["Alpha.dep"])
         self.assertEqual(self._path("Alpha").read_bytes(), before)

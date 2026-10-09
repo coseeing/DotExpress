@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
+import tempfile
 import zipfile
 from collections.abc import Callable
 
@@ -64,6 +67,84 @@ def save_document_package(
             metadata_name = f"{document.name}{PENDING_METADATA_SUFFIX}"
             archive.writestr(metadata_name, json.dumps({"braille_pending": True}, ensure_ascii=False))
     return package_path
+
+
+class PackageFiles:
+    """The file operations ``move_document_package`` uses; tests pass a model or a fault injector."""
+
+    def exists(self, path: Path) -> bool:
+        return Path(path).exists()
+
+    def write(self, path: Path, document: Document) -> None:
+        save_document_package(path, document)
+
+    def replace(self, source: Path, destination: Path) -> None:
+        os.replace(source, destination)
+
+    def remove(self, path: Path) -> None:
+        Path(path).unlink(missing_ok=True)
+
+    def temporary_path(self, directory: Path, name: str) -> Path:
+        """Create a new empty hidden file ``.<name>.<random>.tmp`` in ``directory`` (created if missing)."""
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=directory, prefix=f".{name}.", suffix=".tmp", delete=False) as temporary:
+            return Path(temporary.name)
+
+
+def move_document_package(
+    old_path: Path,
+    new_path: Path,
+    document: Document,
+    *,
+    files: PackageFiles,
+) -> None:
+    """Write ``document`` as the package at ``new_path`` and remove the package at ``old_path``.
+
+    Safe when both paths name the same file, as a case-only rename does on a case-insensitive
+    file system: nothing is written to, replaced onto or removed under a name that can alias
+    the other package. The new package is staged in a temporary file, the old one is moved
+    aside to another temporary file, then the staged file takes the exact name ``new_path``.
+
+    On return the package exists only at ``new_path``, with that spelling, and holds
+    ``document``. On an exception the old package is back at ``old_path`` with its spelling
+    and bytes and no temporary file is left, unless putting the old package back fails too:
+    then it stays in its ``.tmp`` file. Failing to remove the moved-aside old package after the
+    install is ignored; that leftover ``.tmp`` file is never loaded as a package.
+    """
+    old_path = Path(old_path)
+    new_path = Path(new_path)
+    staged_path = files.temporary_path(new_path.parent, new_path.name)
+    try:
+        files.write(staged_path, document)
+    except BaseException:
+        with suppress(OSError):
+            files.remove(staged_path)
+        raise
+    aside_path: Path | None = None
+    try:
+        if files.exists(old_path):
+            aside_path = files.temporary_path(old_path.parent, old_path.name)
+            files.replace(old_path, aside_path)
+    except BaseException:
+        with suppress(OSError):
+            files.remove(staged_path)
+        if aside_path is not None:
+            with suppress(OSError):
+                files.remove(aside_path)
+        raise
+    try:
+        files.replace(staged_path, new_path)
+    except BaseException:
+        if aside_path is not None:
+            with suppress(OSError):
+                files.replace(aside_path, old_path)
+        with suppress(OSError):
+            files.remove(staged_path)
+        raise
+    if aside_path is not None:
+        with suppress(OSError):
+            files.remove(aside_path)
 
 
 def load_document_package(path: Path | str) -> Document:

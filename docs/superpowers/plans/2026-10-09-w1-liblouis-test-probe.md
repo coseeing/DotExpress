@@ -263,12 +263,12 @@ Expected: the two hashes from Global Constraints, no status line.
 
 ```bash
 git -C $REPO switch main
-git -C $REPO merge --no-ff fix/w1-liblouis-test-probe -F - <<'EOF'
-merge: liblouis test probe uses louis_helper (W-1)
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-EOF
+git -C $REPO merge --no-ff fix/w1-liblouis-test-probe \
+  -m "merge: liblouis test probe uses louis_helper (W-1)" \
+  -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+(`git merge` does not read `-F -` from standard input; the first attempt failed with `could not read file '-'` and changed nothing.)
 
 ## Results (2026-10-09, Windows 11, `client\.venv` Python 3.13, implementation commit `e29a835`)
 

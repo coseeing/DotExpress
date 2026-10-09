@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 import stat
@@ -22,7 +23,7 @@ from documents.workspace import (
     save_document_package,
 )
 from shared import name_validation
-from tests.windows_file_handles import make_read_only
+from tests.windows_file_handles import SHARE_MODES, hold_open, is_hidden, make_hidden, make_read_only
 
 
 class DocumentWorkspaceTest(unittest.TestCase):
@@ -388,6 +389,112 @@ class AtomicSaveDocumentPackageTest(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), before)
         self.assertEqual(self._listing(), ["alpha.dep"])
 
+    def test_save_failure_from_a_lone_surrogate_keeps_the_existing_package(self) -> None:
+        # UTF-8 cannot encode a lone surrogate. The in-place save had already truncated
+        # the package and left a zip without the failing member (invalid at the next start).
+        before = self._write_alpha()
+        broken = {"text": Document("alpha", "\ud800", "1"), "braille": Document("alpha", "a", "\ud800")}
+        for field, document in broken.items():
+            with self.subTest(field=field):
+                with self.assertRaises(UnicodeEncodeError):
+                    save_document_package(self.path, document)
+
+                self.assertEqual(self._listing(), ["alpha.dep"])
+                self.assertEqual(load_document_package(self.path), self.alpha)
+                self.assertEqual(self.path.read_bytes(), before)
+
+    def test_save_failure_while_writing_keeps_the_existing_package(self) -> None:
+        # A full disk while the second member is written (simulated).
+        before = self._write_alpha()
+        real_writestr = zipfile.ZipFile.writestr
+        written = []
+
+        def writestr_until_the_disk_is_full(archive, name, data, *args, **kwargs):
+            written.append(name)
+            if len(written) == 2:
+                raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+            return real_writestr(archive, name, data, *args, **kwargs)
+
+        with patch.object(zipfile.ZipFile, "writestr", writestr_until_the_disk_is_full):
+            with self.assertRaises(OSError) as raised:
+                save_document_package(self.path, Document("alpha", "edited", "2"))
+
+        self.assertEqual(raised.exception.errno, errno.ENOSPC)
+        self.assertEqual(written, ["alpha.txt", "alpha.brl"])
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(load_document_package(self.path), self.alpha)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_save_install_failure_keeps_the_existing_package(self) -> None:
+        before = self._write_alpha()
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "denied")):
+            with self.assertRaises(PermissionError):
+                save_document_package(self.path, Document("alpha", "edited", "2"))
+
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(self._listing(), ["alpha.dep"])
+
+    def test_save_installs_a_temporary_file_from_the_same_folder(self) -> None:
+        self._write_alpha()
+
+        with patch("os.replace", wraps=os.replace) as replace:
+            save_document_package(self.path, Document("alpha", "edited", "2"))
+
+        self.assertEqual(replace.call_count, 1)
+        source, destination = replace.call_args.args
+        self.assertEqual(Path(source).parent, self.workspace_dir)
+        self.assertRegex(Path(source).name, r"^\.alpha\.dep\.[0-9a-f]{16}\.tmp$")
+        self.assertEqual(Path(destination), self.path)
+        self.assertEqual(load_document_package(self.path), Document("alpha", "edited", "2"))
+        self.assertEqual(self._listing(), ["alpha.dep"])
+
+    def test_save_refuses_a_package_without_write_access(self) -> None:
+        before = self._write_alpha()
+
+        with patch("os.access", return_value=False):
+            with self.assertRaises(PermissionError) as raised:
+                save_document_package(self.path, Document("alpha", "edited", "2"))
+
+        self.assertEqual(
+            str(raised.exception),
+            f"[Errno {errno.EACCES}] {os.strerror(errno.EACCES)}: {str(self.path)!r}",
+        )
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(self._listing(), ["alpha.dep"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows sharing modes")
+    def test_save_of_a_package_held_open_keeps_it(self) -> None:
+        # Another program reading the package. The in-place save failed with [Errno 13]
+        # or rewrote the file under that program (share read+write); now the replace is
+        # refused in every share mode and the package keeps its bytes (spec D12, Q1).
+        before = self._write_alpha()
+        for label, share in SHARE_MODES:
+            with self.subTest(share=label):
+                release = hold_open(self, self.path, share)
+                try:
+                    with self.assertRaises(PermissionError) as raised:
+                        save_document_package(self.path, Document("alpha", "edited", "2"))
+                finally:
+                    release()
+
+                self.assertEqual(raised.exception.winerror, 5)
+                self.assertEqual(self.path.read_bytes(), before)
+                self.assertEqual(self._listing(), ["alpha.dep"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows hidden attribute")
+    def test_save_of_a_hidden_package_replaces_it_and_drops_the_attribute(self) -> None:
+        # The in-place open (CREATE_ALWAYS) refused a hidden file with [Errno 13]; the
+        # replaced package is a new file with default attributes (spec D11).
+        self._write_alpha()
+        make_hidden(self.path)
+
+        save_document_package(self.path, Document("alpha", "edited", "2"))
+
+        self.assertFalse(is_hidden(self.path))
+        self.assertEqual(load_document_package(self.path), Document("alpha", "edited", "2"))
+        self.assertEqual(self._listing(), ["alpha.dep"])
+
 
 class _FailingPackageFiles:
     """The real ``PackageFiles``, except that ``operation`` raises ``OSError`` when ``when(*paths)`` is true.
@@ -568,6 +675,30 @@ class MoveDocumentPackageTest(unittest.TestCase):
         self.assertTrue(path.name.startswith(".alpha.dep."), path.name)
         self.assertTrue(path.name.endswith(".tmp"), path.name)
         self.assertEqual(list(self.workspace_dir.glob("*.dep")), [])
+
+    def test_staged_package_is_written_directly_and_flushed_to_disk(self) -> None:
+        # The staged file is already private and new: it is written in place (no second
+        # temporary file inside the first) and synced before the move installs it (D4).
+        files = workspace.PackageFiles()
+        staged = files.temporary_path(self.workspace_dir, "alpha.dep")
+        real_fsync = os.fsync
+        sizes_at_fsync = []
+
+        def fsync_recording_the_size(descriptor: int) -> None:
+            sizes_at_fsync.append(os.fstat(descriptor).st_size)
+            real_fsync(descriptor)
+
+        with patch("os.fsync", side_effect=fsync_recording_the_size), patch("os.replace", wraps=os.replace) as replace:
+            files.write(staged, Document("alpha", "a", None))
+
+        replace.assert_not_called()
+        self.assertEqual(sizes_at_fsync, [staged.stat().st_size])
+        self.assertGreater(sizes_at_fsync[0], 0)
+        self.assertEqual(self._listing(), [staged.name])
+        with zipfile.ZipFile(staged) as archive:
+            self.assertEqual(sorted(archive.namelist()), ["alpha.brl", "alpha.meta.json", "alpha.txt"])
+            self.assertEqual(archive.read("alpha.txt"), b"a")
+
 
 if __name__ == "__main__":
     unittest.main()

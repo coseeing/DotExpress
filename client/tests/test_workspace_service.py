@@ -186,6 +186,20 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
 
         self.assertEqual(self.controller.documents, [Document("alpha", "edited", "edited braille")])
 
+    def test_save_failure_keeps_the_package_and_updates_memory(self) -> None:
+        # Memory is updated first (the documented contract); the package keeps its bytes.
+        self._write(Document("alpha", "a", "1"))
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        service = self._service([Document("alpha", "a", "1")], open_name="alpha")
+
+        with self.assertRaises(UnicodeEncodeError):
+            service.save_open_document(text="\ud800", braille="1")
+
+        self.assertEqual(self.controller.documents, [Document("alpha", "\ud800", "1")])
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(self._package("alpha"), Document("alpha", "a", "1"))
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+
     # --- create ------------------------------------------------------------
 
     def test_create_document_writes_then_adds(self) -> None:

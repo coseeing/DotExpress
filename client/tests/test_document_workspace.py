@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 import documents.workspace as workspace
@@ -313,6 +314,163 @@ class DocumentWorkspaceTest(unittest.TestCase):
         documents, invalid_paths = load_workspace_documents(self.workspace_dir)
         self.assertEqual([document.name for document in documents], ["alpha", "Beta"])
         self.assertEqual(invalid_paths, [self.workspace_dir / "bad.dep"])
+
+
+class _FailingPackageFiles:
+    """The real ``PackageFiles``, except that ``operation`` raises ``OSError`` when ``when(*paths)`` is true.
+
+    Predicates compare ``path.name`` strings: ``Path`` equality ignores case on Windows.
+    """
+
+    def __init__(self, operation: str, when=lambda *paths: True) -> None:
+        self._files = workspace.PackageFiles()
+        self._operation = operation
+        self._when = when
+
+    def _check(self, operation: str, *paths) -> None:
+        if operation == self._operation and self._when(*(Path(path) for path in paths)):
+            raise OSError(f"injected {operation} failure")
+
+    def exists(self, path) -> bool:
+        return self._files.exists(path)
+
+    def write(self, path, document) -> None:
+        self._check("write", path)
+        self._files.write(path, document)
+
+    def replace(self, source, destination) -> None:
+        self._check("replace", source, destination)
+        self._files.replace(source, destination)
+
+    def remove(self, path) -> None:
+        self._check("remove", path)
+        self._files.remove(path)
+
+    def temporary_path(self, directory, name) -> Path:
+        return self._files.temporary_path(directory, name)
+
+
+class MoveDocumentPackageTest(unittest.TestCase):
+    """``move_document_package`` on the real file system (F-1, D4)."""
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.workspace_dir = Path(temp_dir.name) / "workspace"
+
+    def _path(self, name: str) -> Path:
+        return self.workspace_dir / f"{name}.dep"
+
+    def _listing(self) -> list[str]:
+        return sorted(path.name for path in self.workspace_dir.iterdir())
+
+    def _members(self, name: str) -> list[str]:
+        with zipfile.ZipFile(self._path(name)) as archive:
+            return sorted(archive.namelist())
+
+    def _write_alpha(self, braille: str | None = "1") -> bytes:
+        save_document_package(self._path("Alpha"), Document("Alpha", "a", braille))
+        return self._path("Alpha").read_bytes()
+
+    def _move(self, old_name: str, document: Document, files=None) -> None:
+        workspace.move_document_package(
+            self._path(old_name),
+            self._path(document.name),
+            document,
+            files=workspace.PackageFiles() if files is None else files,
+        )
+
+    def test_case_only_move_leaves_only_the_new_spelling(self) -> None:
+        self._write_alpha()
+
+        self._move("Alpha", Document("alpha", "a", "1"))
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(self._members("alpha"), ["alpha.brl", "alpha.txt"])
+        self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a", "1"))
+
+    def test_move_to_a_different_name(self) -> None:
+        save_document_package(self._path("alpha"), Document("alpha", "a", "1"))
+
+        self._move("alpha", Document("gamma", "a", "1"))
+
+        self.assertEqual(self._listing(), ["gamma.dep"])
+        self.assertEqual(load_document_package(self._path("gamma")), Document("gamma", "a", "1"))
+
+    def test_missing_old_package_and_directory_writes_the_new_package(self) -> None:
+        self._move("Alpha", Document("alpha", "a", "1"))
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a", "1"))
+
+    def test_pending_braille_keeps_its_metadata(self) -> None:
+        self._write_alpha(braille=None)
+
+        self._move("Alpha", Document("alpha", "a", None))
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(self._members("alpha"), ["alpha.brl", "alpha.meta.json", "alpha.txt"])
+        self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a", None))
+
+    def test_staging_write_failure_keeps_the_old_package(self) -> None:
+        before = self._write_alpha()
+
+        with self.assertRaises(OSError):
+            self._move("Alpha", Document("alpha", "a", "1"), _FailingPackageFiles("write"))
+
+        self.assertEqual(self._listing(), ["Alpha.dep"])
+        self.assertEqual(self._path("Alpha").read_bytes(), before)
+
+    def test_staging_error_that_is_not_an_os_error_keeps_the_old_package(self) -> None:
+        before = self._write_alpha()
+
+        with self.assertRaises(UnicodeEncodeError):
+            self._move("Alpha", Document("alpha", "\ud800", "1"))
+
+        self.assertEqual(self._listing(), ["Alpha.dep"])
+        self.assertEqual(self._path("Alpha").read_bytes(), before)
+
+    def test_move_aside_failure_keeps_the_old_package(self) -> None:
+        before = self._write_alpha()
+        files = _FailingPackageFiles("replace", when=lambda source, destination: source.name == "Alpha.dep")
+
+        with self.assertRaises(OSError):
+            self._move("Alpha", Document("alpha", "a", "1"), files)
+
+        self.assertEqual(self._listing(), ["Alpha.dep"])
+        self.assertEqual(self._path("Alpha").read_bytes(), before)
+
+    def test_install_failure_puts_the_old_package_back(self) -> None:
+        before = self._write_alpha()
+        files = _FailingPackageFiles("replace", when=lambda source, destination: destination.name == "alpha.dep")
+
+        with self.assertRaises(OSError):
+            self._move("Alpha", Document("alpha", "a", "1"), files)
+
+        self.assertEqual(self._listing(), ["Alpha.dep"])
+        self.assertEqual(self._path("Alpha").read_bytes(), before)
+
+    def test_clean_up_failure_is_ignored_and_leaves_a_tmp_file_the_workspace_ignores(self) -> None:
+        self._write_alpha()
+
+        self._move("Alpha", Document("alpha", "a", "1"), _FailingPackageFiles("remove"))
+
+        listing = self._listing()
+        self.assertEqual([name for name in listing if not name.endswith(".tmp")], ["alpha.dep"])
+        leftovers = [name for name in listing if name.endswith(".tmp")]
+        self.assertEqual(len(leftovers), 1)
+        self.assertTrue(leftovers[0].startswith(".Alpha.dep."), leftovers)
+        self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a", "1"))
+        self.assertEqual(load_workspace_documents(self.workspace_dir), ([Document("alpha", "a", "1")], []))
+
+    def test_temporary_path_creates_the_directory_and_is_not_a_package(self) -> None:
+        path = workspace.PackageFiles().temporary_path(self.workspace_dir, "alpha.dep")
+
+        self.assertEqual(path.parent, self.workspace_dir)
+        self.assertTrue(path.is_file())
+        self.assertTrue(path.name.startswith(".alpha.dep."), path.name)
+        self.assertTrue(path.name.endswith(".tmp"), path.name)
+        self.assertEqual(list(self.workspace_dir.glob("*.dep")), [])
 
 if __name__ == "__main__":
     unittest.main()

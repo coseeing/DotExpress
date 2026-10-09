@@ -50,7 +50,8 @@ def get_adjacent_document_name(documents: list[Document], current_name: str | No
 
 
 def document_name_exists(documents: list[Document], name: str, exclude_name: str | None = None) -> bool:
-	return any(document.name == name and document.name != exclude_name for document in documents)
+	folded_name = name.casefold()
+	return any(document.name.casefold() == folded_name and document.name != exclude_name for document in documents)
 
 
 def plan_open_document(documents: list[Document], name: str | None) -> OpenDocumentDecision:

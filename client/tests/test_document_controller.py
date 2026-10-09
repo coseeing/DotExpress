@@ -249,13 +249,19 @@ class DocumentControllerTest(unittest.TestCase):
         self.assertEqual(controller.adjacent_document_name(1), "alpha")
         self.assertIsNone(DocumentController().adjacent_document_name(1))
 
-    def test_document_name_exists_is_exact_and_honours_exclude(self) -> None:
+    def test_document_name_exists_ignores_case_and_honours_exact_exclude(self) -> None:
+        # F-1 (D1): names are compared with casefold() on every platform; the exclusion
+        # (the document being renamed) stays exact.
         controller = DocumentController(documents=list(self.documents))
 
         self.assertTrue(controller.document_name_exists("beta"))
-        self.assertFalse(controller.document_name_exists("Beta"))
+        self.assertTrue(controller.document_name_exists("Beta"))
+        self.assertFalse(controller.document_name_exists("gamma"))
         self.assertFalse(controller.document_name_exists("beta", exclude_name="beta"))
+        self.assertFalse(controller.document_name_exists("BETA", exclude_name="beta"))
         self.assertTrue(controller.document_name_exists("zoo", exclude_name="beta"))
+        legacy = DocumentController(documents=[Document("Alpha", "A", "1"), Document("alpha", "a", "2")])
+        self.assertTrue(legacy.document_name_exists("ALPHA", exclude_name="Alpha"))
 
     def test_dual_view_results_get_and_set(self) -> None:
         controller = DocumentController(documents=list(self.documents))

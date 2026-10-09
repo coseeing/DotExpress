@@ -17,6 +17,7 @@ regenerate it to make a refactor pass.
 import csv
 import inspect
 import json
+import os
 import random
 import sys
 import tempfile
@@ -259,6 +260,10 @@ class _ScriptedEntryDialog:
         return self._entry
 
 
+def _skip_fsync(_descriptor: int) -> None:
+    """Stand-in for ``os.fsync`` while an editor is open; see ``_EditorHarness.open``."""
+
+
 class _EditorHarness:
     """Build the real editor against fake widgets and drive it like a user."""
 
@@ -308,6 +313,10 @@ class _EditorHarness:
             stack.enter_context(patch.object(dialog, "wx", self.wx))
             stack.enter_context(patch.object(dialog, "CallbackVirtualListCtrl", self._list_ctrl))
             stack.enter_context(patch.object(dialog, "AddSymbolDialog", self._entry_dialog))
+            # Editor tests check the dialog and the saved bytes, not durability: every OK
+            # would otherwise wait for a real fsync (40 in the trace replay alone).
+            # tests.test_atomic_write keeps the real fsync.
+            stack.enter_context(patch("os.fsync", _skip_fsync))
             editor = object.__new__(DictionaryEntriesDialog)
             editor.CreateButtonSizer = self._create_button_sizer
             editor.FindWindowById = self._find_window_by_id
@@ -1277,6 +1286,14 @@ class DictionaryEntriesDialogDeleteTest(_EditorTestCase):
 
 
 class DictionaryEntriesDialogOkTest(_EditorTestCase):
+    def test_fsync_is_skipped_only_while_the_editor_is_open(self) -> None:
+        real_fsync = os.fsync
+        harness = self.open_editor([ALPHA])
+
+        self.assertIs(os.fsync, _skip_fsync)
+        harness.close()
+        self.assertIs(os.fsync, real_fsync)
+
     def test_ok_saves_the_full_list_in_order_and_closes(self) -> None:
         harness = self.open_editor([BETA, ALPHA])
         harness.script_entry("Gamma", "\u281b", "Braille")

@@ -40,13 +40,13 @@ The baseline's two `liblouis bindings unavailable` skips and the `setUpClass (te
 
 ### Task 0: Baseline (no commit)
 
-- [ ] **Step 1: Branch.**
+- [x] **Step 1: Branch.**
 
 ```bash
 git -C $REPO switch -c fix/w1-liblouis-test-probe
 ```
 
-- [ ] **Step 2: Checklist item 4 fails before any test runs.**
+- [x] **Step 2: Checklist item 4 fails before any test runs.**
 
 ```bash
 $PY -m unittest tests.test_liblouis_runtime tests.test_translation_language_result tests.test_language_detection_translation -v 2>&1 | tail -1
@@ -58,7 +58,7 @@ Expected:
 unittest.case.SkipTest: liblouis bindings unavailable: function 'lou_freeTableFile' not found
 ```
 
-- [ ] **Step 3: Full suite.**
+- [x] **Step 3: Full suite.**
 
 ```bash
 $PY -m unittest discover -s tests -v 2>&1 | grep -E "ModuleSkipped|^setUpClass|^(FAILED|OK)"
@@ -75,7 +75,7 @@ FAILED (failures=6, errors=2, skipped=7)
 
 ### Task 1: Guard test (red)
 
-- [ ] **Step 1: Add the detector and `LiblouisImportGuardTest` to `client/tests/test_braille_glue.py`**, between `GlueSourceTest` and `TableDirectoryTest` (4 spaces; `ast` and `CLIENT_DIR` already exist in the module):
+- [x] **Step 1: Add the detector and `LiblouisImportGuardTest` to `client/tests/test_braille_glue.py`**, between `GlueSourceTest` and `TableDirectoryTest` (4 spaces; `ast` and `CLIENT_DIR` already exist in the module):
 
 ```python
 LIBLOUIS_BINDING = "braille.liblouis"
@@ -160,7 +160,7 @@ class LiblouisImportGuardTest(unittest.TestCase):
 
 `path.read_bytes()` lets `ast.parse` handle a BOM or coding cookie. The detector does not parse string literals (spec D4).
 
-- [ ] **Step 2: Red.**
+- [x] **Step 2: Red.**
 
 ```bash
 $PY -m unittest tests.test_braille_glue.LiblouisImportGuardTest -v 2>&1 | grep -E "^- |^-  |\.\.\. |^(FAILED|OK)"
@@ -179,7 +179,7 @@ FAILED (failures=1)
 
 ### Task 2: Probe through the helper (green, commit)
 
-- [ ] **Step 1: Module-level probes** (tabs). In both `client/tests/test_translation_language_result.py` and `client/tests/test_language_detection_translation.py`:
+- [x] **Step 1: Module-level probes** (tabs). In both `client/tests/test_translation_language_result.py` and `client/tests/test_language_detection_translation.py`:
 
 ```diff
 +# Probe through the helper: it adds the bundled DLL's directory first. A bare
@@ -191,7 +191,7 @@ FAILED (failures=1)
  	raise unittest.SkipTest(f"liblouis bindings unavailable: {exc}") from exc
 ```
 
-- [ ] **Step 2: `LiblouisRuntimeTests.setUpClass`** (4 spaces) in `client/tests/test_liblouis_runtime.py`:
+- [x] **Step 2: `LiblouisRuntimeTests.setUpClass`** (4 spaces) in `client/tests/test_liblouis_runtime.py`:
 
 ```diff
      @classmethod
@@ -206,7 +206,7 @@ FAILED (failures=1)
          cls.helper.initialize()
 ```
 
-- [ ] **Step 3: Green.**
+- [x] **Step 3: Green.**
 
 ```bash
 $PY -m unittest tests.test_braille_glue -v 2>&1 | tail -1
@@ -216,7 +216,7 @@ git -C $REPO diff --stat
 
 Expected: `OK`, `COMPILE_OK`, and the four test files with `80 +`, `4 +-`, `4 +-`, `4 +-`.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_braille_glue.py client/tests/test_liblouis_runtime.py client/tests/test_translation_language_result.py client/tests/test_language_detection_translation.py
@@ -233,7 +233,7 @@ EOF
 
 ### Task 3: Windows verification, results, merge
 
-- [ ] **Step 1: Checklist item 4.**
+- [x] **Step 1: Checklist item 4.**
 
 ```bash
 $PY -m unittest tests.test_liblouis_runtime tests.test_translation_language_result tests.test_language_detection_translation -v
@@ -241,7 +241,7 @@ $PY -m unittest tests.test_liblouis_runtime tests.test_translation_language_resu
 
 Expected: `Ran 7 tests`; every test runs (no `SkipTest` traceback, no `setUpClass` error). Record any failure under Results.
 
-- [ ] **Step 2: Full suite.**
+- [x] **Step 2: Full suite.**
 
 ```bash
 $PY -m unittest discover -s tests -v > $TEMP/w1_discover.txt 2>&1; grep -E "skipped|ERROR$|FAIL$" $TEMP/w1_discover.txt; tail -1 $TEMP/w1_discover.txt
@@ -249,7 +249,7 @@ $PY -m unittest discover -s tests -v > $TEMP/w1_discover.txt 2>&1; grep -E "skip
 
 Expected: the counts in Expected Counts; every failure and error other than R1 is one of the baseline's.
 
-- [ ] **Step 3: Fixtures.**
+- [x] **Step 3: Fixtures.**
 
 ```bash
 git -C $REPO show HEAD:client/tests/fixtures/translation_golden.json | sha256sum
@@ -259,7 +259,7 @@ git -C $REPO status --short client/tests/fixtures
 
 Expected: the two hashes from Global Constraints, no status line.
 
-- [ ] **Step 4: Record the results below, commit (`docs: record W-1 verification results`), then merge.**
+- [x] **Step 4: Record the results below, commit (`docs: record W-1 verification results`), then merge.**
 
 ```bash
 git -C $REPO switch main
@@ -270,6 +270,29 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 EOF
 ```
 
-## Results
+## Results (2026-10-09, Windows 11, `client\.venv` Python 3.13, implementation commit `e29a835`)
 
-Filled in by Task 3.
+Task 1 red and Task 2 green matched the expected blocks. `py_compile` of the four test files: OK. Fixtures: `e67d95a1...211ccd` and `f493da52...c66c2cf`, `git status` clean for `client/tests/fixtures`.
+
+### Checklist item 4
+
+`Ran 7 tests`, `FAILED (failures=1)`. All seven tests ran on the real liblouis for the first time; six pass (`test_table_resolver_finds_bundled_table`, `test_chinese_default_table_translates`, `test_ueb_grade_1_translates`, `test_ueb_grade_2_translates_and_contracts`, `test_add_blank_between_language_change`, `test_language_detection_translation_consistency`).
+
+- **R1** `test_liblouis_runtime.LiblouisRuntimeTests.test_built_wrapper_loads_bundled_dll`: `AssertionError: Could not determine expected liblouis version from include/liblouis/configure.ac`. A test bug, not a DLL problem: `_expected_liblouis_version` searches `AC_INIT\(\[liblouis\]` case-sensitively, but upstream's `configure.ac` says `AC_INIT([Liblouis], [3.37.0], ...)` (capitalized since liblouis commit `84b1a81e`, 2014). The loaded DLL reports `3.37.0`, which matches; with `re.IGNORECASE` the test would pass. Not fixed here (outside W-1); follow-up.
+
+### Full suite
+
+`Ran 1143 tests`, `FAILED (failures=7, errors=1, skipped=5)` (baseline `Ran 1136`, `failures=6, errors=2, skipped=7`). The two `liblouis bindings unavailable` module skips and the `setUpClass (test_liblouis_runtime.LiblouisRuntimeTests)` error are gone. Every other failure, error and skip is the baseline's:
+
+| Test | Kind | Reason |
+| --- | --- | --- |
+| `test_liblouis_runtime.LiblouisRuntimeTests.test_built_wrapper_loads_bundled_dll` | FAIL (new: first run) | R1 |
+| `test_conversion_service.ConversionServiceTest.test_translate_with_language_does_not_duplicate_existing_spaces_around_math` | FAIL (baseline) | known P2-5 case: `['計算 ', '1+2', ' ', '的值'] != ['計算 ', '1+2', ' 的值']` |
+| `test_dual_view_browser.DualViewBrowserTest.test_chromium_commands_request_new_window_and_size` | FAIL (baseline) | Windows path: `'C:\\Chrome\\chrome.exe'` vs expected `'C:/Chrome/chrome.exe'` |
+| `test_dual_view_browser.DualViewBrowserTest.test_firefox_command_requests_new_window_and_size` | FAIL (baseline) | Windows path: `'C:\\Firefox\\firefox.exe'` vs `'C:/Firefox/firefox.exe'` |
+| `test_gui_document_flows.DocumentMenuAndExportCharacterizationTest.test_dual_view_and_html_export_render_math_with_real_mathml` | FAIL (baseline) | written HTML has `\r\n`, expected `\n` |
+| `test_gui_document_flows.DocumentMenuAndExportCharacterizationTest.test_real_writers_produce_today_bytes` | FAIL (baseline) | `alpha.html` has `\r\n`, expected `\n` |
+| `test_liblouis_adapter.LiblouisTextTranslatorTest.test_regular_translation_preserves_native_mapping` | FAIL (baseline) | Windows path join: `'/tables\\en.ctb'` vs `'/tables/en.ctb'` (fake helper, not the DLL) |
+| `test_dictionary_name_prompt.DictionaryNamePromptTest.test_case_only_rename_still_renames` | ERROR (baseline) | case-insensitive file system: `FileExistsError: Dictionary 'Alpha' already exists.` |
+
+Skips (5, all baseline, platform): `test_atomic_write.WriteTextAtomicallyTest` `test_a_new_file_gets_the_default_mode_for_the_umask`, `test_a_read_only_file_gets_the_same_verdict_as_writing_it_in_place`, `test_keeps_the_permission_bits_of_an_existing_file`, and `test_document_workspace.MoveDocumentPackageTest.test_case_only_move_keeps_the_permission_bits_of_the_old_package` (all `POSIX permission bits`); `test_dictionary_presenter.PresenterRenameTest.test_rename_case_only_change_renames_file` (`case-insensitive file system`).

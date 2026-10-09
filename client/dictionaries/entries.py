@@ -51,7 +51,7 @@ def load_dictionary_entries(dictionary_path: Path) -> list[DictionaryEntry]:
 		return []
 
 	entries: list[DictionaryEntry] = []
-	with dictionary_path.open("r", newline="", encoding="utf-8") as fp:
+	with dictionary_path.open("r", newline="", encoding="utf-8-sig") as fp:
 		reader = csv.DictReader(fp)
 		for row in reader:
 			entry = DictionaryEntry(

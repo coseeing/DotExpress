@@ -40,7 +40,7 @@ def normalize_dictionary_name(name: str) -> str:
 
 def validate_dictionary_csv(path: Path | str) -> None:
     source_path = Path(path)
-    with source_path.open("r", newline="", encoding="utf-8") as fp:
+    with source_path.open("r", newline="", encoding="utf-8-sig") as fp:
         reader = csv.DictReader(fp)
         fieldnames = reader.fieldnames or []
     if any(field not in fieldnames for field in DEFAULT_HEADER):

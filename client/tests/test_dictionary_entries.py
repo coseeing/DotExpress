@@ -57,6 +57,15 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 
 		self.assertEqual(entries, [DictionaryEntry("Braille", "abc", "Braille")])
 
+	def test_load_ignores_a_utf8_bom(self) -> None:
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			path.write_bytes(b"\xef\xbb\xbftext,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\n")
+
+			entries = load_dictionary_entries(path)
+
+		self.assertEqual(entries, [DictionaryEntry("Alpha", "\u2801", "General")])
+
 	def test_save_load_roundtrip(self) -> None:
 		entries = [
 			DictionaryEntry("Alpha", "\u2801", "General"),

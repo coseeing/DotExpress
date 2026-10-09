@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from shared import name_validation
+from dictionaries.entries import DictionaryEntry, load_dictionary_entries
 from dictionaries.manager import (
     DEFAULT_DICTIONARY_NAME,
     DEFAULT_HEADER,
@@ -132,6 +133,17 @@ class DictionaryManagerTest(unittest.TestCase):
 
         self.assertEqual(imported_path, self.dictionary_dir / "1.1.csv")
         self.assertEqual(imported_path.read_text(encoding="utf-8"), source_path.read_text(encoding="utf-8"))
+
+    def test_import_dictionary_accepts_a_utf8_bom_and_copies_the_bytes(self) -> None:
+        source_path = Path(self._tmpdir.name) / "excel.csv"
+        data = b"\xef\xbb\xbftext,braille,type\r\nterm,\xe2\xa0\x81,General\r\n"
+        source_path.write_bytes(data)
+
+        imported_path = import_dictionary(self.dictionary_dir, source_path, "excel")
+
+        self.assertEqual(imported_path, self.dictionary_dir / "excel.csv")
+        self.assertEqual(imported_path.read_bytes(), data)
+        self.assertEqual(load_dictionary_entries(imported_path), [DictionaryEntry("term", "\u2801", "General")])
 
     def test_import_dictionary_rejects_invalid_header(self) -> None:
         source_path = Path(self._tmpdir.name) / "invalid.csv"

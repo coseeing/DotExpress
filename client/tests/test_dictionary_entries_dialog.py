@@ -824,14 +824,15 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
 
         self.assertEqual(harness.take_log(), [["Dialog.__init__", TITLE, DIALOG_STYLE]])
 
-    def test_bom_dictionary_opens_empty_and_ok_overwrites_it_with_the_header(self) -> None:
-        # KNOWN BUG (P2-2 spec, Q1; data loss), pinned as it is today, NOT desired: the
-        # BOM makes the header "\ufefftext", every row is skipped, OK writes the header only.
+    def test_bom_dictionary_opens_with_its_rows_and_ok_saves_them_without_the_bom(self) -> None:
+        # Was the P2-2 Q1 KNOWN BUG (data loss), fixed by F-2: the BOM made the header
+        # "\ufefftext", the editor showed no rows and OK wrote the header only.
         harness = self.open_editor(data=b"\xef\xbb\xbftext,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\n")
 
-        self.assertEqual(harness.rows(), [])
+        self.assertEqual(harness.rows(), [ALPHA_CELLS])
         self.assertTrue(harness.press_ok())
-        self.assertEqual(harness.saved_csv(), HEADER)
+        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\n")
+        self.assertFalse(harness.path.read_bytes().startswith(b"\xef\xbb\xbf"))
 
     def test_only_ok_gets_a_handler_and_both_standard_buttons_are_localized(self) -> None:
         harness = self.open_editor([ALPHA])

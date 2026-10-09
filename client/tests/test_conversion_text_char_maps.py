@@ -73,6 +73,20 @@ class TranslationCharMapsTest(unittest.TestCase):
             "ac",
         )
 
+    def test_translate_mapping_char_ignores_a_utf8_bom(self) -> None:
+        dictionary_path = self.directory / "mapping.csv"
+        dictionary_path.write_bytes("\ufeffsource,target\r\na,x\r\n".encode("utf-8"))
+
+        self.assertEqual(
+            translate__mapping_char(
+                "abc",
+                dictionary_path=dictionary_path,
+                from_field="source",
+                to_field="target",
+            ),
+            "xbc",
+        )
+
     def test_translate_mapping_char_requires_header_row(self) -> None:
         dictionary_path = self.directory / "mapping.csv"
         dictionary_path.write_text("", encoding="utf-8")

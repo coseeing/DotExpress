@@ -120,6 +120,17 @@ class DictionaryManagementVirtualListTest(unittest.TestCase):
 		self.assertEqual(target._get_item_text(0, 1), "1")
 		self.assertEqual(target.list_ctrl.selected, 0)
 
+	def test_utf8_bom_dictionary_counts_its_entries(self):
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "alpha.csv"
+			path.write_bytes(b"\xef\xbb\xbftext,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\n")
+			target = _make_dialog(temp_dir, ["alpha"])
+
+			target.refresh_dictionaries(["alpha"], "alpha")
+
+		self.assertEqual(target._get_item_text(0, 0), "alpha")
+		self.assertEqual(target._get_item_text(0, 1), "1")
+
 	def test_missing_dictionary_has_zero_entries(self):
 		with tempfile.TemporaryDirectory() as temp_dir:
 			target = _make_dialog(temp_dir, ["missing"])

@@ -44,21 +44,21 @@ mkdir D:\dxtest\B
 copy ..\DotExpress-6e5819f\client\dist\DotExpress.exe D:\dxtest\B\
 ```
 
-- [ ] N 建置成功，`D:\dxtest\N\DotExpress.exe` 存在　結果：
-- [ ] B 建置成功，`D:\dxtest\B\DotExpress.exe` 存在　結果：
+- [x] N 建置成功，`D:\dxtest\N\DotExpress.exe` 存在　結果：（Claude 自動化，見 `auto-results.md`）PyInstaller 6.21.0，exit 0；48,731,302 bytes，sha256 `733168e8…54d0e5`；啟動冒煙測試正常
+- [x] B 建置成功，`D:\dxtest\B\DotExpress.exe` 存在　結果：（Claude 自動化，見 `auto-results.md`）worktree `..\DotExpress-6e5819f`，exit 0；48,705,657 bytes，sha256 `790180f4…12d43b`；啟動冒煙測試正常
 
 > packaged app 會把 `config.json`、`dictionary\`、`workspace\`、`log\`、`dual_view\` 建在 exe 旁邊。N 與 B 各用自己的資料夾，不要共用。**不要**直接拿 `client\dictionary\`（真實使用者資料）來測；需要真實字典時，一律**複製**到測試資料夾。
 
 ### 0.2 環境與工具
 
-- [ ] Windows 顯示語言為繁體中文（app 以 zh_TW 顯示）
-- [ ] NVDA 已啟動（11、12、13 需要）
+- [X] Windows 顯示語言為繁體中文（app 以 zh_TW 顯示）
+- [X] NVDA 已啟動（11、12、13 需要）
 - [ ] 即時防毒（Windows Defender 即時保護）維持開啟（21、28 需要）
-- [ ] 準備工具：7-Zip、Excel、記事本
-- [ ] 測試資料：
+- [X] 準備工具：7-Zip、Excel、記事本
+- [X] 測試資料：
   - 混排文件 `docs\superpowers\history\2026-10-09-03-windows-verification\p25_doc.txt`
   - 一份含行內數學的長篇中英混排文件，例如匯入的 PDF 或 EPUB 章節，越長越好
-  - 一份真實使用者字典的**複本**，需含 `Braille`、`Braille/Unicode`（`@` 切分）與 `Bopomofo` 類型的列
+  - 一份真實使用者字典的**複本**，需含 `General`（`braille` 欄可用 `@` 切分）、`Braille`（Unicode 點字）與 `Bopomofo` 類型的列。注意：不合法的注音列在按確定時會被刪除（F-W11），所以一定要用複本
 
 ### 0.3 常用指令
 
@@ -80,11 +80,11 @@ attrib +h <檔案>    & attrib -h <檔案>
 
 在 N 與 B 中各做一次，設定維持預設：Unicode 輸出、寬度 40、預設轉譯表、預設字典。
 
-- [ ] 匯入 `p25_doc.txt` 成為文件 → 執行轉換 → 匯出 BRL 為 `p25_unicode.brl`　結果：
-- [ ] 設定 > 輸出模式改為 ASCII → 再轉換 → 匯出 BRL 為 `p25_ascii.brl`　結果：
-- [ ] N 的 `p25_unicode.brl` sha256 是否等於 `365d28a9244a1ef79ab90c783a0a152fa4be26c12d3894862712fab63f9d683c`（source-run 基線）　結果：
-- [ ] N 的 `p25_ascii.brl` sha256 是否等於 `95b9a1a6bdb7956d2be0cd1c9eddd7670c606e9e4591116149813a0c2538bc64`　結果：
-- [ ] `fc /b` N vs B 的兩個 BRL：預期相同　結果：
+- [x] 匯入 `p25_doc.txt` 成為文件 → 執行轉換 → 匯出 BRL 為 `p25_unicode.brl`　結果：（Claude 自動化，見 `auto-results.md`）N、B 皆完成
+- [x] 設定 > 輸出模式改為 ASCII → 再轉換 → 匯出 BRL 為 `p25_ascii.brl`　結果：（Claude 自動化，見 `auto-results.md`）N、B 皆完成（設定的「點字類型」改為 ASCII）
+- [x] N 的 `p25_unicode.brl` sha256 是否等於 `365d28a9244a1ef79ab90c783a0a152fa4be26c12d3894862712fab63f9d683c`（source-run 基線）　結果：（Claude 自動化，見 `auto-results.md`）相同
+- [x] N 的 `p25_ascii.brl` sha256 是否等於 `95b9a1a6bdb7956d2be0cd1c9eddd7670c606e9e4591116149813a0c2538bc64`　結果：（Claude 自動化，見 `auto-results.md`）相同
+- [x] `fc /b` N vs B 的兩個 BRL：預期相同　結果：（Claude 自動化，見 `auto-results.md`）兩個 BRL 皆逐位元組相同
 
 > 若 N 與 source-run 基線不同，但 N 與 B 相同，可能是匯入時調整了文字（例如去掉行尾空白）。請記錄下來，不要當成 regression。若 N 與 B 不同，才是 regression，請附上兩個檔案。
 
@@ -232,45 +232,45 @@ attrib +h <檔案>    & attrib -h <檔案>
 ## C. F-1：文件只改大小寫（18–21，N）
 
 ### 18. 基本流程
-- [ ] 新增文件 `Alpha`，輸入文字，重新命名為 `alpha`，重新啟動：文件與內文都在；在 `workspace\` 執行 `dir`，只看到 `alpha.dep`，沒有 `.tmp`　結果：
-- [ ] 新增文件 `ALPHA`：出現重複訊息，磁碟內容不變　結果：
-- [ ] 選另一份文件，重新命名為 `Alpha`：出現重複訊息，磁碟內容不變　結果：
+- [x] 新增文件 `Alpha`，輸入文字，重新命名為 `alpha`，重新啟動：文件與內文都在；在 `workspace\` 執行 `dir`，只看到 `alpha.dep`，沒有 `.tmp`　結果：（Claude 自動化，見 `auto-results.md`）通過
+- [x] 新增文件 `ALPHA`：出現重複訊息，磁碟內容不變　結果：（Claude 自動化，見 `auto-results.md`）`文件「ALPHA」已存在。`，磁碟不變。名稱對話框重新顯示時按鈕變英文（F-W9）
+- [x] 選另一份文件，重新命名為 `Alpha`：出現重複訊息，磁碟內容不變　結果：（Claude 自動化，見 `auto-results.md`）`文件「Alpha」已存在。`，磁碟不變
 
 ### 19. 檔案被鎖住
-- [ ] 用 7-Zip 開著 `Alpha.dep`，同時把它重新命名為 `alpha`：出現 `Failed to save document: [WinError 32] ...`，清單仍顯示 `Alpha`；重新啟動後 `Alpha.dep` 內容不變，資料夾沒有 `.tmp`　結果：
+- [ ] 用 7-Zip 開著 `Alpha.dep`，同時把它重新命名為 `alpha`：出現 `Failed to save document: [WinError 32] ...`，清單仍顯示 `Alpha`；重新啟動後 `Alpha.dep` 內容不變，資料夾沒有 `.tmp`　結果：（Claude 自動化，見 `auto-results.md`）本機無 7-Zip，以程式模擬。只共用讀取：改名前的存檔就失敗 `[Errno 13] Permission denied`，不出現名稱對話框；共用讀寫：`[WinError 32]`，與預期相同。兩者資料不變、無 `.tmp`。**待人工：真實 7-Zip 屬於哪一種**
 
 ### 20. 唯讀屬性
-- [ ] `attrib +r Alpha.dep` 後重新命名為 `alpha`：預期成功，但可能留下唯讀的 `.Alpha.dep.<亂數>.tmp`。請記錄是否留下，以及檔案總管是否顯示它（M-7）　結果：
+- [x] `attrib +r Alpha.dep` 後重新命名為 `alpha`：預期成功，但可能留下唯讀的 `.Alpha.dep.<亂數>.tmp`。請記錄是否留下，以及檔案總管是否顯示它（M-7）　結果：（Claude 自動化，見 `auto-results.md`）改名前的存檔就失敗（`[Errno 13]`），M-7 路徑在 GUI 走不到；關閉也被擋（F-W10），B 相同
 
 ### 21. 即時防毒
-- [ ] Defender 即時保護開著，連續做 10 次只改大小寫的重新命名（`a` ↔ `A`）：記錄是否有暫時性失敗（M-4）　結果：
+- [x] Defender 即時保護開著，連續做 10 次只改大小寫的重新命名（`a` ↔ `A`）：記錄是否有暫時性失敗（M-4）　結果：（Claude 自動化，見 `auto-results.md`）10/10 成功，無 `.tmp`
 
 ---
 
 ## D. F-2：字典檔安全（23–29，N）
 
 ### 23. 寫出的位元組
-- [ ] 同一份字典複本分別放在 B 與 N，各按一次確定，用 `fc /b` 比對：預期相同（`\r\n`、無 BOM，驗證 `O_BINARY`）。可與 11 的最後一步合併　結果：
+- [x] 同一份字典複本分別放在 B 與 N，各按一次確定，用 `fc /b` 比對：預期相同（`\r\n`、無 BOM，驗證 `O_BINARY`）。可與 11 的最後一步合併　結果：（Claude 自動化，見 `auto-results.md`）B、N 相同（sha256 `ef319c21…`），CRLF、無 BOM
 
 > 若 B 與 N 不同，再用 F-2 之前的 `aced6f8` 建一個 build 比對，以區分差異來自 F-2 還是更早的變更。
 
 ### 24. 帶 BOM 的字典
-- [ ] 用 Excel 另存「CSV UTF-8」，用記事本另存「UTF-8 with BOM」，各做一份字典 → 匯入 → 字典管理顯示正確筆數 → 編輯器顯示各列 → 按確定 → 轉換時有使用該字典；確定後的檔案沒有 BOM　結果：
+- [ ] 用 Excel 另存「CSV UTF-8」，用記事本另存「UTF-8 with BOM」，各做一份字典 → 匯入 → 字典管理顯示正確筆數 → 編輯器顯示各列 → 按確定 → 轉換時有使用該字典；確定後的檔案沒有 BOM　結果：（Claude 自動化，見 `auto-results.md`）以程式產生的 BOM＋CRLF／BOM＋LF 檔模擬，全部通過。**可選：用真的 Excel／記事本再做一次**
 
 ### 25. Excel 鎖檔
-- [ ] Excel 開著該字典時按確定：顯示 `儲存失敗：[WinError 32] ...`，列保留、檔案不變；關掉 Excel 再按確定則成功；字典資料夾沒有 `.default.csv.*.tmp`　結果：
+- [x] Excel 開著該字典時按確定：顯示 `儲存失敗：[WinError 32] ...`，列保留、檔案不變；關掉 Excel 再按確定則成功；字典資料夾沒有 `.default.csv.*.tmp`　結果：（Claude 自動化，見 `auto-results.md`）以只共用讀取的程序模擬：訊息是 `[WinError 5] 存取被拒`（不是 32），列保留、檔案不變、無 `.tmp`；解鎖後成功
 
 ### 26. 唯讀屬性
-- [ ] `attrib +r` 後按確定：顯示 `儲存失敗：[Errno 13] Permission denied: '<路徑>'`，沒有 `.tmp`；`attrib -r` 後再按確定成功，新檔案沒有唯讀屬性　結果：
+- [x] `attrib +r` 後按確定：顯示 `儲存失敗：[Errno 13] Permission denied: '<路徑>'`，沒有 `.tmp`；`attrib -r` 後再按確定成功，新檔案沒有唯讀屬性　結果：（Claude 自動化，見 `auto-results.md`）與預期相同
 
 ### 27. 隱藏屬性
-- [ ] `attrib +h` 後按確定：記錄是成功還是失敗、訊息內容（M-8）。不論哪種結果，原檔都要不變、沒有 `.tmp`；結束後執行 `attrib -h`　結果：
+- [x] `attrib +h` 後按確定：記錄是成功還是失敗、訊息內容（M-8）。不論哪種結果，原檔都要不變、沒有 `.tmp`；結束後執行 `attrib -h`　結果：（Claude 自動化，見 `auto-results.md`）成功，檔案被取代，隱藏屬性消失，無 `.tmp`
 
 ### 28. 即時防毒
-- [ ] Defender 即時保護開著，連續按確定 10 次：記錄是否有暫時性失敗，以及是否留下 `.tmp`（D8）　結果：
+- [x] Defender 即時保護開著，連續按確定 10 次：記錄是否有暫時性失敗，以及是否留下 `.tmp`（D8）　結果：（Claude 自動化，見 `auto-results.md`）0 次失敗，無 `.tmp`
 
 ### 29. ACL 拒寫、允許刪除
-- [ ] `icacls <字典.csv> /deny "%USERNAME%:(W)"` 後按確定：記錄結果是檔案被整個取代（判決變寬），還是失敗。只需記錄，不要求修改。結束後執行 `icacls <字典.csv> /remove:d "%USERNAME%"` 還原　結果：
+- [x] `icacls <字典.csv> /deny "%USERNAME%:(WD,AD,WEA,WA)"` 後按確定（不要用 `(W)`：它包含 SYNCHRONIZE，連讀取都會被拒，字典管理會打不開，見 F-W12、F-W13）：記錄結果是檔案被整個取代（判決變寬），還是失敗。只需記錄，不要求修改。結束後執行 `icacls <字典.csv> /remove:d "%USERNAME%"` 還原　結果：（Claude 自動化，見 `auto-results.md`）成功，檔案被整個取代，deny ACE 消失（判決變寬）；已還原
 
 ---
 

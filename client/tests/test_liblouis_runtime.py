@@ -16,10 +16,10 @@ class LiblouisRuntimeTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from braille import liblouis
+        # Only through the helper: it adds the bundled DLL's directory first (W-1).
         from braille import louis_helper
 
-        cls.louis = liblouis
+        cls.louis = louis_helper.louis
         cls.helper = louis_helper
         cls.helper.initialize()
 

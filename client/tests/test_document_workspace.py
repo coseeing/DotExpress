@@ -1,9 +1,11 @@
+import json
 import os
 import stat
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 import documents.workspace as workspace
 from documents.importers.base import source_name
@@ -20,6 +22,7 @@ from documents.workspace import (
     save_document_package,
 )
 from shared import name_validation
+from tests.windows_file_handles import make_read_only
 
 
 class DocumentWorkspaceTest(unittest.TestCase):
@@ -316,6 +319,74 @@ class DocumentWorkspaceTest(unittest.TestCase):
         documents, invalid_paths = load_workspace_documents(self.workspace_dir)
         self.assertEqual([document.name for document in documents], ["alpha", "Beta"])
         self.assertEqual(invalid_paths, [self.workspace_dir / "bad.dep"])
+
+
+class AtomicSaveDocumentPackageTest(unittest.TestCase):
+    """``save_document_package`` never leaves a broken package and keeps the format (F-3)."""
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.workspace_dir = Path(temp_dir.name) / "workspace"
+        self.path = self.workspace_dir / "alpha.dep"
+        self.alpha = Document("alpha", "a", "1")
+
+    def _listing(self) -> list[str]:
+        return sorted(path.name for path in self.workspace_dir.iterdir())
+
+    def _write_alpha(self) -> bytes:
+        save_document_package(self.path, self.alpha)
+        return self.path.read_bytes()
+
+    def test_save_writes_the_same_bytes_as_the_in_place_writer(self) -> None:
+        # The format does not change: for the same timestamp the bytes equal those of the
+        # in-place writer before F-3, rebuilt here (ZipFile on the path, three writestr calls).
+        self.workspace_dir.mkdir(parents=True)
+        reference = self.workspace_dir / "reference.dep"
+        for document in (Document("alpha", "a\n中文", "⠁⠂"), Document("alpha", "pending", None)):
+            with self.subTest(braille=document.braille):
+                with patch("time.time", return_value=1_760_000_000.0):
+                    save_document_package(self.path, document)
+                    with zipfile.ZipFile(reference, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                        archive.writestr("alpha.txt", document.text)
+                        archive.writestr("alpha.brl", document.braille or "")
+                        if document.braille is None:
+                            archive.writestr("alpha.meta.json", json.dumps({"braille_pending": True}, ensure_ascii=False))
+
+                self.assertEqual(self.path.read_bytes(), reference.read_bytes())
+
+    def test_load_workspace_documents_ignores_leftover_temporary_files(self) -> None:
+        # A crash or a failed clean-up can leave the temporary file of a save
+        # (.<name>.dep.<16 hex>.tmp) or of a rename (.<name>.dep.<8 characters>.tmp).
+        # "*.dep" never matches them: startup neither loads nor offers to delete them.
+        self._write_alpha()
+        for name in (".alpha.dep.0123456789abcdef.tmp", ".alpha.dep.k2j1abcd.tmp", ".beta.dep.x.tmp"):
+            (self.workspace_dir / name).write_bytes(b"not a zip")
+
+        self.assertEqual(load_workspace_documents(self.workspace_dir), ([self.alpha], []))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX permission bits")
+    def test_save_keeps_the_permission_bits_of_the_package(self) -> None:
+        self._write_alpha()
+        os.chmod(self.path, 0o640)
+
+        save_document_package(self.path, Document("alpha", "edited", "1"))
+
+        self.assertEqual(oct(stat.S_IMODE(os.stat(self.path).st_mode)), oct(0o640))
+        self.assertEqual(load_document_package(self.path), Document("alpha", "edited", "1"))
+
+    @unittest.skipUnless(os.name == "nt", "Windows read-only attribute")
+    def test_save_of_a_read_only_package_gives_the_old_message(self) -> None:
+        # The in-place open("w+b") failed with exactly this text; F-3 keeps it (D3).
+        before = self._write_alpha()
+        make_read_only(self, self.path)
+
+        with self.assertRaises(PermissionError) as raised:
+            save_document_package(self.path, Document("alpha", "edited", "1"))
+
+        self.assertEqual(str(raised.exception), f"[Errno 13] Permission denied: {str(self.path)!r}")
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(self._listing(), ["alpha.dep"])
 
 
 class _FailingPackageFiles:

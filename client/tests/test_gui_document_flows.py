@@ -1967,6 +1967,22 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self.events[2:], [("title", "good - DotExpress"), ("title", "good - DotExpress")])
         self.assertEqual(self._listing(), ["a-blocked.dep", "good.dep"])
 
+    def test_startup_ignores_leftover_temporary_files(self) -> None:
+        # F-3 (D13): temporary files a crash can leave next to the packages are neither
+        # listed nor offered for deletion; they stay on disk untouched.
+        self._write_packages(Document("good", "g", "1"))
+        leftovers = [".good.dep.0123456789abcdef.tmp", ".good.dep.k2j1abcd.tmp"]
+        for name in leftovers:
+            (self.workspace / name).write_bytes(b"not a zip")
+        self.delete_invalid = True
+        frame = self._make_workspace_frame()
+
+        frame._load_workspace_documents_at_startup()
+
+        self.assertEqual(self.events, [("title", "good - DotExpress"), ("title", "good - DotExpress")])
+        self.assertEqual(self._listing(), sorted(leftovers + ["good.dep"]))
+        self.assertEqual(frame._document_controller.document_names, ["good"])
+
     # --- save --------------------------------------------------------------
 
     def test_save_open_document_keeps_pending_document_pending(self) -> None:

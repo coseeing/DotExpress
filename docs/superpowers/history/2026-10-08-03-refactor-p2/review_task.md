@@ -276,3 +276,12 @@ venv：`$SP/venv/bin/python`（Python 3.14），皆於 `client/` 執行。
 ## Final assessment
 
 **Ready: Yes.** P2 六個任務的 production 變更經逐流程比對無 regression，acceptance 指令全數通過，20 個 shuffle seed 與 app-data 快照乾淨，分層目標（`gui.py` 只剩 wx 組裝與 view 實作、`conversion ⇄ documents` 雙向消除、config／paths 單一 composition root、braille 膠水不再碰 root logger、MathCAT 由 runtime 擁有）達成，且沒有引入 refactor.md §7 反對的抽象。唯一的 Important（I-1）是跨三個階段累積的 Windows 驗證債，加上 P2-7 的產生檔只有 Windows 能刷新；它不要求回頭改 P2 的程式碼，但必須在 P2-5 開工前完成，並順手為 P2-5 蒐集真 liblouis 基線。P2-5 的既有失敗測試已定位到重構基線 `6e5819f` 的 `LanguageDetector` 前綴處理，且在真 adapter 下很可能不是使用者可見差異；建議以「斷言 join 後的 raw／braille + 新增前綴 token 的 characterization」裁決，而不是改回 `LanguageDetector`。Minor 項目併入 P2-5 前的測試衛生任務與既有缺陷修復任務即可。
+
+## Windows 驗證結果（2026-10-09）
+
+完整記錄：`docs/superpowers/history/2026-10-09-03-windows-verification/results.md`。
+
+- 已完成：1–6、8，以及 7 的 source-run 部分。驗證過程中修正了 W-1（`9a4ae81`，測試誤載 System32 `liblouis.dll`）、W-2（`4b4a2b6`，6 個測試的 Linux 假設）、W-3（`115f57f`，`generate-pot.bat` 絕對參照、gitignore、本地化重新產生）。
+- 第 6 項：`Ran 1143`，`failures=1`（P2-5），`errors=1`（`test_case_only_rename_still_renames`，既有），`skipped=5`（平台 skip）。原本 7 個 liblouis skip 已消失。
+- P2-5 基線：`" 的值"` 一次翻譯與拆開翻譯的 cells 完全相同，且空白在真 adapter 下原本就是獨立 token，證實上方「P2-5 readiness 與失敗測試分析」。混排長文件的 BRL sha256 存在記錄裡。`reclean_braille_endspace` 在真實輸出上約每 20 字 trim 一次，8 萬字約需 29 秒，建議提升 P1-5 defect 3 的優先序。
+- I-1 的狀態：自動化部分已清；第 7 項的 packaged 部分與 9–16 尚待人工執行。

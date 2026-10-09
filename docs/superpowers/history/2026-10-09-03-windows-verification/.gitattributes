@@ -1,0 +1,3 @@
+# Byte-exact P2-5 baseline: never convert line endings.
+*.brl -text
+p25_doc.txt -text

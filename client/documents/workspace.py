@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import BinaryIO
 
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
-from shared.atomic_write import write_bytes_atomically
+from shared.atomic_write import ensure_writable, write_bytes_atomically
 from shared.name_validation import normalize_base_name
 
 DEP_EXTENSION = ".dep"
@@ -92,6 +92,10 @@ def save_document_package(
 class PackageFiles:
     """The file operations ``move_document_package`` uses; tests pass a model or a fault injector."""
 
+    def ensure_writable(self, path: Path) -> None:
+        """Raise ``PermissionError`` if the package at ``path`` exists and the user may not write it."""
+        ensure_writable(path)
+
     def exists(self, path: Path) -> bool:
         return Path(path).exists()
 
@@ -145,9 +149,13 @@ def move_document_package(
     left, unless putting the old package back fails too: then it stays in its ``.tmp`` file.
     Failing to remove the moved-aside old package after the install is ignored; that
     leftover ``.tmp`` file is never loaded as a package.
+
+    An old package the user may not write (a read-only file) raises ``PermissionError``
+    before anything is created or moved, as saving it does (F-3).
     """
     old_path = Path(old_path)
     new_path = Path(new_path)
+    files.ensure_writable(old_path)
     staged_path = files.temporary_path(new_path.parent, new_path.name)
     try:
         files.write(staged_path, document)

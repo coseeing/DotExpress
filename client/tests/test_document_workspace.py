@@ -511,6 +511,10 @@ class _FailingPackageFiles:
         if operation == self._operation and self._when(*(Path(path) for path in paths)):
             raise OSError(f"injected {operation} failure")
 
+    def ensure_writable(self, path) -> None:
+        self._check("ensure_writable", path)
+        self._files.ensure_writable(path)
+
     def exists(self, path) -> bool:
         return self._files.exists(path)
 
@@ -666,6 +670,39 @@ class MoveDocumentPackageTest(unittest.TestCase):
         self.assertTrue(leftovers[0].startswith(".Alpha.dep."), leftovers)
         self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a", "1"))
         self.assertEqual(load_workspace_documents(self.workspace_dir), ([Document("alpha", "a", "1")], []))
+
+    def test_unwritable_old_package_is_refused_before_anything_changes(self) -> None:
+        before = self._write_alpha()
+
+        with patch("os.access", return_value=False):
+            with self.assertRaises(PermissionError) as raised:
+                self._move("Alpha", Document("gamma", "a", "1"))
+
+        self.assertEqual(
+            str(raised.exception),
+            f"[Errno {errno.EACCES}] {os.strerror(errno.EACCES)}: {str(self._path('Alpha'))!r}",
+        )
+        self.assertEqual(self._listing(), ["Alpha.dep"])
+        self.assertEqual(self._path("Alpha").read_bytes(), before)
+
+    @unittest.skipUnless(os.name == "nt", "Windows read-only attribute")
+    def test_read_only_old_package_is_refused_and_leaves_no_temporary_file(self) -> None:
+        # Without the check, moving a read-only package aside succeeds (it needs only
+        # delete access) and the aside file cannot be removed: a read-only .tmp stays
+        # (F-1 note; spec D7, Q2). Case-only and regular renames are both refused.
+        root = self.workspace_dir
+        for new_name in ("alpha", "gamma"):
+            with self.subTest(new_name=new_name):
+                self.workspace_dir = root / new_name
+                before = self._write_alpha()
+                make_read_only(self, self._path("Alpha"))
+
+                with self.assertRaises(PermissionError) as raised:
+                    self._move("Alpha", Document(new_name, "a", "1"))
+
+                self.assertEqual(str(raised.exception), f"[Errno 13] Permission denied: {str(self._path('Alpha'))!r}")
+                self.assertEqual(self._listing(), ["Alpha.dep"])
+                self.assertEqual(self._path("Alpha").read_bytes(), before)
 
     def test_temporary_path_creates_the_directory_and_is_not_a_package(self) -> None:
         path = workspace.PackageFiles().temporary_path(self.workspace_dir, "alpha.dep")

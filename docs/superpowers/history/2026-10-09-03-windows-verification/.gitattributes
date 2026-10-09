@@ -1,3 +1,5 @@
 # Byte-exact P2-5 baseline: never convert line endings.
 *.brl -text
 p25_doc.txt -text
+# Test dictionaries: BOM and line endings are part of the test.
+auto/data/*.csv -text

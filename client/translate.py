@@ -1,4 +1,5 @@
 import string
+from bisect import bisect_right
 from types import MappingProxyType
 
 from languageDetection.unicode_blocks import (
@@ -385,23 +386,62 @@ class TranslationResult:
 		則在它們之間插入一個空白 token 與對應的點字空格。
 		"""
 		blank_cell = chr(0x2800)
-		i = 1
-		# 以 while 迴圈處理，因為過程會動態插入 token、改變長度
-		while i < len(self.raw):
+		# The original token indices before which a separator goes. The original loop
+		# skipped every inserted separator, so it checked exactly these adjacent pairs.
+		positions = []
+		for i in range(1, len(self.raw)):
 			prev_tok = self.raw[i - 1]
 			curr_tok = self.raw[i]
-
 			# 防禦：空字串不處理
-			if prev_tok and curr_tok:
-				prev_last = prev_tok[-1]
-				curr_first = curr_tok[0]
+			if prev_tok and curr_tok and prev_tok[-1] in self.RIGHT_PUNCT and curr_tok[0] in self.LEFT_PUNCT:
+				positions.append(i)
+		if not positions:
+			return
+		if not _is_well_formed_alignment(self.raw, self.braille, self.braille_to_raw_pos, self.raw_to_braille_pos):
+			# Malformed maps: insert one by one, exactly as before.
+			for offset, index in enumerate(positions):
+				self.insert_token(index + offset, " ", blank_cell)
+			return
 
-				if (prev_last in self.RIGHT_PUNCT) and (curr_first in self.LEFT_PUNCT):
-					# 插入空白 token 與點字空格
-					self.insert_token(i, " ", blank_cell)
-					i += 1  # 跳過剛插入的空白
+		# One pass: the lists that inserting the separators one by one would give.
+		# Separator m goes before original token positions[m], at token index
+		# positions[m] + m and braille index raw_to_braille_pos[positions[m]] + m.
+		raw_to_braille_pos = self.raw_to_braille_pos
+		count = len(positions)
+		new_raw: list[str] = []
+		new_raw_to_braille_pos: list[int] = []
+		inserted = 0
+		for t_idx, token in enumerate(self.raw):
+			if inserted < count and positions[inserted] == t_idx:
+				new_raw.append(" ")
+				new_raw_to_braille_pos.append(raw_to_braille_pos[t_idx] + inserted)
+				inserted += 1
+			new_raw.append(token)
+			new_raw_to_braille_pos.append(raw_to_braille_pos[t_idx] + inserted)
 
-			i += 1
+		separator_cells = [raw_to_braille_pos[index] for index in positions]
+		new_braille: list[str] = []
+		new_braille_to_raw_pos: list[int] = []
+		inserted = 0
+		for b_idx, cell in enumerate(self.braille):
+			while inserted < count and separator_cells[inserted] <= b_idx:
+				new_braille.append(blank_cell)
+				new_braille_to_raw_pos.append(positions[inserted] + inserted)
+				inserted += 1
+			# One by one, a cell's token index grows at each separator inserted at or
+			# before the cell, until the first separator that lies after that token.
+			token_idx = self.braille_to_raw_pos[b_idx]
+			new_braille.append(cell)
+			new_braille_to_raw_pos.append(token_idx + min(inserted, bisect_right(positions, token_idx)))
+		while inserted < count:
+			new_braille.append(blank_cell)
+			new_braille_to_raw_pos.append(positions[inserted] + inserted)
+			inserted += 1
+
+		self.raw = new_raw
+		self.braille = new_braille
+		self.raw_to_braille_pos = new_raw_to_braille_pos
+		self.braille_to_raw_pos = new_braille_to_raw_pos
 
 	def reclean_braille_endspace(self):
 		"""

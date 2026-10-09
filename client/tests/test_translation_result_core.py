@@ -312,5 +312,47 @@ class LinearTrimTest(unittest.TestCase):
         self.assertEqual(well_formed.braille, ["⠁", "⠃"])
 
 
+class LinearSeparatorTest(unittest.TestCase):
+    def test_inserting_ten_thousand_separators_takes_linear_time(self) -> None:
+        count = 10_000
+        result = TranslationResult(["」", "「"] * count, ["⠁"] * (2 * count), list(range(2 * count)), list(range(2 * count)))
+
+        started = time.perf_counter()
+        result.reclean_token()
+        elapsed = time.perf_counter() - started
+
+        self.assertEqual(
+            lists_of(result),
+            (["」", " ", "「"] * count, ["⠁", "⠀", "⠁"] * count, list(range(3 * count)), list(range(3 * count))),
+        )
+        self.assertLess(elapsed, 2.0)
+
+    def test_well_formed_alignment_never_calls_insert_token(self) -> None:
+        result = TranslationResult(["我」", "「共", "）", "（", "乙"], ["⠁", "⠂", "⠃", "⠄", "⠅", "⠆"], [0, 0, 1, 2, 3, 4], [0, 2, 3, 4, 5])
+
+        with patch.object(TranslationResult, "insert_token", side_effect=AssertionError("one by one")):
+            result.reclean_token()
+
+        self.assertEqual(
+            lists_of(result),
+            (
+                ["我」", " ", "「共", "）", " ", "（", "乙"],
+                ["⠁", "⠂", "⠀", "⠃", "⠄", "⠀", "⠅", "⠆"],
+                [0, 0, 1, 2, 3, 4, 5, 6],
+                [0, 2, 3, 4, 5, 6, 7],
+            ),
+        )
+
+    def test_malformed_alignment_inserts_one_by_one(self) -> None:
+        insert_token = TranslationResult.insert_token
+        result = TranslationResult(["我」", "「共", "）", "（"], ["⠁", "⠂", "⠃", "⠄"], [0, 1, 2], [0, 1, 2, 3])
+
+        with patch.object(TranslationResult, "insert_token", autospec=True, side_effect=insert_token) as insert:
+            result.reclean_token()
+
+        self.assertEqual([call.args[1:] for call in insert.call_args_list], [(1, " ", "⠀"), (4, " ", "⠀")])
+        self.assertEqual(result.raw, ["我」", " ", "「共", "）", " ", "（"])
+
+
 if __name__ == "__main__":
     unittest.main()

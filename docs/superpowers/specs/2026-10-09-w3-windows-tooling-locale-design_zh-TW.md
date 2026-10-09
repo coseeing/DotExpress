@@ -26,14 +26,15 @@
 - **D4. 忽略規則放在檔案所在處。** 根目錄 `.gitignore`：`/.sconsign.dblite` 與 `/vendor/nvda/liblouis/dist/`。`client/.gitignore`：`/config.json`（加錨點，避免隱藏 `client/` 下其他 `config.json`）。`test_liblouis_build_contract.py` 的 ignore 斷言加入新規則。
 - **D5. 以預設換行重產。** 已提交的 `.pot`／`.po` 使用 gettext 預設的 79 欄換行，所以 `msgmerge` 不加 `--no-wrap`。指令：`msgmerge --update --backup=none locales\zh_TW\LC_MESSAGES\dotexpress.po locales\dotexpress.pot`，接著 `msgfmt --check -o ...dotexpress.mo ...dotexpress.po`。四個孤兒變成 `#~` 項目。項目順序跟隨新的 `.pot`（檔案已排序），因此 diff 也會重排項目；msgid 與譯文不變。
 - **D6. 恢復 `Close` → `關閉`**（`38ae85f` 的譯文），獨立一個 commit，讓目錄沒有未翻譯項目（AGENTS.md 在地化規則）。不更動其他譯文。
+- **D7. 過時的目錄測試跟隨 P1-2 的決策。** `client/tests/test_config.py`（`test_zh_tw_catalog_keeps_runtime_wildcard_translations_active`）與 `client/tests/test_import_fixtures.py`（`test_zh_tw_catalog_loads_import_wildcard_translations`）斷言四個孤兒 msgid 在 `.mo` 中有翻譯。沒有任何正式程式碼會查詢它們（匯入對話框透過 `documents.formats.build_import_wildcard` 由格式標籤組出 `DEP (*.dep)|...`），變成 `#~` 後 `.mo` 也不再包含它們。第一個測試刪去這四個斷言，保留 CSV／DEP／BRL／All Supported Files；第二個改為檢查 `build_import_wildcard(translation.gettext)` 回傳的 zh_TW wildcard，重產前後皆通過。（實作時發現。）
 
 ## 驗收條件
 
 1. `scripts\generate-pot.bat` 寫出 `#: about.py:10`、`#: settings/options.py:71` 這類參照，沒有絕對路徑或反斜線，共 353 個 msgid；連續執行兩次，除 `POT-Creation-Date` 外輸出相同。
 2. `.po` 的 `msgfmt --statistics`：353 已翻譯、0 未翻譯、0 fuzzy；四個孤兒為 `#~`。`.mo` 可用 `gettext.GNUTranslations` 載入，含 353 則訊息加 header，且能翻譯搬移過的標籤（例如現在參照 `settings/options.py` 的 `Light`）。
-3. Windows 上 `scripts/tests` 全數通過（含 bat 測試）；`client` 的 `discover -s tests` 維持 `Ran 1143`、`FAILED (failures=1, errors=1, skipped=5)`（已知的 P2-5 與只改大小寫重新命名兩項）。
+3. Windows 上新的 `scripts/tests` 測試全數通過（含 bat 測試）；`scripts/tests` 在 Windows 上唯一的其他結果是既有的 `test_vendor_helper_snapshot` 失敗（`core.autocrlf=true` 下 `vendor/nvda/liblouis/runtime/louis_helper.py` 的工作副本是 CRLF，NVDA 原始檔是 `eol=lf`；CRLF 轉 LF 後相同；範圍外）。`client` 的 `discover -s tests` 維持 `Ran 1143`、`FAILED (failures=1, errors=1, skipped=5)`（已知的 P2-5 與只改大小寫重新命名兩項）。
 4. 合併後 `git status --short` 只列出未追蹤的 `client2/` 與 `preprocessing/`。fixture 的 sha256 不變。
-5. 變更檔案：`scripts/generate-pot.bat`、`scripts/tests/test_generate_pot.py`、`scripts/tests/test_liblouis_build_contract.py`、`.gitignore`、`client/.gitignore`、三份 readme、`client/locales/dotexpress.pot`、`client/locales/zh_TW/LC_MESSAGES/dotexpress.po`、`client/locales/zh_TW/LC_MESSAGES/dotexpress.mo`、W-3 文件。
+5. 變更檔案：`scripts/generate-pot.bat`、`scripts/tests/test_generate_pot.py`、`scripts/tests/test_liblouis_build_contract.py`、`.gitignore`、`client/.gitignore`、三份 readme、`client/locales/dotexpress.pot`、`client/locales/zh_TW/LC_MESSAGES/dotexpress.po`、`client/locales/zh_TW/LC_MESSAGES/dotexpress.mo`、`client/tests/test_config.py`、`client/tests/test_import_fixtures.py`（D7）、W-3 文件。
 
 ## 範圍外
 

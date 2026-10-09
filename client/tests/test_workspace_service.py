@@ -9,6 +9,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+import documents.workspace_service as workspace_service
 from documents.controller import DocumentController
 from documents.workspace import BatchIssue, Document, PackageFiles, load_document_package, save_document_package
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
@@ -273,6 +274,26 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(result.issues[0], BatchIssue(path=sources[0], reason='Document "Alpha" already exists.'))
         self.assertEqual(result.issues[1].path, self.workspace / "delta.dep")
         self.assertIn("delta.dep", result.issues[1].reason)
+
+    def test_import_files_reports_any_save_error_as_an_issue(self) -> None:
+        # F-3 (D9): an error that is not an OSError becomes an issue too; before, it
+        # escaped after beta.dep was written, and beta never reached the list.
+        service = self._service([Document("zoo", "z", "1")])
+        real_save = workspace_service.save_document_package
+        error = UnicodeEncodeError("utf-8", "\ud800", 0, 1, "surrogates not allowed")
+
+        def save(path, document, **kwargs):
+            if document.name == "delta":
+                raise error
+            return real_save(path, document, **kwargs)
+
+        with patch.object(workspace_service, "save_document_package", side_effect=save):
+            result = service.import_files(self._sources(beta="b", delta="d"), format_key="all")
+
+        self.assertEqual(result.saved, [Document("beta", "b", None)])
+        self.assertEqual(result.issues, [BatchIssue(path=self.workspace / "delta.dep", reason=str(error))])
+        self.assertEqual(self.controller.document_names, ["zoo", "beta"])
+        self.assertEqual(self._listing(), ["beta.dep"])
 
     def test_import_files_rejects_unknown_format(self) -> None:
         service = self._service()

@@ -101,7 +101,7 @@ class DocumentWorkspaceService:
             package_path = self.package_path(document.name)
             try:
                 save_document_package(package_path, document)
-            except OSError as exc:
+            except Exception as exc:
                 save_issues.append(BatchIssue(path=package_path, reason=str(exc)))
                 continue
             saved.append(document)

@@ -1916,6 +1916,33 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._state(frame), before)
         self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("a", "1"))
 
+    def test_add_failure_that_is_not_an_os_error_shows_the_message(self) -> None:
+        # F-3 (D9): every Exception from creating the package is reported.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        before = self._state(frame)
+        self.names = ["beta"]
+
+        with patch.object(frame._workspace_service, "create_document", side_effect=ValueError("boom")):
+            frame.on_add_document(None)
+
+        self.assertEqual(
+            self.events,
+            [
+                ("DocumentNameDialog", gui._("Add Document"), ""),
+                (
+                    "MessageBox",
+                    gui._("Failed to save document: {error}").format(error="boom"),
+                    gui._("Error"),
+                    gui.wx.OK | gui.wx.ICON_ERROR,
+                    frame,
+                ),
+            ],
+        )
+        self.assertEqual(self._state(frame), before)
+        self.assertEqual(self._listing(), ["alpha.dep"])
+
     def test_default_document_is_pending_opened_and_focused(self) -> None:
         frame = self._make_workspace_frame()
 
@@ -2037,6 +2064,43 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         event.Skip.assert_not_called()
         frame.close_converting_dialog.assert_not_called()
 
+    def test_save_failure_that_is_not_an_os_error_shows_the_message_and_keeps_the_package(self) -> None:
+        # F-3 (D9): a lone surrogate cannot be encoded. The message appears instead of an
+        # escaping exception; the package keeps its bytes and memory keeps the edit.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("x\ud800")
+
+        self.assertFalse(frame._save_open_document_with_feedback())
+
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "x\ud800", "1")])
+
+    def test_close_vetoes_and_keeps_the_package_when_save_raises_a_non_os_error(self) -> None:
+        # Before F-3 the exception escaped _on_close: no message, and the window neither
+        # closed nor said why.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("\ud800")
+        event = Mock()
+        event.CanVeto.return_value = True
+
+        frame._on_close(event)
+
+        event.Veto.assert_called_once_with()
+        event.Skip.assert_not_called()
+        frame.close_converting_dialog.assert_not_called()
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+
     # --- rename ------------------------------------------------------------
 
     def test_rename_writes_new_package_deletes_old_and_moves_state(self) -> None:
@@ -2146,6 +2210,23 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self._assert_error_box(self.events[1], "Failed to save document: {error}", "beta.dep", frame)
         self.assertIn(f"[Errno 13] Permission denied: {str(beta_path)!r}", self.events[1][1])
         self.assertEqual(beta_path.read_bytes(), beta_bytes)
+        self.assertEqual(self._state(frame), before)
+
+    def test_rename_failure_that_is_not_an_os_error_shows_the_message_and_keeps_state(self) -> None:
+        # F-3 (D9): renaming the non-open beta, whose text in memory cannot be encoded.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha, Document("beta", "b", "2"))
+        beta_bytes = (self.workspace / "beta.dep").read_bytes()
+        frame = self._make_workspace_frame([alpha, Document("beta", "\ud800", "2")], open_name="alpha", selected_name="beta")
+        before = self._state(frame)
+        self.names = ["gamma"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self.assertEqual((self.workspace / "beta.dep").read_bytes(), beta_bytes)
         self.assertEqual(self._state(frame), before)
 
     def test_rename_cancelled_or_unchanged_does_nothing(self) -> None:

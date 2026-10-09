@@ -596,7 +596,7 @@ class BrailleFrame(wx.Frame):
 	def _save_open_document_with_feedback(self) -> bool:
 		try:
 			self._save_open_document()
-		except OSError as exc:
+		except Exception as exc:
 			self._show_file_error(_("Failed to save document: {error}"), exc)
 			return False
 		return True
@@ -625,7 +625,7 @@ class BrailleFrame(wx.Frame):
 		document = Document(name=document_name, text=text, braille=braille)
 		try:
 			self._workspace_service.create_document(document)
-		except OSError as exc:
+		except Exception as exc:
 			self._show_file_error(_("Failed to save document: {error}"), exc)
 			return False
 		self._refresh_document_list(document.name)
@@ -757,7 +757,7 @@ class BrailleFrame(wx.Frame):
 			return
 		try:
 			renamed_document = self._workspace_service.rename_document(selected_document.name, new_name)
-		except OSError as exc:
+		except Exception as exc:
 			self._show_file_error(_("Failed to save document: {error}"), exc)
 			return
 		if renamed_document is None:

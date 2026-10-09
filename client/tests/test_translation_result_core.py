@@ -107,7 +107,7 @@ class SharedConstantsTest(unittest.TestCase):
         self.assertEqual(sorted(vars(result)), sorted(FIELDS))
 
     def test_construction_does_not_build_language_blocks(self) -> None:
-        with patch("translate.build_language_blocks", side_effect=AssertionError("built per instance")) as build:
+        with patch("conversion.tokenizer.build_language_blocks", side_effect=AssertionError("built per instance")) as build:
             TranslationResult([], [], [], [])
 
         build.assert_not_called()

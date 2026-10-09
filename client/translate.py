@@ -1,18 +1,7 @@
-import string
 from bisect import bisect_right
-from types import MappingProxyType
 
-from languageDetection.unicode_blocks import (
-    build_language_blocks,
-    language_has_all,
-    language_has_char,
-)
-
-
-_CJK_LANGUAGE_BLOCKS = MappingProxyType({
-	language: tuple(blocks)
-	for language, blocks in build_language_blocks(("ja", "zh", "ko")).items()
-})
+from conversion import tokenizer
+from conversion.tokenizer import contracted_token_spans, iter_separator_positions, word_token_spans
 
 
 def _is_well_formed_alignment(raw, braille, braille_to_raw_pos, raw_to_braille_pos):
@@ -29,22 +18,23 @@ def _is_well_formed_alignment(raw, braille, braille_to_raw_pos, raw_to_braille_p
 
 
 class TranslationResult:
-	LEFT_PUNCT_HALF = frozenset("([{")
-	RIGHT_PUNCT_HALF = frozenset(")]}")
-	MIDDLE_SENTENCE_PUNCT_HALF = frozenset(",;:%")
-	END_SENTENCE_PUNCT_HALF = frozenset(".!?")
+	# The same objects as the tokenizer's constants.
+	LEFT_PUNCT_HALF = tokenizer.LEFT_PUNCT_HALF
+	RIGHT_PUNCT_HALF = tokenizer.RIGHT_PUNCT_HALF
+	MIDDLE_SENTENCE_PUNCT_HALF = tokenizer.MIDDLE_SENTENCE_PUNCT_HALF
+	END_SENTENCE_PUNCT_HALF = tokenizer.END_SENTENCE_PUNCT_HALF
 
-	LEFT_PUNCT_FULL = frozenset("‘“「『〈《【〔〖（")
-	RIGHT_PUNCT_FULL = frozenset("’”」』〉》】〕〗）")
-	MIDDLE_SENTENCE_PUNCT_FULL = frozenset("，；：、％")
-	END_SENTENCE_PUNCT_FULL = frozenset("。！？")
+	LEFT_PUNCT_FULL = tokenizer.LEFT_PUNCT_FULL
+	RIGHT_PUNCT_FULL = tokenizer.RIGHT_PUNCT_FULL
+	MIDDLE_SENTENCE_PUNCT_FULL = tokenizer.MIDDLE_SENTENCE_PUNCT_FULL
+	END_SENTENCE_PUNCT_FULL = tokenizer.END_SENTENCE_PUNCT_FULL
 
-	LEFT_PUNCT = LEFT_PUNCT_HALF | LEFT_PUNCT_FULL
-	RIGHT_PUNCT = RIGHT_PUNCT_HALF | RIGHT_PUNCT_FULL
-	MIDDLE_SENTENCE_PUNCT = MIDDLE_SENTENCE_PUNCT_HALF | MIDDLE_SENTENCE_PUNCT_FULL
-	END_SENTENCE_PUNCT = END_SENTENCE_PUNCT_HALF | END_SENTENCE_PUNCT_FULL
+	LEFT_PUNCT = tokenizer.LEFT_PUNCT
+	RIGHT_PUNCT = tokenizer.RIGHT_PUNCT
+	MIDDLE_SENTENCE_PUNCT = tokenizer.MIDDLE_SENTENCE_PUNCT
+	END_SENTENCE_PUNCT = tokenizer.END_SENTENCE_PUNCT
 
-	lang_blocks = _CJK_LANGUAGE_BLOCKS
+	lang_blocks = tokenizer.CJK_LANGUAGE_BLOCKS
 
 	__hash__ = None
 
@@ -92,40 +82,7 @@ class TranslationResult:
 		"""
 		if not self.raw or len(self.raw) != len(self.raw_to_braille_pos):
 			return
-
-		old_raw = self.raw
-		old_raw_to_braille = self.raw_to_braille_pos
-		old_braille_to_raw = self.braille_to_raw_pos
-		token_spans: list[tuple[int, int]] = []
-		tokens: list[str] = []
-		start = 0
-		while start < len(old_raw):
-			end = start + 1
-			while (
-				end < len(old_raw)
-				and old_raw_to_braille[end] == old_raw_to_braille[start]
-			):
-				end += 1
-			tokens.append("".join(old_raw[start:end]))
-			token_spans.append((start, end))
-			start = end
-
-		char_to_token = [0] * len(old_raw)
-		for token_index, (span_start, span_end) in enumerate(token_spans):
-			for char_index in range(span_start, span_end):
-				char_to_token[char_index] = token_index
-
-		self.raw = tokens
-		self.raw_to_braille_pos = [
-			old_raw_to_braille[span_start]
-			for span_start, _span_end in token_spans
-		]
-		self.braille_to_raw_pos = [
-			char_to_token[char_index]
-			if 0 <= char_index < len(old_raw)
-			else 0
-			for char_index in old_braille_to_raw
-		]
+		self._regroup(contracted_token_spans(self.raw_to_braille_pos))
 
 	def bind_word_tokens(self):
 		"""
@@ -146,187 +103,36 @@ class TranslationResult:
 		  - self.braille_to_raw_pos：braille_index → token_index
 		"""
 
-		# 取得語系對應 blocks
-
-		lang_blocks = getattr(self, "lang_blocks", None)
-
-		# ---- 判斷是否為 CJK/假名/注音/韓文等字母字元（不合併成詞，但可吃標點）----
-		def is_cjk_word_char(ch: str) -> bool:
-			if not lang_blocks:
-				return False
-			for _lang in ("ja", "zh", "ko"):
-				if language_has_all(_lang, ch, lang_blocks):
-					return True
-			return False
-
-		# ---- ASCII 英數集合（可合併成詞）----
-		ASCII_ALNUM = set(string.ascii_letters + string.digits)
-
-		# 會併到「前一個字母 token」的尾隨標點（避免出現在行首）
-		TRAIL_PUNCT = self.RIGHT_PUNCT | self.MIDDLE_SENTENCE_PUNCT | self.END_SENTENCE_PUNCT
-		# 會併到「後一個字母 token」的開頭標點（避免出現在行尾）
-		LEAD_PUNCT = set(self.LEFT_PUNCT) | set("—")
-
-		chars = self.raw  # list[str]（每元素一字元）
-		n_chars = len(chars)
-
-		# ---- Pass 1：產生基礎 tokens ----
-		# 規則：
-		#   - 連續 ASCII 英數 → 合併為一個 token
-		#   - CJK/假名/注音/韓文 → 單字一 token（不合併）
-		#   - 其他（空白/標點/符號…）→ 單字一 token
-		#   - '\n' → 獨立 token
-		tokens: list[str] = []
-		token_char_spans: list[tuple[int, int]] = []  # (char_start, char_end_exclusive)
-
-		i = 0
-		while i < n_chars:
-			ch = chars[i]
-			if ch == "\n":
-				tokens.append("\n")
-				token_char_spans.append((i, i + 1))
-				i += 1
-				continue
-
-			if ch in ASCII_ALNUM:
-				j = i + 1
-				while j < n_chars and chars[j] in ASCII_ALNUM:
-					j += 1
-				tokens.append("".join(chars[i:j]))
-				token_char_spans.append((i, j))
-				i = j
-				continue
-
-			if is_cjk_word_char(ch):
-				tokens.append(ch)
-				token_char_spans.append((i, i + 1))
-				i += 1
-				continue
-
-			# 其他：空白/標點/符號等，單字元 token
-			tokens.append(ch)
-			token_char_spans.append((i, i + 1))
-			i += 1
-
-		# ---- 定義「字母 token」：可被尾隨/開頭標點綁定的 token ----
-		#   A) 含任一 ASCII_ALNUM 的 ASCII 詞
-		#   B) 長度為 1 且為 CJK 字母字元
-		def is_word_token(tok: str) -> bool:
-			if any(c in ASCII_ALNUM for c in tok):
-				return True
-			return len(tok) == 1 and is_cjk_word_char(tok)
-
-		# ---- Pass 2：尾隨標點鏈併入前一個字母 token ----
-		merged_tokens: list[str] = []
-		merged_spans: list[tuple[int, int]] = []
-		t = 0
-		while t < len(tokens):
-			tok = tokens[t]
-			span_start, span_end = token_char_spans[t]
-
-			if is_word_token(tok):
-				u = t
-				trailing_text = ""
-				trailing_end = span_end
-				# 貪婪吸收連續尾隨標點
-				while (
-					u + 1 < len(tokens)
-					and len(tokens[u + 1]) == 1
-					and tokens[u + 1] in TRAIL_PUNCT
-				):
-					u += 1
-					trailing_text += tokens[u]
-					trailing_end = token_char_spans[u][1]
-				if trailing_text:
-					tok = tok + trailing_text
-					span_end = trailing_end
-					t = u  # 跳過吃掉的尾隨標點
-
-			merged_tokens.append(tok)
-			merged_spans.append((span_start, span_end))
-			t += 1
-
-		tokens = merged_tokens
-		token_char_spans = merged_spans
-
-		# ---- Pass 3：開頭標點鏈併到下一個字母 token ----
-		# 不與 '\n' 或空白（含全形空白等 .isspace()）綁定
-		merged_tokens2: list[str] = []
-		merged_spans2: list[tuple[int, int]] = []
-		t = 0
-		while t < len(tokens):
-			tok = tokens[t]
-			span_start, span_end = token_char_spans[t]
-
-			if len(tok) == 1 and tok in LEAD_PUNCT and t + 1 < len(tokens):
-				u = t
-				lead_text = tok
-				lead_start = span_start
-				lead_end = span_end
-
-				# 收集連續的開頭標點
-				while (
-					u + 1 < len(tokens)
-					and len(tokens[u + 1]) == 1
-					and tokens[u + 1] in LEAD_PUNCT
-				):
-					u += 1
-					lead_text += tokens[u]
-					lead_end = token_char_spans[u][1]
-
-				# 嘗試與下一個可綁定的「字母 token」合併
-				if u + 1 < len(tokens):
-					next_tok = tokens[u + 1]
-					if next_tok != "\n" and not (len(next_tok) == 1 and next_tok.isspace()):
-						if is_word_token(next_tok):
-							merged_tokens2.append(lead_text + next_tok)
-							merged_spans2.append((lead_start, token_char_spans[u + 1][1]))
-							t = u + 2
-							continue
-
-				# 無法綁定則保留開頭標點鏈
-				merged_tokens2.append(lead_text)
-				merged_spans2.append((lead_start, lead_end))
-				t = u + 1
-				continue
-
-			# 其他情況原樣輸出
-			merged_tokens2.append(tok)
-			merged_spans2.append((span_start, span_end))
-			t += 1
-
-		tokens = merged_tokens2
-		token_char_spans = merged_spans2
-
-		# ---- 從「字元級」對應表升級為「token 級」對應表 ----
-		old_r2b = self.raw_to_braille_pos		# 字元級：char_idx -> braille_start_pos
-		old_b2r = self.braille_to_raw_pos		# 字元級：braille_pos -> char_idx
-		braille_len = len(self.braille)
+		spans = word_token_spans(self.raw, self.lang_blocks)
 
 		# 防禦：長度不一致時維持原狀（避免 IndexError）
-		if not old_r2b or n_chars == 0 or len(old_b2r) != braille_len:
+		if not self.raw_to_braille_pos or not self.raw or len(self.braille_to_raw_pos) != len(self.braille):
 			return
+		self._regroup(spans)
+
+	def _regroup(self, spans):
+		"""Rebuild the four lists for tokens made of the given spans of the current tokens."""
+		old_raw = self.raw
+		old_r2b = self.raw_to_braille_pos
 
 		# token → braille 起始（取 token 第一個字元的起點）
-		new_raw_to_braille_pos: list[int] = [old_r2b[c_start] for (c_start, _c_end) in token_char_spans]
+		new_raw_to_braille_pos = [old_r2b[span_start] for span_start, _span_end in spans]
 
 		# 字元索引 → token 索引
-		char_to_token_idx = [0] * n_chars
-		for t_idx, (c_start, c_end) in enumerate(token_char_spans):
-			for c in range(c_start, c_end):
-				char_to_token_idx[c] = t_idx
+		char_to_token = [0] * len(old_raw)
+		for token_index, (span_start, span_end) in enumerate(spans):
+			for char_index in range(span_start, span_end):
+				char_to_token[char_index] = token_index
 
 		# braille 索引 → token 索引（從舊的字元級映射轉換）
-		new_braille_to_raw_pos: list[int] = []
-		for bpos in range(braille_len):
-			char_idx = old_b2r[bpos]
-			if 0 <= char_idx < n_chars:
-				new_braille_to_raw_pos.append(char_to_token_idx[char_idx])
-			else:
-				new_braille_to_raw_pos.append(0)
+		new_braille_to_raw_pos = [
+			char_to_token[char_index]
+			if 0 <= char_index < len(old_raw)
+			else 0
+			for char_index in self.braille_to_raw_pos
+		]
 
-		# ---- 覆寫為 token 級結構 ----
-		self.raw = tokens
+		self.raw = ["".join(old_raw[span_start:span_end]) for span_start, span_end in spans]
 		self.raw_to_braille_pos = new_raw_to_braille_pos
 		self.braille_to_raw_pos = new_braille_to_raw_pos
 
@@ -388,13 +194,7 @@ class TranslationResult:
 		blank_cell = chr(0x2800)
 		# The original token indices before which a separator goes. The original loop
 		# skipped every inserted separator, so it checked exactly these adjacent pairs.
-		positions = []
-		for i in range(1, len(self.raw)):
-			prev_tok = self.raw[i - 1]
-			curr_tok = self.raw[i]
-			# 防禦：空字串不處理
-			if prev_tok and curr_tok and prev_tok[-1] in self.RIGHT_PUNCT and curr_tok[0] in self.LEFT_PUNCT:
-				positions.append(i)
+		positions = list(iter_separator_positions(self.raw))
 		if not positions:
 			return
 		if not _is_well_formed_alignment(self.raw, self.braille, self.braille_to_raw_pos, self.raw_to_braille_pos):

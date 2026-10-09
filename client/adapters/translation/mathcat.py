@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from translate import TranslationResult
+from conversion.alignment import TranslationResult
 
 
 class MathCATMathTranslator:

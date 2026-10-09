@@ -99,6 +99,14 @@ assert not hasattr(translate, "translate_as_single_token")
             build_language_blocks({"ja", "zh", "ko"}),
         )
 
+    def test_translate_reexports_the_alignment_class(self) -> None:
+        import conversion.alignment
+        import translate
+
+        self.assertIs(translate.TranslationResult, conversion.alignment.TranslationResult)
+        self.assertEqual(TranslationResult.__module__, "conversion.alignment")
+        self.assertEqual(translate.__all__, ["TranslationResult"])
+
 
 class SharedConstantsTest(unittest.TestCase):
     def test_instance_holds_only_its_data_fields(self) -> None:

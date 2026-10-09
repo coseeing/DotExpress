@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
-from translate import TranslationResult
+from conversion.alignment import TranslationResult
 
 
 class BrailleTextTranslator(Protocol):

@@ -110,6 +110,66 @@ assert not loaded, f"dual_view modules were imported: {loaded}"
         self.assertIs(adapters.translation.RuntimeUnavailableError, error)
         self.assertFalse(hasattr(conversion.contracts, "RuntimeUnavailableError"))
 
+    def test_production_modules_do_not_import_translate(self) -> None:
+        found = []
+        for path in sorted(CLIENT_DIR.rglob("*.py")):
+            relative = path.relative_to(CLIENT_DIR)
+            if {"tests", ".venv", "__pycache__"} & set(relative.parts) or relative.parts[:2] == ("braille", "liblouis"):
+                continue
+            if relative.as_posix() == "translate.py":
+                continue
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    names = [node.module]
+                else:
+                    continue
+                if "translate" in names:
+                    found.append(f"{relative.as_posix()}:{node.lineno}")
+
+        self.assertEqual(found, [], "import TranslationResult from conversion.alignment")
+
+    def test_alignment_modules_load_no_config_adapters_or_native_code(self) -> None:
+        script = """
+import sys
+import conversion.alignment
+import conversion.tokenizer
+import conversion.line_wrap
+import conversion.contracts
+forbidden = ("config", "adapters", "braille", "wx", "dual_view", "libmathcat_py")
+loaded = sorted(
+    name for name in sys.modules
+    if any(name == prefix or name.startswith(prefix + ".") for prefix in forbidden)
+)
+assert not loaded, f"loaded: {loaded}"
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_tokenizer_and_line_wrap_do_not_import_alignment(self) -> None:
+        script = """
+import sys
+import conversion.tokenizer
+import conversion.line_wrap
+loaded = sorted(name for name in sys.modules if name in {"conversion.alignment", "translate"})
+assert not loaded, f"loaded: {loaded}"
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_dual_view_does_not_import_conversion_or_config(self) -> None:
         script = """
 import sys

@@ -172,7 +172,7 @@ scripts\install.bat
 To update the translation template file (`.pot`), run:
 
 ```bat
-scripts\generate_pot.bat
+scripts\generate-pot.bat
 ```
 
 ---

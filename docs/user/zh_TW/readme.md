@@ -174,7 +174,7 @@ scripts\install.bat
 若要更新翻譯範本檔（`.pot`），請執行：
 
 ```bat
-scripts\generate_pot.bat
+scripts\generate-pot.bat
 ```
 
 ---

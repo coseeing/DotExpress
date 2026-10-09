@@ -7,10 +7,47 @@ import zipfile
 from pathlib import Path
 
 from documents.controller import DocumentController
-from documents.workspace import BatchIssue, Document, load_document_package, save_document_package
+from documents.workspace import BatchIssue, Document, PackageFiles, load_document_package, save_document_package
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
+from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
 
 SERVICE_PATH = Path(__file__).resolve().parents[1] / "documents" / "workspace_service.py"
+
+
+class _FailingInstallPackageFiles(PackageFiles):
+    """The real file operations, except that replacing onto a file named ``name`` raises ``OSError``.
+
+    The name is compared as a string: ``Path`` equality ignores case on Windows.
+    """
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def replace(self, source: Path, destination: Path) -> None:
+        if Path(destination).name == self.name:
+            raise OSError("injected install failure")
+        super().replace(source, destination)
+
+
+class _RecordingCaseInsensitivePackageFiles(CaseInsensitivePackageFiles):
+    """The case-insensitive model, recording the destination name of every ``replace``."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.replaced_onto: list[str] = []
+
+    def replace(self, source: Path, destination: Path) -> None:
+        super().replace(source, destination)
+        self.replaced_onto.append(Path(destination).name)
+
+
+class _UnusablePackageFiles:
+    """Any use fails the test: a regular rename must not go through ``package_files``."""
+
+    def _fail(self, *_args) -> None:
+        raise AssertionError("a regular rename used package_files")
+
+    exists = write = replace = remove = temporary_path = _fail
 
 
 class DocumentWorkspaceServiceTest(unittest.TestCase):
@@ -20,9 +57,11 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.root = Path(temp_dir.name)
         self.workspace = self.root / "workspace"
 
-    def _service(self, documents=(), **state) -> DocumentWorkspaceService:
+    def _service(self, documents=(), *, package_files=None, **state) -> DocumentWorkspaceService:
         self.controller = DocumentController(documents=list(documents), **state)
-        return DocumentWorkspaceService(self.controller, self.workspace)
+        if package_files is None:
+            return DocumentWorkspaceService(self.controller, self.workspace)
+        return DocumentWorkspaceService(self.controller, self.workspace, package_files=package_files)
 
     def _write(self, *documents: Document) -> None:
         for document in documents:
@@ -265,6 +304,75 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(self._listing(), ["alpha.dep", "gamma.dep"])
         self.assertEqual(self._package("gamma"), Document("gamma", "a", "1"))
         self.assertEqual(self._state(), before)
+
+    def _assert_case_only_rename(self, service: DocumentWorkspaceService) -> None:
+        self.assertEqual(service.rename_document("Alpha", "alpha"), Document("alpha", "a", "1"))
+
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+        self.assertEqual(self._members("alpha"), ["alpha.brl", "alpha.txt"])
+        self.assertEqual(self._package("alpha"), Document("alpha", "a", "1"))
+        self.assertEqual(self._package("beta"), Document("beta", "b", "2"))
+        self.assertEqual(
+            self._state(),
+            ([Document("alpha", "a", "1"), Document("beta", "b", "2")], "alpha", "alpha", {"alpha": ("segment",)}),
+        )
+
+    def _case_only_service(self, package_files=None) -> DocumentWorkspaceService:
+        self._write(Document("Alpha", "a", "1"), Document("beta", "b", "2"))
+        return self._service(
+            [Document("Alpha", "a", "1"), Document("beta", "b", "2")],
+            package_files=package_files,
+            open_name="Alpha",
+            selected_name="Alpha",
+            dual_view_results_by_document={"Alpha": ("segment",)},
+        )
+
+    def test_case_only_rename_moves_the_package_and_updates_the_controller(self) -> None:
+        self._assert_case_only_rename(self._case_only_service())
+
+    def test_case_only_rename_on_a_case_insensitive_file_model(self) -> None:
+        # F-1: the Linux stand-in for Windows and macOS (P1-3 known defect 1 lost the package).
+        self._assert_case_only_rename(self._case_only_service(CaseInsensitivePackageFiles()))
+
+    def test_case_only_rename_on_a_case_insensitive_file_model_survives_a_reload(self) -> None:
+        # F-1 end to end: the service's real case-only rename on the model, then a fresh
+        # load of the workspace (the next start). On Linux the old rename path never calls
+        # package_files, so the test also checks that the model installed alpha.dep.
+        files = _RecordingCaseInsensitivePackageFiles()
+        service = self._case_only_service(files)
+
+        service.rename_document("Alpha", "alpha")
+
+        self.assertIn("alpha.dep", files.replaced_onto)
+        reloaded = DocumentController()
+        invalid_paths = DocumentWorkspaceService(reloaded, self.workspace).load_documents()
+        self.assertEqual(invalid_paths, [])
+        self.assertEqual(reloaded.documents, [Document("alpha", "a", "1"), Document("beta", "b", "2")])
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+        self.assertEqual(self._members("alpha"), ["alpha.brl", "alpha.txt"])
+
+    def test_case_only_rename_install_failure_propagates_and_keeps_state(self) -> None:
+        service = self._case_only_service(_FailingInstallPackageFiles("alpha.dep"))
+        alpha_bytes = (self.workspace / "Alpha.dep").read_bytes()
+        before = self._state()
+
+        with self.assertRaises(OSError):
+            service.rename_document("Alpha", "alpha")
+
+        self.assertEqual(self._listing(), ["Alpha.dep", "beta.dep"])
+        self.assertEqual((self.workspace / "Alpha.dep").read_bytes(), alpha_bytes)
+        self.assertEqual(self._state(), before)
+
+    def test_regular_rename_does_not_use_package_files(self) -> None:
+        # F-1 (D6): only case-only renames take the new path; regular renames keep
+        # today's write-then-unlink sequence (known defect 3 stays pinned above).
+        self._write(Document("alpha", "a", "1"))
+        service = self._service([Document("alpha", "a", "1")], package_files=_UnusablePackageFiles())
+
+        self.assertEqual(service.rename_document("alpha", "gamma"), Document("gamma", "a", "1"))
+
+        self.assertEqual(self._listing(), ["gamma.dep"])
+        self.assertEqual(self._package("gamma"), Document("gamma", "a", "1"))
 
     def test_rename_unknown_source_does_nothing(self) -> None:
         service = self._service([Document("alpha", "a", "1")])

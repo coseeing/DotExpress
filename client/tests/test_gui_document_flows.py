@@ -15,6 +15,7 @@ from unittest.mock import ANY, DEFAULT, Mock, call, patch
 
 from tests import wx_stub
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
+from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
 from tests.menu_recording import DOCUMENT_MENU_BUILD_LOG, MenuRecorder, enable_log, fake_translate
 
 _SCOPE = wx_stub.StubScope(
@@ -1831,15 +1832,6 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
             frame,
         )
 
-    def _skip_unless_case_sensitive(self, sensitive: bool) -> None:
-        self.workspace.mkdir(parents=True, exist_ok=True)
-        probe = self.workspace / "case-probe"
-        probe.write_text("", encoding="utf-8")
-        is_sensitive = not (self.workspace / "CASE-PROBE").exists()
-        probe.unlink()
-        if is_sensitive != sensitive:
-            self.skipTest("needs a case-%s file system" % ("sensitive" if sensitive else "insensitive"))
-
     # --- Add and default document ------------------------------------------
 
     def test_add_saves_open_document_then_creates_and_opens_new_document(self) -> None:
@@ -2107,34 +2099,35 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
                 self.assertEqual(self._listing(), ["alpha.dep"])
                 self.assertEqual(self._state(frame), before)
 
-    def test_case_only_rename_on_case_sensitive_file_system(self) -> None:
-        self._skip_unless_case_sensitive(True)
+    def _rename_alpha_case_only(self, package_files=None):
         alpha = Document("Alpha", "a", "1")
         self._write_packages(alpha)
         frame = self._make_workspace_frame([alpha], open_name="Alpha", selected_name="Alpha")
+        if package_files is not None:
+            frame._workspace_service = DocumentWorkspaceService(
+                frame._document_controller,
+                self.workspace,
+                package_files=package_files,
+            )
         self.names = ["alpha"]
 
         frame.on_rename_document(None)
 
         self.assertEqual(self._listing(), ["alpha.dep"])
         self.assertEqual(self._package("alpha"), Document("alpha", "a", "1"))
-        self.assertEqual(frame._document_controller.document_names, ["alpha"])
-
-    def test_case_only_rename_on_case_insensitive_file_system_deletes_package(self) -> None:
-        # KNOWN BUG (P1-3 spec, known defect 1; data loss), pinned as it is today, NOT
-        # desired behavior: the new package is the old file, so the unlink that follows
-        # removes the document. A later fix task flips this.
-        self._skip_unless_case_sensitive(False)
-        alpha = Document("Alpha", "a", "1")
-        self._write_packages(alpha)
-        frame = self._make_workspace_frame([alpha], open_name="Alpha", selected_name="Alpha")
-        self.names = ["alpha"]
-
-        frame.on_rename_document(None)
-
-        self.assertEqual(self._listing(), [])
+        self.assertEqual(self._members("alpha"), ["alpha.brl", "alpha.txt"])
         self.assertEqual(frame._document_controller.document_names, ["alpha"])
         self.assertEqual(self.events, [("DocumentNameDialog", gui._("Rename Document"), "Alpha"), ("title", "alpha - DotExpress")])
+
+    def test_case_only_rename_keeps_the_document(self) -> None:
+        # Replaces the KNOWN BUG test of P1-3 known defect 1 (data loss: the case-only
+        # rename deleted the package on a case-insensitive file system), fixed by F-1.
+        # Runs on the host's real file system: case-insensitive on Windows and macOS.
+        self._rename_alpha_case_only()
+
+    def test_case_only_rename_on_a_case_insensitive_file_model_keeps_the_document(self) -> None:
+        # F-1: the same rename on the case-insensitive file model, so Linux covers it too.
+        self._rename_alpha_case_only(CaseInsensitivePackageFiles())
 
     def _duplicate_name_events(self, title: str, initial_name: str, typed_name: str, frame) -> list:
         return [

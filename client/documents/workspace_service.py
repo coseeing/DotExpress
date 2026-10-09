@@ -3,7 +3,10 @@
 No wx: the frame keeps the dialogs, confirmations, error messages and list refreshes.
 The order of memory and disk effects is part of the contract: save updates memory
 before writing, rename writes the new package before deleting the old one, and
-Delete All reports a failure before it reloads the workspace.
+Delete All reports a failure before it reloads the workspace. A case-only rename
+(``Alpha`` to ``alpha``) instead stages the new package and moves the old one aside
+before installing it (``move_document_package``), because on a case-insensitive file
+system both names are the same file.
 """
 
 from __future__ import annotations
@@ -17,10 +20,12 @@ from documents.session import DeleteDocumentDecision
 from documents.workspace import (
     BatchIssue,
     Document,
+    PackageFiles,
     batch_import_documents,
     document_package_path_for_name,
     ensure_workspace_directory,
     load_workspace_documents,
+    move_document_package,
     prepare_document_for_save,
     save_document_package,
 )
@@ -39,9 +44,16 @@ class DeleteAllResult:
 
 
 class DocumentWorkspaceService:
-    def __init__(self, controller: DocumentController, workspace_dir: Path) -> None:
+    def __init__(
+        self,
+        controller: DocumentController,
+        workspace_dir: Path,
+        *,
+        package_files: PackageFiles | None = None,
+    ) -> None:
         self._controller = controller
         self._workspace_dir = Path(workspace_dir)
+        self._package_files = package_files or PackageFiles()
 
     @property
     def workspace_dir(self) -> Path:
@@ -101,6 +113,14 @@ class DocumentWorkspaceService:
         source = self._controller.get_document(source_name)
         if source is None:
             return None
+        if source_name.casefold() == new_name.casefold():
+            move_document_package(
+                self.package_path(source_name),
+                self.package_path(new_name),
+                Document(new_name, source.text, source.braille),
+                files=self._package_files,
+            )
+            return self._controller.rename_document(source_name, new_name)
         save_document_package(self.package_path(new_name), Document(new_name, source.text, source.braille))
         old_path = self.package_path(source_name)
         if old_path.exists():

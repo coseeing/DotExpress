@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import shared.atomic_write as atomic_write
+from tests.windows_file_handles import SHARE_MODES, hold_open, make_read_only
 
 
 def _write_line(stream) -> None:
@@ -204,6 +205,170 @@ class WriteTextAtomicallyTest(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), b"old,bytes\n")
         self.assertEqual(taken.read_bytes(), b"someone else's\n")
         self.assertEqual(self.listing(), [".d.csv.aaaa.tmp", "d.csv"])
+
+
+def _write_new_bytes(stream) -> None:
+    stream.write(b"new bytes")
+
+
+class WriteBytesAtomicallyTest(unittest.TestCase):
+    """The binary variant that document packages use (F-3): the same steps and guarantee."""
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.directory = Path(self._tmpdir.name)
+        self.path = self.directory / "d.dep"
+
+    def listing(self) -> list[str]:
+        return sorted(os.listdir(self.directory))
+
+    def test_replaces_an_existing_file_with_the_written_bytes(self) -> None:
+        self.path.write_bytes(b"old bytes")
+
+        atomic_write.write_bytes_atomically(self.path, _write_new_bytes)
+
+        self.assertEqual(self.path.read_bytes(), b"new bytes")
+        self.assertEqual(self.listing(), ["d.dep"])
+
+    def test_creates_a_file_that_does_not_exist(self) -> None:
+        atomic_write.write_bytes_atomically(str(self.path), _write_new_bytes)
+
+        self.assertEqual(self.path.read_bytes(), b"new bytes")
+        self.assertEqual(self.listing(), ["d.dep"])
+
+    def test_disk_full_while_writing_keeps_the_original_bytes_and_leaves_no_temporary_file(self) -> None:
+        self.path.write_bytes(b"old bytes")
+
+        def fill_the_disk(stream) -> None:
+            stream.write(b"new")
+            raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+
+        with self.assertRaises(OSError) as raised:
+            atomic_write.write_bytes_atomically(self.path, fill_the_disk)
+
+        self.assertEqual(raised.exception.errno, errno.ENOSPC)
+        self.assertEqual(self.path.read_bytes(), b"old bytes")
+        self.assertEqual(self.listing(), ["d.dep"])
+
+    def test_replace_error_keeps_the_original_bytes_and_leaves_no_temporary_file(self) -> None:
+        self.path.write_bytes(b"old bytes")
+
+        with patch("os.replace", side_effect=PermissionError(13, "denied")) as replace:
+            with self.assertRaises(PermissionError):
+                atomic_write.write_bytes_atomically(self.path, _write_new_bytes)
+
+        source, destination = replace.call_args.args
+        self.assertEqual(Path(source).parent, self.directory)
+        self.assertRegex(Path(source).name, r"^\.d\.dep\.[0-9a-f]{16}\.tmp$")
+        self.assertEqual(Path(destination), self.path)
+        self.assertEqual(self.path.read_bytes(), b"old bytes")
+        self.assertEqual(self.listing(), ["d.dep"])
+
+    def test_interrupt_leaves_no_temporary_file_and_propagates(self) -> None:
+        self.path.write_bytes(b"old bytes")
+
+        def interrupt(stream) -> None:
+            stream.write(b"new")
+            raise KeyboardInterrupt
+
+        with self.assertRaises(KeyboardInterrupt):
+            atomic_write.write_bytes_atomically(self.path, interrupt)
+
+        self.assertEqual(self.path.read_bytes(), b"old bytes")
+        self.assertEqual(self.listing(), ["d.dep"])
+
+    def test_data_is_flushed_to_disk_before_the_replace(self) -> None:
+        calls = Mock()
+        real_fsync = os.fsync
+        sizes_at_fsync = []
+
+        def fsync_recording_the_size(descriptor: int) -> None:
+            # fsync only reaches what the stream has already handed to the descriptor.
+            sizes_at_fsync.append(os.fstat(descriptor).st_size)
+            real_fsync(descriptor)
+
+        with patch("os.fsync", side_effect=fsync_recording_the_size) as fsync, patch(
+            "os.replace", wraps=os.replace
+        ) as replace:
+            calls.attach_mock(fsync, "fsync")
+            calls.attach_mock(replace, "replace")
+            atomic_write.write_bytes_atomically(self.path, _write_new_bytes)
+
+        self.assertEqual([name for name, _args, _kwargs in calls.mock_calls], ["fsync", "replace"])
+        self.assertEqual(sizes_at_fsync, [len(b"new bytes")])
+        self.assertEqual(self.path.read_bytes(), b"new bytes")
+
+    def test_a_file_without_write_access_raises_permission_error_and_is_kept(self) -> None:
+        self.path.write_bytes(b"old bytes")
+
+        with patch("os.access", return_value=False) as access:
+            with self.assertRaises(PermissionError) as raised:
+                atomic_write.write_bytes_atomically(self.path, _write_new_bytes)
+
+        access.assert_called_with(self.path, os.W_OK)
+        self.assertEqual(
+            str(raised.exception),
+            f"[Errno {errno.EACCES}] {os.strerror(errno.EACCES)}: {str(self.path)!r}",
+        )
+        self.assertEqual(self.path.read_bytes(), b"old bytes")
+        self.assertEqual(self.listing(), ["d.dep"])
+
+    def test_ensure_writable_accepts_missing_and_writable_files_and_refuses_others(self) -> None:
+        with patch("os.access", return_value=False) as access:
+            atomic_write.ensure_writable(self.path)
+        access.assert_not_called()
+
+        self.path.write_bytes(b"old bytes")
+        atomic_write.ensure_writable(self.path)
+
+        with patch("os.access", return_value=False) as access:
+            with self.assertRaises(PermissionError) as raised:
+                atomic_write.ensure_writable(str(self.path))
+        access.assert_called_once_with(self.path, os.W_OK)
+        self.assertEqual(raised.exception.errno, errno.EACCES)
+        self.assertEqual(raised.exception.filename, str(self.path))
+        self.assertEqual(self.listing(), ["d.dep"])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX permission bits")
+    def test_keeps_the_permission_bits_of_an_existing_file(self) -> None:
+        self.path.write_bytes(b"old bytes")
+        os.chmod(self.path, 0o640)
+
+        atomic_write.write_bytes_atomically(self.path, _write_new_bytes)
+
+        self.assertEqual(oct(stat.S_IMODE(os.stat(self.path).st_mode)), oct(0o640))
+        self.assertEqual(self.path.read_bytes(), b"new bytes")
+
+    @unittest.skipUnless(os.name == "nt", "Windows read-only attribute")
+    def test_a_read_only_file_is_refused_with_the_in_place_verdict(self) -> None:
+        self.path.write_bytes(b"old bytes")
+        make_read_only(self, self.path)
+
+        with self.assertRaises(PermissionError) as raised:
+            atomic_write.write_bytes_atomically(self.path, _write_new_bytes)
+
+        self.assertEqual(str(raised.exception), f"[Errno 13] Permission denied: {str(self.path)!r}")
+        self.assertEqual(self.path.read_bytes(), b"old bytes")
+        self.assertEqual(self.listing(), ["d.dep"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows sharing modes")
+    def test_a_file_held_open_by_another_handle_is_kept(self) -> None:
+        # os.replace refuses a destination that any handle has open, whatever it shares:
+        # the file keeps its bytes and the temporary file goes (spec D10, Q1).
+        self.path.write_bytes(b"old bytes")
+        for label, share in SHARE_MODES:
+            with self.subTest(share=label):
+                release = hold_open(self, self.path, share)
+                try:
+                    with self.assertRaises(PermissionError) as raised:
+                        atomic_write.write_bytes_atomically(self.path, _write_new_bytes)
+                finally:
+                    release()
+
+                self.assertEqual(raised.exception.winerror, 5)
+                self.assertEqual(self.path.read_bytes(), b"old bytes")
+                self.assertEqual(self.listing(), ["d.dep"])
 
 
 class ProductionCodeDoesNotSetTheUmaskTest(unittest.TestCase):

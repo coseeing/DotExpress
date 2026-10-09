@@ -16,16 +16,32 @@ In the same task, on the same branch:
 2. **`reclean_braille_endspace` becomes linear** (P1-5 known defect 3). Output must be byte-identical.
 3. **Prerequisites** (HANDOFF section 4.3): `tests/test_translation_result.py` is converted to `unittest` and its 5 failures are adjudicated (verdicts below: all five are fixture defects, none is a production bug); `adapters/translation/contracts.py` moves its ports into `conversion/contracts.py` and `adapters` joins `HIGHER_LAYERS` (P2 review M-1).
 4. **Safety net before any production change**: the existing fake-helper golden stays byte-identical; a frozen copy of today's `translate.py` serves as a test oracle for randomized equivalence tests (runs everywhere); a new Windows-only golden pins real liblouis and MathCAT output (Chinese, English UEB grade 1 and 2, Japanese, math, punctuation, widths 1-40) and the recorded `p25_*.brl` hashes, and skips where liblouis is absent.
-5. **Proposed addition (needs the user's yes, see Open Questions):** `reclean_token` becomes linear too. Found while writing this spec: on dialogue-heavy Chinese text it is quadratic and much slower than the trim (322 s for 99,200 characters with 9,600 separators, real liblouis). Byte-identical, same safety net, its own commit, droppable without touching the other steps.
+5. **Proposed addition (decided: included, see Open Questions):** `reclean_token` becomes linear too. Found while writing this spec: on dialogue-heavy Chinese text it is quadratic and much slower than the trim (322 s for 99,200 characters with 9,600 separators, real liblouis). Byte-identical, same safety net, its own commit, droppable without touching the other steps.
 
 This is a behavior-preserving refactor except for the test expectation in item 1, which pins today's behavior. For any input the braille text (Unicode and ASCII), the BRL bytes, the source-text wrap, every alignment list and every dual-view segment and HTML are byte-identical to `main` at `d4a7aa1`. No user-facing string changes; no `.po`/`.mo` change.
 
-If the plan corrects this spec, a "Corrections" section is added here after planning, as in earlier specs.
+Corrected after planning: the plan `docs/superpowers/plans/2026-10-09-p2-5-translate-split.md` (section "Spec Corrections and Refinements") fixed three facts (the oracle cannot be a byte copy and carry a header; the language-blocks patch target must move when the tokenizer is extracted, not at the class move; the separator timing test size) and refined the safety net, two implementation details and the counts. The section "Corrected after planning" below lists every change against the first version (commit `079d58b`); where a later section disagrees with that list, the list wins.
 
-## Open Questions for the User
+## Corrected after planning (2026-10-09)
 
-- **Q1. Make `reclean_token` linear in P2-5 (D6)?** Not in the brief, but the same kind of fix as the decided trim and on the same code path. Default in this spec: included as migration step 7; if the user says no, step 7 is dropped and nothing else changes.
-- **Q2 (finding, not part of P2-5).** With English set to UEB grade 2, words that contain a contraction are cut into several tokens (`brown` -> `br`, `ow`, `n`), so the line wrapper can break a word in the middle without a hyphen: at width 8, `The quick br` / `own fox`. Grade 1 (the default) is not affected. Fixing it changes braille layout, so it is a user decision and a separate task; P2-5 pins today's behavior in the Windows golden.
+1. **Q1 and Q2 are decided** (orchestrator, 2026-10-09): Q1 yes, migration step 7 (D6, linear `reclean_token`) is part of P2-5. Q2 is out of scope: P2-5 only pins today's behavior; the mid-word break with UEB grade 2 stays a known pre-existing defect (Known Defects 1) for a later user decision.
+2. **The oracle is header + marker + verbatim copy (D11.2).** `tests/legacy_translation_result.py` is a five-line comment header ending with the marker line `# ---- verbatim copy of client/translate.py at d4a7aa1 follows ----`, followed by the exact bytes of `git show d4a7aa1:client/translate.py`. The oracle test LF-normalizes the file and checks that the part after the marker has the blob id `10bd641485327b00cb71a14d4946f01a1788f794` (a byte copy with a header would have a different blob id).
+3. **The `build_language_blocks` patch target moves in step 8, not step 10 (D7, Test Plan F).** Once the tokenizer owns the constants, `translate.py` no longer imports `build_language_blocks`, so `patch("translate.build_language_blocks")` raises `AttributeError`; step 8 changes it to `conversion.tokenizer.build_language_blocks`.
+4. **Separator timing test: 10,000 separators (Test Plan E).** The old `reclean_token` takes 19 s for 10,000 `」「` pairs on the Windows machine and would take more than a minute for 20,000; the test is `test_inserting_ten_thousand_separators_takes_linear_time` (bound 2 s; linear 0.01 s). The trim test keeps 40,000 tokens (old code 42 s there, not 37 s; linear 0.02 s).
+5. **Real golden shape (D11.3).** 17 cases: the 8 inputs for each table set and one long document (the `p25_perf.py` paragraph x 400, width 40) with the default tables only, since it is Chinese only. Per case: the input's sha256, the display text per run (digest only for the long document), the post-processed tokens (digest for the long document), the digests of the merged lists, the post-processed lists and the dual-view segments, and the segment count. The fixture is about 34 KB; the module runs in 1.7 s after step 6 (4.9 s before). A liblouis version other than the recorded `3.37.0` makes `setUpClass` raise an `AssertionError` that says to regenerate only for an intended upgrade. The runtime comes from `create_default_text_translator()` and `create_default_math_translator()` directly and is closed by a class cleanup.
+6. **Equivalence tests (D11.2)** also compare which of the four attributes still hold the original list objects ("mutates in place or replaces"). Half of the `reclean_token` cases and half of the whole-chain cases use a separator-dense unit alphabet (with the general one, fewer than 100 of 4,000 well-formed cases had a separator and none had two). 4,000 cases per operation, 2,000 chains; the module runs in 1.3 s.
+7. **The fast trim does not run the final clamp loop (D5).** On the fast path no start can exceed the new length, so it is skipped (a comment says why); the stepwise fallback keeps it.
+8. **Separator positions are taken eagerly (D6).** `reclean_token` computes `list(iter_separator_positions(...))` before choosing a path. The positions depend only on the original tokens and computing them cannot raise for string tokens, so the one-by-one fallback still raises at the same insertion.
+9. **Moved code keeps its comments (D1).** The moved bodies keep their Chinese comments verbatim; the `bind_word_tokens` docstring stays on the method. `line_wrap.py` drops the two commented-out lines at the end of `wrap` and adds the English branch comments D4 allows.
+10. **Fixture defects (D10).** `test_bind_word_tokens_complex` also has a short map (96 characters, 94 cells and positions); it passes because the regroup never reads past position 82 and stays as written.
+11. **Guards (Test Plan F).** `test_tokenizer_and_line_wrap_do_not_import_alignment` passes when it is added (a guard, not a red test). Until step 10, `conversion/contracts.py` imports `TranslationResult` from `translate`.
+12. **Windows verification 4.** `D:\dxtest\N` holds only `DotExpress.exe`; the packaged outputs are compared with `docs/superpowers/history/2026-10-09-03-windows-verification/baseline/p25_*.brl`, which N and B matched byte for byte.
+13. **Counts.** After step 10: `Ran 1208`, `FAILED (errors=1, skipped=5)` on Windows (F-W6 only). Per commit: 1157, 1158, 1171, 1179, 1180, 1183, 1186, 1200, 1204, 1208. The real-golden module has 13 tests; the equivalence module 8; the tokenizer module 14; the line-wrap module 4.
+
+## Open Questions for the User (decided 2026-10-09, see above)
+
+- **Q1. Make `reclean_token` linear in P2-5 (D6)?** Not in the brief, but the same kind of fix as the decided trim and on the same code path. **Decided: yes**, migration step 7.
+- **Q2 (finding, not part of P2-5).** With English set to UEB grade 2, words that contain a contraction are cut into several tokens (`brown` -> `br`, `ow`, `n`), so the line wrapper can break a word in the middle without a hyphen: at width 8, `The quick br` / `own fox`. Grade 1 (the default) is not affected. Fixing it changes braille layout, so it is a user decision and a separate task. **Decided: out of scope**; P2-5 pins today's behavior in the Windows golden, and the defect stays open for a later user decision (Known Defects 1).
 
 ## Inputs Already Decided
 
@@ -214,7 +230,7 @@ Steps 1-4 change tests only and are made on unchanged production code; steps 5-1
 4. `test: add the pre-split oracle and equivalence tests` (D11.2). Green by construction; a throwaway mutation check (plan) shows each equivalence test fails for a deliberate in-memory change of the corresponding production method.
 5. `refactor: move the translation ports into conversion` (D8). Red: `"adapters"` added to `HIGHER_LAYERS` lists the four `conversion` imports.
 6. `perf: trim trailing blank cells in one pass` (D5, item 2). Red: the timing test.
-7. `perf: insert punctuation separators in one pass` (D6). Red: the timing test. **Only if the user answers yes to Q1.**
+7. `perf: insert punctuation separators in one pass` (D6). Red: the timing test. **Q1 decided yes: included.**
 8. `refactor: extract the tokenizer` (D3). Red: `tests/test_conversion_tokenizer.py` (`ModuleNotFoundError`).
 9. `refactor: extract the line wrapper` (D4). Red: `tests/test_conversion_line_wrap.py`.
 10. `refactor: move TranslationResult to conversion.alignment` (D1, D2, D7). Red: the import guards of part F.
@@ -244,7 +260,7 @@ All tests are `unittest`; new files use 4 spaces, edited files keep their indent
 ### E. Performance guards (steps 6, 7) in `tests/test_translation_result_core.py`
 
 - `LinearTrimTest`: `test_trimming_forty_thousand_tokens_takes_linear_time` (each token one non-blank and one blank cell; result equals a reference computed by plain slicing; bound 2 s; prototype 0.015 s, today about 37 s here), `test_trim_keeps_the_list_objects` (identity of the three lists before and after), `test_malformed_alignment_uses_the_stepwise_trim` (patch the private fallback with a wrapper: called for a shuffled map, not called for a well-formed one).
-- `LinearSeparatorTest` (only with Q1 = yes): `test_inserting_twenty_thousand_separators_takes_linear_time` (`」「` pairs; reference built independently; bound 2 s), `test_well_formed_alignment_never_calls_insert_token` (`insert_token` patched with `side_effect=AssertionError`), `test_malformed_alignment_inserts_one_by_one`.
+- `LinearSeparatorTest` (Q1 = yes): `test_inserting_ten_thousand_separators_takes_linear_time` (`」「` pairs, 10,000 separators, see Corrected after planning 4; reference built independently; bound 2 s), `test_well_formed_alignment_never_calls_insert_token` (`insert_token` patched with `side_effect=AssertionError`), `test_malformed_alignment_inserts_one_by_one`.
 
 The timing bounds are backstops; the structural tests and part D are the binding checks.
 
@@ -295,7 +311,7 @@ No menu, dialog or string changes, so no screenshots and no `generate-pot.bat` r
 
 ## Known Defects Found (not fixed here)
 
-1. UEB grade 2 words with contractions can be broken across lines (Q2).
+1. UEB grade 2 words with contractions can be broken across lines (Q2). Pre-existing, unchanged by P2-5 and pinned by the real golden (`ueb_g2/en_prose` tokens `br`, `ow`, `n`); fixing it changes braille layout and waits for a user decision in a separate task.
 2. `wrap` raises `IndexError` on an empty source token (`token[-1]`), and `bind_word_tokens` on a `raw_to_braille_pos` shorter than `raw`. No producer creates either; kept as is and covered by the equivalence tests.
 3. `language_has_all` builds a set per character (P1-5 known defect 4).
 4. Root `AGENTS.md` "Key Modules" still describes the old top-level layout (`translate.py`, `utils.py`, ...).

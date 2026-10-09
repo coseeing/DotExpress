@@ -16,16 +16,32 @@
 2. **`reclean_braille_endspace` 改為線性**（P1-5 已知缺陷 3）。輸出必須逐位元組相同。
 3. **前置工作**（HANDOFF 4.3 節）：`tests/test_translation_result.py` 轉成 `unittest`，並裁決其 5 個失敗（裁決見下：五個都是 fixture 錯誤，沒有正式程式碼的缺陷）；`adapters/translation/contracts.py` 的 port 移到 `conversion/contracts.py`，並把 `adapters` 加入 `HIGHER_LAYERS`（P2 審查 M-1）。
 4. **先建安全網，再動正式程式碼**：既有的假 helper golden 維持逐位元組不變；以目前 `translate.py` 的凍結複本作為測試 oracle，進行隨機等價測試（所有平台都執行）；新增只在 Windows 執行的 golden，鎖定真實 liblouis 與 MathCAT 的輸出（中文、英文 UEB 一級與二級、日文、數學、標點、寬度 1-40）以及已記錄的 `p25_*.brl` 雜湊值，沒有 liblouis 的環境則略過。
-5. **提議新增（需使用者同意，見「待使用者決定」）：** `reclean_token` 也改為線性。這是撰寫本規格時發現的：在對話很多的中文文字上，它是平方複雜度，而且比修剪慢得多（真實 liblouis，99,200 字、9,600 個分隔空白需 322 秒）。輸出逐位元組相同、使用同一張安全網、獨立 commit，可以拿掉而不影響其他步驟。
+5. **提議新增（已決定納入，見「待使用者決定」）：** `reclean_token` 也改為線性。這是撰寫本規格時發現的：在對話很多的中文文字上，它是平方複雜度，而且比修剪慢得多（真實 liblouis，99,200 字、9,600 個分隔空白需 322 秒）。輸出逐位元組相同、使用同一張安全網、獨立 commit，可以拿掉而不影響其他步驟。
 
 除了第 1 項的測試預期（它鎖定的是目前的行為）以外，這是保持行為不變的重構。對任何輸入，點字文字（Unicode 與 ASCII）、BRL 位元組、原文換行、每個對位 list、每個 Dual View 段與 HTML 都與 `main` 的 `d4a7aa1` 逐位元組相同。使用者可見字串不變；`.po`/`.mo` 不變。
 
-若計畫更正本規格，會在規劃後於此處加入「Corrections」一節，與先前的規格相同。
+規劃後更正：計畫 `docs/superpowers/plans/2026-10-09-p2-5-translate-split.md`（「Spec Corrections and Refinements」一節）更正了三項事實（oracle 不可能既是逐位元組複本又帶標頭；language blocks 的 patch 目標必須在抽出 tokenizer 時就改，而不是搬移類別時；分隔空白計時測試的規模），並細化了安全網、兩處實作細節與測試數量。下方「規劃後更正」一節列出相對於第一版（commit `079d58b`）的所有變更；若後面的章節與該清單不一致，以清單為準。
 
-## 待使用者決定
+## 規劃後更正（2026-10-09）
 
-- **Q1. 是否在 P2-5 把 `reclean_token` 改為線性（D6）？** 不在原本的範圍內，但與已決定的修剪是同一類修正、位於同一條程式路徑。本規格預設：納入，作為遷移步驟 7；若使用者說不要，就拿掉步驟 7，其餘不變。
-- **Q2（發現，不屬於 P2-5）。** 英文設為 UEB 二級時，含縮寫的詞會被切成數個 token（`brown` -> `br`、`ow`、`n`），所以換行器可能在詞的中間斷行而沒有連字號：寬度 8 時為 `The quick br` / `own fox`。一級（預設）不受影響。修正會改變點字版面，所以是使用者的決定，應另立任務；P2-5 在 Windows golden 中鎖定目前的行為。
+1. **Q1 與 Q2 已決定**（協調者，2026-10-09）：Q1 同意，遷移步驟 7（D6，線性 `reclean_token`）納入 P2-5。Q2 不在範圍內：P2-5 只鎖定目前的行為；UEB 二級在詞中間斷行仍是既有的已知缺陷（「發現但不在此修正的缺陷」第 1 項），留待使用者日後決定。
+2. **oracle 是「標頭 + 標記行 + 逐位元組複本」（D11.2）。** `tests/legacy_translation_result.py` 開頭是五行註解，最後一行是標記 `# ---- verbatim copy of client/translate.py at d4a7aa1 follows ----`，其後是 `git show d4a7aa1:client/translate.py` 的原始位元組。oracle 測試把檔案換行正規化為 LF，檢查標記之後的部分的 blob id 為 `10bd641485327b00cb71a14d4946f01a1788f794`（加了標頭的整份複本 blob id 一定不同）。
+3. **`build_language_blocks` 的 patch 目標在步驟 8 改，而不是步驟 10（D7、測試計畫 F）。** tokenizer 擁有常數之後，`translate.py` 不再 import `build_language_blocks`，`patch("translate.build_language_blocks")` 會引發 `AttributeError`；步驟 8 把它改成 `conversion.tokenizer.build_language_blocks`。
+4. **分隔空白計時測試用 10,000 個分隔空白（測試計畫 E）。** 舊的 `reclean_token` 在這台 Windows 機器上處理 10,000 組 `」「` 需 19 秒，20,000 組會超過一分鐘；測試名稱為 `test_inserting_ten_thousand_separators_takes_linear_time`（上限 2 秒；線性版 0.01 秒）。修剪測試維持 40,000 個 token（舊程式在該機器上 42 秒而非 37 秒；線性版 0.02 秒）。
+5. **真實 golden 的形狀（D11.3）。** 17 個案例：兩組翻譯表各 8 個輸入，加上一份長文件（`p25_perf.py` 的段落 x 400，寬度 40），長文件只用預設翻譯表，因為它只有中文。每個案例記錄：輸入的 sha256、每次執行的顯示文字（長文件只記摘要）、後處理後的 token（長文件記摘要）、合併後 list、後處理後 list 與 Dual View 段的摘要，以及段數。fixture 約 34 KB；步驟 6 之後模組執行 1.7 秒（之前 4.9 秒）。liblouis 版本不是記錄的 `3.37.0` 時，`setUpClass` 會引發 `AssertionError`，訊息說明只有在刻意升級時才重新產生。runtime 直接由 `create_default_text_translator()` 與 `create_default_math_translator()` 建立，並由 class cleanup 關閉。
+6. **等價測試（D11.2）** 也比對四個屬性中哪些仍是原本的 list 物件（「就地修改或替換」）。`reclean_token` 的案例與整條鏈的案例各有一半使用分隔空白密集的單位字母表（只用一般字母表時，4,000 個格式正確的案例中有分隔空白的不到 100 個，有兩個以上的為零）。每種操作 4,000 個案例，整條鏈 2,000 個；模組執行 1.3 秒。
+7. **快速修剪不執行最後的夾限迴圈（D5）。** 快速路徑上不可能有起點超過新長度，所以略過（程式中有註解說明）；逐步的後備路徑保留它。
+8. **分隔空白位置一次算出（D6）。** `reclean_token` 在選擇路徑之前先算 `list(iter_separator_positions(...))`。位置只取決於原本的 token，而且對字串 token 計算時不會引發例外，所以逐一插入的後備路徑仍在同一次插入時引發例外。
+9. **搬移的程式碼保留註解（D1）。** 搬移的程式本體原樣保留中文註解；`bind_word_tokens` 的 docstring 留在方法上。`line_wrap.py` 刪除 `wrap` 結尾兩行被註解掉的程式碼，並加入 D4 允許的英文分支註解。
+10. **fixture 錯誤（D10）。** `test_bind_word_tokens_complex` 的對應表也偏短（96 個字元、94 個點字方與位置）；因為重組從不讀到位置 82 之後，它會通過，維持原樣。
+11. **守衛（測試計畫 F）。** `test_tokenizer_and_line_wrap_do_not_import_alignment` 加入時就會通過（它是守衛，不是紅燈測試）。步驟 10 之前，`conversion/contracts.py` 從 `translate` import `TranslationResult`。
+12. **Windows 驗證第 4 項。** `D:\dxtest\N` 只有 `DotExpress.exe`；packaged build 的輸出改與 `docs/superpowers/history/2026-10-09-03-windows-verification/baseline/p25_*.brl` 比對，N 與 B 都與它逐位元組相同。
+13. **測試數量。** 步驟 10 之後在 Windows 上為 `Ran 1208`、`FAILED (errors=1, skipped=5)`（只有 F-W6）。各 commit：1157、1158、1171、1179、1180、1183、1186、1200、1204、1208。真實 golden 模組 13 個測試；等價模組 8 個；tokenizer 模組 14 個；line wrap 模組 4 個。
+
+## 待使用者決定（已於 2026-10-09 決定，見上）
+
+- **Q1. 是否在 P2-5 把 `reclean_token` 改為線性（D6）？** 不在原本的範圍內，但與已決定的修剪是同一類修正、位於同一條程式路徑。**決定：納入**，作為遷移步驟 7。
+- **Q2（發現，不屬於 P2-5）。** 英文設為 UEB 二級時，含縮寫的詞會被切成數個 token（`brown` -> `br`、`ow`、`n`），所以換行器可能在詞的中間斷行而沒有連字號：寬度 8 時為 `The quick br` / `own fox`。一級（預設）不受影響。修正會改變點字版面，所以是使用者的決定，應另立任務。**決定：不在範圍內**；P2-5 在 Windows golden 中鎖定目前的行為，此缺陷留待使用者日後決定（「發現但不在此修正的缺陷」第 1 項）。
 
 ## 已決定的前提
 
@@ -214,7 +230,7 @@ __all__ = ["TranslationResult"]
 4. `test: add the pre-split oracle and equivalence tests`（D11.2）。必然是綠燈；以一次性的突變檢查（計畫中）證明：刻意在記憶體中改壞某個正式方法時，對應的等價測試會失敗。
 5. `refactor: move the translation ports into conversion`（D8）。紅燈：把 `"adapters"` 加進 `HIGHER_LAYERS` 後列出 `conversion` 的四個 import。
 6. `perf: trim trailing blank cells in one pass`（D5，第 2 項）。紅燈：計時測試。
-7. `perf: insert punctuation separators in one pass`（D6）。紅燈：計時測試。**只有在使用者對 Q1 回答「要」時才做。**
+7. `perf: insert punctuation separators in one pass`（D6）。紅燈：計時測試。**Q1 已決定為「要」：納入。**
 8. `refactor: extract the tokenizer`（D3）。紅燈：`tests/test_conversion_tokenizer.py`（`ModuleNotFoundError`）。
 9. `refactor: extract the line wrapper`（D4）。紅燈：`tests/test_conversion_line_wrap.py`。
 10. `refactor: move TranslationResult to conversion.alignment`（D1、D2、D7）。紅燈：F 部分的 import 守衛。
@@ -244,7 +260,7 @@ __all__ = ["TranslationResult"]
 ### E. 效能守衛（步驟 6、7），位於 `tests/test_translation_result_core.py`
 
 - `LinearTrimTest`：`test_trimming_forty_thousand_tokens_takes_linear_time`（每個 token 一個非空白與一個空白點字方；結果等於以單純切片計算的參考值；上限 2 秒；原型 0.015 秒，目前在本機約 37 秒）、`test_trim_keeps_the_list_objects`（三個 list 前後是同一物件）、`test_malformed_alignment_uses_the_stepwise_trim`（以包裝函式 patch 私有 fallback：打亂的對應表會呼叫它，格式正確的不會）。
-- `LinearSeparatorTest`（只在 Q1 =「要」時）：`test_inserting_twenty_thousand_separators_takes_linear_time`（`」「` 成對；參考值獨立建立；上限 2 秒）、`test_well_formed_alignment_never_calls_insert_token`（`insert_token` 以 `side_effect=AssertionError` patch）、`test_malformed_alignment_inserts_one_by_one`。
+- `LinearSeparatorTest`（Q1 =「要」）：`test_inserting_ten_thousand_separators_takes_linear_time`（`」「` 成對，10,000 個分隔空白，見規劃後更正第 4 項；參考值獨立建立；上限 2 秒）、`test_well_formed_alignment_never_calls_insert_token`（`insert_token` 以 `side_effect=AssertionError` patch）、`test_malformed_alignment_inserts_one_by_one`。
 
 計時上限只是後盾；結構測試與 D 部分才是真正的檢查。
 
@@ -295,7 +311,7 @@ __all__ = ["TranslationResult"]
 
 ## 發現但不在此修正的缺陷
 
-1. UEB 二級中含縮寫的詞可能被斷在兩行（Q2）。
+1. UEB 二級中含縮寫的詞可能被斷在兩行（Q2）。這是既有缺陷，P2-5 不改變它，並由真實 golden 鎖定（`ueb_g2/en_prose` 的 token `br`、`ow`、`n`）；修正會改變點字版面，留待使用者決定後另立任務。
 2. `wrap` 遇到空的原文 token 會拋出 `IndexError`（`token[-1]`），`bind_word_tokens` 遇到比 `raw` 短的 `raw_to_braille_pos` 也會。沒有任何產生者會建出這兩種情況；維持原樣，由等價測試涵蓋。
 3. `language_has_all` 對每個字元建立一個 set（P1-5 已知缺陷 4）。
 4. 根目錄 `AGENTS.md` 的「Key Modules」仍描述舊的頂層配置（`translate.py`、`utils.py` 等）。

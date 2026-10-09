@@ -180,7 +180,7 @@ class WrapTest(unittest.TestCase):
 
 	def test_end_right_end_sentence_blank2(self) -> None:
 		"""右符號/句尾符號加空白"""
-		# Non-blank cells: a token whose braille ends in a blank cell gets no separator.
+		# Non-blank cells, so the closing mark gets its separator space (the all-blank fixture above pins the other branch).
 		result = TranslationResult(
 			["「嶼我共視 是個關心數位無障礙」", "\n", "「嶼我共視 是個關心數位無障礙」"],
 			["⠁"] * 38,
@@ -191,7 +191,7 @@ class WrapTest(unittest.TestCase):
 
 	def test_end_right_end_sentence_blank3(self) -> None:
 		"""右符號/句尾符號加空白"""
-		# Non-blank cells: a token whose braille ends in a blank cell gets no separator.
+		# Non-blank cells, so the closing mark gets its separator space (the all-blank fixture above pins the other branch).
 		result = TranslationResult(
 			["「嶼我」", "『共視』"],
 			["⠁"] * 8,

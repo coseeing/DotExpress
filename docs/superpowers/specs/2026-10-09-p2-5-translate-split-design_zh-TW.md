@@ -42,7 +42,7 @@
 ## 待使用者決定（已於 2026-10-09 決定，見上）
 
 - **Q1. 是否在 P2-5 把 `reclean_token` 改為線性（D6）？** 不在原本的範圍內，但與已決定的修剪是同一類修正、位於同一條程式路徑。**決定：納入**，作為遷移步驟 7。
-- **Q2（發現，不屬於 P2-5）。** 英文設為 UEB 二級時，含縮寫的詞會被切成數個 token（`brown` -> `br`、`ow`、`n`），所以換行器可能在詞的中間斷行而沒有連字號：寬度 8 時為 `The quick br` / `own fox`。一級（預設）不受影響。修正會改變點字版面，所以是使用者的決定，應另立任務。**決定：不在範圍內**；P2-5 在 Windows golden 中鎖定目前的行為，此缺陷留待使用者日後決定（「發現但不在此修正的缺陷」第 1 項）。
+- **Q2（發現，不屬於 P2-5）。** 英文設為 UEB 二級時，每個含部分詞縮寫的詞都會被切成數個 token（`brown` -> `br`、`ow`、`n`；完整範圍見「發現但不在此修正的缺陷」第 1 項），所以換行器可能在詞的中間斷行而沒有連字號：寬度 8 時為 `The quick br` / `own fox`。一級（預設）不受影響。修正會改變點字版面，所以是使用者的決定，應另立任務。**決定：不在範圍內**；P2-5 在 Windows golden 中鎖定目前的行為，此缺陷留待使用者日後決定（「發現但不在此修正的缺陷」第 1 項）。
 
 ## 已決定的前提
 
@@ -150,7 +150,7 @@ translate.py              -> conversion.alignment            （只做 re-export
 - `reclean_braille_endspace`（線性，第 2 項）：
   - 與目前相同的提早 return（`raw`/`braille` 為空、對應表為空）。
   - **快速路徑**在對位格式正確時使用：`len(raw_to_braille_pos) == len(raw)`、`len(braille_to_raw_pos) == len(braille)`，且 `0 <= raw_to_braille_pos[0] <= ... <= raw_to_braille_pos[-1] <= len(braille)`。對 token 走一遍，並累計已刪除的點字方數 `removed`：token `t` 的原始範圍為 `[start, end)`（`end` 是下一個起點或 `len(braille)`），新起點為 `start - removed`；保留的點字方是 `braille[start:new_end]`，其中 `new_end` 在剩下不只一格時去掉結尾的空白點字方；第一個起點之前的點字方保留。三個 list 以 slice assignment（`lst[:] = new`）就地取代，因此仍是同一個物件，與目前的 `del` 相同。
-  - 為何完全相同：目前的迴圈對之後的每個起點位移相同的量，所以處理 token `t` 時，它的起點與終點都是原始值減去到目前為止刪除的點字方數；起點不遞減時，先前的每次刪除都在目前起點之前，所以目前看到的點字方就是同樣位移後的原始點字方。因此被修剪的 token 與修剪的量都相同。最後的夾限迴圈在這條路徑上不可能生效（token `t` 之後的刪除都落在 `[start_t, len)` 之內），但仍照目前的做法執行。
+  - 為何完全相同：目前的迴圈對之後的每個起點位移相同的量，所以處理 token `t` 時，它的起點與終點都是原始值減去到目前為止刪除的點字方數；起點不遞減時，先前的每次刪除都在目前起點之前，所以目前看到的點字方就是同樣位移後的原始點字方。因此被修剪的 token 與修剪的量都相同。最後的夾限迴圈在這條路徑上不可能生效（token `t` 之後的刪除都落在 `[start_t, len)` 之內），所以快速路徑略過它（規劃後更正第 7 項）；後備路徑保留它。
   - **Fallback**：其他任何對位都執行目前的迴圈，內容不變（私有的 `_reclean_braille_endspace_stepwise`）。非單調或長度不符的對應表會讓刪除與後面的範圍重疊，只有逐步模擬才能重現；真實輸出從不出現這種情況，所以 fallback 實際上沒有成本，同時讓每個輸入（包括會拋出的例外）都保持逐位元組相同。
 - `reclean_token`（D6）。
 
@@ -202,7 +202,7 @@ __all__ = ["TranslationResult"]
 ### D11. 安全網
 
 1. **假 golden 不變。** `tests/test_translation_golden.py` 與其 fixture 完全不修改；fixture sha256 在每個 commit 都維持 `e67d95a1…211ccd`。
-2. **凍結 oracle + 等價測試（所有平台）。** `tests/legacy_translation_result.py` 是 `client/translate.py` 在 `d4a7aa1` 的位元組複本（git blob `10bd641485327b00cb71a14d4946f01a1788f794`），開頭加一段註解，說明它是拆分前的參考實作，永遠不得修改。`tests/test_translation_split_equivalence.py`（4 個空白）先檢查複本的 git blob id（先正規化為 LF，所以不受 `autocrlf` 影響），再以固定 seed 產生隨機案例，從相同的起始狀態分別交給 oracle 與正式類別，比對四個 list、回傳值，以及任何例外的型別與訊息，涵蓋：`bind_contracted_tokens`、`bind_word_tokens`、`insert_token`（隨機索引）、`reclean_token`、`reclean_braille_endspace`、`wrap`（寬度 1-45），以及對 1-3 個結果做完整串接 `concat` -> 修剪 -> `bind_word_tokens` -> `reclean_token` -> `wrap`。產生器：單元取自 ASCII 字母與數字（單一與連續）、多字元單元（`the`、`1+2`、`台灣`）、漢字、假名、諺文、注音、12 個標點集合的每個成員與 `—`、`" "`、`"　"`、`"\n"`，偶爾 `""`；每個單元 0-4 個點字方，取自空白與兩種非空白點字方；大多數案例的對應表格式正確，固定比例的案例使用打亂、過長、過短或超出範圍的對應表，以及任意的 `braille_to_raw_pos` 值（讓 fallback 會被執行）。seed 固定；案例數量讓此模組在 3 秒內跑完。
+2. **凍結 oracle + 等價測試（所有平台）。** `tests/legacy_translation_result.py` 是 `client/translate.py` 在 `d4a7aa1` 的位元組複本（git blob `10bd641485327b00cb71a14d4946f01a1788f794`），開頭加一段註解，說明它是拆分前的參考實作，永遠不得修改。`tests/test_translation_split_equivalence.py`（4 個空白）先檢查複本的 git blob id（先正規化為 LF，所以不受 `autocrlf` 影響），再以固定 seed 產生隨機案例，從相同的起始狀態分別交給 oracle 與正式類別，比對四個 list、回傳值，以及任何例外的型別與訊息，涵蓋：`bind_contracted_tokens`、`bind_word_tokens`、`insert_token`（隨機索引）、`reclean_token`、`reclean_braille_endspace`、`wrap`（寬度 1-45），以及對 1-3 個結果做完整串接 `concat` -> 修剪 -> `bind_word_tokens` -> `reclean_token` -> `wrap`。產生器：單元取自 ASCII 字母與數字（單一與連續）、多字元單元（`the`、`1+2`、`台灣`）、漢字、假名、諺文、注音、12 個標點集合的每個成員與 `—`、`" "`、`"　"`、`"\n"`，偶爾 `""`；每個單元 0-4 個點字方，取自空白與兩種非空白點字方；大多數案例的對應表格式正確，固定比例的案例使用打亂、過長、過短或超出範圍的對應表，以及任意的 `braille_to_raw_pos` 值（讓 fallback 會被執行）。seed 固定；案例數量讓此模組在 3 秒內跑完。限制（P2-5 審查 M-2）：oracle 只凍結 `translate.py`；它 import 的是現行的 `languageDetection.unicode_blocks`（`build_language_blocks`、`language_has_all`），日後若修改那裡，oracle 與正式程式會一起改變，等價測試看不出來，只有假 golden 與真實 golden 會發現。
 3. **Windows 真實 liblouis golden。** `tests/test_translation_liblouis_golden.py`（4 個空白）與 `tests/fixtures/translation_liblouis_golden.json`：
    - 略過規則：`ctypes` 沒有 `WINFUNCTYPE`，或 `from braille import louis_helper` 失敗時，在模組層級拋出 `SkipTest`（W-1 的模式；不直接 import `braille.liblouis`）。`setUpClass` 以 `create_default_text_translator()` 與 `create_default_math_translator()` 建立 `TranslationRuntime`；任一個拋出 `RuntimeUnavailableError` 時，以該原因拋出 `SkipTest`（不會默默退回字元 fallback）。Linux 與 CI 會略過；本機 Windows 必須執行（驗收條件）。
    - 設定：一個沒有字典檔的暫存資料夾（沒有規則、沒有前處理腳本）、`lang="zh_TW"`、`DEFAULT_CHARSET_MAPS`，兩組翻譯表：`DEFAULT_TRANSLATION_TABLES`，以及把 `"en"` 換成 `"en-ueb-g2.ctb"` 的同一組。
@@ -312,7 +312,7 @@ __all__ = ["TranslationResult"]
 
 ## 發現但不在此修正的缺陷
 
-1. UEB 二級中含縮寫的詞可能被斷在兩行（Q2）。這是既有缺陷，P2-5 不改變它，並由真實 golden 鎖定（`ueb_g2/en_prose` 的 token `br`、`ow`、`n`）；修正會改變點字版面，留待使用者決定後另立任務。
+1. UEB 二級中含縮寫的詞可能被斷在兩行（Q2）。這是既有缺陷，P2-5 不改變它，並由真實 golden 鎖定（`ueb_g2/en_prose` 的 token `br`、`ow`、`n`）；修正會改變點字版面，留待使用者決定後另立任務。範圍（P2-5 審查 M-8）：不只 `brown`，每個含部分詞縮寫的詞都會被切開；`ueb_g2/en_prose` 中 `brown`、`over`、`then`、`rests.`、`Testing,` 分別成為 `br`, `ow`, `n`; `ov`, `er`; `the`, `n`; `re`, `st`, `s.`; `Te`, `st`, `ing,`（`the`、`and` 這類整詞縮寫保持完整），而且句尾標點跟著最後一個片段（`s.`、`ing,`）。可能的根因（由程式推理，未以修正驗證）：`bind_contracted_tokens` 把共用同一個點字起點的字元合併成一個多字元單元，而 `word_token_spans` 的第一輪只合併單字元的 `ASCII_ALNUM` 單元，所以詞的片段不會再被接回。
 2. `wrap` 遇到空的原文 token 會拋出 `IndexError`（`token[-1]`），`bind_word_tokens` 遇到比 `raw` 短的 `raw_to_braille_pos` 也會。沒有任何產生者會建出這兩種情況；維持原樣，由等價測試涵蓋。
 3. `language_has_all` 對每個字元建立一個 set（P1-5 已知缺陷 4）。
 4. 根目錄 `AGENTS.md` 的「Key Modules」仍描述舊的頂層配置（`translate.py`、`utils.py` 等）。

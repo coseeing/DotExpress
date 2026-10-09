@@ -9,8 +9,10 @@ from conversion.tokenizer import contracted_token_spans, iter_separator_position
 
 
 def _is_well_formed_alignment(raw, braille, braille_to_raw_pos, raw_to_braille_pos):
-    """True when there is one start per token and one token per cell, and the token
-    starts never decrease and stay within the braille, as every producer builds them."""
+    """True when there is one start per token and one token index per cell, and the
+    token starts never decrease and stay within the braille, as every producer builds
+    them. The braille_to_raw_pos values are not checked: reclean_token's one-pass
+    formula matches the one-by-one inserts for any value, and the trim only copies them."""
     if len(raw_to_braille_pos) != len(raw) or len(braille_to_raw_pos) != len(braille):
         return False
     previous = 0

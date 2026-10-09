@@ -17,6 +17,7 @@ from unittest.mock import ANY, DEFAULT, Mock, call, patch
 from tests import wx_stub
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
+from tests.file_log_isolation import isolate_file_logs
 from tests.menu_recording import DOCUMENT_MENU_BUILD_LOG, MenuRecorder, enable_log, fake_translate
 from tests.windows_file_handles import make_read_only
 
@@ -28,7 +29,12 @@ with _SCOPE.loading():
     gui = importlib.import_module("gui")
     from settings.dialogs import TranslationSettingsPanel
 
-setUpModule = _SCOPE.activate
+
+def setUpModule() -> None:
+    _SCOPE.activate()
+    unittest.addModuleCleanup(isolate_file_logs("dotexpress.gui"))
+
+
 tearDownModule = _SCOPE.deactivate
 
 import app_paths
@@ -2228,6 +2234,72 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self._assert_error_box(self.events[1], "Failed to save document: {error}", "surrogates not allowed", frame)
         self.assertEqual((self.workspace / "beta.dep").read_bytes(), beta_bytes)
         self.assertEqual(self._state(frame), before)
+
+    # --- logging at the save boundary (F-3 review M-3) ----------------------
+
+    def _assert_logged_with_traceback(self, logs, error_type: type[BaseException]) -> None:
+        self.assertEqual(len(logs.records), 1)
+        record = logs.records[0]
+        self.assertEqual(record.levelname, "ERROR")
+        self.assertIs(record.exc_info[0], error_type)
+        self.assertIn("Traceback (most recent call last)", logs.output[0])
+
+    def test_save_failure_that_is_not_an_os_error_is_logged_with_its_traceback(self) -> None:
+        # The packaged build has no console: gui.log is the only trace of an
+        # unexpected error behind the "Failed to save document" box.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("x\ud800")
+
+        with self.assertLogs(gui.logger, level="ERROR") as logs:
+            self.assertFalse(frame._save_open_document_with_feedback())
+
+        self._assert_logged_with_traceback(logs, UnicodeEncodeError)
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "surrogates not allowed", frame)
+
+    def test_add_failure_that_is_not_an_os_error_is_logged_with_its_traceback(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.names = ["beta"]
+
+        with (
+            patch.object(frame._workspace_service, "create_document", side_effect=ValueError("boom")),
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
+            frame.on_add_document(None)
+
+        self._assert_logged_with_traceback(logs, ValueError)
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "boom", frame)
+
+    def test_rename_failure_that_is_not_an_os_error_is_logged_with_its_traceback(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha, Document("beta", "b", "2"))
+        frame = self._make_workspace_frame([alpha, Document("beta", "\ud800", "2")], open_name="alpha", selected_name="beta")
+        self.names = ["gamma"]
+
+        with self.assertLogs(gui.logger, level="ERROR") as logs:
+            frame.on_rename_document(None)
+
+        self._assert_logged_with_traceback(logs, UnicodeEncodeError)
+        self.assertEqual(len(self.events), 2)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "surrogates not allowed", frame)
+
+    def test_save_failure_from_an_os_error_is_not_logged(self) -> None:
+        # Locked, read-only or full disks are expected; the message box already
+        # names the path and the system error, so gui.log stays free of them.
+        self._block("alpha")
+        frame = self._make_workspace_frame([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("edited")
+
+        with self.assertNoLogs(gui.logger):
+            self.assertFalse(frame._save_open_document_with_feedback())
+
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "alpha.dep", frame)
 
     def test_rename_cancelled_or_unchanged_does_nothing(self) -> None:
         for answer in (None, "alpha"):

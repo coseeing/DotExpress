@@ -449,6 +449,17 @@ class BrailleFrame(wx.Frame):
 			parent=self,
 		)
 
+	def _show_document_save_error(self, error: Exception) -> None:
+		"""Report a failed document save; log the traceback if it is not an ``OSError``.
+
+		An ``OSError`` (locked, read-only, disk full) is expected and the message box
+		names it fully. Anything else means a bug or bad data in memory, and the
+		packaged build has no console, so its traceback goes to ``gui.log``.
+		"""
+		if not isinstance(error, OSError):
+			logger.error("Unexpected error while saving a document", exc_info=error)
+		self._show_file_error(_("Failed to save document: {error}"), error)
+
 	def on_open_coseeing_website(self, _evt: wx.CommandEvent) -> None:
 		try:
 			webbrowser.open(about.url)
@@ -597,7 +608,7 @@ class BrailleFrame(wx.Frame):
 		try:
 			self._save_open_document()
 		except Exception as exc:
-			self._show_file_error(_("Failed to save document: {error}"), exc)
+			self._show_document_save_error(exc)
 			return False
 		return True
 
@@ -626,7 +637,7 @@ class BrailleFrame(wx.Frame):
 		try:
 			self._workspace_service.create_document(document)
 		except Exception as exc:
-			self._show_file_error(_("Failed to save document: {error}"), exc)
+			self._show_document_save_error(exc)
 			return False
 		self._refresh_document_list(document.name)
 		self._open_document_by_name(document.name)
@@ -758,7 +769,7 @@ class BrailleFrame(wx.Frame):
 		try:
 			renamed_document = self._workspace_service.rename_document(selected_document.name, new_name)
 		except Exception as exc:
-			self._show_file_error(_("Failed to save document: {error}"), exc)
+			self._show_document_save_error(exc)
 			return
 		if renamed_document is None:
 			return

@@ -10,24 +10,28 @@ from dual_view.browser import build_browser_command, find_browser_executable, op
 class DualViewBrowserTest(unittest.TestCase):
     def test_chromium_commands_request_new_window_and_size(self) -> None:
         html_path = Path("C:/DotExpress/dual_view/dual-view-one.html")
+        # The command carries str(path): native separators (backslashes on Windows) (W-2).
+        chrome_exe = Path("C:/Chrome/chrome.exe")
+        edge_exe = Path("C:/Edge/msedge.exe")
 
-        chrome = build_browser_command("chrome", Path("C:/Chrome/chrome.exe"), html_path, (900, 600))
-        edge = build_browser_command("edge", Path("C:/Edge/msedge.exe"), html_path, (900, 600))
+        chrome = build_browser_command("chrome", chrome_exe, html_path, (900, 600))
+        edge = build_browser_command("edge", edge_exe, html_path, (900, 600))
 
-        self.assertEqual(chrome[:3], ["C:/Chrome/chrome.exe", "--new-window", "--window-size=900,600"])
-        self.assertEqual(edge[:3], ["C:/Edge/msedge.exe", "--new-window", "--window-size=900,600"])
+        self.assertEqual(chrome[:3], [str(chrome_exe), "--new-window", "--window-size=900,600"])
+        self.assertEqual(edge[:3], [str(edge_exe), "--new-window", "--window-size=900,600"])
         self.assertTrue(chrome[-1].startswith("file:"))
         self.assertTrue(edge[-1].startswith("file:"))
 
     def test_firefox_command_requests_new_window_and_size(self) -> None:
+        firefox_exe = Path("C:/Firefox/firefox.exe")
         command = build_browser_command(
             "firefox",
-            Path("C:/Firefox/firefox.exe"),
+            firefox_exe,
             Path("C:/DotExpress/dual_view/dual-view-one.html"),
             (1024, 768),
         )
 
-        self.assertEqual(command[0:2], ["C:/Firefox/firefox.exe", "-new-window"])
+        self.assertEqual(command[0:2], [str(firefox_exe), "-new-window"])
         self.assertIn("file:", command[2])
         self.assertEqual(command[3:], ["-width", "1024", "-height", "768"])
 

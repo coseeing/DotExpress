@@ -267,5 +267,50 @@ class LinearMergeTest(unittest.TestCase):
         )
         self.assertLess(elapsed, 5.0)
 
+
+class LinearTrimTest(unittest.TestCase):
+    def test_trimming_forty_thousand_tokens_takes_linear_time(self) -> None:
+        count = 40_000
+        result = TranslationResult(
+            ["中"] * count,
+            ["⠁", "⠀"] * count,
+            [index for index in range(count) for _cell in range(2)],
+            [2 * index for index in range(count)],
+        )
+
+        started = time.perf_counter()
+        result.reclean_braille_endspace()
+        elapsed = time.perf_counter() - started
+
+        self.assertEqual(
+            lists_of(result),
+            (["中"] * count, ["⠁"] * count, list(range(count)), list(range(count))),
+        )
+        self.assertLess(elapsed, 2.0)
+
+    def test_trim_keeps_the_list_objects(self) -> None:
+        result = TranslationResult(["中", "文", "字"], ["⠁", "⠀", "⠀", "⠃", "⠉", "⠀"], [0, 0, 0, 1, 2, 2], [0, 3, 4])
+        before = lists_of(result)
+
+        result.reclean_braille_endspace()
+
+        self.assertEqual(lists_of(result), (["中", "文", "字"], ["⠁", "⠃", "⠉"], [0, 1, 2], [0, 1, 2]))
+        for name, original in zip(FIELDS, before):
+            self.assertIs(getattr(result, name), original, name)
+
+    def test_malformed_alignment_uses_the_stepwise_trim(self) -> None:
+        stepwise = TranslationResult._reclean_braille_endspace_stepwise
+        well_formed = TranslationResult(["中", "文"], ["⠁", "⠀", "⠃", "⠀"], [0, 0, 1, 1], [0, 2])
+        shuffled = TranslationResult(["中", "文"], ["⠁", "⠀", "⠃", "⠀"], [0, 0, 1, 1], [2, 0])
+
+        with patch.object(TranslationResult, "_reclean_braille_endspace_stepwise", autospec=True, side_effect=stepwise) as fallback:
+            well_formed.reclean_braille_endspace()
+            fallback.assert_not_called()
+            shuffled.reclean_braille_endspace()
+
+        fallback.assert_called_once_with(shuffled)
+        self.assertEqual(well_formed.braille, ["⠁", "⠃"])
+
+
 if __name__ == "__main__":
     unittest.main()

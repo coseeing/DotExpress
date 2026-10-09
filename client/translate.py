@@ -14,6 +14,19 @@ _CJK_LANGUAGE_BLOCKS = MappingProxyType({
 })
 
 
+def _is_well_formed_alignment(raw, braille, braille_to_raw_pos, raw_to_braille_pos):
+	"""True when there is one start per token and one token per cell, and the token
+	starts never decrease and stay within the braille, as every producer builds them."""
+	if len(raw_to_braille_pos) != len(raw) or len(braille_to_raw_pos) != len(braille):
+		return False
+	previous = 0
+	for start in raw_to_braille_pos:
+		if start < previous:
+			return False
+		previous = start
+	return previous <= len(braille)
+
+
 class TranslationResult:
 	LEFT_PUNCT_HALF = frozenset("([{")
 	RIGHT_PUNCT_HALF = frozenset(")]}")
@@ -405,7 +418,41 @@ class TranslationResult:
 			return
 		if not self.braille_to_raw_pos or not self.raw_to_braille_pos:
 			return
+		if not _is_well_formed_alignment(self.raw, self.braille, self.braille_to_raw_pos, self.raw_to_braille_pos):
+			self._reclean_braille_endspace_stepwise()
+			return
 
+		# One pass. Every earlier trim lies before the current token (the starts never
+		# decrease) and shifts its start and end by the same amount, so the step-by-step
+		# loop sees each token's original cells: the same tokens lose the same cells.
+		blank = chr(0x2800)
+		braille = self.braille
+		braille_to_raw_pos = self.braille_to_raw_pos
+		raw_to_braille_pos = self.raw_to_braille_pos
+		braille_len = len(braille)
+		first_start = raw_to_braille_pos[0]
+		new_braille = braille[:first_start]
+		new_braille_to_raw_pos = braille_to_raw_pos[:first_start]
+		new_raw_to_braille_pos = []
+		removed = 0
+		for t_idx, start in enumerate(raw_to_braille_pos):
+			end = raw_to_braille_pos[t_idx + 1] if t_idx + 1 < len(raw_to_braille_pos) else braille_len
+			new_raw_to_braille_pos.append(start - removed)
+			new_end = end
+			while new_end - start > 1 and braille[new_end - 1] == blank:
+				new_end -= 1
+			new_braille.extend(braille[start:new_end])
+			new_braille_to_raw_pos.extend(braille_to_raw_pos[start:new_end])
+			removed += end - new_end
+		# Replace the contents, not the lists, as the step-by-step deletions do. No start
+		# can exceed the new length here, so the stepwise loop's final clamp is not needed.
+		braille[:] = new_braille
+		braille_to_raw_pos[:] = new_braille_to_raw_pos
+		raw_to_braille_pos[:] = new_raw_to_braille_pos
+
+	def _reclean_braille_endspace_stepwise(self):
+		"""The original trim, one token at a time; kept for malformed alignments, whose
+		deletions can overlap later tokens."""
 		blank = chr(0x2800)
 		n_tokens = len(self.raw)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from translate import TranslationResult
+from conversion.alignment import TranslationResult
 
 
 BRAILLE_UNICODE_PATTERNS_START = 0x2800

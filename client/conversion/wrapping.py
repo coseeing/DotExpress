@@ -1,4 +1,4 @@
-from translate import TranslationResult
+from conversion.alignment import TranslationResult
 
 
 def merge_translation_results(translations):

@@ -1,4 +1,4 @@
-from adapters.translation.contracts import TranslationRuntime
+from conversion.contracts import TranslationRuntime
 from config import DEFAULT_MATH_BRAILLE_TABLE
 from conversion.text.char_maps import translate__mapping_char
 from conversion.output import (

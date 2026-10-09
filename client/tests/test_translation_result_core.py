@@ -99,6 +99,14 @@ assert not hasattr(translate, "translate_as_single_token")
             build_language_blocks({"ja", "zh", "ko"}),
         )
 
+    def test_translate_reexports_the_alignment_class(self) -> None:
+        import conversion.alignment
+        import translate
+
+        self.assertIs(translate.TranslationResult, conversion.alignment.TranslationResult)
+        self.assertEqual(TranslationResult.__module__, "conversion.alignment")
+        self.assertEqual(translate.__all__, ["TranslationResult"])
+
 
 class SharedConstantsTest(unittest.TestCase):
     def test_instance_holds_only_its_data_fields(self) -> None:
@@ -107,7 +115,7 @@ class SharedConstantsTest(unittest.TestCase):
         self.assertEqual(sorted(vars(result)), sorted(FIELDS))
 
     def test_construction_does_not_build_language_blocks(self) -> None:
-        with patch("translate.build_language_blocks", side_effect=AssertionError("built per instance")) as build:
+        with patch("conversion.tokenizer.build_language_blocks", side_effect=AssertionError("built per instance")) as build:
             TranslationResult([], [], [], [])
 
         build.assert_not_called()
@@ -266,6 +274,121 @@ class LinearMergeTest(unittest.TestCase):
             ),
         )
         self.assertLess(elapsed, 5.0)
+
+
+class LinearTrimTest(unittest.TestCase):
+    def test_trimming_forty_thousand_tokens_takes_linear_time(self) -> None:
+        count = 40_000
+        result = TranslationResult(
+            ["中"] * count,
+            ["⠁", "⠀"] * count,
+            [index for index in range(count) for _cell in range(2)],
+            [2 * index for index in range(count)],
+        )
+
+        started = time.perf_counter()
+        result.reclean_braille_endspace()
+        elapsed = time.perf_counter() - started
+
+        self.assertEqual(
+            lists_of(result),
+            (["中"] * count, ["⠁"] * count, list(range(count)), list(range(count))),
+        )
+        self.assertLess(elapsed, 2.0)
+
+    def test_trim_keeps_the_list_objects(self) -> None:
+        result = TranslationResult(["中", "文", "字"], ["⠁", "⠀", "⠀", "⠃", "⠉", "⠀"], [0, 0, 0, 1, 2, 2], [0, 3, 4])
+        before = lists_of(result)
+
+        result.reclean_braille_endspace()
+
+        self.assertEqual(lists_of(result), (["中", "文", "字"], ["⠁", "⠃", "⠉"], [0, 1, 2], [0, 1, 2]))
+        for name, original in zip(FIELDS, before):
+            self.assertIs(getattr(result, name), original, name)
+
+    def test_malformed_alignment_uses_the_stepwise_trim(self) -> None:
+        stepwise = TranslationResult._reclean_braille_endspace_stepwise
+        well_formed = TranslationResult(["中", "文"], ["⠁", "⠀", "⠃", "⠀"], [0, 0, 1, 1], [0, 2])
+        shuffled = TranslationResult(["中", "文"], ["⠁", "⠀", "⠃", "⠀"], [0, 0, 1, 1], [2, 0])
+
+        with patch.object(TranslationResult, "_reclean_braille_endspace_stepwise", autospec=True, side_effect=stepwise) as fallback:
+            well_formed.reclean_braille_endspace()
+            fallback.assert_not_called()
+            shuffled.reclean_braille_endspace()
+
+        fallback.assert_called_once_with(shuffled)
+        self.assertEqual(well_formed.braille, ["⠁", "⠃"])
+
+    def test_cells_before_the_first_token_start_are_kept(self) -> None:
+        # Expected values computed once with tests/legacy_translation_result.py.
+        result = TranslationResult(["中", "文"], ["⠀", "⠀", "⠃", "⠀", "⠉", "⠀"], [0, 0, 0, 0, 1, 1], [2, 4])
+
+        with patch.object(TranslationResult, "_reclean_braille_endspace_stepwise", side_effect=AssertionError("stepwise")):
+            result.reclean_braille_endspace()
+
+        self.assertEqual(lists_of(result), (["中", "文"], ["⠀", "⠀", "⠃", "⠉"], [0, 0, 0, 1], [2, 3]))
+
+
+class LinearSeparatorTest(unittest.TestCase):
+    def test_inserting_ten_thousand_separators_takes_linear_time(self) -> None:
+        count = 10_000
+        result = TranslationResult(["」", "「"] * count, ["⠁"] * (2 * count), list(range(2 * count)), list(range(2 * count)))
+
+        started = time.perf_counter()
+        result.reclean_token()
+        elapsed = time.perf_counter() - started
+
+        self.assertEqual(
+            lists_of(result),
+            (["」", " ", "「"] * count, ["⠁", "⠀", "⠁"] * count, list(range(3 * count)), list(range(3 * count))),
+        )
+        self.assertLess(elapsed, 2.0)
+
+    def test_well_formed_alignment_never_calls_insert_token(self) -> None:
+        result = TranslationResult(["我」", "「共", "）", "（", "乙"], ["⠁", "⠂", "⠃", "⠄", "⠅", "⠆"], [0, 0, 1, 2, 3, 4], [0, 2, 3, 4, 5])
+
+        with patch.object(TranslationResult, "insert_token", side_effect=AssertionError("one by one")):
+            result.reclean_token()
+
+        self.assertEqual(
+            lists_of(result),
+            (
+                ["我」", " ", "「共", "）", " ", "（", "乙"],
+                ["⠁", "⠂", "⠀", "⠃", "⠄", "⠀", "⠅", "⠆"],
+                [0, 0, 1, 2, 3, 4, 5, 6],
+                [0, 2, 3, 4, 5, 6, 7],
+            ),
+        )
+
+    def test_malformed_alignment_inserts_one_by_one(self) -> None:
+        insert_token = TranslationResult.insert_token
+        result = TranslationResult(["我」", "「共", "）", "（"], ["⠁", "⠂", "⠃", "⠄"], [0, 1, 2], [0, 1, 2, 3])
+
+        with patch.object(TranslationResult, "insert_token", autospec=True, side_effect=insert_token) as insert:
+            result.reclean_token()
+
+        self.assertEqual([call.args[1:] for call in insert.call_args_list], [(1, " ", "⠀"), (4, " ", "⠀")])
+        self.assertEqual(result.raw, ["我」", " ", "「共", "）", " ", "（"])
+
+    def test_arbitrary_cell_token_indices_shift_as_one_by_one(self) -> None:
+        # The well-formed check does not look at braille_to_raw_pos values: negative and
+        # too large ones take the fast path. Expected values computed once with
+        # tests/legacy_translation_result.py.
+        result = TranslationResult(["我」", "「共", "）", "（"], ["⠁", "⠂", "⠃", "⠄", "⠅", "⠆"], [9, -1, 0, 9, -2, 1], [0, 1, 3, 4])
+
+        with patch.object(TranslationResult, "insert_token", side_effect=AssertionError("one by one")):
+            result.reclean_token()
+
+        self.assertEqual(
+            lists_of(result),
+            (
+                ["我」", " ", "「共", "）", " ", "（"],
+                ["⠁", "⠀", "⠂", "⠃", "⠄", "⠀", "⠅", "⠆"],
+                [9, 1, -1, 0, 10, 4, -2, 2],
+                [0, 1, 2, 4, 5, 6],
+            ),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -295,6 +295,22 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(self.controller.document_names, ["zoo", "beta"])
         self.assertEqual(self._listing(), ["beta.dep"])
 
+    def test_import_files_continues_after_a_failed_save(self) -> None:
+        # F-3 (D9): a failed save is an issue and the batch goes on; the
+        # documents after it are still saved and added.
+        blocked = self._block("beta")
+        service = self._service([Document("zoo", "z", "1")])
+
+        result = service.import_files(self._sources(beta="b", delta="d", epsilon="e"), format_key="all")
+
+        expected = [Document("delta", "d", None), Document("epsilon", "e", None)]
+        self.assertEqual(result.saved, expected)
+        self.assertEqual(len(result.issues), 1)
+        self.assertEqual(result.issues[0].path, blocked)
+        self.assertEqual(self.controller.document_names, ["zoo", "delta", "epsilon"])
+        self.assertEqual(self._package("delta"), expected[0])
+        self.assertEqual(self._package("epsilon"), expected[1])
+
     def test_import_files_rejects_unknown_format(self) -> None:
         service = self._service()
 

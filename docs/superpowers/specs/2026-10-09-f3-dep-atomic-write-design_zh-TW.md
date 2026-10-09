@@ -16,6 +16,20 @@
 
 沒有新的使用者可見字串；msgid 不變（353，集合相同）。F-W10（開著的 `.dep` 為唯讀或被鎖住時擋住改名與關閉）不在範圍內；本任務只改變哪些鎖定模式會觸發它（D12）。
 
+## 規劃後更正（2026-10-09）
+
+規劃（`docs/superpowers/plans/2026-10-09-f3-dep-atomic-write.md`，已在 scratch clone 上 dry run）沒有發現決策 D1-D13 有錯；以下記錄已決定的開放問題，以及計畫細化本規格之處。兩者不同時以本節為準。
+
+1. **Q1 與 Q2 已決定**：由協調者採用建議的預設（2026-10-09）；使用者可在合併前推翻任一項。**Q1：接受。** 被另一個程式以任何共用模式開著的 `.dep` 現在會擋住存檔，以及每個先存檔的動作（包括關閉），直到那個程式釋放它。**Q2：拒絕。** 唯讀文件包不能改名，一般改名與只改大小寫皆然：`[Errno 13] Permission denied: '<文件包>'`，磁碟上不留下任何東西。
+2. **複製 runtime 後的基線。** worktree 沒有 git 忽略的 liblouis runtime、MathCAT 與 submodule 的 `configure.ac`，所以基線是 `Ran 1138`、`errors=2`、`skipped=7`（見「現況」）。計畫的 Task 0 從主 checkout 複製這些建置產物（submodule commit 相同，`2aa5f84b`；`louis_helper.py` 與 `vendor/nvda/liblouis/runtime/louis_helper.py` 逐位元組相同）；之後 worktree 的基線與主 checkout 相同（`Ran 1143`、`FAILED (failures=1, errors=1, skipped=5)`），`git status` 仍是空的，驗收條件 1 中 `test_liblouis_runtime` 的錯誤也不會出現。
+3. **新增 37 個測試，不是 34 個。** 多出：`test_rename_of_a_package_held_open_by_another_program`（service，僅 Windows，四種共用模式：不共用刪除時改名以 `[WinError 32]` 失敗且只留下舊包，F-3 之前則兩份都留下；共用刪除時改名完成）、`test_regular_rename_ignores_a_failure_to_remove_the_moved_aside_package`（service）與 `test_startup_ignores_leftover_temporary_files`（GUI，D13 在啟動對話框的層級）。A11 與 B7 以 subtest 涵蓋讀取、讀寫、讀取加刪除、讀寫加刪除四種共用模式。僅 Windows 的測試：8 個。最後一步之後預期 `Ran 1180`、`FAILED (failures=1, errors=1, skipped=7)`（未複製 runtime 時 1175）；合併 `main` 的 `4953772`（P2-5）之後 `Ran 1248`、`FAILED (errors=1, skipped=7)`，唯一的錯誤是 F-W6。取代「數量」中的「預期：worktree `Ran 1172`（主 checkout 1177）」。
+4. **六個 commit。** 第一個 commit 只含測試：在目前程式上就會通過的五個測試（B6、B9、B10、B11 與 GUI 啟動測試）；之後是五個遷移步驟，每步先紅後綠。commit 標題以 `(F-3)` 結尾。
+5. **測試 helper。** `client/tests/windows_file_handles.py` 另外提供 `SHARE_MODES`（四種模式）、`make_read_only`（clean-up 只在檔案仍存在時清除屬性）、`make_hidden` 與 `is_hidden`；`hold_open` 回傳 `release` 函式，讓測試可以在檢查資料夾之前關閉 handle。
+6. **匯入測試。** 讓兩份文件中的第二份（`beta` 之後的 `delta`）失敗，而不是 `beta`，這樣舊程式會顯示較嚴重的結果：`beta.dep` 已寫入卻從未加入清單。
+7. **GUI 翻轉測試。** GUI 模組自己定義 `_FailingReplacePackageFiles(source_name=...)`；從 service 測試模組 import 會讓 `unittest` 把那些測試收集兩次。
+8. **驗收條件 4 與 8** 與 merge base（`git merge-base main HEAD`）比較，而不是 `main`，因為 `main` 已包含 P2-5。條件 4 的「沒有新的 `_(`／`N_(` 字面值」只針對正式程式碼；測試以既有 msgid 呼叫 `gui._()`。
+9. **Windows 驗證。** exe 放到 `D:\dxtest\N-f3\DotExpress.exe`（協調者指定），不是 `D:\dxtest\F3\`。不複製也不修改 2026-10-09-03 的腳本：包裝程式 `rerun.py` 在記憶體中替換 exe 與工作資料夾後執行第 18、19、21 項（19 與 21 從第 18 項資料夾的複本開始），`item20b.py` 本來就接受參數，第 30-33 項是新腳本；全部放在 `docs/superpowers/history/2026-10-09-05-f3-dep-atomic-write/auto/`。每一項在新的 `D:\dxtest\auto<N>-f3` 資料夾執行。建置時把主 checkout 的 `client\.venv` 放到 `PATH` 前面（worktree 沒有 venv）；計畫中的程式在 scratch clone 上建置成功，打包的是該 clone 自己的模組。第 34 項仍是人工、可選。
+
 ## 現況（2026-10-09 於 `fix/f3-dep-atomic-write`、HEAD `d4a7aa1` 驗證，Windows 11 26200，NTFS）
 
 `$PY` 為 `D:\workspace\DotExpress\client\.venv\Scripts\python.exe`（Python 3.13.15）。`$SP` 為 session scratchpad；下文使用的原型在 `$SP\f3spec\`（`probe.py`、`probe2.py`、`probe3.py`、`lock.py`）。
@@ -371,11 +385,11 @@ Move（`MoveDocumentPackageTest`）：
 - **兩種暫存命名**（低，D13）。兩者都是以點開頭的 `.tmp`；永不載入。
 - **測試時間**（低）。每次存檔多一次 `fsync`：本機中位數 1 ms；F 審查在 Linux 量到每次 `fsync` 50-70 ms。若 GUI 流程測試在 Linux 上慢超過 2 s，比照 F 審查 M-6 在其 harness 中把 `os.fsync` 換成 no-op；`test_atomic_write` 保留真實呼叫。
 
-## 給使用者的開放問題
+## 給使用者的開放問題（已於 2026-10-09 決定，見「規劃後更正」）
 
-**Q1. 被另一個程式開著的 `.dep` 現在在多兩種共用模式下擋住存檔。** 目前當另一個程式允許寫入（共用讀寫，含或不含刪除）時，存檔會原地重寫檔案；F-3 之後 `os.replace` 拒絕任何被開著的目標，所以存檔以 `[WinError 5]` 失敗，動作（切換、改名、關閉……）被擋，直到那個程式關閉檔案；這和目前只共用讀取的 zip 工具已經發生的情況相同。**建議：接受。** 在另一個程式開著的 handle 底下寫入，正是 F-3 要移除的行為（那個程式可能正在讀半寫完的封存檔），失敗是可見且安全的，實測的防毒行為也沒有暫時性失敗。替代方案：(a) replace 失敗時退回「把舊包移開再安裝」（只對共用刪除的持有者有幫助；會在每次這樣的存檔加上沒有 `.dep` 的當機視窗）；(b) 提前做 F-W10 後續工作（略過未修改文件的寫入；存檔失敗後允許不存檔就關閉）。
+**Q1. 被另一個程式開著的 `.dep` 現在在多兩種共用模式下擋住存檔。** 目前當另一個程式允許寫入（共用讀寫，含或不含刪除）時，存檔會原地重寫檔案；F-3 之後 `os.replace` 拒絕任何被開著的目標，所以存檔以 `[WinError 5]` 失敗，動作（切換、改名、關閉……）被擋，直到那個程式關閉檔案；這和目前只共用讀取的 zip 工具已經發生的情況相同。**建議：接受。** 在另一個程式開著的 handle 底下寫入，正是 F-3 要移除的行為（那個程式可能正在讀半寫完的封存檔），失敗是可見且安全的，實測的防毒行為也沒有暫時性失敗。替代方案：(a) replace 失敗時退回「把舊包移開再安裝」（只對共用刪除的持有者有幫助；會在每次這樣的存檔加上沒有 `.dep` 的當機視窗）；(b) 提前做 F-W10 後續工作（略過未修改文件的寫入；存檔失敗後允許不存檔就關閉）。**已決定：接受。** 由協調者採用建議的預設決定；使用者可在合併前推翻。
 
-**Q2. 唯讀文件包不能再改名。** 兩種改名都以 `[Errno 13] Permission denied: '<文件包>'` 拒絕它（D7）。目前一般改名它會失敗並留下兩份文件包，而只改大小寫地改名一個非開啟中的唯讀文件包會成功，但留下 app 刪不掉的唯讀 `.tmp`。**建議：拒絕**，與已經會拒絕它的存檔和刪除一致。替代方案：刪除移開的檔案之前先清除它的唯讀屬性以允許改名；改名後的文件包會失去唯讀屬性，之後的存檔會覆寫它。
+**Q2. 唯讀文件包不能再改名。** 兩種改名都以 `[Errno 13] Permission denied: '<文件包>'` 拒絕它（D7）。目前一般改名它會失敗並留下兩份文件包，而只改大小寫地改名一個非開啟中的唯讀文件包會成功，但留下 app 刪不掉的唯讀 `.tmp`。**建議：拒絕**，與已經會拒絕它的存檔和刪除一致。替代方案：刪除移開的檔案之前先清除它的唯讀屬性以允許改名；改名後的文件包會失去唯讀屬性，之後的存檔會覆寫它。**已決定：拒絕。** 由協調者採用建議的預設決定；使用者可在合併前推翻。
 
 ## 範圍外／後續工作
 

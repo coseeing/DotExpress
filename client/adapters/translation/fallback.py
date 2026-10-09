@@ -1,4 +1,4 @@
-from translate import TranslationResult
+from conversion.alignment import TranslationResult
 
 
 def build_character_fallback(source: str) -> TranslationResult:

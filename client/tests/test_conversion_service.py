@@ -289,8 +289,40 @@ class ConversionServiceTest(unittest.TestCase):
             charset_maps=CHARSET_MAPS,
         )
 
-        self.assertEqual(result.raw, ["計算 ", "1+2", " 的值"])
-        self.assertEqual("".join(result.braille), "T[計算 ]M[1+2]T[ 的值]")
+        # Each source space appears once in the text and once in the braille (the fake
+        # translates a lone " " to one blank cell); how the tokens split is pinned below.
+        self.assertEqual("".join(result.raw), "計算 1+2 的值")
+        self.assertEqual("".join(result.braille), "T[計算 ]M[1+2]⠀T[的值]")
+
+    def test_leading_space_of_a_text_segment_is_its_own_token_and_segment(self) -> None:
+        text_translator = FakeTextTranslator()
+        result = translate_with_language(
+            "計算 $1+2$ 的值",
+            self.dictionary_path,
+            {"default": "zh-tw.ctb", "math": "Nemeth"},
+            self.bopomofo_path,
+            runtime=self._runtime(text_translator=text_translator),
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
+        )
+        request = ConversionRequest(
+            raw_text="計算 $1+2$ 的值",
+            output_mode="unicode",
+            width=40,
+            dictionary_path=self.dictionary_path,
+            data_dir=self.test_dir,
+            translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
+            lang=LANG,
+            charset_maps=CHARSET_MAPS,
+        )
+        output = convert_text_with_alignment(request, runtime=self._runtime())
+
+        self.assertEqual(result.raw, ["計算 ", "1+2", " ", "的值"])
+        self.assertEqual([call[0] for call in text_translator.calls], ["計算 ", " ", "的值"])
+        self.assertEqual(
+            [(segment.source_kind, segment.result.raw) for segment in output.dual_view_segments],
+            [("text", ["計算 "]), ("math", ["1+2"]), ("text", [" "]), ("text", ["的值"])],
+        )
 
     def test_translate_with_language_propagates_math_conversion_failures(self) -> None:
         from conversion import service

@@ -8,7 +8,7 @@ import wx
 import about
 from i18n import _, resource_path
 from app_paths import ApplicationDataError, ApplicationPaths, build_application_paths, prepare_application_directories
-from adapters.translation.contracts import TranslationRuntime
+from conversion.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
 from conversion.math_service import latex_to_mathml
 from conversion.service import ConversionRequest

@@ -1,40 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Callable, Protocol
-
-from translate import TranslationResult
+# The translation ports belong to their consumer, the conversion package; they are
+# re-exported here so that adapters.translation keeps its names.
+from conversion.contracts import BrailleTextTranslator, MathSegmentTranslator, TranslationRuntime
 
 
 class RuntimeUnavailableError(RuntimeError):
     pass
 
 
-class BrailleTextTranslator(Protocol):
-    def translate(
-        self,
-        text: str,
-        *,
-        table: str,
-        raw: str,
-        single_token: bool = False,
-    ) -> TranslationResult: ...
-
-
-class MathSegmentTranslator(Protocol):
-    def translate(self, source: str, *, braille_code: str, language: str) -> TranslationResult: ...
-
-
-@dataclass
-class TranslationRuntime:
-    text_translator: BrailleTextTranslator
-    math_translator: MathSegmentTranslator
-    close_callbacks: tuple[Callable[[], None], ...] = ()
-    _closed: bool = field(default=False, init=False, repr=False)
-
-    def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        for callback in reversed(self.close_callbacks):
-            callback()
+__all__ = [
+    "BrailleTextTranslator",
+    "MathSegmentTranslator",
+    "RuntimeUnavailableError",
+    "TranslationRuntime",
+]

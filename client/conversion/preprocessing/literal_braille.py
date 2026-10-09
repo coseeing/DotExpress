@@ -1,4 +1,4 @@
-from translate import TranslationResult
+from conversion.alignment import TranslationResult
 
 
 def is_unicode_braille(text: str) -> bool:

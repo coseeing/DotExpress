@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import importlib
 import inspect
 import json
@@ -17,6 +18,7 @@ from tests import wx_stub
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
 from tests.menu_recording import DOCUMENT_MENU_BUILD_LOG, MenuRecorder, enable_log, fake_translate
+from tests.windows_file_handles import make_read_only
 
 _SCOPE = wx_stub.StubScope(
     wx_stub.gui_frame_stubs(),
@@ -32,7 +34,7 @@ tearDownModule = _SCOPE.deactivate
 import app_paths
 import config
 from documents.controller import DocumentController
-from documents.workspace import BatchIssue, Document, load_document_package, save_document_package
+from documents.workspace import BatchIssue, Document, PackageFiles, load_document_package, save_document_package
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
 from documents.export_results import ExportBatchResult
 from settings.state import DotExpressSettingsSnapshot
@@ -1641,6 +1643,18 @@ class _FakeDocumentList:
         return self.selected
 
 
+class _FailingReplacePackageFiles(PackageFiles):
+    """The real file operations, except that moving the file named ``source_name`` raises."""
+
+    def __init__(self, *, source_name: str) -> None:
+        self.source_name = source_name
+
+    def replace(self, source: Path, destination: Path) -> None:
+        if Path(source).name == self.source_name:
+            raise PermissionError(errno.EACCES, "injected", str(source), None, str(destination))
+        super().replace(source, destination)
+
+
 class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
     """Pins today's document flows: disk effects, dialogs, state; must pass unchanged through P1-3.
 
@@ -2084,24 +2098,54 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._package("alpha"), alpha)
         self.assertEqual(self._state(frame), before)
 
-    def test_rename_unlink_failure_leaves_both_packages_and_state(self) -> None:
-        # KNOWN BUG (P1-3 spec, known defect 3), pinned as it is today, NOT desired
-        # behavior: the new package is written, the old unlink fails, and both stay
-        # on disk while memory keeps only the old name. A later fix task flips this.
+    def test_rename_that_cannot_move_the_old_package_aside_keeps_one_package_and_state(self) -> None:
+        # Was the KNOWN BUG test of P1-3 known defect 3 (the new package was written, the
+        # old one could not be removed, and both stayed on disk while memory kept only
+        # the old name), fixed by F-3: the old package is moved aside before the new one
+        # is installed, so a failure there leaves only the old package.
         alpha = Document("alpha", "a", "1")
         beta = Document("beta", "b", "2")
-        self._write_packages(alpha)
-        self._block("beta")
+        self._write_packages(alpha, beta)
+        beta_bytes = (self.workspace / "beta.dep").read_bytes()
+        frame = self._make_workspace_frame([alpha, beta], open_name="alpha", selected_name="beta")
+        frame._workspace_service = DocumentWorkspaceService(
+            frame._document_controller,
+            self.workspace,
+            package_files=_FailingReplacePackageFiles(source_name="beta.dep"),
+        )
+        before = self._state(frame)
+        self.names = ["gamma"]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+        self.assertEqual(len(self.events), 2)
+        self.assertEqual(self.events[0], ("DocumentNameDialog", gui._("Rename Document"), "beta"))
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "beta.dep", frame)
+        self.assertEqual((self.workspace / "beta.dep").read_bytes(), beta_bytes)
+        self.assertEqual(self._state(frame), before)
+
+    @unittest.skipUnless(os.name == "nt", "Windows read-only attribute")
+    def test_rename_of_a_read_only_package_is_refused_with_the_save_message(self) -> None:
+        # F-3 (D7, Q2): the same [Errno 13] text Save gives; before F-3 a regular rename
+        # failed with [WinError 5] after writing gamma.dep, so both packages stayed.
+        alpha = Document("alpha", "a", "1")
+        beta = Document("beta", "b", "2")
+        self._write_packages(alpha, beta)
+        beta_path = self.workspace / "beta.dep"
+        beta_bytes = beta_path.read_bytes()
+        make_read_only(self, beta_path)
         frame = self._make_workspace_frame([alpha, beta], open_name="alpha", selected_name="beta")
         before = self._state(frame)
         self.names = ["gamma"]
 
         frame.on_rename_document(None)
 
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
         self.assertEqual(len(self.events), 2)
         self._assert_error_box(self.events[1], "Failed to save document: {error}", "beta.dep", frame)
-        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep", "gamma.dep"])
-        self.assertEqual(self._package("gamma"), Document("gamma", "b", "2"))
+        self.assertIn(f"[Errno 13] Permission denied: {str(beta_path)!r}", self.events[1][1])
+        self.assertEqual(beta_path.read_bytes(), beta_bytes)
         self.assertEqual(self._state(frame), before)
 
     def test_rename_cancelled_or_unchanged_does_nothing(self) -> None:

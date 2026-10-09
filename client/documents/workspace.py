@@ -138,6 +138,8 @@ def move_document_package(
 ) -> None:
     """Write ``document`` as the package at ``new_path`` and remove the package at ``old_path``.
 
+    Every rename uses this sequence, case-only or not (F-3).
+
     Safe when both paths name the same file, as a case-only rename does on a case-insensitive
     file system: nothing is written to, replaced onto or removed under a name that can alias
     the other package. The new package is staged in a temporary file, the old one is moved

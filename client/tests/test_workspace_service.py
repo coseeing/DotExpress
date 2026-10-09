@@ -1,32 +1,58 @@
 from __future__ import annotations
 
 import ast
+import errno
+import os
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from documents.controller import DocumentController
 from documents.workspace import BatchIssue, Document, PackageFiles, load_document_package, save_document_package
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
+from tests.windows_file_handles import SHARE_DELETE, SHARE_MODES, hold_open
 
 SERVICE_PATH = Path(__file__).resolve().parents[1] / "documents" / "workspace_service.py"
 
 
-class _FailingInstallPackageFiles(PackageFiles):
-    """The real file operations, except that replacing onto a file named ``name`` raises ``OSError``.
+class _FailingReplacePackageFiles(PackageFiles):
+    """The real file operations, except that one ``replace`` raises ``PermissionError``.
 
-    The name is compared as a string: ``Path`` equality ignores case on Windows.
+    It fails when the source is named ``source_name`` (moving the old package aside) or
+    the destination is named ``destination_name`` (installing the new package). Names
+    are compared as strings: ``Path`` equality ignores case on Windows. The error names
+    both paths, as a failed rename does (spec D8).
     """
 
-    def __init__(self, name: str) -> None:
-        self.name = name
+    def __init__(self, *, source_name: str | None = None, destination_name: str | None = None) -> None:
+        self.source_name = source_name
+        self.destination_name = destination_name
 
     def replace(self, source: Path, destination: Path) -> None:
-        if Path(destination).name == self.name:
-            raise OSError("injected install failure")
+        if Path(source).name == self.source_name or Path(destination).name == self.destination_name:
+            raise PermissionError(errno.EACCES, "injected", str(source), None, str(destination))
         super().replace(source, destination)
+
+
+class _FailingRemovePackageFiles(PackageFiles):
+    """The real file operations, except that ``remove`` raises ``PermissionError``."""
+
+    def remove(self, path: Path) -> None:
+        raise PermissionError(errno.EACCES, "injected", str(path))
+
+
+class _RecordingPackageFiles(PackageFiles):
+    """The real file operations, recording the source and destination name of every ``replace``."""
+
+    def __init__(self) -> None:
+        self.replaced: list[tuple[str, str]] = []
+
+    def replace(self, source: Path, destination: Path) -> None:
+        super().replace(source, destination)
+        self.replaced.append((Path(source).name, Path(destination).name))
 
 
 class _RecordingCaseInsensitivePackageFiles(CaseInsensitivePackageFiles):
@@ -39,15 +65,6 @@ class _RecordingCaseInsensitivePackageFiles(CaseInsensitivePackageFiles):
     def replace(self, source: Path, destination: Path) -> None:
         super().replace(source, destination)
         self.replaced_onto.append(Path(destination).name)
-
-
-class _UnusablePackageFiles:
-    """Any use fails the test: a regular rename must not go through ``package_files``."""
-
-    def _fail(self, *_args) -> None:
-        raise AssertionError("a regular rename used package_files")
-
-    exists = write = replace = remove = copy_permissions = temporary_path = _fail
 
 
 class DocumentWorkspaceServiceTest(unittest.TestCase):
@@ -301,23 +318,122 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         with self.assertRaises(OSError):
             service.rename_document("alpha", "gamma")
 
+        # gamma.dep is the blocking folder; the staged package and the aside file are gone.
+        self.assertEqual(self._listing(), ["alpha.dep", "gamma.dep"])
         self.assertEqual(self._package("alpha"), Document("alpha", "a", "1"))
         self.assertEqual(self._state(), before)
 
-    def test_rename_unlink_failure_propagates_and_leaves_both_packages(self) -> None:
-        # KNOWN BUG (P1-3 spec, known defect 3), pinned as it is today, NOT desired
-        # behavior: the new package stays on disk next to the old one while the
-        # controller keeps only the old name. A later fix task flips this.
-        self._block("alpha")
+    def test_rename_that_cannot_move_the_old_package_aside_keeps_one_package_and_state(self) -> None:
+        # Was the KNOWN BUG test of P1-3 known defect 3 (the new package was written next
+        # to the old one, the old one could not be removed, and both stayed on disk),
+        # fixed by F-3: the old package is moved aside before the new one is installed.
+        self._write(Document("alpha", "a", "1"))
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        service = self._service(
+            [Document("alpha", "a", "1")],
+            package_files=_FailingReplacePackageFiles(source_name="alpha.dep"),
+            open_name="alpha",
+            selected_name="alpha",
+        )
+        before = self._state()
+
+        with self.assertRaises(PermissionError) as raised:
+            service.rename_document("alpha", "gamma")
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertIn("alpha.dep", str(raised.exception))
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+        self.assertEqual(self._state(), before)
+
+    def test_regular_rename_install_failure_puts_the_old_package_back(self) -> None:
+        self._write(Document("alpha", "a", "1"))
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        service = self._service(
+            [Document("alpha", "a", "1")],
+            package_files=_FailingReplacePackageFiles(destination_name="gamma.dep"),
+            open_name="alpha",
+            selected_name="alpha",
+        )
+        before = self._state()
+
+        with self.assertRaises(PermissionError):
+            service.rename_document("alpha", "gamma")
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+        self.assertEqual(self._state(), before)
+
+    def test_rename_of_an_unwritable_package_is_refused(self) -> None:
+        self._write(Document("alpha", "a", "1"))
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
         service = self._service([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
         before = self._state()
 
-        with self.assertRaises(OSError):
-            service.rename_document("alpha", "gamma")
+        with patch("os.access", return_value=False):
+            with self.assertRaises(PermissionError) as raised:
+                service.rename_document("alpha", "gamma")
 
-        self.assertEqual(self._listing(), ["alpha.dep", "gamma.dep"])
-        self.assertEqual(self._package("gamma"), Document("gamma", "a", "1"))
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(
+            str(raised.exception),
+            f"[Errno {errno.EACCES}] {os.strerror(errno.EACCES)}: {str(self.workspace / 'alpha.dep')!r}",
+        )
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
         self.assertEqual(self._state(), before)
+
+    def test_regular_rename_ignores_a_failure_to_remove_the_moved_aside_package(self) -> None:
+        # The rename is complete once the new package is installed; an aside file that
+        # cannot be removed stays as a .tmp the workspace never loads (F-1 behavior).
+        self._write(Document("alpha", "a", "1"))
+        service = self._service(
+            [Document("alpha", "a", "1")],
+            package_files=_FailingRemovePackageFiles(),
+            open_name="alpha",
+            selected_name="alpha",
+        )
+
+        self.assertEqual(service.rename_document("alpha", "gamma"), Document("gamma", "a", "1"))
+
+        listing = self._listing()
+        self.assertEqual(len(listing), 2, listing)
+        self.assertRegex(listing[0], r"^\.alpha\.dep\..+\.tmp$")
+        self.assertEqual(listing[1], "gamma.dep")
+        self.assertEqual(self.controller.document_names, ["gamma"])
+        reloaded = DocumentController()
+        self.assertEqual(DocumentWorkspaceService(reloaded, self.workspace).load_documents(), [])
+        self.assertEqual(reloaded.documents, [Document("gamma", "a", "1")])
+
+    @unittest.skipUnless(os.name == "nt", "Windows sharing modes")
+    def test_rename_of_a_package_held_open_by_another_program(self) -> None:
+        # Moving the package aside needs delete sharing. Without it (a zip tool, an
+        # editor) the rename fails and exactly the old package stays; before F-3 the new
+        # package was left next to it. With it (an antivirus scanner) the rename completes.
+        for label, share in SHARE_MODES:
+            with self.subTest(share=label):
+                self.workspace = self.root / label.replace("+", "-")
+                self._write(Document("alpha", "a", "1"))
+                alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+                service = self._service([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+                before = self._state()
+                release = hold_open(self, self.workspace / "alpha.dep", share)
+                try:
+                    if share & SHARE_DELETE:
+                        service.rename_document("alpha", "gamma")
+                    else:
+                        with self.assertRaises(PermissionError) as raised:
+                            service.rename_document("alpha", "gamma")
+                finally:
+                    release()
+
+                if share & SHARE_DELETE:
+                    self.assertEqual(self._listing(), ["gamma.dep"])
+                    self.assertEqual(self._package("gamma"), Document("gamma", "a", "1"))
+                    self.assertEqual(self.controller.document_names, ["gamma"])
+                else:
+                    self.assertEqual(self._listing(), ["alpha.dep"])
+                    self.assertEqual(raised.exception.winerror, 32)
+                    self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+                    self.assertEqual(self._state(), before)
 
     def _assert_case_only_rename(self, service: DocumentWorkspaceService) -> None:
         self.assertEqual(service.rename_document("Alpha", "alpha"), Document("alpha", "a", "1"))
@@ -366,7 +482,7 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(self._members("alpha"), ["alpha.brl", "alpha.txt"])
 
     def test_case_only_rename_install_failure_propagates_and_keeps_state(self) -> None:
-        service = self._case_only_service(_FailingInstallPackageFiles("alpha.dep"))
+        service = self._case_only_service(_FailingReplacePackageFiles(destination_name="alpha.dep"))
         alpha_bytes = (self.workspace / "Alpha.dep").read_bytes()
         before = self._state()
 
@@ -377,14 +493,22 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual((self.workspace / "Alpha.dep").read_bytes(), alpha_bytes)
         self.assertEqual(self._state(), before)
 
-    def test_regular_rename_does_not_use_package_files(self) -> None:
-        # F-1 (D6): only case-only renames take the new path; regular renames keep
-        # today's write-then-unlink sequence (known defect 3 stays pinned above).
+    def test_regular_rename_moves_the_old_package_aside_before_installing(self) -> None:
+        # F-3 (D5): replaces the F-1 (D6) guard that kept regular renames on the old
+        # write-then-unlink sequence. The old package leaves its name before the new one
+        # takes its own, so nothing is removed under a name that can alias the new one.
         self._write(Document("alpha", "a", "1"))
-        service = self._service([Document("alpha", "a", "1")], package_files=_UnusablePackageFiles())
+        files = _RecordingPackageFiles()
+        service = self._service([Document("alpha", "a", "1")], package_files=files)
 
         self.assertEqual(service.rename_document("alpha", "gamma"), Document("gamma", "a", "1"))
 
+        self.assertEqual(len(files.replaced), 2, files.replaced)
+        (moved, aside), (staged, installed) = files.replaced
+        self.assertEqual(moved, "alpha.dep")
+        self.assertRegex(aside, r"^\.alpha\.dep\..+\.tmp$")
+        self.assertRegex(staged, r"^\.gamma\.dep\..+\.tmp$")
+        self.assertEqual(installed, "gamma.dep")
         self.assertEqual(self._listing(), ["gamma.dep"])
         self.assertEqual(self._package("gamma"), Document("gamma", "a", "1"))
 

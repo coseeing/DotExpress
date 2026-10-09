@@ -1,0 +1,9 @@
+第一章　緒論
+請計算 $\frac{1}{2} + \frac{2}{5}$ 的值，並說明 the reason why 你這樣做。
+English paragraph: The quick brown fox jumps over the lazy dog, and then it rests.
+日本語の文章：これは点字翻訳のテストです。
+混排：價格是新臺幣 1,234 元（約 USD 40），請於 2026/10/09 前回覆。
+數學：若 $x^2 + 2x + 1 = 0$，則 $x = -1$。
+  前置空白的中文行
+結尾有空白的行   
+「引號」與（括號）以及 "English quotes" 的處理。

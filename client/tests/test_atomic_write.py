@@ -156,6 +156,17 @@ class WriteTextAtomicallyTest(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), b"old,bytes\n")
         self.assertEqual(self.listing(), ["d.csv"])
 
+    def test_an_unknown_encoding_raises_it_and_leaves_no_temporary_file(self) -> None:
+        # The temporary file exists before the text stream is built; the stream's own
+        # error must come out (not a second close of its descriptor) and the file goes.
+        self.path.write_bytes(b"old,bytes\n")
+
+        with self.assertRaises(LookupError):
+            atomic_write.write_text_atomically(self.path, _write_line, encoding="no-such-codec")
+
+        self.assertEqual(self.path.read_bytes(), b"old,bytes\n")
+        self.assertEqual(self.listing(), ["d.csv"])
+
     def test_a_taken_temporary_name_is_skipped_and_kept(self) -> None:
         self.path.write_bytes(b"old,bytes\n")
         taken = self.directory / ".d.csv.aaaa.tmp"

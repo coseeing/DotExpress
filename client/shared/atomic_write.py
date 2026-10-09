@@ -25,15 +25,17 @@ _ATTEMPTS = 100
 _CREATE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
 
 
-def _create_temporary_file(destination: Path) -> tuple[int, Path]:
-    """Create a new ``.<name>.<random>.tmp`` next to ``destination``; never reuses a file.
-
-    Mode 0o666 lets the kernel apply the umask, as ``open(path, "w")`` would.
-    """
+def _open_temporary_file(
+    destination: Path,
+    opener: Callable[[Path, int], int],
+    encoding: str,
+    newline: str | None,
+) -> TextIO:
+    """Open a new ``.<name>.<random>.tmp`` next to ``destination``; never reuses a file."""
     for _attempt in range(_ATTEMPTS):
         candidate = destination.parent / f".{destination.name}.{secrets.token_hex(8)}.tmp"
         try:
-            return os.open(candidate, _CREATE_FLAGS, 0o666), candidate
+            return open(candidate, "w", encoding=encoding, newline=newline, opener=opener)
         except FileExistsError:
             continue
     raise FileExistsError(errno.EEXIST, "No usable temporary file name found", str(destination.parent))
@@ -64,14 +66,17 @@ def write_text_atomically(
         raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(destination))
     temporary_path: Path | None = None
     installed = False
+
+    def create_new(candidate: Path, _flags: int) -> int:
+        # Mode 0o666 lets the kernel apply the umask, as open(path, "w") would; the
+        # path is recorded as soon as the file exists, so every failure removes it.
+        nonlocal temporary_path
+        descriptor = os.open(candidate, _CREATE_FLAGS, 0o666)
+        temporary_path = Path(candidate)
+        return descriptor
+
     try:
-        descriptor, temporary_path = _create_temporary_file(destination)
-        try:
-            stream = os.fdopen(descriptor, "w", encoding=encoding, newline=newline)
-        except BaseException:
-            os.close(descriptor)
-            raise
-        with stream:
+        with _open_temporary_file(destination, create_new, encoding, newline) as stream:
             write(stream)
             stream.flush()
             os.fsync(stream.fileno())

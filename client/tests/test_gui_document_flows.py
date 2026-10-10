@@ -4349,6 +4349,32 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._boxes(), [self._exported_box(), self._exported_box()])
         self.assertEqual(self.calls.pending, [])
 
+    def test_ctrl_s_then_ctrl_tab_during_manual_conversion(self) -> None:
+        # F-9 review M-4: the queued export of the pending alpha and the switch to beta together.
+        # The manual result goes to alpha (D2 box), then the export converts alpha's text again
+        # and writes alpha.brl; beta is left alone.
+        frame = self._make_frame([Document("alpha", "alpha text", None), Document("beta", "beta text", "⠃")], "alpha")
+        target = self.export_dir / "alpha.brl"
+        self.export_paths.append(target)
+        self.outputs["alpha text"] = ConversionOutput("⠁⠁", ("result",), (_dual_view_segment("a", "⠁"),))
+
+        frame.on_convert(None)
+        frame.on_output_text_key_down(_KeyEvent(self.CTRL_S))
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB))
+        self.assertEqual(len(self.threads), 1)
+        self._finish_jobs()
+
+        self.assertEqual(self._boxes(), [self._saved_to(frame, "alpha")[1:3], self._exported_box()])
+        self.assertEqual([request.raw_text for request in self.requests], ["alpha text", "alpha text"])
+        self.assertEqual(self._written(), {"alpha.brl": "⠁⠁"})
+        controller = frame._document_controller
+        self.assertEqual(controller.documents, [Document("alpha", "alpha text", "⠁⠁"), Document("beta", "beta text", "⠃")])
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "alpha text", "⠁⠁"))
+        self.assertFalse((self.workspace / "beta.dep").exists())
+        self.assertEqual(controller.open_document_name, "beta")
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("beta text", "⠃"))
+        self.assertFalse(frame._conversion_presenter.is_running())
+
     def test_ctrl_tab_during_manual_conversion_sends_result_to_the_starting_document(self) -> None:
         segment = _dual_view_segment("a", "⠁")
         frame = self._make_frame([Document("alpha", "alpha text", None), Document("beta", "beta text", "⠃")], "alpha")

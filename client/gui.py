@@ -15,6 +15,7 @@ from conversion.service import ConversionRequest
 from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.manager import dictionary_path_for_name
 from dictionaries.presenter import DictionaryManagementPresenter
+from dictionaries.read_problems import describe_unreadable_dictionary, log_dictionary_read_error
 from documents.controller import DocumentController
 from documents.export_coordinator import ExportCoordinator
 from documents.formats import DocumentFormatDescriptor, build_export_wildcard, get_format
@@ -1001,8 +1002,20 @@ class BrailleFrame(wx.Frame):
 		if result != wx.ID_EDIT or edit_name is None:
 			return
 		dictionary_path = self._dictionary_presenter.dictionary_path(edit_name)
-		with DictionaryEntriesDialog(self, dictionary_path=dictionary_path) as editor:
-			editor.ShowModal()
+		try:
+			editor = DictionaryEntriesDialog(self, dictionary_path=dictionary_path)
+		except Exception as error:
+			# F-6 (D6): the file could not be read after Dictionary Management checked it.
+			log_dictionary_read_error(dictionary_path, error)
+			wx.MessageBox(
+				describe_unreadable_dictionary(edit_name, error),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
+			return
+		with editor as entries_dialog:
+			entries_dialog.ShowModal()
 
 	def on_convert(self, _evt):
 		self._conversion_presenter.convert()

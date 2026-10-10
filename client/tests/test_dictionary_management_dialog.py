@@ -7,9 +7,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 from dictionaries.presenter import DictionaryManagementView
+from dictionaries.read_problems import describe_dictionary_read_error, describe_unreadable_dictionary
 from tests import wx_stub
 from tests.file_log_isolation import isolate_file_logs
-from tests.unreadable_dictionary_files import BIG5, LATE_BIG5, READABLE, UTF16
+from tests.unreadable_dictionary_files import BIG5, LATE_BIG5, READABLE, UTF16, UTF8_FIXED
 from tests.windows_file_handles import hold_open
 
 
@@ -72,6 +73,26 @@ class _FakeListCtrl:
 		self.column_widths[column] = width
 
 
+class _FakeControl:
+	"""The reason label or field of Dictionary Management (F-6): records what the dialog does."""
+
+	def __init__(self):
+		self.shown = False
+		self.value = ""
+		self.calls = []
+
+	def Show(self, show=True):
+		self.shown = show
+		self.calls.append(("Show", show))
+
+	def ChangeValue(self, value):
+		self.value = value
+		self.calls.append(("ChangeValue", value))
+
+	def SelectAll(self):
+		self.calls.append(("SelectAll",))
+
+
 class _FakeActions:
 	"""Stands in for the presenter: fixed names, scripted results, recorded calls."""
 
@@ -119,7 +140,11 @@ def _make_dialog(dictionary_dir, names, actions=None):
 	target.edit_button = Mock()
 	target.import_button = Mock()
 	target.export_button = Mock()
+	target.read_problem_label = _FakeControl()
+	target.read_problem_ctrl = _FakeControl()
+	target.Layout = Mock()
 	target.EndModal = Mock()
+	target.edit_dictionary_name = None
 	return target
 
 
@@ -304,6 +329,108 @@ class UnreadableDictionaryCountTest(_DictionaryFilesTestCase):
 
 		self.assertEqual(self.counts(target), [dialog._("Unreadable")])
 		self.assertIsInstance(target._dictionary_read_errors["alpha"], PermissionError)
+		# The reason row says "in use or no permission" (the two causes cannot be told apart).
+		self.assertEqual(target.read_problem_ctrl.value, describe_dictionary_read_error(PermissionError(13, "Permission denied")))
+		self.assertTrue(target.read_problem_ctrl.shown)
+
+
+class ReadProblemReasonTest(_DictionaryFilesTestCase):
+	"""F-6 (D3, D5): the reason under the list, and Edit on a dictionary that cannot be read."""
+
+	def open_dialog(self, selected):
+		self.write("big5", BIG5)
+		self.write("default", b"text,braille,type\r\n")
+		names = ["big5", "default"]
+		target = _make_dialog(self.root, names)
+		with self.assertLogs(LOGGER, level="ERROR"):
+			target.refresh_dictionaries(names, selected)
+		return target
+
+	def select(self, target, index):
+		target.list_ctrl.selected = index
+		target.read_problem_label.calls.clear()
+		target.read_problem_ctrl.calls.clear()
+		target.Layout.reset_mock()
+		event = Mock()
+		target._on_selection_changed(event)
+		event.Skip.assert_called_once_with()
+
+	def test_selecting_an_unreadable_dictionary_shows_the_reason(self):
+		target = self.open_dialog("default")
+
+		self.select(target, 0)
+
+		reason = describe_dictionary_read_error(target._dictionary_read_errors["big5"])
+		self.assertEqual(target.read_problem_ctrl.calls, [("ChangeValue", reason), ("SelectAll",), ("Show", True)])
+		self.assertEqual(target.read_problem_label.calls, [("Show", True)])
+		target.Layout.assert_called_once_with()
+
+	def test_selecting_a_readable_dictionary_hides_the_reason(self):
+		target = self.open_dialog("big5")
+
+		self.select(target, 1)
+
+		self.assertEqual(target.read_problem_ctrl.calls, [("ChangeValue", ""), ("Show", False)])
+		self.assertEqual(target.read_problem_label.calls, [("Show", False)])
+		target.Layout.assert_called_once_with()
+
+	def test_refresh_shows_the_reason_for_the_preferred_selection(self):
+		target = self.open_dialog("big5")
+
+		reason = describe_dictionary_read_error(target._dictionary_read_errors["big5"])
+		self.assertEqual(target.list_ctrl.selected, 0)
+		self.assertEqual(target.read_problem_ctrl.calls[-3:], [("ChangeValue", reason), ("SelectAll",), ("Show", True)])
+		self.assertTrue(target.read_problem_label.shown)
+
+	def test_edit_on_an_unreadable_dictionary_shows_the_error_and_stays_open(self):
+		target = self.open_dialog("big5")
+		target.show_error = Mock()
+
+		with self.assertLogs(LOGGER, level="ERROR") as logs:
+			target._on_edit(None)
+
+		error = target._dictionary_read_errors["big5"]
+		target.show_error.assert_called_once_with(describe_unreadable_dictionary("big5", error))
+		target.EndModal.assert_not_called()
+		self.assertIsNone(target.edit_dictionary_name)
+		self.assertEqual(len(logs.records), 1)
+		self.assertTrue(target.read_problem_ctrl.shown)
+
+	def test_edit_after_the_file_was_fixed_opens_the_editor_and_updates_the_count(self):
+		target = self.open_dialog("big5")
+		target.show_error = Mock()
+		refreshes = target.list_ctrl.refresh_count
+		self.write("big5", UTF8_FIXED)
+
+		with self.assertNoLogs(LOGGER):
+			target._on_edit(None)
+
+		self.assertEqual(target.edit_dictionary_name, "big5")
+		target.EndModal.assert_called_once_with(dialog.wx.ID_EDIT)
+		target.show_error.assert_not_called()
+		self.assertEqual(target._get_item_text(0, 1), "1")
+		self.assertEqual(target._dictionary_read_errors, {})
+		self.assertEqual(target.list_ctrl.refresh_count, refreshes + 1)
+		self.assertFalse(target.read_problem_ctrl.shown)
+		self.assertFalse(target.read_problem_label.shown)
+
+	def test_edit_on_a_dictionary_that_became_unreadable_stays_open(self):
+		self.write("alpha", READABLE)
+		target = _make_dialog(self.root, ["alpha"])
+		target.refresh_dictionaries(["alpha"], "alpha")
+		target.show_error = Mock()
+		self.write("alpha", BIG5)
+
+		with self.assertLogs(LOGGER, level="ERROR"):
+			target._on_edit(None)
+
+		error = target._dictionary_read_errors["alpha"]
+		self.assertIsInstance(error, UnicodeDecodeError)
+		target.show_error.assert_called_once_with(describe_unreadable_dictionary("alpha", error))
+		target.EndModal.assert_not_called()
+		self.assertIsNone(target.edit_dictionary_name)
+		self.assertEqual(self.counts(target), [dialog._("Unreadable")])
+		self.assertTrue(target.read_problem_ctrl.shown)
 
 
 class DictionaryManagementInteractionTest(unittest.TestCase):

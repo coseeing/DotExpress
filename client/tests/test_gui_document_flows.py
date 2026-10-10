@@ -52,6 +52,8 @@ from conversion.output import DualViewSegment
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
 from dual_view.html import render_dual_view_html
 from dual_view.model import build_dual_view_model
+from dictionaries.read_problems import describe_unreadable_dictionary
+from tests.unreadable_dictionary_files import big5_decode_error
 
 
 def make_paths(root: Path = Path("unused-root"), **folders: Path) -> app_paths.ApplicationPaths:
@@ -1074,10 +1076,10 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         frame._dictionary_presenter = Mock()
         return frame
 
-    def _open_management(self, frame, result, edit_name):
+    def _open_management(self, frame, result, edit_name, editor_error=None):
         with (
             patch.object(gui, "DictionaryManagementDialog") as dialog_class,
-            patch.object(gui, "DictionaryEntriesDialog") as editor_class,
+            patch.object(gui, "DictionaryEntriesDialog", side_effect=editor_error) as editor_class,
         ):
             dialog = dialog_class.return_value.__enter__.return_value
             dialog.ShowModal.return_value = result
@@ -1107,6 +1109,54 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         presenter.dictionary_path.assert_called_once_with("alpha")
         editor_class.assert_called_once_with(frame, dictionary_path=Path("dictionary/alpha.csv"))
         editor_class.return_value.__enter__.return_value.ShowModal.assert_called_once_with()
+
+    def test_editor_that_cannot_read_its_dictionary_shows_the_reason(self) -> None:
+        # F-6 (D6): the file went bad between the check in Dictionary Management and the editor.
+        frame = self._make_frame()
+        frame._dictionary_presenter.dictionary_path.return_value = Path("dictionary/alpha.csv")
+        error = big5_decode_error()
+
+        with (
+            patch.object(gui.wx, "MessageBox") as message_box,
+            self.assertLogs("dotexpress.gui", level="ERROR") as logs,
+        ):
+            _dialog_class, editor_class = self._open_management(frame, gui.wx.ID_EDIT, "alpha", editor_error=error)
+
+        editor_class.assert_called_once_with(frame, dictionary_path=Path("dictionary/alpha.csv"))
+        message_box.assert_called_once_with(
+            describe_unreadable_dictionary("alpha", error),
+            gui._("Error"),
+            gui.wx.OK | gui.wx.ICON_ERROR,
+            parent=frame,
+        )
+        self.assertEqual(
+            [record.getMessage() for record in logs.records],
+            [f'Cannot read dictionary "alpha.csv": UnicodeDecodeError: {error}'],
+        )
+        self.assertIsNone(logs.records[0].exc_info)
+
+    def test_editor_failure_that_is_unexpected_is_logged_with_its_traceback(self) -> None:
+        frame = self._make_frame()
+        frame._dictionary_presenter.dictionary_path.return_value = Path("dictionary/alpha.csv")
+        error = RuntimeError("injected")
+
+        with (
+            patch.object(gui.wx, "MessageBox") as message_box,
+            self.assertLogs("dotexpress.gui", level="ERROR") as logs,
+        ):
+            self._open_management(frame, gui.wx.ID_EDIT, "alpha", editor_error=error)
+
+        message_box.assert_called_once_with(
+            describe_unreadable_dictionary("alpha", error),
+            gui._("Error"),
+            gui.wx.OK | gui.wx.ICON_ERROR,
+            parent=frame,
+        )
+        self.assertEqual(
+            [record.getMessage() for record in logs.records],
+            ['Unexpected error while reading dictionary "alpha.csv"'],
+        )
+        self.assertIs(logs.records[0].exc_info[1], error)
 
     def test_other_results_open_no_editor(self) -> None:
         for result, edit_name in ((gui.wx.ID_OK, "alpha"), (gui.wx.ID_EDIT, None)):

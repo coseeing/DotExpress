@@ -32,7 +32,7 @@
 ## 結論
 
 - 所有自動化項目（85–93）在兩個 build 上的結果都與 plan Task 7 Step 4 的預期區塊一致。只有 N-f8b2 的 93 重跑一次（結束時的當機碼，見下方「觀察」）。
-- D1–D3：轉換結果送到按下「轉換」時開著的文件。使用者在轉換中切換（85、93）或匯入（87）時，開著的文件完全不受影響（編輯框、焦點不變），結果立刻存進起始文件的套件，並以新的訊息框「轉換完成。結果已儲存到文件「alpha」。」告知；切回起始文件就看到結果，重新啟動後也還在。轉換中切走再切回（86）走今天的路徑，訊息框仍是「轉換完成。」。存檔失敗（88）只顯示存檔錯誤，不顯示完成訊息；結果留在記憶體中，之後的切換時寫入。改前結果送到結束時開著的文件，並在切換或關閉時寫進那份文件的套件（85、87、88、93 的 `beta.dep`／`imported` 被寫入 alpha 的點字，`alpha` 一直是 pending）。
+- D1–D3：轉換結果送到按下「轉換」時開著的文件。使用者在轉換中切換（85、93）或匯入（87）時，開著的文件的編輯框不受影響（訊息框關閉後的焦點見下方「審查修正後的重跑」），結果立刻存進起始文件的套件，並以新的訊息框「轉換完成。結果已儲存到文件「alpha」。」告知；切回起始文件就看到結果，重新啟動後也還在。轉換中切走再切回（86）走今天的路徑，訊息框仍是「轉換完成。」。存檔失敗（88）只顯示存檔錯誤，不顯示完成訊息；結果留在記憶體中，之後的切換時寫入。改前結果送到結束時開著的文件，並在切換或關閉時寫進那份文件的套件（85、87、88、93 的 `beta.dep`／`imported` 被寫入 alpha 的點字，`alpha` 一直是 pending）。
 - D4、D5：轉換中要求的匯出（89 的 Ctrl+S、90 的 Export All 加 Ctrl+S）排隊依序執行，每個訊息框都出現，所有檔案都寫出。改前第二個轉換與第一個同時執行，在這麼長的文字下程式當機（`ntdll.dll`、`c0000374`）。
 - D6：待轉換文件的 Dual View HTML 匯出（單一匯出與全部匯出）顯示這次新轉換的段落，不再是 "No conversion data" 頁面；文件與快取不變（91）。
 - D8：轉換中關閉被擋下，結束後可以正常關閉（92，改前改後相同）；登出查詢在轉換中被拒絕，之後的結果仍正確送到起始文件（93）。
@@ -43,6 +43,26 @@
 - **改前兩個轉換同時執行會當機（spec 修正 14）**：89、90 在 N-f8b2 上都以 `ntdll.dll` 的 `c0000374` 結束，與 dry run 的四次相同。F-9 的佇列一次只執行一個轉換，所以改後兩個訊息框都出現。
 - **英文的摘要字串**：全部匯出成功的摘要 `'All documents were exported successfully.'` 在中文介面仍是英文（90、91，改前改後相同）。這是既有缺陷（P1-4 defect 4，F-7 審查已記錄），與 F-9 無關。
 
+## 審查修正後的重跑（2026-10-11，N-f9b）
+
+審查 M-6：在 N-f9 上，(b) 的訊息框關閉後焦點停在 `beta` 唯讀的點字結果編輯框。修正（`f755e3c`）讓 (b) 的訊息框（D2 訊息或存檔錯誤）關閉後，若主視窗是作用中視窗，焦點移到開著文件的原文編輯框（spec「審查後的修正」第 1 點）。
+
+- Build：`fix/f9-conversion-target-document` 在 `f755e3c`（`HEAD:client` `a64da653f7348440a9a8b7419cb9aaea1e7a3440`），同樣以主 checkout 的 `client\.venv\Scripts` 放在 `PATH` 最前面執行 `scripts\build-dotexpress.bat`，約 64 秒，log 有 `Build complete!`；`PYZ-00.toc` 的四個模組與 `Analysis-00.toc` 的 `gui.py` 都來自 `DotExpress-f9\client\`。`D:\dxtest\N-f9b\DotExpress.exe`，48,765,092 bytes，sha256 `B5AD9BFA9DA0C73F87C8FA547C1E7BDD1771A50E142E14EE1D86F37DD1AB83DD`。沒有動到 `N-f9`、`N-f8b2` 與其他 build（`N-f9` 只被腳本讀取、複製，sha256 仍是 `5DE1ACDB…`）。
+- 會受影響的是 (b) 的項目：85、87、88、93 在新資料夾 `D:\dxtest\auto<N>-f9b` 重跑，四個 log 與 N-f9 的 `auto<N>-f9.log` 逐行相同（`diff --strip-trailing-cr` 無差異；93 的 `WM_ENDSESSION` 結束碼 0）。86、89–92 不經過 (b)，沒有重跑。
+- 焦點：新腳本 `auto/focus_check.py`（沿用審查的 `focus_probe.py` 做法：以 `GetGUIThreadInfo` 讀取程式 UI 執行緒的焦點，對應到主視窗的兩個編輯框）。85 的流程，以及 88 的流程（`lock.py` 鎖住 `alpha.dep`，訊息框是存檔錯誤）：
+
+| 步驟 | N-f9b（修正後）`auto85focus-f9b`、`auto88focus-f9b` | N-f9（修正前）`auto85focus-before-f9b`、`auto88focus-before-f9b` |
+| --- | --- | --- |
+| 開始，`alpha` 開著 | 原文編輯框 | 相同 |
+| Ctrl+Enter 之後 | 點字結果編輯框（原文編輯框停用） | 相同 |
+| Ctrl+Tab 到 `beta` 之後 | `beta` 的點字結果編輯框 | 相同 |
+| 訊息框 | 85：`'轉換完成。結果已儲存到文件「alpha」。'`；88：`'儲存文件失敗：[WinError 5] 存取被拒。…'` | 相同 |
+| 按 Enter 關閉訊息框之後 | **`beta` 的原文編輯框（已啟用）**；`beta` 的編輯框內容不變 | `beta` 的點字結果編輯框（唯讀） |
+| Ctrl+Tab 回 `alpha` | 原文編輯框，點字結果編輯框顯示 alpha 的點字 | 相同 |
+
+  兩個 build 上的程式都正常關閉（`exited`），沒有殘留的 DotExpress 程序；執行期間使用者沒有開著 DotExpress，只結束 exe 位於這些資料夾的程序。沒有腳本讀寫剪貼簿。
+- 沒有自動驗證的部分：轉換在 Ctrl+S 的檔案對話框開著時結束的情況（`IsActive()` 為 false，焦點不動）只有單元測試，沒有 GUI 實測。
+
 ## 仍需人工（使用者）
 
-- [ ] 94（NVDA）：請在 NVDA 執行中，把 `D:\dxtest\N-f9\DotExpress.exe` 複製到新資料夾 `D:\dxtest\manual94-f9\`，用 `auto/item85.py` 準備項目 85 的工作區（或把 `D:\dxtest\auto85-f9\workspace` 的初始內容複製過去：`alpha` 是很長的待轉換文件，`beta` 是短文件），然後：(1) 開啟 `alpha`，在原文編輯框按 Ctrl+Enter，立刻按 Ctrl+Tab 切到 `beta`；約 15 秒後出現「轉換完成。結果已儲存到文件「alpha」。」訊息框：記錄 NVDA 是否讀出文件名稱，以及按「確定」後焦點是否回到 `beta` 的編輯框；(2) 切回 `alpha`，按 Ctrl+Enter 後立刻在點字結果編輯框按 Ctrl+S 並存檔：記錄兩個訊息框（「轉換完成。」與「文件已成功匯出。」）是否依序讀出。若有讀不到或焦點跑掉的情形，請告訴我們。
+- [ ] 94（NVDA）：請在 NVDA 執行中，把 `D:\dxtest\N-f9b\DotExpress.exe`（審查修正後的 build）複製到新資料夾 `D:\dxtest\manual94-f9b\`，用 `auto/item85.py` 準備項目 85 的工作區（或把 `D:\dxtest\auto85-f9\workspace` 的初始內容複製過去：`alpha` 是很長的待轉換文件，`beta` 是短文件），然後：(1) 開啟 `alpha`，在原文編輯框按 Ctrl+Enter，立刻按 Ctrl+Tab 切到 `beta`；約 15 秒後出現「轉換完成。結果已儲存到文件「alpha」。」訊息框：記錄 NVDA 是否讀出文件名稱，以及按「確定」後焦點是否在 `beta` 的原文編輯框、NVDA 是否唸出它（修正後的預期；修正前停在唯讀的點字結果編輯框）；(2) 切回 `alpha`，按 Ctrl+Enter 後立刻在點字結果編輯框按 Ctrl+S 並存檔：記錄兩個訊息框（「轉換完成。」與「文件已成功匯出。」）是否依序讀出。若有讀不到或焦點跑掉的情形，請告訴我們。

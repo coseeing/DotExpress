@@ -38,6 +38,24 @@ F-9（轉換結果寫回啟動轉換的文件）正在 `D:\workspace\DotExpress-
 - service 新增的記錄（待提示的 U+0000 數量，D12）以文件名稱為鍵，並跟著重新命名與刪除移動，和 F-5 的存檔記錄一樣。F-9 把轉換結果存進未開啟的文件時，走 `DocumentController.replace_document`，不會產生 U+0000，所以不需要 F-8 做任何事。
 - 後 merge 的任務在合併後的 `main` 上重跑完整套件；行號由 plan 重新標出。
 
+## 規劃後的修正（2026-10-10）
+
+F-8a 的 plan（`docs/superpowers/plans/2026-10-10-f8a-data-safety-cleanup.md`，在 `bfd24db` 的 scratch clone 上 dry run：Task 0–5 完全重現，每個步驟也以 plan 自己的區塊腳本套用過，GUI 項目 66–69 與 76–82 對同一份程式碼的 packaged build 與 `N-f7` 都執行過）沒有發現決策 D1、D2、D6–D11 或其行為對照列的錯誤。plan 細化本規格之處，以本節為準。D3–D5 與 D12–D15 屬於 F-8b，之後再規劃；本節不改動它們。
+
+1. **採用拆分（O1）。** F-8a ＝ D1、D2、D6–D11，遷移步驟 1–4，測試計畫 A–C，沒有新字串也沒有新 UI，在 `fix/f8-data-safety-cleanup` 上進行。F-8b ＝ D3–D5、D12–D15，步驟 5–6，測試計畫 D–F，兩個通知與 4 個 msgid；F-8a merge 之後在新分支上另寫 plan。Windows 項目 66–69、76–82 與人工項目 84 屬於 F-8a；項目 70–75 與人工項目 83 屬於 F-8b。編號不變。
+2. **F-8a 的數量：** 步驟 1–4 之後分別是 `Ran 1378`、`1386`、`1389`、`1400`（新增 10、8、3、11 個測試；基準 1368；全程 `FAILED (errors=1, skipped=7)`，只有 F-W6；msgid 維持 364 個）。測試計畫 C 有 10 個測試（C3 是兩個：第三個檔案，以及經 `CaseInsensitivePackageFiles` 的只改大小寫重新命名；C9 就是既有的 `test_case_only_rename_keeps_the_document`，它已經在真正的 NTFS 上經由主視窗把 `Alpha` 改名為 `alpha`）；A 有 14 個（A4 是修改既有測試）；B 有 8 個（B7 是兩個測試）。驗收條件 2 的測試組從 `Ran 502` 變為 `Ran 534`，`OK (skipped=7)`。
+3. **所有寫入者共用一種故障注入。** 新的測試輔助模組 `client/tests/full_disk.py`（`full_disk(folder, after=N, pattern=...)`）在 `with` 區塊內替換 `builtins.open` 與 `io.open`：在 `folder` 內以寫入模式開啟的檔案，寫入 `N` 個字元或位元組之後就拋出 `OSError(ENOSPC)`。舊的就地寫入（`Path.write_text`、`shutil.copyfile`、`open("w")`、`NamedTemporaryFile`）與 `shared.atomic_write` 都會遇到這個故障。它取代了對 `shutil.copyfileobj`（A6、A7；在 Windows 上 `copyfile` 不會呼叫它）、`json.dump`（A14）與 `os.replace`（A11）的 patch。
+4. **五個既有測試用 `<name>.dep` 資料夾讓寫入失敗。** D1 讓這種名稱算作已被占用，所以它們改用 `full_disk`（新增，以及服務與主視窗的匯入）或讓安裝步驟失敗（重新命名，`_FailingReplacePackageFiles(destination_name=...)`）注入故障，測試目的不變；訊息改為逐字比對（`[Errno 28] No space left on device`）。為了存檔、刪除或全部刪除而占用名稱的測試不變。
+5. **`Mock` 服務的測試骨架**設定 `package_name_taken.return_value = False` 與 `free_document_name.side_effect = lambda base: base`；測試計畫中另外兩項設定屬於 F-8b。
+6. **D8：匯出到同名資料夾時保留現在的訊息。** 只靠 `write_text_atomically` 的話，匯出到同名資料夾會以「取代失敗」結束，訊息中出現暫存檔名（`[WinError 5] ...: '<dir>\.alpha.brl.<random>.tmp' -> '<dir>\alpha.brl'`），而不是 F-7 的匯出測試與項目 56 固定下來的 `[Errno 13] Permission denied: '<dir>\alpha.brl'`。因此 `documents/workspace.py` 新增 `write_export_text(path, text)`：`path` 是資料夾時，拋出就地寫入會拋出的錯誤（Windows 是 `PermissionError` 13，其他平台是 `IsADirectoryError`）；否則呼叫 `write_text_atomically(..., encoding="utf-8", newline=None)`。`export_document_brl` 與 `_write_html`（在函式內 import）都使用它。`shared/atomic_write.py` 維持不變：改 `ensure_writable` 也會改變字典編輯器遇到資料夾時的訊息，而那是 F-2 D5 固定下來的。
+7. **D6、D7 的名稱。** 寫標頭的函式是私有的 `_write_header(stream)`；`dictionaries/manager.py` 新增模組說明，寫明以原子方式寫入；`save_preprocessing_script` 移除 `os` 與 `tempfile` 的 import。
+8. **D10、D11 的細節。** 不是物件時，在 `_load` 的 `try` 內拋出 `ValueError("config.json does not hold a JSON object (<type>)")`（型別名稱為 `NoneType`、`list`、`str`、`int`），因此照舊記錄。略過的存檔以 `WARNING` 記錄 `Config file %s was not saved because it could not be read`，同一路徑的同一種讀取錯誤只記一次（`_logged_skipped_saves`，讀取成功時清除），並附上讀取錯誤（`_log_current_exception` 新增 `exc_info` 參數）。`_backup_unreadable` 先讀出目前的位元組，再以 `write_bytes_atomically` 寫入 `config.json.bak`；這一步任何失敗都記錄為存檔失敗，且不寫入任何檔案。
+9. **`test_config` 在 `setUpModule` 隔離 `dotexpress.config`**（實作在主 checkout 執行；在 `assertLogs` 之外記錄的測試不可以寫入使用者的 `client/log/config.log`）。
+10. **測試細節。** A1 的腳本含 `\r\n`，換行轉換會現形；A3 先檢查錯誤的檔名；A9 在資料夾被刪除之前釋放佔用；A12 以 `os.linesep` 比較；B2 也檢查記錄下來的 `ValueError` 文字；B5 改兩次設定，預期只有一個略過存檔的警告；B6 以 `create=True` patch `config.write_bytes_atomically`。
+11. **程式在啟動時就會寫入 `config.json`。** client-init 執行緒在主視窗顯示後立刻存入 client id，所以行為對照表中的「下一次變更」在啟動時就發生：F-8 之前，含 BOM 的檔案在啟動時就被 `{"client": {"id": ...}}` 取代（在 `N-f7` 上實測，項目 80；截斷或不是 UTF-8 的檔案走同一條路）；F-8 之後，檔案損壞時這第一次寫入會先保留 `config.json.bak`（項目 79），檔案讀不到時則略過並記錄一次警告（項目 81）。
+12. **Windows 項目。** 字型大小以「Ctrl＋在原文編輯框上滾動滑輪一格」改變。項目 80 檢查含 BOM 的檔案中的寬度 30 被保留，不在「設定」中改寬度。項目 81 以**只允許寫入**的共用模式（其他程式可寫不可讀）佔用 `config.json`，而不是「不共用」：不共用時，啟動時既有的可寫入檢查（`prepare_application_directories` 以附加模式開啟 `config.json`）會失敗，兩個版本都顯示既有的「啟動錯誤」，那不是 D11 的情況。F-8 之前的項目 79：沒有主視窗，程序約 3 秒後以結束碼 1 結束，沒有任何記錄。項目 77、78 以 `lockshare.py`（共用讀寫）佔用目標檔。項目 82 比較兩個版本做同樣步驟後的位元組。
+13. **驗收條件 7。** `shared/atomic_write.py` 之外，正式程式碼中剩下的直接寫入是：`app_paths.py` 對 `config.json` 的附加模式檢查（不寫入任何內容）、`PackageFiles.write` 與 `PackageFiles.temporary_path`（F-3 重新命名時私有的暫存套件檔，同步到磁碟後以 `os.replace` 安裝），以及 `dual_view/files.py`（規格已排除）。
+
 ## 現況（2026-10-10 於 `main` `861d110`、Windows 11 26200、NTFS 驗證）
 
 `$PY` 是 `D:\workspace\DotExpress\client\.venv\Scripts\python.exe`（Python 3.13.15，wxPython 4.2.5 msw）。`$SP` 是 session 的 scratchpad。探針在 `$SP\f8\probes\`，不 commit。它們在 `$SP\f8\copy\client` 上執行（`861d110` 的 `git archive`，加上從主 checkout 複製的 git-ignored liblouis 與 MathCAT runtime），只寫入 `$SP\f8\` 底下：

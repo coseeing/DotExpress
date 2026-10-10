@@ -3,6 +3,7 @@ import json
 import os
 import stat
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -24,7 +25,13 @@ from documents.workspace import (
 )
 from shared import name_validation
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
+from tests.file_log_isolation import isolate_file_logs
 from tests.windows_file_handles import SHARE_MODES, hold_open, is_hidden, make_hidden, make_read_only
+
+
+def setUpModule() -> None:
+    # Recovery logs a failed rename to dotexpress.gui (F-8 D3): never to the real gui.log.
+    unittest.addModuleCleanup(isolate_file_logs("dotexpress.gui"))
 
 
 class DocumentWorkspaceTest(unittest.TestCase):
@@ -853,6 +860,210 @@ class MoveDocumentPackageTest(unittest.TestCase):
 
         self.assertEqual(self._listing(), ["alpha.dep"])
         self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "y�", "1"))
+
+
+class RecoverInterruptedPackagesTest(unittest.TestCase):
+    """Startup puts back a package that a crash left only in a temporary file (F-8 D3).
+
+    The leftovers are written as the F-8 probe found them: a Save writes
+    ``.<name>.dep.<16 hex>.tmp`` and a Rename uses ``.<name>.dep.<8 characters>.tmp`` for the
+    staged new package and for the old package moved aside, which keeps its older
+    modification time.
+    """
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.workspace_dir = Path(temp_dir.name) / "workspace"
+        self.workspace_dir.mkdir()
+
+    def _leftover(self, file_name: str, document: Document, *, age_s: int = 0) -> Path:
+        """``file_name`` holding ``document`` as a package, last modified ``age_s`` seconds ago."""
+        path = self.workspace_dir / file_name
+        workspace.PackageFiles().write(path, document)
+        modified = time.time_ns() - age_s * 1_000_000_000
+        os.utime(path, ns=(modified, modified))
+        return path
+
+    def _raw_leftover(self, file_name: str, member_stem: str) -> Path:
+        """``file_name`` holding a package whose members are ``<member_stem>.txt`` and ``.brl``."""
+        path = self.workspace_dir / file_name
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr(f"{member_stem}.txt", "text")
+            archive.writestr(f"{member_stem}.brl", "1")
+        return path
+
+    def _recover(self, listed=()) -> list[Document]:
+        # Nothing is logged: a skipped file never even reaches os.rename (which on Windows
+        # would refuse a taken name and log it).
+        with self.assertNoLogs("dotexpress.gui"):
+            return workspace.recover_interrupted_packages(self.workspace_dir, list(listed))
+
+    def _listing(self) -> list[str]:
+        return sorted(path.name for path in self.workspace_dir.iterdir())
+
+    def _snapshot(self) -> dict[str, bytes]:
+        return {path.name: path.read_bytes() for path in self.workspace_dir.iterdir()}
+
+    def test_interrupted_rename_is_recovered_under_the_old_name(self) -> None:
+        # Rename alpha -> gamma crashed after the move aside, before the install: no .dep.
+        aside = self._leftover(".alpha.dep._vw4x6f_.tmp", Document("alpha", "text", "1"), age_s=60)
+        before = aside.read_bytes()
+        staged = self._leftover(".gamma.dep.mlw4jang.tmp", Document("gamma", "text", "1"))
+        staged_bytes = staged.read_bytes()
+
+        recovered = self._recover()
+
+        self.assertEqual(recovered, [Document("alpha", "text", "1")])
+        self.assertEqual(self._listing(), [".gamma.dep.mlw4jang.tmp", "alpha.dep"])
+        self.assertEqual((self.workspace_dir / "alpha.dep").read_bytes(), before)
+        self.assertEqual(staged.read_bytes(), staged_bytes)
+        self.assertEqual(load_document_package(self.workspace_dir / "alpha.dep"), Document("alpha", "text", "1"))
+
+    def test_leftover_of_a_completed_rename_is_not_recovered(self) -> None:
+        # The rename installed gamma.dep, then removing the moved-aside alpha failed.
+        gamma = Document("gamma", "text", "1")
+        save_document_package(self.workspace_dir / "gamma.dep", gamma)
+        self._leftover(".alpha.dep.7gdjw2yi.tmp", Document("alpha", "text", "1"), age_s=60)
+        before = self._snapshot()
+
+        self.assertEqual(self._recover([gamma]), [])
+
+        self.assertEqual(self._snapshot(), before)
+
+    def test_leftover_save_next_to_its_package_is_not_recovered(self) -> None:
+        # The save wrote and synced its temporary file, then crashed before os.replace:
+        # from the user's point of view that save never completed.
+        alpha = Document("alpha", "old text", "1")
+        save_document_package(self.workspace_dir / "alpha.dep", alpha)
+        self._leftover(".alpha.dep.97dc8315c5cf865f.tmp", Document("alpha", "new text", "1"))
+        before = self._snapshot()
+
+        self.assertEqual(self._recover([alpha]), [])
+
+        self.assertEqual(self._snapshot(), before)
+
+    def test_invalid_and_empty_temporary_files_are_ignored(self) -> None:
+        complete = self._leftover(".delta.dep.0123456789abcdef.tmp", Document("delta", "text", "1"))
+        (self.workspace_dir / ".gamma.dep.x2y3z4w5.tmp").write_bytes(complete.read_bytes()[:40])
+        complete.unlink()
+        (self.workspace_dir / ".alpha.dep.0123456789abcdef.tmp").write_bytes(b"not a zip")
+        (self.workspace_dir / ".beta.dep.k2j1abcd.tmp").write_bytes(b"")
+        before = self._snapshot()
+
+        self.assertEqual(self._recover(), [])
+
+        self.assertEqual(self._snapshot(), before)
+
+    def test_name_held_by_an_unlisted_package_is_not_recovered(self) -> None:
+        # An invalid package kept at startup holds the name in another case.
+        (self.workspace_dir / "ALPHA.dep").write_bytes(b"not a zip")
+        self._leftover(".alpha.dep.k2j1abcd.tmp", Document("alpha", "text", "1"))
+        before = self._snapshot()
+
+        self.assertEqual(self._recover(), [])
+
+        self.assertEqual(self._snapshot(), before)
+
+    def test_names_that_are_not_valid_document_names_are_ignored(self) -> None:
+        # Names a Windows folder can hold but a document cannot have.
+        too_long = "x" * 33
+        for stem in (" alpha", "alpha ", "alpha.", too_long, "CON"):
+            self._raw_leftover(f".{stem}.dep.k2j1abcd.tmp", stem)
+        before = self._snapshot()
+
+        self.assertEqual(self._recover(), [])
+
+        self.assertEqual(self._snapshot(), before)
+
+    def test_member_names_must_match_the_temporary_file_name(self) -> None:
+        self._raw_leftover(".alpha.dep.k2j1abcd.tmp", "beta")
+        self._raw_leftover(".gamma.dep.k2j1abcd.tmp", "Gamma")
+        before = self._snapshot()
+
+        self.assertEqual(self._recover(), [])
+
+        self.assertEqual(self._snapshot(), before)
+
+    def test_files_that_are_not_package_leftovers_are_ignored(self) -> None:
+        self._leftover("alpha.tmp", Document("alpha", "text", "1"))
+        self._leftover(".beta.txt.k2j1abcd.tmp", Document("beta", "text", "2"))
+        self._leftover(".gamma.dep.k2j1abcd.bak", Document("gamma", "text", "3"))
+        (self.workspace_dir / ".delta.dep.k2j1abcd.tmp").mkdir()
+        before = sorted(self._listing())
+
+        self.assertEqual(self._recover(), [])
+
+        self.assertEqual(self._listing(), before)
+
+    def test_recovery_never_deletes_or_replaces_a_file(self) -> None:
+        self._leftover(".alpha.dep._vw4x6f_.tmp", Document("alpha", "text", "1"), age_s=60)
+        self._leftover(".gamma.dep.mlw4jang.tmp", Document("gamma", "text", "1"))
+        save_document_package(self.workspace_dir / "beta.dep", Document("beta", "b", "2"))
+        self._leftover(".beta.dep.97dc8315c5cf865f.tmp", Document("beta", "newer", "2"))
+        (self.workspace_dir / ".delta.dep.k2j1abcd.tmp").write_bytes(b"")
+        recorders = [
+            patch("os.unlink", wraps=os.unlink),
+            patch("os.remove", wraps=os.remove),
+            patch("os.replace", wraps=os.replace),
+            patch("pathlib.Path.unlink", autospec=True, wraps=Path.unlink),
+            patch("shutil.rmtree"),
+        ]
+        mocks = [recorder.start() for recorder in recorders]
+        for recorder in recorders:
+            self.addCleanup(recorder.stop)
+
+        recovered = self._recover([Document("beta", "b", "2")])
+
+        self.assertEqual(recovered, [Document("alpha", "text", "1")])
+        self.assertEqual([mock.call_count for mock in mocks], [0, 0, 0, 0, 0])
+        self.assertEqual(
+            self._listing(),
+            [".beta.dep.97dc8315c5cf865f.tmp", ".delta.dep.k2j1abcd.tmp", ".gamma.dep.mlw4jang.tmp", "alpha.dep", "beta.dep"],
+        )
+
+    def test_documents_are_recovered_oldest_first(self) -> None:
+        # Two interrupted renames: each old package comes back under its own name; their
+        # staged twins hold the same text and stay.
+        self._leftover(".beta.dep.aaaaaaaa.tmp", Document("beta", "b", "2"), age_s=120)
+        self._leftover(".alpha.dep.bbbbbbbb.tmp", Document("alpha", "a", "1"), age_s=60)
+        self._leftover(".zeta.dep.cccccccc.tmp", Document("zeta", "a", "1"), age_s=30)
+        self._leftover(".delta.dep.dddddddd.tmp", Document("delta", "b", "2"))
+
+        recovered = self._recover()
+
+        self.assertEqual(recovered, [Document("beta", "b", "2"), Document("alpha", "a", "1")])
+        self.assertEqual(
+            self._listing(),
+            [".delta.dep.dddddddd.tmp", ".zeta.dep.cccccccc.tmp", "alpha.dep", "beta.dep"],
+        )
+
+    @unittest.skipUnless(os.name == "nt", "os.rename never replaces an existing file on Windows")
+    def test_recovery_does_not_replace_a_file_created_meanwhile(self) -> None:
+        # Another program creates alpha.dep between the disk check and the rename.
+        leftover = self._leftover(".alpha.dep.k2j1abcd.tmp", Document("alpha", "text", "1"))
+        before = leftover.read_bytes()
+        target = self.workspace_dir / "alpha.dep"
+        real_rename = os.rename
+
+        def create_then_rename(source, destination):
+            Path(destination).write_bytes(b"created meanwhile")
+            real_rename(source, destination)
+
+        with patch("os.rename", side_effect=create_then_rename), self.assertLogs("dotexpress.gui", "ERROR") as logs:
+            recovered = workspace.recover_interrupted_packages(self.workspace_dir, [])
+
+        self.assertEqual(recovered, [])
+        self.assertEqual(target.read_bytes(), b"created meanwhile")
+        self.assertEqual(leftover.read_bytes(), before)
+        self.assertEqual(len(logs.records), 1)
+        self.assertTrue(
+            logs.records[0].getMessage().startswith(
+                f"Cannot recover interrupted document package {leftover}: [WinError 183] "
+            ),
+            logs.records[0].getMessage(),
+        )
+        self.assertIsNone(logs.records[0].exc_info)
 
 
 if __name__ == "__main__":

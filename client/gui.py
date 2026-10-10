@@ -743,6 +743,16 @@ class BrailleFrame(wx.Frame):
 		invalid_paths = self._workspace_service.load_documents()
 		self._refresh_document_list()
 		self._review_invalid_workspace_files(invalid_paths)
+		# Documents put back from the temporary files of an interrupted save or rename (F-8).
+		recovered_names = self._workspace_service.take_recovered_document_names()
+		if recovered_names:
+			self.show_info(
+				_(
+					"DotExpress was interrupted while saving or renaming a document. These documents were "
+					"recovered:\n\n{names}\n\nCheck that their content is what you expect."
+				).format(names="\n".join(recovered_names)),
+				_("Documents Recovered"),
+			)
 		self._ensure_open_document_exists()
 		self._update_window_title()
 

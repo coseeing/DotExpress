@@ -14,6 +14,7 @@ from collections.abc import Callable
 from typing import BinaryIO
 
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
+from log import get_logger
 from shared.atomic_write import ensure_writable, write_bytes_atomically, write_text_atomically
 from shared.name_validation import normalize_base_name
 
@@ -23,6 +24,9 @@ BRL_EXTENSION = ".brl"
 PENDING_METADATA_SUFFIX = ".meta.json"
 DEFAULT_DOCUMENT_NAME = "new"
 _LONE_SURROGATE = re.compile(r"[\ud800-\udfff]")
+# ".<name>.dep.<random>.tmp": a Save's temporary file (16 hex digits) or the staged or
+# moved-aside package of a Rename (8 characters of tempfile's alphabet).
+_INTERRUPTED_PACKAGE = re.compile(r"^\.(?P<stem>.+)\.(?i:dep)\.[A-Za-z0-9_]+\.tmp$")
 
 
 @dataclass(frozen=True)
@@ -219,7 +223,11 @@ def load_document_package(path: Path | str) -> Document:
     package_path = Path(path)
     if package_path.suffix.casefold() != DEP_EXTENSION:
         raise ValueError("Document package must use the .dep extension.")
-    package_name = normalize_document_name(package_path.stem)
+    return _read_package(package_path, normalize_document_name(package_path.stem))
+
+
+def _read_package(package_path: Path, package_name: str) -> Document:
+    """The document of the package archive at ``package_path``, whose members must be named ``package_name``."""
     with zipfile.ZipFile(package_path, "r") as archive:
         names = [info.filename for info in archive.infolist() if not info.is_dir()]
         txt_names = [name for name in names if name.endswith(".txt")]
@@ -304,6 +312,54 @@ def load_workspace_documents(workspace_dir: Path) -> tuple[list[Document], list[
             invalid_paths.append(path)
     documents.sort(key=lambda document: (document.name.casefold(), document.name))
     return documents, invalid_paths
+
+
+def recover_interrupted_packages(directory: Path, listed: list[Document]) -> list[Document]:
+    """Put back the packages that a crash left only in temporary files (F-8); never deletes, never replaces.
+
+    A Rename moves the old package aside to ``.<name>.dep.<random>.tmp`` before it
+    installs the staged new one, and a Save writes ``.<name>.dep.<random>.tmp`` before it
+    replaces the package, so a crash in between can leave a document only there. Each
+    such file in ``directory`` that is a valid package of a valid document name is
+    renamed to ``<name>.dep``, oldest first (a moved-aside package keeps the old
+    package's modification time, so an interrupted Rename gives the document back under
+    its old name, as a failed Rename does), unless a ``.dep`` of that name exists in any
+    case or ``listed`` or a document recovered before it holds the same text and braille.
+    Every other file stays as it is; a rename that fails is logged and leaves the file in
+    place. Returns the recovered documents, in that order.
+    """
+    directory = Path(directory)
+    candidates = []
+    for path in sorted(directory.iterdir()):
+        match = _INTERRUPTED_PACKAGE.match(path.name)
+        if match is None or not path.is_file():
+            continue
+        stem = match.group("stem")
+        try:
+            if normalize_document_name(stem) != stem:
+                continue
+            document = _read_package(path, stem)
+            modified = path.stat().st_mtime_ns
+        except Exception:
+            continue
+        candidates.append((modified, stem.casefold(), stem, path, document))
+    taken = {path.stem.casefold() for path in directory.glob(f"*{DEP_EXTENSION}")}
+    contents = {(document.text, document.braille) for document in listed}
+    recovered: list[Document] = []
+    for _modified, folded, stem, path, document in sorted(candidates, key=lambda candidate: candidate[:3]):
+        if folded in taken or (document.text, document.braille) in contents:
+            continue
+        try:
+            # On Windows os.rename never replaces an existing file, unlike os.replace.
+            os.rename(path, directory / f"{stem}{DEP_EXTENSION}")
+        except OSError as error:
+            # Bound here, not at import, so importing this module adds no file handler.
+            get_logger("dotexpress.gui", "gui.log").error("Cannot recover interrupted document package %s: %s", path, error)
+            continue
+        taken.add(folded)
+        contents.add((document.text, document.braille))
+        recovered.append(document)
+    return recovered
 
 
 def batch_import_documents(

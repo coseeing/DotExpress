@@ -13,6 +13,8 @@ loaded from its package; that record changes only after a successful write, so a
 failed save is retried by the next one.
 Add, Rename, Import and the default document never replace a package that is on disk
 but not listed, such as an invalid one kept at startup: its name counts as taken.
+Startup puts back a package that a crash during Save or Rename left only in a
+temporary file, and reports its name once; it never deletes or replaces a file.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from documents.workspace import (
     load_workspace_documents,
     move_document_package,
     prepare_document_for_save,
+    recover_interrupted_packages,
     save_document_package,
 )
 
@@ -85,6 +88,7 @@ class DocumentWorkspaceService:
         self._workspace_dir = Path(workspace_dir)
         self._package_files = package_files or PackageFiles()
         self._saved: dict[str, _SavedPackage] = {}
+        self._recovered_names: list[str] = []
 
     @property
     def workspace_dir(self) -> Path:
@@ -134,9 +138,17 @@ class DocumentWorkspaceService:
     def load_documents(self) -> list[Path]:
         ensure_workspace_directory(self._workspace_dir)
         documents, invalid_paths = load_workspace_documents(self._workspace_dir)
+        recovered = recover_interrupted_packages(self._workspace_dir, documents)
+        self._recovered_names = [document.name for document in recovered]
+        documents = sorted([*documents, *recovered], key=lambda document: (document.name.casefold(), document.name))
         self._controller.load_documents(documents)
         self._reset_saved(documents)
         return invalid_paths
+
+    def take_recovered_document_names(self) -> list[str]:
+        """The documents the last ``load_documents`` put back from temporary files, once (F-8 D4)."""
+        names, self._recovered_names = self._recovered_names, []
+        return names
 
     def delete_invalid_files(self, paths: Iterable[Path], *, on_error: Callable[[OSError], None]) -> None:
         for path in paths:

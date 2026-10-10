@@ -273,6 +273,8 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         # F-8 (D1, D2): a bare Mock would answer "taken" and loop the name prompt.
         frame._workspace_service.package_name_taken.return_value = False
         frame._workspace_service.free_document_name.side_effect = lambda base: base
+        # F-8 (D4): a bare Mock would be a truthy list of recovered names.
+        frame._workspace_service.take_recovered_document_names.return_value = []
         frame.input_txt = Mock()
         frame.output_txt = Mock()
         frame._show_file_error = Mock()
@@ -2165,6 +2167,46 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._package("new (2)"), Document("new (2)", "", None))
         self.assertEqual(frame._document_controller.document_names, ["new (2)"])
         self.assertEqual(frame._document_controller.open_name, "new (2)")
+
+    def _interrupted_rename(self, old_name: str, new_name: str, text: str, age_s: int) -> None:
+        """What a crash inside Rename leaves: the old package moved aside, ``age_s`` seconds
+        old, and the staged new one, written now (F-8 D3)."""
+        self.workspace.mkdir(exist_ok=True)
+        files = PackageFiles()
+        aside = self.workspace / f".{old_name}.dep._vw4x6f_.tmp"
+        files.write(aside, Document(old_name, text, "1"))
+        older = aside.stat().st_mtime_ns - age_s * 1_000_000_000
+        os.utime(aside, ns=(older, older))
+        files.write(self.workspace / f".{new_name}.dep.mlw4jang.tmp", Document(new_name, text, "1"))
+
+    def test_startup_reports_recovered_documents(self) -> None:
+        # F-8 (D3, D4): two interrupted renames, and an invalid package kept at startup.
+        self._interrupted_rename("beta", "delta", "b", 120)
+        self._interrupted_rename("alpha", "gamma", "a", 60)
+        (self.workspace / "bad.dep").write_bytes(b"not a zip")
+        frame = self._make_workspace_frame()
+
+        frame._load_workspace_documents_at_startup()
+
+        message = gui._(
+            "DotExpress was interrupted while saving or renaming a document. These documents were "
+            "recovered:\n\n{names}\n\nCheck that their content is what you expect."
+        ).format(names="beta\nalpha")
+        self.assertEqual(
+            self.events,
+            [
+                ("InvalidWorkspaceFilesDialog", [self.workspace / "bad.dep"]),
+                ("MessageBox", message, gui._("Documents Recovered"), gui.wx.OK | gui.wx.ICON_INFORMATION, frame),
+                ("title", "alpha - DotExpress"),
+                ("title", "alpha - DotExpress"),
+            ],
+        )
+        self.assertEqual(frame._document_controller.document_names, ["alpha", "beta"])
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("a", "1"))
+        self.assertEqual(
+            self._listing(),
+            [".delta.dep.mlw4jang.tmp", ".gamma.dep.mlw4jang.tmp", "alpha.dep", "bad.dep", "beta.dep"],
+        )
 
     # --- save --------------------------------------------------------------
 

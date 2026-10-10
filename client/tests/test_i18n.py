@@ -69,6 +69,24 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
 
+    def test_recovery_strings_are_translated(self) -> None:
+        # F-8 (D4): the box that names the documents startup put back.
+        message = (
+            "DotExpress was interrupted while saving or renaming a document. These documents were "
+            "recovered:\n\n{names}\n\nCheck that their content is what you expect."
+        )
+        expected = {
+            "Documents Recovered": "已復原文件",
+            message: "DotExpress 上次在儲存或重新命名文件時中斷，已復原以下文件：\n\n{names}\n\n請確認內容是否正確。",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+        self.assertEqual(
+            translation.gettext(message).format(names="alpha\nbeta"),
+            "DotExpress 上次在儲存或重新命名文件時中斷，已復原以下文件：\n\nalpha\nbeta\n\n請確認內容是否正確。",
+        )
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

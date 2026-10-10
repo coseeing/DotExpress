@@ -858,193 +858,194 @@ msgstr ""
 msgid "Zulu grade 2"
 msgstr ""
 
-#: conversion/preprocessing/user_script.py:41
+#: conversion/preprocessing/user_script.py:40
 msgid "The script must define exactly one top-level synchronous main function."
 msgstr ""
 
-#: conversion/preprocessing/user_script.py:50
+#: conversion/preprocessing/user_script.py:49
 msgid ""
 "main must define exactly one positional parameter and no other parameters."
 msgstr ""
 
-#: dialog.py:31
+#: dialog.py:32
 msgid "CSV files (*.csv)|*.csv"
 msgstr ""
 
-#: dialog.py:49 dialog.py:93 settings/dialogs.py:142 settings/dialogs.py:292
+#: dialog.py:54 dialog.py:98 settings/dialogs.py:143 settings/dialogs.py:293
+#: ui/message_box.py:29 ui/message_box.py:31
 msgid "OK"
 msgstr ""
 
-#: dialog.py:50 dialog.py:94 gui.py:483 settings/dialogs.py:143
-#: settings/dialogs.py:294
+#: dialog.py:55 dialog.py:99 gui.py:489 settings/dialogs.py:144
+#: settings/dialogs.py:295 ui/message_box.py:29
 msgid "Cancel"
 msgstr ""
 
-#: dialog.py:51 settings/dialogs.py:144 settings/dialogs.py:296
+#: dialog.py:56 settings/dialogs.py:145 settings/dialogs.py:297
 msgid "Apply"
 msgstr ""
 
-#: dialog.py:52
+#: dialog.py:57
 msgid "Close"
 msgstr ""
 
-#: dialog.py:69
+#: dialog.py:74
 msgid "Edit Dictionary Entry"
 msgstr ""
 
-#: dialog.py:69
+#: dialog.py:74
 msgid "Add Dictionary Entry"
 msgstr ""
 
-#: dialog.py:76 dialog.py:368 gui.py:190
+#: dialog.py:81 dialog.py:374 gui.py:196
 msgid "Source Text"
 msgstr ""
 
-#: dialog.py:78 dialog.py:369
+#: dialog.py:83 dialog.py:375
 msgid "Braille"
 msgstr ""
 
-#: dialog.py:80 dialog.py:370
+#: dialog.py:85 dialog.py:376
 msgid "Type"
 msgstr ""
 
-#: dialog.py:149 dialog.py:166 dialog.py:303 dialog.py:755
+#: dialog.py:154 dialog.py:171 dialog.py:309 dialog.py:761
 #: ui/conversion_presenter.py:133 ui/conversion_presenter.py:209
 msgid "Info"
 msgstr ""
 
-#: dialog.py:174
+#: dialog.py:179
 msgid "Please enter the dictionary name."
 msgstr ""
 
-#: dialog.py:175
+#: dialog.py:180
 msgid "Dictionary name must be 1 to 32 characters."
 msgstr ""
 
-#: dialog.py:176
+#: dialog.py:181
 msgid "Dictionary name is not a valid Windows file name."
 msgstr ""
 
-#: dialog.py:177
+#: dialog.py:182
 #, python-brace-format
 msgid "Dictionary name \"{name}\" is reserved."
 msgstr ""
 
-#: dialog.py:182 dictionaries/presenter.py:103 dictionaries/presenter.py:174
+#: dialog.py:187 dictionaries/presenter.py:103 dictionaries/presenter.py:174
 msgid "Add Dictionary"
 msgstr ""
 
-#: dialog.py:188
+#: dialog.py:193
 msgid "Dictionary Name"
 msgstr ""
 
-#: dialog.py:217
+#: dialog.py:222
 msgid "Please enter the document name."
 msgstr ""
 
-#: dialog.py:218
+#: dialog.py:223
 msgid "Document name must be 1 to 32 characters."
 msgstr ""
 
-#: dialog.py:219
+#: dialog.py:224
 msgid "Document name is not a valid Windows file name."
 msgstr ""
 
-#: dialog.py:229 gui.py:176
+#: dialog.py:234 gui.py:182
 msgid "Document Name"
 msgstr ""
 
-#: dialog.py:254
+#: dialog.py:259
 msgid "Invalid Workspace Files"
 msgstr ""
 
-#: dialog.py:257
+#: dialog.py:262
 msgid ""
 "The following workspace files are invalid. Do you want to delete them or "
 "keep them?"
 msgstr ""
 
-#: dialog.py:262
+#: dialog.py:267
 msgid "Delete Invalid Files"
 msgstr ""
 
-#: dialog.py:263
+#: dialog.py:268
 msgid "Keep Invalid Files"
 msgstr ""
 
-#: dialog.py:305
+#: dialog.py:311
 msgid "converting"
 msgstr ""
 
-#: dialog.py:343
+#: dialog.py:349
 msgid "Custom Dictionary Manager"
 msgstr ""
 
-#: dialog.py:354
+#: dialog.py:360
 msgid "Filter by:"
 msgstr ""
 
-#: dialog.py:360
+#: dialog.py:366
 msgid "Dictionary entries"
 msgstr ""
 
-#: dialog.py:377 dialog.py:561 ui/action_menu.py:29
+#: dialog.py:383 dialog.py:567 ui/action_menu.py:29
 msgid "Add"
 msgstr ""
 
-#: dialog.py:378 dialog.py:564
+#: dialog.py:384 dialog.py:570
 msgid "Edit"
 msgstr ""
 
-#: dialog.py:379 dialog.py:562 ui/action_menu.py:27
+#: dialog.py:385 dialog.py:568 ui/action_menu.py:27
 msgid "Delete"
 msgstr ""
 
-#: dialog.py:490
+#: dialog.py:496
 #, python-brace-format
 msgid "Source text \"{identifier}\" already exists."
 msgstr ""
 
-#: dialog.py:491 dialog.py:500 dialog.py:758 documents/export_coordinator.py:85
-#: documents/export_coordinator.py:94 documents/export_coordinator.py:103
-#: gui.py:448 gui.py:707 gui.py:1012 ui/conversion_presenter.py:196
+#: dialog.py:497 dialog.py:506 dialog.py:764 documents/export_coordinator.py:89
+#: documents/export_coordinator.py:98 documents/export_coordinator.py:119
+#: gui.py:454 gui.py:717 gui.py:1033 ui/conversion_presenter.py:196
 msgid "Error"
 msgstr ""
 
-#: dialog.py:500
+#: dialog.py:506
 #, python-brace-format
 msgid "Failed to save: {error}"
 msgstr ""
 
-#: dialog.py:516
+#: dialog.py:522
 msgid "Dictionary Management"
 msgstr ""
 
-#: dialog.py:536 settings/dialogs.py:385
+#: dialog.py:542 settings/dialogs.py:386
 msgid "Dictionary"
 msgstr ""
 
-#: dialog.py:537 dialog.py:663
+#: dialog.py:543 dialog.py:669
 msgid "Entries"
 msgstr ""
 
-#: dialog.py:548
+#: dialog.py:554
 msgid "Why this dictionary cannot be read:"
 msgstr ""
 
-#: dialog.py:563 ui/action_menu.py:30
+#: dialog.py:569 ui/action_menu.py:30
 msgid "Rename"
 msgstr ""
 
-#: dialog.py:565 ui/action_menu.py:31
+#: dialog.py:571 ui/action_menu.py:31
 msgid "Import"
 msgstr ""
 
-#: dialog.py:566 ui/action_menu.py:34
+#: dialog.py:572 ui/action_menu.py:34
 msgid "Export"
 msgstr ""
 
-#: dialog.py:600 dialog.py:663
+#: dialog.py:606 dialog.py:669
 msgid "Unreadable"
 msgstr ""
 
@@ -1155,16 +1156,16 @@ msgstr ""
 msgid "Dictionary \"{name}\" cannot be read."
 msgstr ""
 
-#: documents/export_coordinator.py:103
+#: documents/export_coordinator.py:119
 #, python-brace-format
 msgid "Failed to export document: {error}"
 msgstr ""
 
-#: documents/export_coordinator.py:105
+#: documents/export_coordinator.py:121
 msgid "The document was exported successfully."
 msgstr ""
 
-#: documents/export_coordinator.py:105
+#: documents/export_coordinator.py:121
 msgid "Export Complete"
 msgstr ""
 
@@ -1172,128 +1173,128 @@ msgstr ""
 msgid "All Supported Files"
 msgstr ""
 
-#: documents/formats.py:116
+#: documents/formats.py:118
 msgid "DEP"
 msgstr ""
 
-#: documents/formats.py:122
+#: documents/formats.py:124
 msgid "DotExpress files (*.dep)|*.dep"
 msgstr ""
 
-#: documents/formats.py:123
+#: documents/formats.py:125
 msgid "Package DEP"
 msgstr ""
 
-#: documents/formats.py:128
+#: documents/formats.py:130
 msgid "DOCX"
 msgstr ""
 
-#: documents/formats.py:138
+#: documents/formats.py:140
 msgid "EPUB"
 msgstr ""
 
-#: documents/formats.py:148
+#: documents/formats.py:150
 msgid "PDF"
 msgstr ""
 
-#: documents/formats.py:158
+#: documents/formats.py:160
 msgid "TXT"
 msgstr ""
 
-#: documents/formats.py:168
+#: documents/formats.py:170
 msgid "BRL"
 msgstr ""
 
-#: documents/formats.py:174
+#: documents/formats.py:176
 msgid "Braille files (*.brl)|*.brl"
 msgstr ""
 
-#: documents/formats.py:175
+#: documents/formats.py:177
 msgid "Braille BRL"
 msgstr ""
 
-#: documents/formats.py:188
+#: documents/formats.py:190
 msgid "Dual View HTML"
 msgstr ""
 
-#: gui.py:174
+#: gui.py:180
 msgid "Documents"
 msgstr ""
 
-#: gui.py:180
+#: gui.py:186
 msgid "Document List"
 msgstr ""
 
-#: gui.py:181
+#: gui.py:187
 msgid "Press the Applications key to open the menu."
 msgstr ""
 
-#: gui.py:195
+#: gui.py:201
 msgid "Braille Result"
 msgstr ""
 
-#: gui.py:243 gui.py:1045
+#: gui.py:249 gui.py:1097
 msgid "File"
 msgstr ""
 
-#: gui.py:256 gui.py:1045 settings/dialogs.py:356
+#: gui.py:262 gui.py:1097 settings/dialogs.py:357
 msgid "Translation"
 msgstr ""
 
-#: gui.py:260
+#: gui.py:266
 msgid "Coseeing Website"
 msgstr ""
 
-#: gui.py:263
+#: gui.py:269
 msgid "About"
 msgstr ""
 
-#: gui.py:266
+#: gui.py:272
 msgid "Help"
 msgstr ""
 
-#: gui.py:312 ui/translation_menu.py:9
+#: gui.py:318 ui/translation_menu.py:9
 msgid "Dual View"
 msgstr ""
 
-#: gui.py:323
+#: gui.py:329
 msgid "No conversion data is available for this document."
 msgstr ""
 
-#: gui.py:346
+#: gui.py:352
 #, python-brace-format
 msgid "Failed to open dual view: {error}"
 msgstr ""
 
-#: gui.py:466 gui.py:476
+#: gui.py:472 gui.py:482
 #, python-brace-format
 msgid "Failed to save document: {error}"
 msgstr ""
 
-#: gui.py:477
+#: gui.py:483
 msgid "Cannot Save Document"
 msgstr ""
 
-#: gui.py:481
+#: gui.py:487
 msgid ""
 "Changes made since the last successful save have not been saved. If you "
 "close without saving, these changes will be lost."
 msgstr ""
 
-#: gui.py:483
+#: gui.py:489
 msgid "&Retry"
 msgstr ""
 
-#: gui.py:483
+#: gui.py:489
 msgid "Close &Without Saving"
 msgstr ""
 
-#: gui.py:490
+#: gui.py:496
 #, python-brace-format
 msgid "Failed to open website: {error}"
 msgstr ""
 
-#: gui.py:496
+#: gui.py:499
 msgid "About DotExpress"
 msgstr ""
 
@@ -1302,82 +1303,97 @@ msgstr ""
 msgid "Unable to open text processing script: {error}"
 msgstr ""
 
-#: gui.py:513 settings/dialogs.py:122 settings/dialogs.py:162
+#: gui.py:513 settings/dialogs.py:123 settings/dialogs.py:163
 #: ui/translation_menu.py:10
 msgid "Text Processing"
 msgstr ""
 
-#: gui.py:669
+#: gui.py:676
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr ""
 
-#: gui.py:706
+#: gui.py:716
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr ""
 
-#: gui.py:791
+#: gui.py:751
+#, python-brace-format
+msgid ""
+"DotExpress was interrupted while saving or renaming a document. These "
+"documents were recovered:\n"
+"\n"
+"{names}\n"
+"\n"
+"Check that their content is what you expect."
+msgstr ""
+
+#: gui.py:754
+msgid "Documents Recovered"
+msgstr ""
+
+#: gui.py:812
 msgid "Add Document"
 msgstr ""
 
-#: gui.py:807
+#: gui.py:828
 msgid "Rename Document"
 msgstr ""
 
-#: gui.py:831
+#: gui.py:852
 #, python-brace-format
 msgid "Do you want to delete document \"{name}\"?"
 msgstr ""
 
-#: gui.py:832
+#: gui.py:853
 msgid "Confirm Delete Document"
 msgstr ""
 
-#: gui.py:841 gui.py:868
+#: gui.py:862 gui.py:889
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr ""
 
-#: gui.py:860
+#: gui.py:881
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr ""
 
-#: gui.py:861
+#: gui.py:882
 msgid "Confirm Delete All"
 msgstr ""
 
-#: gui.py:890
+#: gui.py:911
 msgid "Import Document"
 msgstr ""
 
-#: gui.py:910
+#: gui.py:931
 msgid "Import Issues"
 msgstr ""
 
-#: gui.py:911
+#: gui.py:932
 msgid "Some files were skipped during import."
 msgstr ""
 
-#: gui.py:1089
+#: gui.py:1141
 msgid "Export Document"
 msgstr ""
 
-#: gui.py:1099
+#: gui.py:1151
 msgid "Export All Documents"
 msgstr ""
 
-#: gui.py:1108
+#: gui.py:1160
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr ""
 
-#: gui.py:1111
+#: gui.py:1163
 msgid "Confirm Overwrite"
 msgstr ""
 
-#: gui.py:1117
+#: gui.py:1169
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1388,82 +1404,82 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: gui.py:1120
+#: gui.py:1172
 msgid "Startup Error"
 msgstr ""
 
-#: settings/dialogs.py:135
+#: settings/dialogs.py:136
 msgid "Text Processing Python Code"
 msgstr ""
 
-#: settings/dialogs.py:159
+#: settings/dialogs.py:160
 #, python-brace-format
 msgid "Unable to save text processing script: {error}"
 msgstr ""
 
-#: settings/dialogs.py:246
+#: settings/dialogs.py:247
 msgid "&Categories:"
 msgstr ""
 
-#: settings/dialogs.py:267
+#: settings/dialogs.py:268
 msgid "Categories"
 msgstr ""
 
-#: settings/dialogs.py:358
+#: settings/dialogs.py:359
 msgid "Translation output mode, width, and dictionary options"
 msgstr ""
 
-#: settings/dialogs.py:367
+#: settings/dialogs.py:368
 msgid "Braille Type"
 msgstr ""
 
-#: settings/dialogs.py:375
+#: settings/dialogs.py:376
 msgid "Width"
 msgstr ""
 
-#: settings/dialogs.py:437
+#: settings/dialogs.py:438
 msgid "Translation Tables"
 msgstr ""
 
-#: settings/dialogs.py:439
+#: settings/dialogs.py:440
 msgid "Translation table mappings for different languages"
 msgstr ""
 
-#: settings/dialogs.py:455
+#: settings/dialogs.py:456
 msgid "None selected"
 msgstr ""
 
-#: settings/dialogs.py:485
+#: settings/dialogs.py:486
 #, python-brace-format
 msgid "Please select a value for {field}."
 msgstr ""
 
-#: settings/dialogs.py:556
+#: settings/dialogs.py:557
 msgid "View"
 msgstr ""
 
-#: settings/dialogs.py:558
+#: settings/dialogs.py:559
 msgid ""
 "Font, font size, and color scheme for the main window input and output areas"
 msgstr ""
 
-#: settings/dialogs.py:567
+#: settings/dialogs.py:568
 msgid "Font Size"
 msgstr ""
 
-#: settings/dialogs.py:577
+#: settings/dialogs.py:578
 msgid "Scheme"
 msgstr ""
 
-#: settings/dialogs.py:585
+#: settings/dialogs.py:586
 msgid "Braille Font"
 msgstr ""
 
-#: settings/dialogs.py:652
+#: settings/dialogs.py:653
 msgid "DotExpress Settings"
 msgstr ""
 
-#: settings/dialogs.py:653
+#: settings/dialogs.py:654
 #, python-brace-format
 msgid "DotExpress Settings: {category}"
 msgstr ""

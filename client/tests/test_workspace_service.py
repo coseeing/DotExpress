@@ -15,8 +15,15 @@ from documents.workspace import BatchIssue, Document, PackageFiles, load_documen
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
 from shared import name_validation
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
+from tests.file_log_isolation import isolate_file_logs
 from tests.full_disk import full_disk
 from tests.windows_file_handles import SHARE_DELETE, SHARE_MODES, hold_open, make_read_only
+
+
+def setUpModule() -> None:
+    # load_documents can log a failed recovery to dotexpress.gui (F-8 D3): never to the real gui.log.
+    unittest.addModuleCleanup(isolate_file_logs("dotexpress.gui"))
+
 
 NO_SPACE = f"[Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}"
 
@@ -154,6 +161,43 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
 
         self.assertEqual(invalid_paths, [self.workspace / "bad.dep"])
         self.assertEqual(self.controller.documents, [Document("Alpha", "a", None), Document("beta", "b", "2")])
+
+    def _interrupted_rename(self, old_name: str, new_name: str, text: str) -> None:
+        """The two temporary files a crash inside Rename leaves: the old package moved aside
+        (with its older modification time) and the staged new one (F-8 D3)."""
+        self.workspace.mkdir(exist_ok=True)
+        files = PackageFiles()
+        aside = self.workspace / f".{old_name}.dep._vw4x6f_.tmp"
+        files.write(aside, Document(old_name, text, "1"))
+        older = aside.stat().st_mtime_ns - 60_000_000_000
+        os.utime(aside, ns=(older, older))
+        files.write(self.workspace / f".{new_name}.dep.mlw4jang.tmp", Document(new_name, text, "1"))
+
+    def test_load_documents_recovers_and_reports_names_once(self) -> None:
+        self._write(Document("beta", "b", "2"))
+        self._interrupted_rename("alpha", "gamma", "a")
+        service = self._service()
+
+        self.assertEqual(service.load_documents(), [])
+
+        self.assertEqual(self.controller.documents, [Document("alpha", "a", "1"), Document("beta", "b", "2")])
+        self.assertEqual(self._listing(), [".gamma.dep.mlw4jang.tmp", "alpha.dep", "beta.dep"])
+        self.assertEqual(service.take_recovered_document_names(), ["alpha"])
+        self.assertEqual(service.take_recovered_document_names(), [])
+        # The recovered package is recorded as loaded: an unchanged save writes nothing (F-5).
+        self.controller.open_document("alpha")
+        with patch.object(workspace_service, "save_document_package") as save:
+            service.save_open_document(text="a", braille="1")
+        save.assert_not_called()
+
+    def test_load_documents_without_leftovers_recovers_nothing(self) -> None:
+        self._write(Document("alpha", "a", "1"))
+        service = self._service()
+
+        self.assertEqual(service.load_documents(), [])
+
+        self.assertEqual(service.take_recovered_document_names(), [])
+        self.assertEqual(self.controller.documents, [Document("alpha", "a", "1")])
 
     def test_delete_invalid_files_reports_each_error_and_continues(self) -> None:
         blocked = self._block("a-blocked")
@@ -827,6 +871,22 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
 
         self.assertEqual(calls, ["on_error"])
         self.assertEqual(self.controller.documents, documents)
+
+    def test_delete_all_failure_reload_does_not_recover(self) -> None:
+        # Only startup recovers (F-8 D3): the reload after a failed Delete All lists what
+        # is on disk and leaves the temporary files alone.
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
+        self._write(documents[0])
+        self._block("beta")
+        self._interrupted_rename("delta", "gamma", "d")
+        service = self._service(documents)
+
+        result = service.delete_all_documents(on_error=lambda _error: None)
+
+        self.assertFalse(result.completed)
+        self.assertEqual(self.controller.documents, [])
+        self.assertEqual(service.take_recovered_document_names(), [])
+        self.assertEqual(self._listing(), [".delta.dep._vw4x6f_.tmp", ".gamma.dep.mlw4jang.tmp", "beta.dep"])
 
 
 class SaveOnlyWhenChangedTest(unittest.TestCase):

@@ -1,5 +1,6 @@
 import ast
 import csv
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -175,6 +176,26 @@ class ReadProblemsModuleTest(unittest.TestCase):
 				imported.add(node.module.split(".")[0])
 
 		self.assertNotIn("wx", imported)
+
+	def test_importing_binds_no_log_file(self):
+		# F-6 review M-6: the gui.log handler is bound when the first error is logged, so a
+		# test that imports these modules without isolating the logger cannot write to log/.
+		script = (
+			"import logging\n"
+			"import dictionaries.presenter\n"
+			"import dictionaries.read_problems\n"
+			"handlers = logging.getLogger('dotexpress.gui').handlers\n"
+			"assert handlers == [], handlers\n"
+		)
+		completed = subprocess.run(
+			[sys.executable, "-c", script],
+			cwd=Path(read_problems.__file__).resolve().parents[1],
+			check=False,
+			capture_output=True,
+			text=True,
+		)
+
+		self.assertEqual(completed.returncode, 0, completed.stderr)
 
 
 if __name__ == "__main__":

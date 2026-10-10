@@ -16,8 +16,6 @@ from dictionaries.entries import load_dictionary_entries
 from i18n import _
 from log import get_logger
 
-logger = get_logger("dotexpress.gui", "gui.log")
-
 
 class DictionaryReadProblem(Enum):
 	NOT_UTF8 = "not_utf8"
@@ -67,6 +65,9 @@ def describe_unreadable_dictionary(name: str, error: Exception) -> str:
 
 def log_dictionary_read_error(path: Path, error: Exception) -> None:
 	"""One line for an error that comes from the file; a traceback for anything else."""
+	# Bound here, not at import: importing this module (dialog.py and the presenter do) adds
+	# no file handler to log/gui.log (F-6 review M-6).
+	logger = get_logger("dotexpress.gui", "gui.log")
 	if isinstance(error, (UnicodeDecodeError, csv.Error, OSError)):
 		logger.error('Cannot read dictionary "%s": %s: %s', Path(path).name, type(error).__name__, error)
 	else:

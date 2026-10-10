@@ -18,6 +18,10 @@ def message_box(message: str, caption: str, style: int, parent: wx.Window | None
     Returns ``wx.OK``, ``wx.YES``, ``wx.NO`` or ``wx.CANCEL``. An OK button (and a
     Cancel button next to it) gets the translated label; a Yes/No box keeps the
     system's labels.
+
+    ``style`` goes to ``wx.MessageDialog`` unchanged. Unlike ``wx.MessageBox``, which
+    adds ``wx.ICON_INFORMATION`` (``wx.ICON_QUESTION`` with ``wx.YES``) when the style
+    has no icon, this adds none: give the icon in ``style``, as every caller does.
     """
     with wx.MessageDialog(parent, message, caption, style) as dialog:
         if not style & wx.YES_NO:

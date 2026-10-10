@@ -555,6 +555,7 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 		main_sizer.Add(self.read_problem_ctrl, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 		self.read_problem_label.Hide()
 		self.read_problem_ctrl.Hide()
+		self.read_problem_ctrl.Bind(wx.EVT_SET_FOCUS, self._on_read_problem_focus)
 
 		button_sizer = wx.BoxSizer(wx.HORIZONTAL)
 		self.add_button = wx.Button(self, label=_("Add"))
@@ -649,6 +650,11 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 		self.read_problem_label.Show(error is not None)
 		self.read_problem_ctrl.Show(error is not None)
 		self.Layout()
+
+	def _on_read_problem_focus(self, event: wx.FocusEvent) -> None:
+		# Select all again, so the reason is read in full after an arrow key moved the caret.
+		self.read_problem_ctrl.SelectAll()
+		event.Skip()
 
 	def _resize_columns(self) -> None:
 		available_width = max(0, self.list_ctrl.GetClientSize().width)

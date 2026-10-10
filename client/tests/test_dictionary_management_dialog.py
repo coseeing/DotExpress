@@ -382,6 +382,18 @@ class ReadProblemReasonTest(_DictionaryFilesTestCase):
 		self.assertEqual(target.read_problem_ctrl.calls[-3:], [("ChangeValue", reason), ("SelectAll",), ("Show", True)])
 		self.assertTrue(target.read_problem_label.shown)
 
+	def test_the_reason_is_selected_again_when_the_field_gets_focus(self):
+		# F-6 review M-1: an arrow key collapses the selection; coming back with Tab selects all
+		# of the reason again, so a screen reader reads all of it, not only the caret's line.
+		target = self.open_dialog("big5")
+		target.read_problem_ctrl.calls.clear()
+		event = Mock()
+
+		target._on_read_problem_focus(event)
+
+		self.assertEqual(target.read_problem_ctrl.calls, [("SelectAll",)])
+		event.Skip.assert_called_once_with()
+
 	def test_edit_on_an_unreadable_dictionary_shows_the_error_and_stays_open(self):
 		target = self.open_dialog("big5")
 		target.show_error = Mock()

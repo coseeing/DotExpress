@@ -12,6 +12,9 @@ from pathlib import Path
 
 CLIENT = Path(__file__).resolve().parents[1]
 EXCLUDED_FOLDERS = {".venv", "tests", "build", "dist", "mathcat"}
+# The wx names F-7 replaced or restricted (FindWindowById, MessageBox) or allows only in
+# two places (MessageDialog).
+REPLACED_WX_NAMES = {"FindWindowById", "MessageBox", "MessageDialog"}
 
 
 def production_sources() -> list[Path]:
@@ -48,15 +51,19 @@ def is_attribute(name: str) -> Callable[[ast.AST], bool]:
     return lambda node: isinstance(node, ast.Attribute) and node.attr == name
 
 
-def is_wx_call(name: str) -> Callable[[ast.AST], bool]:
-    """A call of ``wx.<name>(...)``."""
-    return lambda node: (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == name
-        and isinstance(node.func.value, ast.Name)
-        and node.func.value.id == "wx"
-    )
+def hides_wx_names(node: ast.AST) -> bool:
+    """``import wx as <alias>``, or ``from wx import`` of a replaced name or of ``*``.
+
+    The other scans find the replaced names as attributes (``wx.MessageBox``); a bare
+    name imported from wx would hide a use from them. With ``import wx as _wx`` the
+    attribute is still found, but the alias is refused too, so that the code keeps one
+    spelling of the module.
+    """
+    if isinstance(node, ast.Import):
+        return any(alias.name == "wx" and alias.asname not in (None, "wx") for alias in node.names)
+    if isinstance(node, ast.ImportFrom) and node.module == "wx" and not node.level:
+        return any(alias.name in REPLACED_WX_NAMES | {"*"} for alias in node.names)
+    return False
 
 
 class WxCallSitesTest(unittest.TestCase):
@@ -74,15 +81,21 @@ class WxCallSitesTest(unittest.TestCase):
 
     def test_no_production_module_calls_wx_message_box(self) -> None:
         # wx.MessageBox labels its OK button from wx's own catalog, which DotExpress does not
-        # load; ui.message_box.message_box sets the translated label (F-7, F-W9).
-        self.assertEqual(find_in_production(is_wx_call("MessageBox")), [])
+        # load; ui.message_box.message_box sets the translated label (F-7, F-W9). Any
+        # reference counts, called or not (message_box = wx.MessageBox), under any alias.
+        self.assertEqual(find_in_production(is_attribute("MessageBox")), [])
 
     def test_message_dialogs_are_the_helper_or_set_every_label(self) -> None:
         # F-5's close dialog sets all three of its labels itself.
         self.assertEqual(
-            find_in_production(is_wx_call("MessageDialog")),
+            find_in_production(is_attribute("MessageDialog")),
             ["gui.py:BrailleFrame._ask_after_close_save_failure", "ui/message_box.py:message_box"],
         )
+
+    def test_no_production_module_imports_wx_names_around_the_scans(self) -> None:
+        # from wx import MessageBox, or import wx as _wx, would let a use slip past the
+        # scans above (F-7 review M-1).
+        self.assertEqual(find_in_production(hides_wx_names), [])
 
 
 if __name__ == "__main__":

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 import documents.export_coordinator as coordinator_module
 from ui.conversion_presenter import ConversionPresenter
+from conversion.output import DualViewSegment
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
 from documents.controller import DocumentController
 from documents.export_coordinator import ExportCoordinator
@@ -16,9 +20,30 @@ from documents.formats import ExportContext, get_format
 from documents.workspace import Document
 from i18n import _
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
+from tests.file_log_isolation import isolate_file_logs
 
 COORDINATOR_PATH = Path(__file__).resolve().parents[1] / "documents" / "export_coordinator.py"
 MISSING_TABLE = "missing table"
+LOGGER = "dotexpress.gui"
+# Half of a surrogate pair, as pasting part of an emoji can leave it in an editor (F-5 review M-7).
+LONE_SURROGATE = chr(0xD83D)
+
+
+def setUpModule() -> None:
+    # The coordinator logs unexpected export errors to gui.log (F-7); keep the real file out of it.
+    unittest.addModuleCleanup(isolate_file_logs(LOGGER))
+
+
+def _writer_failing_for(name: str, error: Exception):
+    """The BRL writer, except that it raises ``error`` for the document called ``name``."""
+    write_brl = get_format("brl").writer
+
+    def writer(path, document, context):
+        if document.name == name:
+            raise error
+        return write_brl(path, document, context)
+
+    return writer
 
 
 class RecordingExportView:
@@ -133,6 +158,25 @@ class ExportCoordinatorTest(unittest.TestCase):
 
         self.assertFalse(imported & {"wx", "gui", "dialog"}, imported)
 
+    def test_importing_binds_no_log_file(self) -> None:
+        # The gui.log handler is bound when the first error is logged (as in F-6 review M-6), so a
+        # test that imports the coordinator without isolating the logger cannot write to log/.
+        script = (
+            "import logging\n"
+            "import documents.export_coordinator\n"
+            "handlers = logging.getLogger('dotexpress.gui').handlers\n"
+            "assert handlers == [], handlers\n"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=COORDINATOR_PATH.parents[1],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     # --- write_document --------------------------------------------------------
 
     def test_write_document_uses_registry_writer(self) -> None:
@@ -227,6 +271,79 @@ class ExportCoordinatorTest(unittest.TestCase):
                 ("show_error", _("Failed to export document: {error}").format(error=reason), _("Error")),
             ],
         )
+
+    def test_single_export_error_that_is_not_an_os_error_shows_the_failure_message(self) -> None:
+        # F-7: before, the exception left the menu handler; the packaged build showed nothing.
+        error = ValueError("injected")
+        descriptor = replace(get_format("brl"), writer=_writer_failing_for("alpha", error))
+        self.view.paths.append(self.root / "alpha.brl")
+
+        with (
+            patch.object(coordinator_module, "get_format", return_value=descriptor),
+            self.assertLogs(LOGGER, level="ERROR") as logs,
+        ):
+            self.coordinator.export_document(Document("alpha", "a", "⠁"), "brl")
+
+        self.assertEqual(
+            self._take(),
+            [
+                ("choose_export_path", "alpha.brl", "brl"),
+                ("show_error", _("Failed to export document: {error}").format(error="injected"), _("Error")),
+            ],
+        )
+        self.assertEqual([record.getMessage() for record in logs.records], ["Unexpected error while exporting a document"])
+        self.assertIs(logs.records[0].exc_info[1], error)
+
+    def test_single_export_os_error_is_not_logged(self) -> None:
+        blocked = self.root / "blocked.brl"
+        blocked.mkdir()
+        reason = self._os_error_text(blocked)
+        self.view.paths.append(blocked)
+
+        with self.assertNoLogs(LOGGER, level="ERROR"):
+            self.coordinator.export_document(Document("alpha", "a", "⠁"), "brl")
+
+        self.assertEqual(
+            self._take()[-1],
+            ("show_error", _("Failed to export document: {error}").format(error=reason), _("Error")),
+        )
+
+    def test_html_export_with_a_lone_surrogate_in_the_dual_view_reports_failure(self) -> None:
+        # The M-7 trigger: the dual-view segments carry the source text, and UTF-8 cannot
+        # encode a lone surrogate. The frame now replaces it before converting (F-7 D5).
+        result = SimpleNamespace(
+            raw=["A" + LONE_SURROGATE + "B"], braille=["⠁"], braille_to_raw_pos=[0], raw_to_braille_pos=[0]
+        )
+        self.documents.set_dual_view_results("alpha", (DualViewSegment(result=result, source_kind="text"),))
+        self.view.paths.append(self.root / "alpha.html")
+
+        with self.assertLogs(LOGGER, level="ERROR") as logs:
+            self.coordinator.export_document(Document("alpha", "a", "⠁"), "html")
+
+        kind, message, caption = self._take()[-1]
+        self.assertEqual((kind, caption), ("show_error", _("Error")))
+        self.assertTrue(message.startswith(_("Failed to export document: {error}").format(error="")), message)
+        self.assertIn("surrogates not allowed", message)
+        self.assertIsInstance(logs.records[0].exc_info[1], UnicodeEncodeError)
+
+    def test_pending_export_failure_after_conversion_is_reported(self) -> None:
+        error = ValueError("injected")
+        descriptor = replace(get_format("brl"), writer=_writer_failing_for("beta", error))
+        self.view.paths.append(self.root / "beta.brl")
+
+        with patch.object(coordinator_module, "get_format", return_value=descriptor):
+            self.coordinator.export_document(Document("beta", "b", None), "brl")
+            self._take()
+            on_success, _on_error = self.conversions.started[0]
+            with self.assertLogs(LOGGER, level="ERROR") as logs:
+                on_success("⠃⠃")
+
+        self.assertEqual(
+            self._take(),
+            [("show_error", _("Failed to export document: {error}").format(error="injected"), _("Error"))],
+        )
+        self.assertIs(logs.records[0].exc_info[1], error)
+        self.assertEqual(self._written(), {})
 
     def test_export_document_pending_converts_document_text_then_writes(self) -> None:
         self.view.paths.append(self.root / "beta.brl")
@@ -423,16 +540,57 @@ class ExportCoordinatorTest(unittest.TestCase):
         )
         self.assertEqual(self.conversions.started, [])
 
-    def test_export_all_writer_value_error_stops_the_chain(self) -> None:
+    def test_export_all_writer_value_error_is_listed_and_the_chain_goes_on(self) -> None:
+        # Was the P1-4 KNOWN BUG (defect 7), fixed by F-7: the error escaped, the chain stopped
+        # and no summary was shown.
         self.documents.documents = [Document("alpha", "a", "⠁"), Document("beta", "b", "⠃")]
         self.view.directories.append(self.root)
 
-        # KNOWN BUG (P1-4 spec, defect 7): the error escapes and no summary is shown.
-        with self.assertRaisesRegex(ValueError, 'Unsupported export format: "txt"\\.'):
+        with self.assertLogs(LOGGER, level="ERROR") as logs:
             self.coordinator.export_all("txt")
+            self.calls.run_all()
 
-        self.assertEqual(self._take(), [("choose_export_directory",)])
+        reason = 'Unsupported export format: "txt".'
+        self.assertEqual(
+            self._take(),
+            [
+                ("choose_export_directory",),
+                ("call_after",),
+                ("call_after",),
+                (
+                    "show_warning",
+                    f"Exported documents: 0\nFailed documents: 2\n\nalpha: {reason}\nbeta: {reason}",
+                    "Export Complete with Errors",
+                ),
+            ],
+        )
+        self.assertEqual(len(logs.records), 2)
         self.assertEqual(self.calls.pending, [])
+
+    def test_export_all_goes_on_after_an_error_that_is_not_an_os_error(self) -> None:
+        error = ValueError("injected")
+        descriptor = replace(get_format("brl"), writer=_writer_failing_for("beta", error))
+        self.documents.documents = [Document("alpha", "a", "⠁"), Document("beta", "b", "⠃"), Document("gamma", "g", "⠛")]
+        self.view.directories.append(self.root)
+
+        with (
+            patch.object(coordinator_module, "get_format", return_value=descriptor),
+            self.assertLogs(LOGGER, level="ERROR") as logs,
+        ):
+            self.coordinator.export_all("brl")
+            self.calls.run_all()
+
+        self.assertEqual(
+            self._take()[-1],
+            (
+                "show_warning",
+                "Exported documents: 2\nFailed documents: 1\n\nbeta: injected",
+                "Export Complete with Errors",
+            ),
+        )
+        self.assertEqual(self._written(), {"alpha.brl": "⠁", "gamma.brl": "⠛"})
+        self.assertEqual([record.getMessage() for record in logs.records], ["Unexpected error while exporting a document"])
+        self.assertIs(logs.records[0].exc_info[1], error)
 
 
 class ExportThroughConversionPresenterTest(unittest.TestCase):

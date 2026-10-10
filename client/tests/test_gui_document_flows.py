@@ -3602,6 +3602,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         )
         frame.SetTitle = lambda title: self.events.append(("title", title))
         frame.GetMenuBar = lambda: self.menu_bar
+        frame.IsActive = lambda: True
         frame._dual_view_frame = _RecordingViewer(self.events)
         frame._document_menu_items = {}
         frame.translation_runtime = self.runtime
@@ -4401,12 +4402,13 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
 
         # Was the P1-4 KNOWN BUG (defect 1): alpha's result landed in beta, the document open
         # then, and the next save wrote it into beta.dep. Now it goes to alpha (F-9 D1, U1):
-        # beta's editors, the focus and the Dual View are left alone.
+        # beta's editors and the Dual View are left alone. After the box the focus goes to
+        # beta's source editor, enabled again (F-9 review M-6).
         self.assertEqual(
             self._take(),
             [("convert", "alpha text"), ("call_after",), ("timer.Stop", 1)]
             + self._busy(False)
-            + [self._saved_to(frame, "alpha")],
+            + [self._saved_to(frame, "alpha"), ("focus", "input")],
         )
         controller = frame._document_controller
         self.assertEqual(controller.documents, [Document("alpha", "alpha text", "⠁⠁"), Document("beta", "beta text", "⠃")])
@@ -4487,7 +4489,9 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self._take()
         self.calls.run_next()
 
-        self.assertEqual(self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._saved_to(frame, "alpha")])
+        self.assertEqual(
+            self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._saved_to(frame, "alpha"), ("focus", "input")]
+        )
         self.assertEqual(
             frame._document_controller.documents,
             [Document("alpha", "alpha text", "⠁⠁"), Document("imported", "imported text", None)],
@@ -4513,7 +4517,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
             self._take(),
             [("timer.Stop", 1)]
             + self._busy(False)
-            + [self._error(frame, gui._("Failed to save document: {error}").format(error=error))],
+            + [self._error(frame, gui._("Failed to save document: {error}").format(error=error)), ("focus", "input")],
         )
         self.assertEqual(frame._document_controller.get_document("alpha"), Document("alpha", "alpha text", "⠁⠁"))
         self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "alpha text", None))
@@ -4538,7 +4542,9 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self._take()
         self.calls.run_next()
 
-        self.assertEqual(self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._saved_to(frame, "alpha")])
+        self.assertEqual(
+            self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._saved_to(frame, "alpha"), ("focus", "input")]
+        )
         self.assertEqual(frame._document_controller.get_document("alpha"), Document("alpha", replaced, "⠁"))
         self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", replaced, "⠁"))
 
@@ -4769,6 +4775,19 @@ class FrameViewMethodsTest(unittest.TestCase):
         frame.show_conversion_output("⠃")
 
         self.assertEqual(frame.steps.mock_calls, [call.output_txt.SetValue("⠃"), call.output_txt.SetFocus()])
+
+    def test_focus_source_editor_only_while_the_window_is_active(self) -> None:
+        # F-9 review M-6: after a case (b) box. A window that is not active (a modal file dialog
+        # of the frame is open, or another program has the focus) keeps its focus.
+        for active, expected in ((True, [call.IsActive(), call.input_txt.SetFocus()]), (False, [call.IsActive()])):
+            with self.subTest(active=active):
+                frame = self._make_frame()
+                frame.IsActive = frame.steps.IsActive
+                frame.steps.IsActive.return_value = active
+
+                frame.focus_source_editor()
+
+                self.assertEqual(frame.steps.mock_calls, expected)
 
     def test_refresh_dual_view_uses_the_frame_refresh(self) -> None:
         frame = self._make_frame()

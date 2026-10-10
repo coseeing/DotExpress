@@ -63,6 +63,9 @@ class RecordingConversionView:
         self.events.append(("save_converted_document", document))
         return self.save_result
 
+    def focus_source_editor(self) -> None:
+        self.events.append(("focus_source_editor",))
+
 
 class ConversionPresenterTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -361,9 +364,13 @@ class ConversionPresenterTest(unittest.TestCase):
 
         self.calls.run_next()
 
+        # After the box the focus goes to beta's source editor: the switch left it in the
+        # read-only Braille Result editor, as the source editor was disabled (F-9 review M-6).
         self.assertEqual(
             self._take(),
-            self._end() + [("save_converted_document", Document("alpha", "source", "⠎")), self._saved_to("alpha")],
+            self._end()
+            + [("save_converted_document", Document("alpha", "source", "⠎")), self._saved_to("alpha")]
+            + [("focus_source_editor",)],
         )
         self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
         self.assertEqual(self.documents.get_document("beta"), Document("beta", "b", "⠃"))
@@ -409,7 +416,7 @@ class ConversionPresenterTest(unittest.TestCase):
         self.assertEqual(
             self._take(),
             self._end()
-            + [("save_converted_document", Document("alpha", "source", "⠎"))]
+            + [("save_converted_document", Document("alpha", "source", "⠎")), ("focus_source_editor",)]
             + [("busy", True), ("close_converting_dialog",), ("call_later", CONVERTING_DIALOG_DELAY_MS, (2,))],
         )
         self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
@@ -779,7 +786,9 @@ class ConversionPresenterTest(unittest.TestCase):
 
         self.assertEqual(
             self._take(),
-            self._end(2) + [("save_converted_document", Document("alpha", "source", "⠎")), self._saved_to("alpha")],
+            self._end(2)
+            + [("save_converted_document", Document("alpha", "source", "⠎")), self._saved_to("alpha")]
+            + [("focus_source_editor",)],
         )
         self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
         self.assertEqual(self.documents.get_document("beta"), Document("beta", "b", "⠃"))

@@ -77,6 +77,10 @@ class ConversionView(Protocol):
         """Save ``document``, which is not open; ``False`` if the save failed and was reported."""
         ...
 
+    def focus_source_editor(self) -> None:
+        """Focus the open document's source editor if the window is active (F-9 review M-6)."""
+        ...
+
 
 @dataclass(frozen=True)
 class _ExportCallbacks:
@@ -305,6 +309,9 @@ class ConversionPresenter:
                 _('Conversion completed. The result was saved to document "{name}".').format(name=document.name),
                 _("Info"),
             )
+        # The switch left the focus in the read-only Braille Result editor, as the source editor
+        # was disabled; after the box it goes to the open document's source editor (F-9 review M-6).
+        self._view.focus_source_editor()
 
     def _discard(self, reason: str) -> None:
         """Drop a manual result that has no document to go to (F-9 D3).

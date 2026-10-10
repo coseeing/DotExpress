@@ -910,8 +910,8 @@ msgid "Type"
 msgstr ""
 
 #: dialog.py:154 dialog.py:171 dialog.py:309 dialog.py:761
-#: ui/conversion_presenter.py:170 ui/conversion_presenter.py:289
-#: ui/conversion_presenter.py:306
+#: ui/conversion_presenter.py:174 ui/conversion_presenter.py:293
+#: ui/conversion_presenter.py:310
 msgid "Info"
 msgstr ""
 
@@ -1010,7 +1010,7 @@ msgstr ""
 #: dialog.py:497 dialog.py:506 dialog.py:764
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
 #: documents/export_coordinator.py:135 gui.py:454 gui.py:729 gui.py:1045
-#: ui/conversion_presenter.py:273
+#: ui/conversion_presenter.py:277
 msgid "Error"
 msgstr ""
 
@@ -1392,25 +1392,25 @@ msgstr ""
 msgid "Some files were skipped during import."
 msgstr ""
 
-#: gui.py:1164
+#: gui.py:1169
 msgid "Export Document"
 msgstr ""
 
-#: gui.py:1174
+#: gui.py:1179
 msgid "Export All Documents"
 msgstr ""
 
-#: gui.py:1183
+#: gui.py:1188
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr ""
 
-#: gui.py:1186
+#: gui.py:1191
 msgid "Confirm Overwrite"
 msgstr ""
 
-#: gui.py:1192
+#: gui.py:1197
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1421,7 +1421,7 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: gui.py:1195
+#: gui.py:1200
 msgid "Startup Error"
 msgstr ""
 
@@ -1557,30 +1557,30 @@ msgstr ""
 msgid "Export All"
 msgstr ""
 
-#: ui/conversion_presenter.py:111
+#: ui/conversion_presenter.py:115
 msgid "Please select a translation table first."
 msgstr ""
 
-#: ui/conversion_presenter.py:116
+#: ui/conversion_presenter.py:120
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:117
+#: ui/conversion_presenter.py:121
 #, python-brace-format
 msgid "Text processing failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:119
+#: ui/conversion_presenter.py:123
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:289
+#: ui/conversion_presenter.py:293
 msgid "Conversion completed."
 msgstr ""
 
-#: ui/conversion_presenter.py:305
+#: ui/conversion_presenter.py:309
 #, python-brace-format
 msgid "Conversion completed. The result was saved to document \"{name}\"."
 msgstr ""

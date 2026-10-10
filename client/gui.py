@@ -1152,6 +1152,11 @@ class BrailleFrame(wx.Frame):
 			return False
 		return True
 
+	def focus_source_editor(self) -> None:
+		"""After a case (b) box (F-9 review M-6); not while another window, such as a file dialog, is active."""
+		if self.IsActive():
+			self.input_txt.SetFocus()
+
 	# --- ExportView (documents/export_coordinator.py) -----------------------
 
 	def show_warning(self, message: str, caption: str) -> None:

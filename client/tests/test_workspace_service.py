@@ -330,6 +330,30 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(self._listing(), ["Bad.dep", "alpha.dep", "ok.dep"])
         self.assertEqual((self.workspace / "Bad.dep").read_bytes(), b"not a zip")
 
+    def test_import_does_not_replace_a_package_that_appeared_after_the_names_were_checked(self) -> None:
+        # F-8a review M-1: like Add and Rename, each imported package is checked on disk
+        # right before it is written; one created since the batch began is kept.
+        service = self._service([Document("zoo", "z", "1")])
+        real_batch = workspace_service.batch_import_documents
+
+        def batch(*args, **kwargs):
+            result = real_batch(*args, **kwargs)
+            self.workspace.mkdir(exist_ok=True)
+            (self.workspace / "beta.dep").write_bytes(b"not a zip")
+            return result
+
+        with patch.object(workspace_service, "batch_import_documents", side_effect=batch):
+            result = service.import_files(self._sources(beta="b", delta="d"), format_key="all")
+
+        self.assertEqual(result.saved, [Document("delta", "d", None)])
+        self.assertEqual(
+            result.issues,
+            [BatchIssue(path=self.workspace / "beta.dep", reason=self._exists_error("beta.dep"))],
+        )
+        self.assertEqual(self.controller.document_names, ["zoo", "delta"])
+        self.assertEqual(self._listing(), ["beta.dep", "delta.dep"])
+        self.assertEqual((self.workspace / "beta.dep").read_bytes(), b"not a zip")
+
     def test_package_name_taken(self) -> None:
         service = self._start_with_a_kept_invalid_package()
         self._block("folder")

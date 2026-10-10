@@ -178,6 +178,9 @@ class DocumentWorkspaceService:
         for document in documents:
             package_path = self.package_path(document.name)
             try:
+                if os.path.lexists(package_path):
+                    # Created after the names were checked (F-8 D1): not replaced.
+                    raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(package_path))
                 save_document_package(package_path, document)
             except Exception as exc:
                 save_issues.append(BatchIssue(path=package_path, reason=str(exc)))

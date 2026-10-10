@@ -3993,6 +3993,26 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(len(self.timers.timers), 1)
         self.assertFalse(target.exists())
 
+    def test_pending_html_export_through_the_frame_shows_the_conversion(self) -> None:
+        # Was P1-4 defect 3 (task.md #11): the "No conversion data" page (F-9 D6).
+        frame = self._make_frame([Document("alpha", "alpha text", None)], "alpha")
+        target = self.export_dir / "alpha.html"
+        self.export_paths.append(target)
+        self.outputs["alpha text"] = ConversionOutput("⠁⠁", ("result",), (_dual_view_segment("fresh-a", "⠁⠁"),))
+
+        frame.on_export_document("html")
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._exported(frame)])
+        html = target.read_text(encoding="utf-8")
+        self.assertIn('<span class="source">fresh-a</span>', html)
+        self.assertNotIn("No conversion data", html)
+        self.assertEqual(frame._document_controller.dual_view_results_by_document, {})
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "alpha text", None)])
+        self.assertEqual(frame.output_txt.value, "")
+
     # --- Export All ----------------------------------------------------------
 
     def test_export_all_mixed_documents_turn_by_turn(self) -> None:

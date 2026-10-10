@@ -34,6 +34,14 @@ def setUpModule() -> None:
     unittest.addModuleCleanup(isolate_file_logs(LOGGER))
 
 
+def _segment(raw: str, braille: str) -> DualViewSegment:
+    """One dual-view segment showing ``raw`` above ``braille``."""
+    return DualViewSegment(
+        result=SimpleNamespace(raw=[raw], braille=[braille], braille_to_raw_pos=[0], raw_to_braille_pos=[0]),
+        source_kind="text",
+    )
+
+
 def _writer_failing_for(name: str, error: Exception):
     """The BRL writer, except that it raises ``error`` for the document called ``name``."""
     write_brl = get_format("brl").writer
@@ -217,6 +225,22 @@ class ExportCoordinatorTest(unittest.TestCase):
 
         writer.assert_called_once_with(Path("/tmp/beta.html"), Document("beta", "b", "⠃"), ExportContext())
 
+    def test_write_document_uses_the_given_results_instead_of_the_cache(self) -> None:
+        # F-9 D6: None reads the cache, as before; a tuple, even an empty one, is used as it is.
+        self.documents.set_dual_view_results("alpha", ("alpha-cache",))
+        document = Document("alpha", "text", "braille")
+        for given, expected in ((None, ("alpha-cache",)), ((), ()), (("fresh",), ("fresh",))):
+            with self.subTest(given=given):
+                writer = Mock()
+                descriptor = replace(get_format("html"), writer=writer)
+                with patch.object(coordinator_module, "get_format", return_value=descriptor):
+                    self.coordinator.write_document(Path("/tmp/alpha.html"), document, "html", dual_view_results=given)
+
+                writer.assert_called_once_with(Path("/tmp/alpha.html"), document, ExportContext(dual_view_results=expected))
+
+        self.coordinator.write_document(self.root / "alpha.html", document, "html", dual_view_results=())
+        self.assertIn("No conversion data", (self.root / "alpha.html").read_text(encoding="utf-8"))
+
     def test_write_document_rejects_non_exportable_format(self) -> None:
         descriptor = replace(get_format("txt"), writer=Mock())
 
@@ -336,7 +360,7 @@ class ExportCoordinatorTest(unittest.TestCase):
             self._take()
             on_success, _on_error = self.conversions.started[0]
             with self.assertLogs(LOGGER, level="ERROR") as logs:
-                on_success("⠃⠃")
+                on_success(ConversionOutput("⠃⠃", ()))
 
         self.assertEqual(
             self._take(),
@@ -357,7 +381,7 @@ class ExportCoordinatorTest(unittest.TestCase):
         self.assertEqual(self._written(), {})
 
         on_success, _on_error = self.conversions.started[0]
-        on_success("⠃⠃")
+        on_success(ConversionOutput("⠃⠃", ()))
 
         self.assertEqual(self._take(), [self._exported()])
         self.assertEqual(self._written(), {"beta.brl": "⠃⠃"})
@@ -389,6 +413,23 @@ class ExportCoordinatorTest(unittest.TestCase):
             ],
         )
         self.assertEqual(self.conversions.started, [])
+
+    def test_html_export_of_a_pending_document_uses_its_conversion(self) -> None:
+        # Was P1-4 defect 3 (task.md #11): the cache, empty for a pending document, gave the
+        # "No conversion data" page (F-9 D6).
+        self.view.paths.append(self.root / "beta.html")
+        self.coordinator.export_document(Document("beta", "b", None), "html")
+        self._take()
+
+        on_success, _on_error = self.conversions.started[0]
+        on_success(ConversionOutput("⠃", ("result",), (_segment("fresh-b", "⠃"),)))
+
+        self.assertEqual(self._take(), [self._exported()])
+        html = (self.root / "beta.html").read_text(encoding="utf-8")
+        self.assertIn('<span class="source">fresh-b</span>', html)
+        self.assertNotIn("No conversion data", html)
+        self.assertEqual(self.documents.dual_view_results_by_document, {})
+        self.assertEqual(self.documents.get_document("beta"), Document("beta", "b", None))
 
     # --- export_all ----------------------------------------------------------------
 
@@ -461,7 +502,7 @@ class ExportCoordinatorTest(unittest.TestCase):
         self.assertEqual(self.calls.pending, [])
 
         on_success, _on_error = self.conversions.started[0]
-        on_success("⠃")
+        on_success(ConversionOutput("⠃", ()))
         self.assertEqual(self._take(), [("call_after",)])
         self.assertEqual(self._written(), {"alpha.brl": "⠁", "beta.brl": "⠃"})
 
@@ -591,6 +632,27 @@ class ExportCoordinatorTest(unittest.TestCase):
         self.assertEqual(self._written(), {"alpha.brl": "⠁", "gamma.brl": "⠛"})
         self.assertEqual([record.getMessage() for record in logs.records], ["Unexpected error while exporting a document"])
         self.assertIs(logs.records[0].exc_info[1], error)
+
+    def test_export_all_html_uses_each_pending_documents_conversion(self) -> None:
+        # F-9 D6: each pending document gets its own fresh segments; a converted one keeps its cache.
+        self.documents.documents = [Document("alpha", "a", "⠁"), Document("beta", "b", None), Document("gamma", "g", None)]
+        self.documents.set_dual_view_results("alpha", (_segment("cached-a", "⠁"),))
+        self.view.directories.append(self.root)
+
+        self.coordinator.export_all("html")
+        self.calls.run_next()
+        self.conversions.started[0][0](ConversionOutput("⠃", (), (_segment("fresh-b", "⠃"),)))
+        self.calls.run_next()
+        self.conversions.started[1][0](ConversionOutput("⠛", (), (_segment("fresh-g", "⠛"),)))
+        self.calls.run_next()
+
+        self.assertEqual(self._take()[-1], self._all_exported())
+        for name, source in (("alpha", "cached-a"), ("beta", "fresh-b"), ("gamma", "fresh-g")):
+            with self.subTest(name=name):
+                html = (self.root / f"{name}.html").read_text(encoding="utf-8")
+                self.assertIn(f'<span class="source">{source}</span>', html)
+                self.assertNotIn("No conversion data", html)
+        self.assertEqual(list(self.documents.dual_view_results_by_document), ["alpha"])
 
 
 class ExportThroughConversionPresenterTest(unittest.TestCase):

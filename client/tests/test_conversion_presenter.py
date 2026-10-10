@@ -112,7 +112,7 @@ class ConversionPresenterTest(unittest.TestCase):
 
     def _export_callbacks(self) -> dict:
         return {
-            "on_success": lambda braille: self.events.append(("on_success", braille)),
+            "on_success": lambda output: self.events.append(("on_success", output.display_text)),
             "on_error": lambda message: self.events.append(("on_error", message)),
         }
 
@@ -366,6 +366,21 @@ class ConversionPresenterTest(unittest.TestCase):
         self.assertEqual(self._take(), self._end() + [("on_success", "⠙")])
         self.assertEqual(self.documents.documents, [Document("alpha", "old", None), Document("beta", "b", "⠃")])
         self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("manual",)})
+
+    def test_export_success_receives_the_conversion_output(self) -> None:
+        # F-9 D6: the export gets the whole output, so a pending document's HTML export can use
+        # the fresh dual-view segments.
+        output = ConversionOutput("⠙", ("result",), ("export-segment",))
+        self.outputs["doc text"] = output
+        received: list = []
+        presenter = self._presenter()
+        presenter.convert_for_export("doc text", on_success=received.append, on_error=self.fail)
+        self.threads[0].run()
+
+        self.calls.run_next()
+
+        self.assertEqual(len(received), 1)
+        self.assertIs(received[0], output)
 
     def test_export_failure_calls_only_on_error(self) -> None:
         self.outputs["doc text"] = ConversionStageError("ascii", RuntimeError("bad map"))

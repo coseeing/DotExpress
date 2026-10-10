@@ -63,7 +63,7 @@ class ConversionView(Protocol):
 
 @dataclass(frozen=True)
 class _ExportCallbacks:
-    on_success: Callable[[str], None]
+    on_success: Callable[[ConversionOutput], None]
     on_error: Callable[[str], None]
 
 
@@ -138,7 +138,7 @@ class ConversionPresenter:
         self,
         raw_text: str,
         *,
-        on_success: Callable[[str], None],
+        on_success: Callable[[ConversionOutput], None],
         on_error: Callable[[str], None],
     ) -> None:
         # No running check, as before (P1-4 spec, known defect 2): a running job is superseded.
@@ -180,7 +180,7 @@ class ConversionPresenter:
         self._end_job()
         output = result.conversion_output
         if job.export is not None:
-            job.export.on_success(output.display_text)
+            job.export.on_success(output)
             return
         self._complete_manual(output)
 

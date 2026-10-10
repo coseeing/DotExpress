@@ -98,7 +98,7 @@ class TranslationTest(unittest.TestCase):
         expected = {
             "Characters Replaced": "已取代字元",
             message: "文件「{name}」中有 {count} 個無法顯示的字元，已全部以替代字元 {mark} 標示，後面的文字都保留下來了。"
-            "\n\n轉譯前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。",
+            "\n\n轉換前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。",
         }
         translation = i18n.load_translation()
 
@@ -106,7 +106,7 @@ class TranslationTest(unittest.TestCase):
         self.assertEqual(
             translation.gettext(message).format(name="alpha", count=3, mark="\ufffd"),
             "文件「alpha」中有 3 個無法顯示的字元，已全部以替代字元 \ufffd 標示，後面的文字都保留下來了。"
-            "\n\n轉譯前請刪除或修改這些 \ufffd，否則每一個都會在點字中變成一段跳脫碼。",
+            "\n\n轉換前請刪除或修改這些 \ufffd，否則每一個都會在點字中變成一段跳脫碼。",
         )
 
     def test_unknown_msgid_is_returned_unchanged(self) -> None:

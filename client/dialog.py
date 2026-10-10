@@ -27,6 +27,7 @@ from dictionaries.read_problems import (
 from documents.workspace import normalize_document_name
 from i18n import N_, _
 from ui.dialog_base import ContextManagedDialog, NameDialogBase, NameDialogMessages
+from ui.message_box import message_box
 
 CSV_WILDCARD = N_("CSV files (*.csv)|*.csv")
 
@@ -150,7 +151,7 @@ class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
 		try:
 			validate_dictionary_entry(entry)
 		except ValueError as exc:
-			wx.MessageBox(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+			message_box(str(exc), _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 			try:
 				if not entry.text:
 					self.identifier_ctrl.SetFocus()
@@ -167,7 +168,7 @@ class _NameDialog(NameDialogBase, wx.Dialog):
 	"""Name dialog base: shows a name error in an information message box."""
 
 	def _show_name_error(self, message: str) -> None:
-		wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+		message_box(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 
 
 class DictionaryNameDialog(_NameDialog):
@@ -491,7 +492,7 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 			return dialog.get_entry()
 
 	def _show_duplicate_error(self, identifier: str) -> None:
-		wx.MessageBox(
+		message_box(
 			_('Source text "{identifier}" already exists.').format(identifier=identifier),
 			_("Error"),
 			wx.OK | wx.ICON_ERROR,
@@ -502,7 +503,7 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 		try:
 			self._model.save(self.dictionary_path)
 		except Exception as exc:
-			wx.MessageBox(_("Failed to save: {error}").format(error=exc), _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
+			message_box(_("Failed to save: {error}").format(error=exc), _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
 			return
 		event.Skip()
 
@@ -757,13 +758,13 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 			return name_dialog.get_dictionary_name()
 
 	def show_info(self, message: str) -> None:
-		wx.MessageBox(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+		message_box(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
 
 	def show_error(self, message: str) -> None:
-		wx.MessageBox(message, _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
+		message_box(message, _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
 
 	def confirm(self, message: str, caption: str) -> bool:
-		return wx.MessageBox(message, caption, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, parent=self) == wx.YES
+		return message_box(message, caption, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, parent=self) == wx.YES
 
 	def choose_import_path(self, title: str) -> Path | None:
 		with wx.FileDialog(

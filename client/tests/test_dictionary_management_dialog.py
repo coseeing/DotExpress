@@ -628,7 +628,7 @@ class DictionaryManagementViewTest(unittest.TestCase):
 		name_dialog.__exit__.assert_called_once()
 
 	def test_show_info_uses_information_box_on_dialog(self):
-		with patch.object(self.wx, "MessageBox") as message_box:
+		with patch.object(dialog, "message_box") as message_box:
 			self.target.show_info("message")
 
 		message_box.assert_called_once_with(
@@ -639,7 +639,7 @@ class DictionaryManagementViewTest(unittest.TestCase):
 		)
 
 	def test_show_error_uses_error_box_on_dialog(self):
-		with patch.object(self.wx, "MessageBox") as message_box:
+		with patch.object(dialog, "message_box") as message_box:
 			self.target.show_error("message")
 
 		message_box.assert_called_once_with(
@@ -652,7 +652,7 @@ class DictionaryManagementViewTest(unittest.TestCase):
 	def test_confirm_uses_warning_yes_no_box_with_no_default(self):
 		for answer, expected in ((self.wx.YES, True), (self.wx.NO, False)):
 			with self.subTest(answer=answer):
-				with patch.object(self.wx, "MessageBox", return_value=answer) as message_box:
+				with patch.object(dialog, "message_box", return_value=answer) as message_box:
 					result = self.target.confirm("message", "caption")
 
 				self.assertIs(result, expected)

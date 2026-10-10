@@ -23,7 +23,7 @@ from tests.windows_file_handles import make_read_only
 
 _SCOPE = wx_stub.StubScope(
     wx_stub.gui_frame_stubs(),
-    isolate=("gui", "settings.dialogs", "ui.dual_view"),
+    isolate=("gui", "settings.dialogs", "ui.dual_view", "ui.message_box"),
 )
 with _SCOPE.loading():
     gui = importlib.import_module("gui")
@@ -432,7 +432,7 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         frame = self._make_frame(documents, open_name="alpha", selected_name="beta")
         frame._workspace_service.delete_document.side_effect = frame._document_controller.delete_document
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_document(None)
 
         frame._workspace_service.delete_document.assert_called_once_with("beta")
@@ -445,7 +445,7 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         error = OSError("locked")
         frame._workspace_service.delete_document.side_effect = error
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_document(None)
 
         frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
@@ -462,7 +462,7 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
 
         frame._workspace_service.delete_all_documents.side_effect = delete_all_documents
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_all_documents(None)
 
         frame._workspace_service.delete_all_documents.assert_called_once_with(on_error=ANY)
@@ -490,7 +490,7 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
 
         frame._workspace_service.delete_all_documents.side_effect = delete_all_documents
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_all_documents(None)
 
         frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
@@ -521,7 +521,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame.dictionary_dir = Path("dictionary")
         with (
             patch.object(gui.TextProcessingDialog, "show_singleton", side_effect=OSError("denied")),
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
         ):
             frame.on_open_text_processing(None)
         message_box.assert_called_once_with(
@@ -581,7 +581,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             patch.object(gui, "prepare_application_directories", side_effect=error),
             patch.object(gui, "build_default_translation_runtime") as build_runtime,
             patch.object(gui, "BrailleFrame") as frame_class,
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
         ):
             app = gui.BrailleApp()
             result = app.OnInit()
@@ -645,7 +645,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             patch.object(gui, "prepare_application_directories", return_value=paths),
             patch.object(gui, "cleanup_dual_view_html", side_effect=cause),
             patch.object(gui, "build_default_translation_runtime") as build_runtime,
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
         ):
             app = gui.BrailleApp()
             result = app.OnInit()
@@ -703,7 +703,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         with ExitStack() as stack:
             for name, fake in self._startup_recorders(order).items():
                 stack.enter_context(patch.object(gui, name, side_effect=fake))
-            message_box = stack.enter_context(patch.object(gui.wx, "MessageBox"))
+            message_box = stack.enter_context(patch.object(gui, "message_box"))
             result = gui.BrailleApp().OnInit()
 
         self.assertTrue(result)
@@ -717,7 +717,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         with ExitStack() as stack:
             for name, fake in self._startup_recorders(order, prepare_error=error).items():
                 stack.enter_context(patch.object(gui, name, side_effect=fake))
-            message_box = stack.enter_context(patch.object(gui.wx, "MessageBox"))
+            message_box = stack.enter_context(patch.object(gui, "message_box"))
             result = gui.BrailleApp().OnInit()
 
         self.assertFalse(result)
@@ -892,7 +892,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._workspace_service = Mock()
         frame._workspace_service.delete_all_documents.side_effect = delete_all_documents
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_all_documents(None)
 
         frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
@@ -1117,7 +1117,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         error = big5_decode_error()
 
         with (
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
             self.assertLogs("dotexpress.gui", level="ERROR") as logs,
         ):
             _dialog_class, editor_class = self._open_management(frame, gui.wx.ID_EDIT, "alpha", editor_error=error)
@@ -1141,7 +1141,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         error = RuntimeError("injected")
 
         with (
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
             self.assertLogs("dotexpress.gui", level="ERROR") as logs,
         ):
             self._open_management(frame, gui.wx.ID_EDIT, "alpha", editor_error=error)
@@ -1533,7 +1533,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
                 document = Document("alpha", "t", "b")
                 with (
                     patch.object(gui.wx, "FileDialog", Mock(return_value=dialog)),
-                    patch.object(gui.wx, "MessageBox", Mock()) as message_box,
+                    patch.object(gui, "message_box", Mock()) as message_box,
                 ):
                     frame._export_coordinator.export_document(document, "brl")
 
@@ -1739,7 +1739,7 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.import_paths: list[str] = []
         self.import_filter_index = gui.ALL_SUPPORTED_FILTER_INDEX
         for patcher in (
-            patch.object(gui.wx, "MessageBox", self._message_box),
+            patch.object(gui, "message_box", self._message_box),
             patch.object(gui.wx, "MessageDialog", self._message_dialog_class()),
             patch.object(gui, "DocumentNameDialog", self._name_dialog_class()),
             patch.object(gui, "InvalidWorkspaceFilesDialog", self._invalid_files_dialog_class()),
@@ -3103,7 +3103,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.threads = self.thread_factory.threads
         self.menu_bar = _RecordingMenuBar(self.events)
         for patcher in (
-            patch.object(gui.wx, "MessageBox", self._message_box),
+            patch.object(gui, "message_box", self._message_box),
             patch.object(gui.wx, "FileDialog", self._file_dialog_class()),
             patch.object(gui.wx, "DirDialog", self._dir_dialog_class()),
             patch.object(gui.wx, "CallAfter", self.calls),
@@ -4074,7 +4074,7 @@ class FrameViewMethodsTest(unittest.TestCase):
 
     def test_message_methods_use_one_message_box_each(self) -> None:
         frame = self._make_frame()
-        with patch.object(gui.wx, "MessageBox") as message_box:
+        with patch.object(gui, "message_box") as message_box:
             frame.show_info("info text", "Info caption")
             frame.show_error("error text", "Error caption")
 
@@ -4086,9 +4086,18 @@ class FrameViewMethodsTest(unittest.TestCase):
             ],
         )
 
+    def test_about_box_uses_the_helper(self) -> None:
+        frame = self._make_frame()
+        with patch.object(gui, "message_box") as message_box:
+            frame.on_about(None)
+
+        message_box.assert_called_once_with(
+            gui.about.aboutMessage, gui._("About DotExpress"), gui.wx.OK | gui.wx.ICON_INFORMATION, parent=frame
+        )
+
     def test_show_file_error_formats_the_error_for_the_frame(self) -> None:
         frame = self._make_frame()
-        with patch.object(gui.wx, "MessageBox") as message_box:
+        with patch.object(gui, "message_box") as message_box:
             frame._show_file_error("Failed: {error}", OSError("disk full"))
 
         message_box.assert_called_once_with(
@@ -4228,7 +4237,7 @@ class FrameExportViewMethodsTest(unittest.TestCase):
 
     def test_confirm_overwrite_all_asks_only_for_conflicts(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
-        with patch.object(gui.wx, "MessageBox") as message_box:
+        with patch.object(gui, "message_box") as message_box:
             self.assertTrue(frame.confirm_overwrite_all([]))
             message_box.assert_not_called()
             for answer, expected in ((gui.wx.YES, True), (gui.wx.NO, False)):
@@ -4247,7 +4256,7 @@ class FrameExportViewMethodsTest(unittest.TestCase):
 
     def test_show_warning_uses_the_warning_icon(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
-        with patch.object(gui.wx, "MessageBox") as message_box:
+        with patch.object(gui, "message_box") as message_box:
             frame.show_warning("warning text", "Warning caption")
 
         message_box.assert_called_once_with(

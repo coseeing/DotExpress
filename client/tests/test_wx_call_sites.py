@@ -48,6 +48,17 @@ def is_attribute(name: str) -> Callable[[ast.AST], bool]:
     return lambda node: isinstance(node, ast.Attribute) and node.attr == name
 
 
+def is_wx_call(name: str) -> Callable[[ast.AST], bool]:
+    """A call of ``wx.<name>(...)``."""
+    return lambda node: (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == name
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "wx"
+    )
+
+
 class WxCallSitesTest(unittest.TestCase):
     def test_scan_reads_the_production_modules(self) -> None:
         names = {path.relative_to(CLIENT).as_posix() for path in production_sources()}
@@ -60,6 +71,18 @@ class WxCallSitesTest(unittest.TestCase):
         # top-level window and can return another dialog's button (F-W9). FindWindow
         # searches the window and its children only.
         self.assertEqual(find_in_production(is_attribute("FindWindowById")), [])
+
+    def test_no_production_module_calls_wx_message_box(self) -> None:
+        # wx.MessageBox labels its OK button from wx's own catalog, which DotExpress does not
+        # load; ui.message_box.message_box sets the translated label (F-7, F-W9).
+        self.assertEqual(find_in_production(is_wx_call("MessageBox")), [])
+
+    def test_message_dialogs_are_the_helper_or_set_every_label(self) -> None:
+        # F-5's close dialog sets all three of its labels itself.
+        self.assertEqual(
+            find_in_production(is_wx_call("MessageDialog")),
+            ["gui.py:BrailleFrame._ask_after_close_save_failure", "ui/message_box.py:message_box"],
+        )
 
 
 if __name__ == "__main__":

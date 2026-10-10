@@ -9,7 +9,7 @@ from unittest.mock import Mock, call, patch
 
 from tests import wx_stub
 
-_SCOPE = wx_stub.StubScope(wx_stub.settings_dialog_stubs(), isolate=("settings.dialogs",))
+_SCOPE = wx_stub.StubScope(wx_stub.settings_dialog_stubs(), isolate=("settings.dialogs", "ui.message_box"))
 with _SCOPE.loading():
     import wx
 
@@ -171,12 +171,17 @@ class TextProcessingDialogTest(unittest.TestCase):
                 "settings.dialogs.save_preprocessing_script",
                 side_effect=SyntaxError("invalid syntax"),
             ),
-            patch("settings.dialogs.wx.MessageBox") as message_box,
+            patch("settings.dialogs.message_box") as message_box,
         ):
             self.assertFalse(dialog.on_apply())
         dialog.Destroy.assert_not_called()
         dialog.editor.SetFocus.assert_called_once_with()
-        message_box.assert_called_once()
+        message_box.assert_called_once_with(
+            i18n._("Unable to save text processing script: {error}").format(error="invalid syntax"),
+            i18n._("Text Processing"),
+            wx.OK | wx.ICON_ERROR,
+            parent=dialog,
+        )
 
     def test_ok_destroys_only_after_successful_apply(self) -> None:
         dialog = self.make_dialog()
@@ -448,7 +453,7 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         dialog.panel_instances = {1: panel}
 
         with patch("settings.dialogs._", side_effect=lambda text: text):
-            with patch("settings.dialogs.wx.MessageBox") as message_box:
+            with patch("settings.dialogs.message_box") as message_box:
                 result = dialog.on_apply()
 
         self.assertFalse(result)

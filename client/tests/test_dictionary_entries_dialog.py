@@ -305,7 +305,6 @@ class _EditorHarness:
             StaticText=self._static_text,
             TextCtrl=self._text_ctrl,
             Button=self._button,
-            MessageBox=self._message_box,
         )
 
     # construction
@@ -323,6 +322,7 @@ class _EditorHarness:
             stack.enter_context(patch.object(dialog, "wx", self.wx))
             stack.enter_context(patch.object(dialog, "CallbackVirtualListCtrl", self._list_ctrl))
             stack.enter_context(patch.object(dialog, "AddSymbolDialog", self._entry_dialog))
+            stack.enter_context(patch.object(dialog, "message_box", self._message_box))
             # Editor tests check the dialog and the saved bytes, not durability: every OK
             # would otherwise wait for a real fsync (40 in the trace replay alone).
             # tests.test_atomic_write keeps the real fsync.

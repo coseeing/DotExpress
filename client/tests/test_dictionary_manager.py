@@ -248,12 +248,21 @@ class DictionaryManagerTest(unittest.TestCase):
         self.assertEqual(self._temporary_files(export_dir), [])
 
     def test_export_copies_the_same_bytes(self) -> None:
+        # F-8a review M-2: bytes that are not UTF-8, such as a Big5 dictionary that cannot
+        # be read (F-6), are copied as they are too.
         export_dir = self._export_folder_with_old_file()
+        source_path = dictionary_path_for_name("math", self.dictionary_dir)
+        for label, content in (
+            ("UTF-8 with a BOM and CRLF", EXCEL_DICTIONARY),
+            ("Big5 after 17 KB of ASCII rows", LATE_BIG5),
+        ):
+            with self.subTest(label):
+                source_path.write_bytes(content)
 
-        export_dictionary(self.dictionary_dir, "math", export_dir / "math.csv")
+                export_dictionary(self.dictionary_dir, "math", export_dir / "math.csv")
 
-        self.assertEqual((export_dir / "math.csv").read_bytes(), EXCEL_DICTIONARY)
-        self.assertEqual(self._temporary_files(export_dir), [])
+                self.assertEqual((export_dir / "math.csv").read_bytes(), content)
+                self.assertEqual(self._temporary_files(export_dir), [])
 
     @unittest.skipUnless(os.name == "nt", "Windows sharing modes")
     def test_export_onto_a_destination_held_open_keeps_it(self) -> None:

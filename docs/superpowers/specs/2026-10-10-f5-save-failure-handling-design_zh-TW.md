@@ -26,6 +26,18 @@
 
 非目標：標題列的「已修改」標記、存檔命令、自動存檔、`.tmp` 殘留檔的回收（F 審查 M-2）、F-3 審查 M-1（新增、改名與匯入覆寫被保留的 invalid `.dep`）、依原因區分的訊息（被鎖 vs 唯讀）、刪除規則，以及含 lone surrogate 的文字的轉換。
 
+## 規劃後更正（2026-10-10）
+
+規劃（`docs/superpowers/plans/2026-10-10-f5-save-failure-handling.md`，已在 scratch clone 上 dry run：Task 0-4 完全重播，GUI 項目也以同一份程式碼的 build 執行過）沒有發現決策 D1-D11、行為表格或總數有錯。以下是計畫細化本規格之處，兩者不同時以本節為準。
+
+1. **代理字元的 pattern 改用 raw string**：`re.compile(r"[\ud800-\udfff]")`。若照「各檔案的設計」寫成一般字串，`xgettext` 0.23（`scripts\generate-pot.bat` 會掃描每個 client 模組）每次執行都會對 `documents/workspace.py:24` 警告 U+D800 與 U+DFFF 是不合法的 Unicode 字元。`re` 會自行解讀 `\uXXXX` 跳脫，編譯出的 pattern 相同。
+2. **`test_close_asks_presenter_before_saving` 多一個呼叫。** `_on_close` 會把 `evt.CanVeto()` 傳給 `_save_open_document_before_close`，所以存檔分支預期的呼叫是 `is_running(), event.CanVeto(), save(), close_converting_dialog(), event.Skip()`；測試計畫 C 所說「預期順序不變」不成立。該測試改 mock `_save_open_document`，它沒有回傳值。
+3. **各遷移步驟的數量：`Ran 1277`、`1298`、`1304`**（新增 7 + 21 + 6 個測試），全程都是 `FAILED (errors=1, skipped=7)`，只有 F-W6。步驟 2 中，B2、B3、B5、B8、B9、B10、B15a 與 C3 在修改前就會通過（現在每次存檔都會寫入），用來守住「應寫入」的情況；其餘 13 個新測試是紅燈。
+4. **測試細節。** B4 先確認未變更的待轉譯文件不會寫入，再模擬轉換。B11 有三個 subtest：空白文件、待轉譯的預設文件 `new`，以及文字與點字都含孤立代理字元的新文件（唯一確認紀錄保存的是 `_encodable(document)` 的測試）。B15b 的 controller 不經過 service 填入，因此只有「全部刪除」失敗後的重新載入能為剩下的文件建立紀錄。C1 直接呼叫 `_open_adjacent_document(1)`；C2 依序切換 alpha -> beta -> alpha 再關閉，讓關閉時開著的是唯讀的 alpha。假的對話框在沒有排定回答時回答「取消」。非 `OSError` 的重新命名測試使用本地的 `PackageFiles` 子類別，其 `write` 會丟出 `ValueError("injected")`。
+5. **`wx_stub` 的值**：`ID_CANCEL = 5101`、`ID_YES = 5103`、`ID_NO = 5104`（與 wx 相同），`YES_DEFAULT = 1 << 27`。它們在遷移步驟 3 的紅燈階段與測試一起加入。
+6. **翻譯檔。** `msgmerge` 會把 `Cannot Save Document` 標成 fuzzy，msgstr 借用 `Rename Document` 的翻譯，其餘三個新項目留空；計畫填入四個 msgstr 並移除該旗標。計畫在 `msgmerge` 之前把 `.pot` 的 `POT-Creation-Date` 固定為 `2026-10-10 12:00+0800`，讓 commit 可重現；`msgfmt` 0.23 不會把這個標頭放進 `.mo`。重新產生時也會更新 F-4 留下的 `dictionaries/entries.py` 過期行號，並移動 `Failed to save document: {error}`（第一個參照變成 `gui.py:465`）：`.pot` 與 `.po` 各為 57 行新增、38 行刪除，沒有 msgid 被移除，31 個過時（`#~`）項目不變。`.mo` 從 26,579 bytes 變成 26,971 bytes（358 個 catalog key）。
+7. **Windows 驗證。** wx 的訊息框是 task dialog；`dx.dismiss` 讀得到內容，但它的 win32 點擊關不掉，而開著的訊息框會讓程序在關閉後仍然存活。F-5 的 `f5gui.py` 改用 UIA 按「OK」，18、19（含 20）、20b、33 的重跑透過新的 `rerun.py`，以它取代 `dx.dismiss`（先前的腳本，包括 F-3 的 `rerun.py`，都不修改）。送給剛出現的對話框的按鍵偶爾會遺失，所以 `f5gui.answer` 在 5 秒後若仍是同一個對話框，會再按一次。第 36、37 項共用 `item36.py`，第 38、39 項共用 `item38.py`。第 38 項「之前」欄中訊息框的按鈕是 `OK`（F-W9），不是 `確定`。
+
 ## 現況（2026-10-10 於 `fix/f5-save-failure-handling`、HEAD `918c251`、Windows 11 26200、NTFS 驗證）
 
 `$PY` 是 `D:\workspace\DotExpress\client\.venv\Scripts\python.exe`（Python 3.13.15、wxPython 4.2.5 msw、wxWidgets 3.2.9）。`$SP` 是 session scratchpad。本 spec 的原型在 `$SP\f5spec\`（`dlg.py`、`drive.py`、`probe.py`、`surrogates.py`；不 commit）。UIA 驅動程式在 `$SP\uia` 執行（pywinauto 0.6.9、psutil 7.2.2）。

@@ -221,7 +221,7 @@ DotExpress 也會把 NUL 寫進自己的包：含 NUL 的匯入原樣存成 `.de
 
 - `ensure_default_dictionary` 與 `create_dictionary` 以 `write_text_atomically(path, write_header, encoding="utf-8", newline="")` 寫表頭，`write_header(stream)` 為 `csv.writer(stream).writerow(DEFAULT_HEADER)`。位元組相同（`text,braille,type\r\n`）。既有的存在檢查留在原處。
 - `import_dictionary` 與 `export_dictionary` 以 `write_bytes_atomically(destination, lambda stream: _copy_file_into(source, stream))` 複製，`_copy_file_into` 以 `open(source, "rb")` 開啟來源並呼叫 `shutil.copyfileobj`。位元組與 `shutil.copyfile` 相同。開啟或讀取來源的錯誤在 callback 內拋出，所以不會安裝，暫存檔也會被移除。來源不存在或被鎖住時的錯誤文字，是和以前相同的 `OSError`。
-- 既有的匯出目的檔（使用者已在檔案對話框中確認覆寫）只在複製完成並同步到磁碟後才被取代。唯讀的目的檔得到 `[Errno 13] Permission denied: '<目的檔>'`，與現在 `copyfile` 給的文字相同。把字典匯出到它自己的檔案時，`copyfile` 會以 `SameFileError` 拒絕；現在會用相同的位元組重寫它。
+- 既有的匯出目的檔（使用者已在檔案對話框中確認覆寫）只在複製完成並同步到磁碟後才被取代。唯讀的目的檔得到 `[Errno 13] Permission denied: '<目的檔>'`，與現在 `copyfile` 給的文字相同。把字典匯出到它自己的檔案時，`copyfile` 會以 `SameFileError` 拒絕；現在會用相同的位元組重寫它。F-8a 審查後的修正（2026-10-10，M-5）：目的地是資料夾時，`export_dictionary` 先檢查，拋出就地寫入會拋出的錯誤（Windows 是 `[Errno 13] Permission denied: '<目的地>'`，與 `copyfile` 相同；其他平台是 `IsADirectoryError`），與 D8 的 `write_export_text` 一致，而不是以「取代失敗」結束、訊息中出現暫存檔名。
 
 **D8. 匯出 BRL 與 HTML。** `export_document_brl` 保留 `mkdir(parents=True, exist_ok=True)`，改以 `write_text_atomically(destination_path, lambda stream: stream.write(document.braille or ""), encoding="utf-8", newline=None)` 寫入。`_write_html` 保留「先轉成 HTML」，再以同樣方式寫入結果。`newline=None` 讓位元組與現在的 CRLF 完全相同（見現況）。BRL 路徑也涵蓋 Ctrl+E 與全部匯出。匯出失敗（任何例外，F-7 D6 的訊息不變）時，既有檔案逐位元組不變，也不會建立檔案。`_write_dep` 已是原子寫入。
 
@@ -594,7 +594,7 @@ F-8b：
 
 - **覆寫被其他程式開著的檔案時，匯出現在會失敗**（中，O6）。`os.replace` 拒絕任何被開著的目標，所以覆寫點字印表軟體或編輯器開著的檔案時，以前允許共用時會成功，現在以 `[WinError 5]` 失敗。會顯示訊息、保留舊檔，使用者關掉另一個程式再匯出即可。和 F-3 Q1 是同樣的取捨。
 - **隱藏或唯讀的目標**（低，F-3 D11）。隱藏的匯出檔、字典檔、程式檔與 `config.json` 會被取代並失去該屬性；唯讀的照舊被拒。
-- **匯出資料夾中的暫存檔**（低）。匯出時會在目標旁短暫建立 `.<名稱>.<16 hex>.tmp`（USB 隨身碟、網路磁碟也一樣）。監看資料夾的程式可能看得到它；匯出結束前它就被移除或改名。
+- **匯出資料夾中的暫存檔**（低）。匯出時會在目標旁短暫建立 `.<名稱>.<16 hex>.tmp`（USB 隨身碟、網路磁碟也一樣）。監看資料夾的程式可能看得到它；通常匯出結束前它就被移除或改名。F-8a 審查後的修正（2026-10-10，M-4）：若掃描程式（例如防毒軟體）在 `os.replace` 當下開著暫存檔，匯出會失敗（`[WinError 32]`），舊檔保持完整，但暫存檔會留下，因為移除它也會失敗（`shared/atomic_write.py` 忽略這個錯誤，套件自 F-3 起就是如此）；使用者可以手動刪除。重試移除留作後續項目。
 - **可以覆寫檔案、但不能建立檔案的資料夾**（很低；F 審查）。原子寫入需要在那裡建立暫存檔。
 - **復原把使用者刻意改過名的文件放回舊名稱**（低）。只發生在重新命名被當機打斷時：文件以舊名稱回來，和失敗的重新命名一樣（F-3）。staged 的那份留在磁碟上。
 - **兩份內容相同的不同文件**（很低）。若中斷的文件與清單中另一份文件的文字和點字完全相同，就不復原（規則 4）；沒有遺失文字，只少了名稱。

@@ -506,7 +506,11 @@ def gui_frame_stubs():
             return ""
 
     class _MessageDialog(Dialog):
-        pass
+        def SetExtendedMessage(self, _message):
+            return None
+
+        def SetYesNoCancelLabels(self, _yes, _no, _cancel):
+            return True
 
     wx.Window = Window
     wx.Frame = Frame
@@ -576,12 +580,17 @@ def gui_frame_stubs():
     wx.ID_ABOUT = 1
     wx.ID_OK = 2
     wx.ID_EDIT = 5030
+    wx.ID_CANCEL = 5101
+    wx.ID_YES = 5103
+    wx.ID_NO = 5104
     wx.OK = 4
     wx.CANCEL = 8
     wx.YES = 1
     wx.NO = 0
     wx.YES_NO = 16
     wx.NO_DEFAULT = 32
+    # 0 in wx; a bit of its own here, so a style assertion sees it (F-5).
+    wx.YES_DEFAULT = 1 << 27
     wx.ICON_ERROR = 512
     wx.ICON_INFORMATION = 128
     wx.ICON_WARNING = 256

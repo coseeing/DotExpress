@@ -39,6 +39,7 @@ tearDownModule = _SCOPE.deactivate
 
 import app_paths
 import config
+import i18n
 from documents.controller import DocumentController
 from documents.workspace import BatchIssue, Document, PackageFiles, load_document_package, save_document_package
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
@@ -1682,12 +1683,14 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.workspace = self.root / "workspace"
         self.events: list = []
         self.answers: list = []
+        self.dialog_answers: list = []
         self.names: list = []
         self.delete_invalid = False
         self.import_paths: list[str] = []
         self.import_filter_index = gui.ALL_SUPPORTED_FILTER_INDEX
         for patcher in (
             patch.object(gui.wx, "MessageBox", self._message_box),
+            patch.object(gui.wx, "MessageDialog", self._message_dialog_class()),
             patch.object(gui, "DocumentNameDialog", self._name_dialog_class()),
             patch.object(gui, "InvalidWorkspaceFilesDialog", self._invalid_files_dialog_class()),
             patch.object(gui, "FileIssuesDialog", self._issues_dialog_class()),
@@ -1701,6 +1704,33 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
     def _message_box(self, message, caption, style, parent=None):
         self.events.append(("MessageBox", message, caption, style, parent))
         return self.answers.pop(0) if self.answers else gui.wx.OK
+
+    def _message_dialog_class(self):
+        """``wx.MessageDialog``: records the shown dialog, answers from ``dialog_answers`` (default Cancel)."""
+        test = self
+
+        class FakeMessageDialog:
+            def __init__(self, parent, message, caption, style):
+                self.shown = [message, caption, style, None, None, parent]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def SetExtendedMessage(self, extended):
+                self.shown[3] = extended
+
+            def SetYesNoCancelLabels(self, yes, no, cancel):
+                self.shown[4] = (yes, no, cancel)
+                return True
+
+            def ShowModal(self):
+                test.events.append(("MessageDialog", *self.shown))
+                return test.dialog_answers.pop(0) if test.dialog_answers else gui.wx.ID_CANCEL
+
+        return FakeMessageDialog
 
     def _name_dialog_class(self):
         test = self
@@ -2065,14 +2095,21 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self._assert_error_box(self.events[0], "Failed to save document: {error}", "alpha.dep", frame)
         self.assertEqual(frame._document_controller.documents, [Document("alpha", "edited", "edited braille")])
 
-    def test_close_vetoes_when_save_fails(self) -> None:
+    def test_close_save_failure_cancel_vetoes(self) -> None:
+        # F-5 (D6): the dialog replaces the error box; Cancel keeps the window open.
         self._block("alpha")
         frame = self._make_workspace_frame([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
         event = Mock()
         event.CanVeto.return_value = True
+        self.dialog_answers = [gui.wx.ID_CANCEL]
 
         frame._on_close(event)
 
+        self.assertEqual([item[0] for item in self.events], ["MessageDialog"])
+        expected = self._close_dialog(frame, "")
+        self.assertTrue(self.events[0][1].startswith(expected[1]), self.events[0][1])
+        self.assertIn("alpha.dep", self.events[0][1])
+        self.assertEqual(self.events[0][2:], expected[2:])
         event.Veto.assert_called_once_with()
         event.Skip.assert_not_called()
         frame.close_converting_dialog.assert_not_called()
@@ -2111,9 +2148,10 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._package("alpha"), Document("alpha", "x�", "1"))
         self.assertEqual(frame.input_txt.value, "x\ud800")
 
-    def test_close_vetoes_and_keeps_the_package_when_save_raises_a_non_os_error(self) -> None:
+    def test_close_save_failure_that_is_not_an_os_error_is_logged_and_asks(self) -> None:
         # Before F-3 the exception escaped _on_close: no message, and the window neither
-        # closed nor said why.
+        # closed nor said why. F-5 (D6, D9): the traceback is logged at each attempt and
+        # the dialog offers a way out (here Cancel: the close is vetoed).
         alpha = Document("alpha", "a", "1")
         self._write_packages(alpha)
         alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
@@ -2121,15 +2159,19 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         frame.input_txt.SetValue("edited")
         event = Mock()
         event.CanVeto.return_value = True
+        self.dialog_answers = [gui.wx.ID_CANCEL]
 
-        with patch.object(zipfile.ZipFile, "writestr", side_effect=ValueError("injected")):
+        with (
+            patch.object(zipfile.ZipFile, "writestr", side_effect=ValueError("injected")),
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
             frame._on_close(event)
 
+        self._assert_close_dialogs(frame, "injected")
+        self._assert_logged_with_traceback(logs, ValueError)
         event.Veto.assert_called_once_with()
         event.Skip.assert_not_called()
         frame.close_converting_dialog.assert_not_called()
-        self.assertEqual(len(self.events), 1)
-        self._assert_error_box(self.events[0], "Failed to save document: {error}", "injected", frame)
         self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
 
     # --- save only when changed (F-5) ----------------------------------------
@@ -2214,6 +2256,135 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         event.Skip.assert_called_once_with()
         frame.close_converting_dialog.assert_called_once_with()
         self.assertEqual(self._disk(), before)
+
+    # --- close after a failed save (F-5) -------------------------------------
+
+    def _close_dialog(self, frame, error: str) -> tuple:
+        """The event of the dialog that a failed save on Close shows (D7)."""
+        return (
+            "MessageDialog",
+            gui._("Failed to save document: {error}").format(error=error),
+            gui._("Cannot Save Document"),
+            gui.wx.YES_NO | gui.wx.CANCEL | gui.wx.YES_DEFAULT | gui.wx.ICON_ERROR,
+            gui._(
+                "Changes made since the last successful save have not been saved. "
+                "If you close without saving, these changes will be lost."
+            ),
+            (gui._("&Retry"), gui._("Close &Without Saving"), gui._("Cancel")),
+            frame,
+        )
+
+    def _assert_close_dialogs(self, frame, *errors: str) -> None:
+        """The only events are one close dialog per error text, in this order."""
+        self.assertEqual([item[0] for item in self.events], ["MessageDialog"] * len(errors))
+        self.assertEqual(self.events, [self._close_dialog(frame, error) for error in errors])
+
+    def test_close_save_failure_asks_and_cancel_keeps_the_window_open(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        before = self._disk()
+        event = self._vetoable_close()
+        self.dialog_answers = [gui.wx.ID_CANCEL]
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")):
+            frame._on_close(event)
+
+        self._assert_close_dialogs(frame, "[Errno 13] injected")
+        event.Veto.assert_called_once_with()
+        event.Skip.assert_not_called()
+        frame.close_converting_dialog.assert_not_called()
+        self.assertEqual(frame._document_controller.get_document("alpha"), Document("alpha", "a edited", "1"))
+        self.assertEqual(frame.input_txt.value, "a edited")
+        self.assertEqual(self._disk(), before)
+
+    def test_close_retry_after_the_cause_is_gone_saves_and_closes(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        event = self._vetoable_close()
+        self.dialog_answers = [gui.wx.ID_YES]
+
+        with patch("os.replace", wraps=os.replace, side_effect=[PermissionError(errno.EACCES, "injected"), DEFAULT]):
+            frame._on_close(event)
+
+        self._assert_close_dialogs(frame, "[Errno 13] injected")
+        event.Veto.assert_not_called()
+        event.Skip.assert_called_once_with()
+        self.assertEqual(self._package("alpha"), Document("alpha", "a edited", "1"))
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
+    def test_close_retry_that_fails_again_asks_again(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        before = self._disk()
+        event = self._vetoable_close()
+        self.dialog_answers = [gui.wx.ID_YES, gui.wx.ID_CANCEL]
+        errors = [PermissionError(errno.EACCES, "first"), PermissionError(errno.EACCES, "second")]
+
+        with patch("os.replace", side_effect=errors):
+            frame._on_close(event)
+
+        self._assert_close_dialogs(frame, "[Errno 13] first", "[Errno 13] second")
+        event.Veto.assert_called_once_with()
+        event.Skip.assert_not_called()
+        self.assertEqual(self._disk(), before)
+
+    def test_close_without_saving_closes_and_keeps_the_last_saved_package(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        viewer = Mock()
+        frame._dual_view_frame = viewer
+        before = self._disk()
+        event = self._vetoable_close()
+        self.dialog_answers = [gui.wx.ID_NO]
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")) as replace:
+            frame._on_close(event)
+
+        self._assert_close_dialogs(frame, "[Errno 13] injected")
+        self.assertEqual(replace.call_count, 1)
+        frame.close_converting_dialog.assert_called_once_with()
+        viewer.Destroy.assert_called_once_with()
+        self.assertIsNone(frame._dual_view_frame)
+        event.Veto.assert_not_called()
+        event.Skip.assert_called_once_with()
+        self.assertEqual(self._disk(), before)
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
+    def test_close_that_cannot_be_vetoed_logs_a_failed_save_and_closes(self) -> None:
+        # D8: Windows is ending the session; nobody could answer a dialog.
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        before = self._disk()
+        event = Mock()
+        event.CanVeto.return_value = False
+        error = PermissionError(errno.EACCES, "injected")
+
+        with patch("os.replace", side_effect=error), self.assertLogs(gui.logger, level="ERROR") as logs:
+            frame._on_close(event)
+
+        self.assertEqual([item[0] for item in self.events], [])
+        self.assertEqual([record.getMessage() for record in logs.records], ["Failed to save the open document while closing"])
+        self.assertIs(logs.records[0].exc_info[1], error)
+        event.Veto.assert_not_called()
+        event.Skip.assert_called_once_with()
+        self.assertEqual(self._disk(), before)
+
+    def test_close_dialog_strings_are_translated(self) -> None:
+        translation = i18n.load_translation()
+        expected = {
+            "Cannot Save Document": "無法儲存文件",
+            "Changes made since the last successful save have not been saved. "
+            "If you close without saving, these changes will be lost.": (
+                "上次成功儲存之後的修改尚未儲存。"
+                "如果不儲存就關閉，這些修改將會遺失。"
+            ),
+            "&Retry": "重試(&R)",
+            "Close &Without Saving": "不儲存就關閉(&W)",
+            "Cancel": "取消",
+            "Failed to save document: {error}": "儲存文件失敗：{error}",
+        }
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
 
     # --- rename ------------------------------------------------------------
 
@@ -3740,7 +3911,7 @@ class FrameConversionDelegationTest(unittest.TestCase):
         frame = self._make_frame()
         steps = Mock()
         frame._conversion_presenter = steps.presenter
-        frame._save_open_document_with_feedback = steps.save
+        frame._save_open_document = steps.save
         frame.close_converting_dialog = steps.close_converting_dialog
         frame._dual_view_frame = None
         event = steps.event
@@ -3752,11 +3923,16 @@ class FrameConversionDelegationTest(unittest.TestCase):
 
         steps.reset_mock()
         steps.presenter.is_running.return_value = False
-        steps.save.return_value = True
         frame._on_close(event)
         self.assertEqual(
             steps.mock_calls,
-            [call.presenter.is_running(), call.save(), call.close_converting_dialog(), call.event.Skip()],
+            [
+                call.presenter.is_running(),
+                call.event.CanVeto(),
+                call.save(),
+                call.close_converting_dialog(),
+                call.event.Skip(),
+            ],
         )
 
 

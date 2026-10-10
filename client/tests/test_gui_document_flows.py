@@ -3891,6 +3891,26 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "edited", None))
         self.assertIsNone(frame._dual_view_frame)
 
+    def test_close_in_the_delivery_gap_is_vetoed(self) -> None:
+        # The worker has ended but its result is not delivered yet: still running (F-9 D5).
+        frame = self._make_frame([Document("alpha", "source", None)], "alpha")
+        self.outputs["source"] = ConversionOutput("⠎", ())
+        frame.on_convert(None)
+        self.threads[0].run()
+        self._take()
+
+        frame._on_close(_CloseEvent(self.events, can_veto=True))
+
+        self.assertEqual(self._take(), [("close.Veto",)])
+        self.assertFalse(self.workspace.exists())
+
+        self.calls.run_next()
+        self._take()
+        frame._on_close(_CloseEvent(self.events, can_veto=True))
+
+        self.assertEqual(self._take(), [("dual_view.Destroy",), ("close.Skip",)])
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "source", "⠎"))
+
     # --- single export -------------------------------------------------------
 
     def test_single_export_with_braille_writes_and_reports(self) -> None:
@@ -4187,7 +4207,28 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
 
     # --- re-entrancy (known defects 1 and 2) ----------------------------------
 
-    def test_ctrl_s_during_manual_conversion_supersedes_it(self) -> None:
+    def _written(self, folder: Path | None = None) -> dict:
+        folder = self.export_dir if folder is None else folder
+        return {path.name: path.read_text(encoding="utf-8") for path in sorted(folder.glob("*.brl")) if path.is_file()}
+
+    def _boxes(self) -> list:
+        """(message, caption) of each message box so far (the frame's repr would vary in a diff)."""
+        return [event[1:3] for event in self.events if event[0] == "MessageBox"]
+
+    def _exported_box(self) -> tuple:
+        return (gui._("The document was exported successfully."), gui._("Export Complete"))
+
+    def _finish_jobs(self) -> None:
+        """Run each started worker, then each later UI turn, until nothing is left."""
+        done = 0
+        while done < len(self.threads) or self.calls.pending:
+            if self.calls.pending:
+                self.calls.run_next()
+            else:
+                self.threads[done].run()
+                done += 1
+
+    def test_ctrl_s_during_manual_conversion_queues_the_export(self) -> None:
         frame = self._make_frame([Document("alpha", "alpha text", None)], "alpha")
         target = self.export_dir / "alpha.brl"
         self.export_paths.append(target)
@@ -4198,29 +4239,84 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         event = _KeyEvent(self.CTRL_S)
         frame.on_output_text_key_down(event)
 
-        # KNOWN BUG (P1-4 spec, defect 2): the export conversion starts without a running check.
-        self.assertEqual(
-            self._take(),
-            [self._export_dialog(frame, "alpha.brl")]
-            + self._busy(True)
-            + [("call_later", 2000, (2,)), ("focus", "output")],
-        )
+        # Was the P1-4 KNOWN BUG (defect 2): the export superseded the manual conversion, which
+        # never showed its output. Now the export waits for it (F-9 D4).
+        self.assertEqual(self._take(), [self._export_dialog(frame, "alpha.brl"), ("focus", "output")])
         self.assertFalse(event.skipped)
+        self.assertEqual(len(self.threads), 1)
         self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "alpha text", None))
 
         self.threads[0].run()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            [("convert", "alpha text"), ("call_after",), ("timer.Stop", 1)]
+            + self._busy(False)
+            + [("set", "output", "⠁⠁"), ("focus", "output"), ("dual_view.refresh",), self._completed(frame)]
+            + self._busy(True)
+            + [("call_later", 2000, (2,))],
+        )
+        self.assertFalse(target.exists())
+
         self.threads[1].run()
-        self.assertEqual(self._take(), [("convert", "alpha text"), ("call_after",), ("convert", "alpha text"), ("call_after",)])
-
         self.calls.run_next()
-        self.assertEqual(self._take(), [])
 
-        self.calls.run_next()
-        self.assertEqual(self._take(), [("timer.Stop", 2)] + self._busy(False) + [self._exported(frame)])
+        self.assertEqual(
+            self._take(),
+            [("convert", "alpha text"), ("call_after",), ("timer.Stop", 2)] + self._busy(False) + [self._exported(frame)],
+        )
         self.assertEqual(target.read_text(encoding="utf-8"), "⠁⠁")
-        self.assertFalse(self.timers.timers[0].stopped)
-        self.assertEqual(frame.output_txt.value, "")
-        self.assertEqual(frame._document_controller.documents, [Document("alpha", "alpha text", None)])
+        self.assertEqual(frame.output_txt.value, "⠁⠁")
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "alpha text", "⠁⠁")])
+
+    def test_ctrl_s_during_export_all_waits_and_the_summary_appears(self) -> None:
+        # Was P1-4 defect 2 (spec probe 3): the Ctrl+S export dropped the first step, the chain
+        # stopped, no summary appeared and the Export All folder stayed empty (F-9 D4).
+        frame = self._make_frame([Document("open", "t0", None), Document("p1", "t1", None), Document("p2", "t2", None)], "open")
+        second_dir = self.root / "second"
+        second_dir.mkdir()
+        self.export_dirs.append(self.export_dir)
+        self.export_paths.append(second_dir / "open.brl")
+        self.outputs.update(t0=ConversionOutput("⠴", ()), t1=ConversionOutput("⠂", ()), t2=ConversionOutput("⠆", ()))
+
+        frame.on_export_all_documents("brl")
+        frame.on_output_text_key_down(_KeyEvent(self.CTRL_S))
+        self._finish_jobs()
+
+        self.assertEqual(
+            self._boxes(),
+            [self._exported_box(), ("All documents were exported successfully.", gui._("Export Complete"))],
+        )
+        self.assertEqual([request.raw_text for request in self.requests], ["t0", "t0", "t1", "t2"])
+        self.assertEqual(self._written(), {"open.brl": "⠴", "p1.brl": "⠂", "p2.brl": "⠆"})
+        self.assertEqual(self._written(second_dir), {"open.brl": "⠴"})
+        self.assertFalse(frame._conversion_presenter.is_running())
+
+    def test_ctrl_s_during_single_export_writes_both_files(self) -> None:
+        # Was P1-4 defect 2 (spec probe 2): beta.brl was never written and nothing said so (F-9 D4).
+        frame = self._make_frame(
+            [Document("alpha", "alpha text", None), Document("beta", "beta text", None)],
+            open_name="alpha",
+            selected_name="beta",
+        )
+        self.export_paths.extend([self.export_dir / "beta.brl", self.export_dir / "alpha.brl"])
+        self.outputs.update({"alpha text": ConversionOutput("⠁", ()), "beta text": ConversionOutput("⠃", ())})
+
+        frame.on_export_document("brl")
+        frame.on_output_text_key_down(_KeyEvent(self.CTRL_S))
+        self.threads[0].run()
+        self.calls.run_next()
+
+        self.assertEqual(self._written(), {"beta.brl": "⠃"})
+        self.assertEqual(self._boxes(), [self._exported_box()])
+
+        self.threads[1].run()
+        self.calls.run_next()
+
+        self.assertEqual(self._written(), {"alpha.brl": "⠁", "beta.brl": "⠃"})
+        self.assertEqual(self._boxes(), [self._exported_box(), self._exported_box()])
+        self.assertEqual(self.calls.pending, [])
 
     def test_ctrl_tab_during_manual_conversion_sends_result_to_new_document(self) -> None:
         segment = _dual_view_segment("a", "⠁")
@@ -4259,7 +4355,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         )
         self.assertEqual(frame._document_controller.dual_view_results_by_document, {"beta": (segment,)})
 
-    def test_convert_between_export_all_steps_is_superseded(self) -> None:
+    def test_convert_between_export_all_steps_completes_before_the_next_step(self) -> None:
         frame = self._make_frame([Document("r1", "t1", "⠁"), Document("p1", "t2", None)], "r1")
         frame.input_txt.value = "manual text"
         self.export_dirs.append(self.export_dir)
@@ -4271,22 +4367,33 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._take(), self._busy(True) + [("call_later", 2000, (1,))])
 
         self.calls.run_next()
-        # KNOWN BUG (P1-4 spec, defect 2): the next pending step starts a second job; the manual one is dropped.
-        self.assertEqual(self._take(), self._busy(True) + [("call_later", 2000, (2,))])
+        # Was the P1-4 KNOWN BUG (defect 2): the next pending step started a second job and the
+        # manual one was dropped. Now the step waits for it (F-9 D4).
+        self.assertEqual(self._take(), [])
+        self.assertEqual(len(self.threads), 1)
 
         self.threads[0].run()
+        self.calls.run_next()
+        self.assertEqual(
+            self._take(),
+            [("convert", "manual text"), ("call_after",), ("timer.Stop", 1)]
+            + self._busy(False)
+            + [("set", "output", "⠍"), ("focus", "output"), ("dual_view.refresh",), self._completed(frame)]
+            + self._busy(True)
+            + [("call_later", 2000, (2,))],
+        )
         self.threads[1].run()
-        self.assertEqual(self._take(), [("convert", "manual text"), ("call_after",), ("convert", "t2"), ("call_after",)])
         self.calls.run_next()
-        self.assertEqual(self._take(), [])
-        self.calls.run_next()
-        self.assertEqual(self._take(), [("timer.Stop", 2)] + self._busy(False) + [("call_after",)])
+        self.assertEqual(
+            self._take(),
+            [("convert", "t2"), ("call_after",), ("timer.Stop", 2)] + self._busy(False) + [("call_after",)],
+        )
         self.calls.run_next()
         self.assertEqual(
             self._take(),
             [self._info(frame, "All documents were exported successfully.", gui._("Export Complete"))],
         )
-        self.assertEqual(frame.output_txt.value, "⠁")
+        self.assertEqual(frame.output_txt.value, "⠍")
         self.assertEqual((self.export_dir / "p1.brl").read_text(encoding="utf-8"), "⠃")
 
 

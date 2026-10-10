@@ -5,11 +5,16 @@ toggles the busy state and completes manual and export conversions. It talks to 
 frame through ``ConversionView``. Threading is injected: ``call_after`` must defer to a
 later UI turn (as ``wx.CallAfter`` does), so the active job is recorded before any
 result can be delivered.
+
+One job runs at a time. A job asked for while another one runs or completes waits in a
+queue and starts, oldest first, when that completion returns, so no result is dropped
+and a completion's message box closes before the next job starts (F-9).
 """
 
 from __future__ import annotations
 
 import threading
+from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
@@ -68,9 +73,15 @@ class _ExportCallbacks:
 
 
 @dataclass(frozen=True)
+class _Job:
+    request: ConversionRequest
+    export: _ExportCallbacks | None  # None: a manual conversion
+
+
+@dataclass(frozen=True)
 class _ActiveJob:
     job_id: int
-    export: _ExportCallbacks | None  # None: a manual conversion
+    job: _Job
 
 
 def missing_default_table_message(translation_tables: Mapping[str, object]) -> str | None:
@@ -118,9 +129,13 @@ class ConversionPresenter:
         )
         self._active: _ActiveJob | None = None
         self._timer: Timer | None = None
+        # Jobs asked for while another one is active or completing, oldest first (F-9 D4).
+        self._queue: deque[_Job] = deque()
+        self._completing = False
 
     def is_running(self) -> bool:
-        return self._runner.is_running()
+        """Whether a job is active (its result not yet delivered) or queued (F-9 D5)."""
+        return self._active is not None or bool(self._queue)
 
     def missing_table_message(self) -> str | None:
         return missing_default_table_message(self._get_translation_tables())
@@ -132,7 +147,7 @@ class ConversionPresenter:
         if message is not None:
             self._view.show_info(message, _("Info"))
             return
-        self._start(self._view.get_source_text(), export=None)
+        self._submit(self._view.get_source_text(), export=None)
 
     def convert_for_export(
         self,
@@ -141,16 +156,33 @@ class ConversionPresenter:
         on_success: Callable[[ConversionOutput], None],
         on_error: Callable[[str], None],
     ) -> None:
-        # No running check, as before (P1-4 spec, known defect 2): a running job is superseded.
-        self._start(raw_text, export=_ExportCallbacks(on_success, on_error))
+        # A running job is not replaced: this one waits for it (F-9 D4, was P1-4 defect 2).
+        self._submit(raw_text, export=_ExportCallbacks(on_success, on_error))
 
-    def _start(self, raw_text: str, export: _ExportCallbacks | None) -> None:
+    def _submit(self, raw_text: str, export: _ExportCallbacks | None) -> None:
+        """Start a job now, or queue it while another one is active, completing or queued (F-9 D4).
+
+        A queued job's request is built now, so the settings at the time of the command apply.
+        """
+        if self._active is not None or self._completing or self._queue:
+            self._queue.append(_Job(self._build_request(raw_text), export))
+            return
+        self._start(lambda: _Job(self._build_request(raw_text), export))
+
+    def _start(self, make_job: Callable[[], _Job]) -> None:
         self._view.set_conversion_busy(True)
         self._view.close_converting_dialog()
-        request = self._build_request(raw_text)
-        job_id = self._runner.start(request)
-        self._active = _ActiveJob(job_id, export)
+        job = make_job()
+        job_id = self._runner.start(job.request)
+        self._active = _ActiveJob(job_id, job)
         self._timer = self._call_later(CONVERTING_DIALOG_DELAY_MS, self._show_converting_dialog, job_id)
+
+    def _finish_completion(self) -> None:
+        """End a completion, also one that raised: start the oldest queued job (F-9 D4)."""
+        self._completing = False
+        if self._queue:
+            job = self._queue.popleft()
+            self._start(lambda: job)
 
     def _show_converting_dialog(self, job_id: int) -> None:
         if job_id != self._runner.active_job_id:
@@ -174,26 +206,34 @@ class ConversionPresenter:
         self._view.set_conversion_busy(False)
 
     def _on_job_success(self, result: ConversionJobSuccess) -> None:
-        job = self._take_active(result.job_id)
-        if job is None:
+        active = self._take_active(result.job_id)
+        if active is None:
             return
-        self._end_job()
-        output = result.conversion_output
-        if job.export is not None:
-            job.export.on_success(output)
-            return
-        self._complete_manual(output)
+        self._completing = True
+        try:
+            self._end_job()
+            output = result.conversion_output
+            if active.job.export is not None:
+                active.job.export.on_success(output)
+            else:
+                self._complete_manual(output)
+        finally:
+            self._finish_completion()
 
     def _on_job_failure(self, result: ConversionJobFailure) -> None:
-        job = self._take_active(result.job_id)
-        if job is None:
+        active = self._take_active(result.job_id)
+        if active is None:
             return
         message = format_conversion_error(result.error)
-        self._end_job()
-        if job.export is not None:
-            job.export.on_error(message)
-            return
-        self._view.show_error(message, _("Error"))
+        self._completing = True
+        try:
+            self._end_job()
+            if active.job.export is not None:
+                active.job.export.on_error(message)
+            else:
+                self._view.show_error(message, _("Error"))
+        finally:
+            self._finish_completion()
 
     def _complete_manual(self, output: ConversionOutput) -> None:
         braille = output.display_text

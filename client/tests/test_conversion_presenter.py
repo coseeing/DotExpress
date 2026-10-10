@@ -223,6 +223,9 @@ class ConversionPresenterTest(unittest.TestCase):
         presenter.convert()
         self.assertTrue(presenter.is_running())
         self.threads[0].run()
+        # Running until the result is delivered, not until the worker ends (F-9 D5).
+        self.assertTrue(presenter.is_running())
+        self.calls.run_next()
         self.assertFalse(presenter.is_running())
 
     # --- converting dialog timer ----------------------------------------------
@@ -419,22 +422,177 @@ class ConversionPresenterTest(unittest.TestCase):
             ],
         )
 
-    def test_superseded_job_delivers_nothing(self) -> None:
+    def _started(self, timer_number: int) -> list:
+        return [("busy", True), ("close_converting_dialog",), ("call_later", CONVERTING_DIALOG_DELAY_MS, (timer_number,))]
+
+    def test_export_requested_while_a_conversion_runs_waits_for_it(self) -> None:
+        # Was the P1-4 KNOWN BUG (defect 2): the export superseded the manual conversion, whose
+        # result was dropped. Now it waits (F-9 D4); its request is built when it is asked for.
         self.outputs.update({"source": ConversionOutput("manual", ()), "doc text": ConversionOutput("export", ())})
         presenter = self._presenter()
         presenter.convert()
-        # KNOWN BUG (P1-4 spec, defect 2): convert_for_export does not check for a running job.
+        self._take()
+
+        presenter.convert_for_export("doc text", **self._export_callbacks())
+
+        self.assertEqual(self._take(), [("build_request", "doc text")])
+        self.assertEqual(len(self.threads), 1)
+
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [
+                ("show_conversion_output", "manual"),
+                ("get_source_text",),
+                ("refresh_dual_view",),
+                ("show_info", _("Conversion completed."), _("Info")),
+            ]
+            + self._started(2),
+        )
+        self.assertTrue(self.timers.timers[0].stopped)
+
+        self.threads[1].run()
+        self.assertEqual(self._take(), [("convert", "doc text"), ("call_after",)])
+        self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end(2) + [("on_success", "export")])
+        self.assertFalse(presenter.is_running())
+
+    def test_queued_jobs_run_in_request_order(self) -> None:
+        texts = ("first", "a", "b", "c")
+        self.outputs.update({text: ConversionOutput(text.upper(), ()) for text in texts})
+        presenter = self._presenter()
+        for text in texts:
+            presenter.convert_for_export(text, **self._export_callbacks())
+
+        for index in range(len(texts)):
+            self.threads[index].run()
+            self.calls.run_next()
+
+        self.assertEqual(
+            [event for event in self.events if event[0] in ("convert", "on_success")],
+            [("convert", "first"), ("on_success", "FIRST"), ("convert", "a"), ("on_success", "A")]
+            + [("convert", "b"), ("on_success", "B"), ("convert", "c"), ("on_success", "C")],
+        )
+        self.assertEqual([timer.stopped for timer in self.timers.timers], [True, True, True, True])
+        self.assertFalse(presenter.is_running())
+
+    def test_queue_drains_after_a_failed_completion(self) -> None:
+        self.outputs.update(
+            {"source": ConversionStageError("translation", RuntimeError("boom")), "doc text": ConversionOutput("export", ())}
+        )
+        presenter = self._presenter()
+        presenter.convert()
         presenter.convert_for_export("doc text", **self._export_callbacks())
         self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [("show_error", _("Translation failed: {error}").format(error="boom"), _("Error"))]
+            + self._started(2),
+        )
+
+    def test_request_during_a_completion_waits_until_it_returns(self) -> None:
+        # An Export All step's CallAfter runs inside the modal box of a completion: it queues,
+        # so a second box never opens on top of the first (F-9 D4).
+        self.outputs.update({"first": ConversionOutput("1", ()), "second": ConversionOutput("2", ())})
+        presenter = self._presenter()
+
+        def first_done(output) -> None:
+            self.events.append(("on_success", output.display_text))
+            presenter.convert_for_export("second", **self._export_callbacks())
+            self.events.append(("callback returns",))
+
+        presenter.convert_for_export("first", on_success=first_done, on_error=self.fail)
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end() + [("on_success", "1"), ("build_request", "second"), ("callback returns",)] + self._started(2),
+        )
+
+    def test_queue_drains_when_a_completion_raises(self) -> None:
+        self.outputs.update({"first": ConversionOutput("1", ()), "second": ConversionOutput("2", ())})
+        presenter = self._presenter()
+
+        def first_done(_output) -> None:
+            raise RuntimeError("callback boom")
+
+        presenter.convert_for_export("first", on_success=first_done, on_error=self.fail)
+        presenter.convert_for_export("second", **self._export_callbacks())
+        self.threads[0].run()
+        self._take()
+
+        with self.assertRaisesRegex(RuntimeError, "callback boom"):
+            self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end() + self._started(2))
+        self.assertTrue(presenter.is_running())
+
+    def test_convert_returns_while_a_job_is_queued_or_in_the_delivery_gap(self) -> None:
+        self.outputs.update(
+            {"source": ConversionOutput("⠎", ()), "first": ConversionOutput("1", ()), "second": ConversionOutput("2", ())}
+        )
+        presenter = self._presenter()
+        presenter.convert()
+        self.threads[0].run()
+        self._take()
+
+        # The worker has ended; its result is not delivered yet.
+        presenter.convert()
+
+        self.assertEqual(self._take(), [])
+        self.assertEqual(len(self.threads), 1)
+        self.calls.run_next()
+        self._take()
+
+        def first_done(output) -> None:
+            self.events.append(("on_success", output.display_text))
+            # "second" is queued.
+            presenter.convert()
+
+        presenter.convert_for_export("first", on_success=first_done, on_error=self.fail)
+        presenter.convert_for_export("second", **self._export_callbacks())
         self.threads[1].run()
         self._take()
 
         self.calls.run_next()
-        self.assertEqual(self._take(), [])
 
+        self.assertEqual(self._take(), self._end(2) + [("on_success", "1")] + self._started(3))
+        self.assertEqual(len(self.threads), 3)
+
+    def test_is_running_covers_the_delivery_gap_and_the_queue(self) -> None:
+        self.outputs.update({"first": ConversionOutput("1", ()), "second": ConversionOutput("2", ())})
+        seen: list = []
+        presenter = self._presenter()
+        for text in ("first", "second"):
+            presenter.convert_for_export(
+                text,
+                on_success=lambda _output, text=text: seen.append((text, presenter.is_running())),
+                on_error=self.fail,
+            )
+
+        self.threads[0].run()
+        self.assertTrue(presenter.is_running())
         self.calls.run_next()
-        self.assertEqual(self._take(), self._end(2) + [("on_success", "export")])
-        self.assertFalse(self.timers.timers[0].stopped)
+        self.threads[1].run()
+        self.assertTrue(presenter.is_running())
+        self.calls.run_next()
+
+        # Queued: running; a completion with an empty queue: not running.
+        self.assertEqual(seen, [("first", True), ("second", False)])
+        self.assertFalse(presenter.is_running())
 
     def test_synchronous_call_after_with_a_manually_run_thread_completes(self) -> None:
         self.outputs["source"] = ConversionOutput("⠎", ())

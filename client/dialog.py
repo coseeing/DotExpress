@@ -10,7 +10,6 @@ from dictionaries.entries import (
 	ENTRY_TYPE_LABELS,
 	ENTRY_TYPE_OPTIONS,
 	DictionaryEntry,
-	load_dictionary_entries,
 	validate_dictionary_entry,
 )
 from dictionaries.entry_list_model import DictionaryEntryListModel, DuplicateEntryError, EntryListUpdate
@@ -19,6 +18,7 @@ from dictionaries.manager import (
 	normalize_dictionary_name,
 )
 from dictionaries.presenter import DictionaryManagementActions
+from dictionaries.read_problems import DictionaryCount, read_dictionary_count
 from documents.workspace import normalize_document_name
 from i18n import N_, _
 from ui.dialog_base import ContextManagedDialog, NameDialogBase, NameDialogMessages
@@ -515,6 +515,8 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 		self._dictionary_names = list(actions.dictionary_names)
 		self._selected_name = selected_name
 		self._dictionary_counts: dict[str, int] = {}
+		# F-6: the dictionaries that could not be read, with the error (their count is not known).
+		self._dictionary_read_errors: dict[str, Exception] = {}
 		self.edit_dictionary_name: str | None = None
 		self._build_ui()
 		self.refresh_dictionaries(self._dictionary_names, selected_name)
@@ -572,14 +574,25 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 		if column == 0:
 			return name
 		if column == 1:
+			if name in self._dictionary_read_errors:
+				return _("Unreadable")
 			return str(self._dictionary_counts.get(name, 0))
 		raise ValueError(f"Unknown column: {column}")
 
 	def _load_dictionary_counts(self) -> None:
-		self._dictionary_counts = {
-			name: len(load_dictionary_entries(self._actions.dictionary_path(name)))
-			for name in self._dictionary_names
-		}
+		"""Read every dictionary on its own; one that cannot be read is kept with its error (F-6)."""
+		self._dictionary_counts = {}
+		self._dictionary_read_errors = {}
+		for name in self._dictionary_names:
+			self._store_count(name, read_dictionary_count(self._actions.dictionary_path(name)))
+
+	def _store_count(self, name: str, count: DictionaryCount) -> None:
+		if count.error is None:
+			self._dictionary_counts[name] = count.entries
+			self._dictionary_read_errors.pop(name, None)
+		else:
+			self._dictionary_counts.pop(name, None)
+			self._dictionary_read_errors[name] = count.error
 
 	def refresh_dictionaries(
 		self,
@@ -603,7 +616,7 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 		available_width = max(0, self.list_ctrl.GetClientSize().width)
 		if available_width == 0:
 			return
-		count_text_width = self.list_ctrl.GetTextExtent(_("Entries"))[0]
+		count_text_width = max(self.list_ctrl.GetTextExtent(label)[0] for label in (_("Entries"), _("Unreadable")))
 		count_width = min(available_width, max(96, count_text_width + 32))
 		name_width = max(0, available_width - count_width)
 		self.list_ctrl.SetColumnWidth(0, name_width)

@@ -1,5 +1,6 @@
 import csv
 import inspect
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,10 +8,21 @@ from unittest.mock import MagicMock, Mock, patch
 
 from dictionaries.presenter import DictionaryManagementView
 from tests import wx_stub
+from tests.file_log_isolation import isolate_file_logs
+from tests.unreadable_dictionary_files import BIG5, LATE_BIG5, READABLE, UTF16
+from tests.windows_file_handles import hold_open
 
 
 dialog, _DIALOG_SCOPE = wx_stub.load_speech_dialog()
-setUpModule = _DIALOG_SCOPE.activate
+LOGGER = "dotexpress.gui"
+
+
+def setUpModule():
+	_DIALOG_SCOPE.activate()
+	# F-6: counting a dictionary that cannot be read logs to dotexpress.gui (gui.log).
+	unittest.addModuleCleanup(isolate_file_logs(LOGGER))
+
+
 tearDownModule = _DIALOG_SCOPE.deactivate
 
 
@@ -98,6 +110,7 @@ def _make_dialog(dictionary_dir, names, actions=None):
 	target._actions = actions if actions is not None else _FakeActions(dictionary_dir, names)
 	target._dictionary_names = list(names)
 	target._dictionary_counts = {}
+	target._dictionary_read_errors = {}
 	target._selected_name = names[0] if names else ""
 	target.list_ctrl = _FakeListCtrl()
 	target.add_button = Mock()
@@ -179,6 +192,118 @@ class DictionaryManagementVirtualListTest(unittest.TestCase):
 
 		with self.assertRaisesRegex(ValueError, "Unknown column"):
 			target._get_item_text(0, 2)
+
+
+class _DictionaryFilesTestCase(unittest.TestCase):
+	"""Dictionary files in a temporary folder (F-6)."""
+
+	def setUp(self):
+		temp_dir = tempfile.TemporaryDirectory()
+		self.addCleanup(temp_dir.cleanup)
+		self.root = Path(temp_dir.name)
+
+	def write(self, name, data):
+		(self.root / f"{name}.csv").write_bytes(data)
+
+	def counts(self, target):
+		return [target._get_item_text(index, 1) for index in range(target.list_ctrl.item_count)]
+
+
+class UnreadableDictionaryCountTest(_DictionaryFilesTestCase):
+	"""F-6 (D2): a dictionary that cannot be read shows "Unreadable"; the others keep their counts."""
+
+	def test_unreadable_dictionary_shows_unreadable_and_the_others_their_counts(self):
+		self.write("alpha", READABLE)
+		self.write("big5", BIG5)
+		self.write("default", b"text,braille,type\r\n")
+		names = ["alpha", "big5", "default"]
+		target = _make_dialog(self.root, names)
+
+		with self.assertLogs(LOGGER, level="ERROR"):
+			target.refresh_dictionaries(names, "default")
+
+		self.assertEqual(target.list_ctrl.item_count, 3)
+		self.assertEqual([target._get_item_text(index, 0) for index in range(3)], names)
+		self.assertEqual(self.counts(target), ["1", dialog._("Unreadable"), "0"])
+		self.assertEqual(target._dictionary_counts, {"alpha": 1, "default": 0})
+		self.assertEqual(list(target._dictionary_read_errors), ["big5"])
+		self.assertIsInstance(target._dictionary_read_errors["big5"], UnicodeDecodeError)
+		self.assertEqual(target.list_ctrl.selected, 2)
+
+	def test_refresh_after_an_action_keeps_names_counts_and_item_count_consistent(self):
+		# Before F-6 the refresh raised after taking the new names: the list kept the old
+		# item count and counts, and nothing was shown.
+		self.write("alpha", READABLE)
+		self.write("default", b"text,braille,type\r\n")
+		actions = _FakeActions(self.root, ["alpha", "big5", "default"], results={"import": "big5"})
+		target = _make_dialog(self.root, ["alpha", "default"], actions)
+		target.refresh_dictionaries(["alpha", "default"], "default")
+		self.write("big5", LATE_BIG5)
+
+		with self.assertLogs(LOGGER, level="ERROR"):
+			target._on_import_clicked(None)
+
+		self.assertEqual(target._dictionary_names, ["alpha", "big5", "default"])
+		self.assertEqual(target.list_ctrl.item_count, 3)
+		self.assertEqual(self.counts(target), ["1", dialog._("Unreadable"), "0"])
+		self.assertEqual(target.list_ctrl.selected, 1)
+
+	def test_each_unreadable_dictionary_is_logged(self):
+		self.write("alpha", READABLE)
+		self.write("big5", BIG5)
+		self.write("utf16", UTF16)
+		names = ["alpha", "big5", "utf16"]
+		target = _make_dialog(self.root, names)
+
+		with self.assertLogs(LOGGER, level="ERROR") as logs:
+			target.refresh_dictionaries(names, "alpha")
+
+		errors = target._dictionary_read_errors
+		self.assertEqual(
+			[record.getMessage() for record in logs.records],
+			[
+				f'Cannot read dictionary "big5.csv": UnicodeDecodeError: {errors["big5"]}',
+				f'Cannot read dictionary "utf16.csv": UnicodeDecodeError: {errors["utf16"]}',
+			],
+		)
+		self.assertEqual([record.exc_info for record in logs.records], [None, None])
+
+	def test_unreadable_dictionaries_keep_delete_rename_and_export_enabled(self):
+		self.write("big5", BIG5)
+		self.write("default", BIG5)
+		names = ["big5", "default"]
+		for selected, removable in (("big5", True), ("default", False)):
+			with self.subTest(selected=selected):
+				target = _make_dialog(self.root, names)
+
+				with self.assertLogs(LOGGER, level="ERROR"):
+					target.refresh_dictionaries(names, selected)
+
+				target.delete_button.Enable.assert_called_with(removable)
+				target.rename_button.Enable.assert_called_with(removable)
+				target.edit_button.Enable.assert_called_with(True)
+				target.export_button.Enable.assert_called_with(True)
+
+	def test_count_column_fits_the_unreadable_label(self):
+		target = _make_dialog(".", ["alpha"])
+		unreadable = dialog._("Unreadable")
+		target.list_ctrl.GetTextExtent = lambda text: (200 if text == unreadable else 40, 16)
+
+		target._resize_columns()
+
+		self.assertEqual(target.list_ctrl.column_widths, {0: 500 - 232, 1: 232})
+
+	@unittest.skipUnless(sys.platform == "win32", "Windows file sharing")
+	def test_dictionary_held_open_without_sharing_is_unreadable(self):
+		self.write("alpha", READABLE)
+		hold_open(self, self.root / "alpha.csv", 0)
+		target = _make_dialog(self.root, ["alpha"])
+
+		with self.assertLogs(LOGGER, level="ERROR"):
+			target.refresh_dictionaries(["alpha"], "alpha")
+
+		self.assertEqual(self.counts(target), [dialog._("Unreadable")])
+		self.assertIsInstance(target._dictionary_read_errors["alpha"], PermissionError)
 
 
 class DictionaryManagementInteractionTest(unittest.TestCase):

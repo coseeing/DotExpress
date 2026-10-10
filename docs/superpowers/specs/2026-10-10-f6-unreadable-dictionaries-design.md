@@ -34,6 +34,16 @@ The plan (`docs/superpowers/plans/2026-10-10-f6-unreadable-dictionaries.md`, dry
 8. **Catalogs (D11).** `msgmerge` fuzzy-matches two new entries: `Why this dictionary cannot be read:` gets the msgstr of `The default dictionary cannot be deleted.` and `Dictionary "{name}" cannot be read.` that of `Dictionary "{name}" already exists.`; the other five are left empty. `The file cannot be read: {error}` is not fuzzy-matched. The plan fills all seven and drops both flags.
 9. **Windows verification.** Item 46 denies the user on a readable UTF-8 file `acl.csv` instead of `big5.csv`, so the reason can only come from the ACL. Item 47's `alpha.csv` is written by the script, not created through 新增. Items 42-45 run in one script (`item42.py`), 48 and 49 in `item48.py`, 50 and 51 in `item50.py`; the history folder is `docs/superpowers/history/2026-10-10-03-f6-unreadable-dictionaries/`. The Edit error box is a task dialog whose main instruction is the headline and whose content is the reason (the blank line splits them). Shift+Tab from the reason field lands on the selected list item. The plan's dry run ran the GUI scripts against a build of the same code: items 42-51 behaved as the table below says, and item 42 on N-f5b reproduced F-W12 (nothing opens, no `gui.log`).
 
+## Corrected after review (2026-10-10)
+
+The review (`docs/superpowers/history/2026-10-10-03-f6-unreadable-dictionaries/review_task.md`, verdict Ready) led to these changes; where they differ from the text below, this section wins.
+
+1. **The reason field selects all of its text again whenever it gets focus** (review M-1; D3). `_on_read_problem_focus`, bound to `EVT_SET_FOCUS` of the field, calls `SelectAll()` and skips the event. After an arrow key collapsed the selection, Shift+Tab to the list and Tab back select the whole reason again, so a screen reader reads all of it. A mouse click still places the caret where it clicks.
+2. **`read_problems` gets the `dotexpress.gui` logger when it logs** (review M-6; D8): `log_dictionary_read_error` calls `get_logger`, nothing does at import. Importing `dialog.py`, `dictionaries.presenter` or `dictionaries.read_problems` adds no file handler for `log/gui.log`. The log lines are unchanged.
+3. **The zh-TW `CANNOT_OPEN` reason says 你, not 您** (review M-7), like the other second-person strings of the catalog: `無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。` The table in User-Visible Strings shows the corrected text; the msgid is unchanged (364 translated, 0 fuzzy). The `#:` references of the template follow the moved lines of `dialog.py` and `read_problems.py`.
+4. **Two more test assertions** (review M-3): Edit on a dictionary that became unreadable leaves `_dictionary_counts` empty (D2), and Import refuses a file with a wrong header and Big5 after 17 KB of ASCII rows with the header `ValueError`, not a `UnicodeDecodeError` (D9: the header is checked first).
+5. **Counts.** Two new tests (1 and 2); the full suite is `Ran 1337`, `FAILED (errors=1, skipped=7)`, F-W6 only.
+
 ## Current State (verified 2026-10-10 on `fix/f6-unreadable-dictionaries`, HEAD `e46ff26`, Windows 11 26200, NTFS)
 
 `$PY` is `D:\workspace\DotExpress\client\.venv\Scripts\python.exe` (Python 3.13, wxPython 4.2.5 msw). `$SP` is the session scratchpad. The prototypes behind this spec are in `$SP\f6\` (`probe.py`, `today.py`, `proto.py`, `drive2.py`, `sizes.py`; not committed). They run against scratch copies in `%TEMP%` only.
@@ -262,7 +272,7 @@ New msgids (357 -> 364):
 | `Why this dictionary cannot be read:` | `無法讀取的原因：` | label of the reason field (`dialog.py`) |
 | `Dictionary "{name}" cannot be read.` | `無法讀取字典「{name}」。` | headline of the Edit error box (`read_problems.py`) |
 | `The file is not saved as UTF-8. Save it again in the "CSV UTF-8 (Comma delimited)" format, for example with Save As in Excel.` | `檔案不是以 UTF-8 儲存。請重新存成「CSV UTF-8 (逗號分隔)」格式，例如在 Excel 中使用「另存新檔」。` | reason `NOT_UTF8` |
-| `The file cannot be opened. It may be in use by another program, or you may not have permission to read it. Close the other program and try again.` | `無法開啟檔案。檔案可能正被其他程式使用，或您沒有讀取權限。請關閉其他程式後再試一次。` | reason `CANNOT_OPEN` |
+| `The file cannot be opened. It may be in use by another program, or you may not have permission to read it. Close the other program and try again.` | `無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。` | reason `CANNOT_OPEN` |
 | `The file is not a valid CSV file. Check for a quotation mark that is not closed. Details: {error}` | `檔案不是有效的 CSV 檔案。請檢查是否有未成對的引號。詳細資訊：{error}` | reason `INVALID_CSV` |
 | `The file cannot be read: {error}` | `無法讀取檔案：{error}` | reason `OTHER` |
 

@@ -59,7 +59,7 @@ class TranslationTest(unittest.TestCase):
             "例如在 Excel 中使用「另存新檔」。",
             "The file cannot be opened. It may be in use by another program, or you may not have "
             "permission to read it. Close the other program and try again.": "無法開啟檔案。檔案可能正被其他程式使用，"
-            "或您沒有讀取權限。請關閉其他程式後再試一次。",
+            "或你沒有讀取權限。請關閉其他程式後再試一次。",
             "The file is not a valid CSV file. Check for a quotation mark that is not closed. Details: {error}": (
                 "檔案不是有效的 CSV 檔案。請檢查是否有未成對的引號。詳細資訊：{error}"
             ),

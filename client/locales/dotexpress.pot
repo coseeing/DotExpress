@@ -908,7 +908,7 @@ msgstr ""
 msgid "Type"
 msgstr ""
 
-#: dialog.py:149 dialog.py:166 dialog.py:303 dialog.py:749
+#: dialog.py:149 dialog.py:166 dialog.py:303 dialog.py:755
 #: ui/conversion_presenter.py:133 ui/conversion_presenter.py:209
 msgid "Info"
 msgstr ""
@@ -988,15 +988,15 @@ msgstr ""
 msgid "Dictionary entries"
 msgstr ""
 
-#: dialog.py:377 dialog.py:560 ui/action_menu.py:29
+#: dialog.py:377 dialog.py:561 ui/action_menu.py:29
 msgid "Add"
 msgstr ""
 
-#: dialog.py:378 dialog.py:563
+#: dialog.py:378 dialog.py:564
 msgid "Edit"
 msgstr ""
 
-#: dialog.py:379 dialog.py:561 ui/action_menu.py:27
+#: dialog.py:379 dialog.py:562 ui/action_menu.py:27
 msgid "Delete"
 msgstr ""
 
@@ -1005,7 +1005,7 @@ msgstr ""
 msgid "Source text \"{identifier}\" already exists."
 msgstr ""
 
-#: dialog.py:491 dialog.py:500 dialog.py:752 documents/export_coordinator.py:85
+#: dialog.py:491 dialog.py:500 dialog.py:758 documents/export_coordinator.py:85
 #: documents/export_coordinator.py:94 documents/export_coordinator.py:103
 #: gui.py:448 gui.py:707 gui.py:1012 ui/conversion_presenter.py:196
 msgid "Error"
@@ -1024,7 +1024,7 @@ msgstr ""
 msgid "Dictionary"
 msgstr ""
 
-#: dialog.py:537 dialog.py:657
+#: dialog.py:537 dialog.py:663
 msgid "Entries"
 msgstr ""
 
@@ -1032,19 +1032,19 @@ msgstr ""
 msgid "Why this dictionary cannot be read:"
 msgstr ""
 
-#: dialog.py:562 ui/action_menu.py:30
+#: dialog.py:563 ui/action_menu.py:30
 msgid "Rename"
 msgstr ""
 
-#: dialog.py:564 ui/action_menu.py:31
+#: dialog.py:565 ui/action_menu.py:31
 msgid "Import"
 msgstr ""
 
-#: dialog.py:565 ui/action_menu.py:34
+#: dialog.py:566 ui/action_menu.py:34
 msgid "Export"
 msgstr ""
 
-#: dialog.py:599 dialog.py:657
+#: dialog.py:600 dialog.py:663
 msgid "Unreadable"
 msgstr ""
 
@@ -1126,31 +1126,31 @@ msgstr ""
 msgid "Dictionary \"{name}\" already exists."
 msgstr ""
 
-#: dictionaries/read_problems.py:47
+#: dictionaries/read_problems.py:45
 msgid ""
 "The file is not saved as UTF-8. Save it again in the \"CSV UTF-8 (Comma "
 "delimited)\" format, for example with Save As in Excel."
 msgstr ""
 
-#: dictionaries/read_problems.py:52
+#: dictionaries/read_problems.py:50
 msgid ""
 "The file cannot be opened. It may be in use by another program, or you may "
 "not have permission to read it. Close the other program and try again."
 msgstr ""
 
-#: dictionaries/read_problems.py:57
+#: dictionaries/read_problems.py:55
 #, python-brace-format
 msgid ""
 "The file is not a valid CSV file. Check for a quotation mark that is not "
 "closed. Details: {error}"
 msgstr ""
 
-#: dictionaries/read_problems.py:59
+#: dictionaries/read_problems.py:57
 #, python-brace-format
 msgid "The file cannot be read: {error}"
 msgstr ""
 
-#: dictionaries/read_problems.py:64
+#: dictionaries/read_problems.py:62
 #, python-brace-format
 msgid "Dictionary \"{name}\" cannot be read."
 msgstr ""

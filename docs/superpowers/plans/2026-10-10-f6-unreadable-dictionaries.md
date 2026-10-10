@@ -3410,3 +3410,9 @@ git rev-parse HEAD:client
 ```
 
 Expected: the eight files in the `--stat`, no `status` output, and the Task 4 tree id `e995d5444d769da21245201c3771bb27d9026edc` (the commit touches no file under `client/`). Do not merge `main` or push; the orchestrator decides.
+
+## Implementation Notes (2026-10-10)
+
+Tasks 0-6 were executed in the main checkout as written, with no deviation from the dry run: every red and green output, `Ran` count, catalog step and expected block matched. The committed `HEAD:client` trees are the plan's: Task 1 (`36d863e`) `d20554f30b8331a9e113f481d695349b0288139a`, Task 2 (`99fda8a`) `290c21bd3c83c5a2f4cc48b73ab0da4ffb3f84d9`, Task 3 (`7cc1fd1`) `01e8a26c795433d8e5fd14d945b8d77c2067f4bb`, Task 4 (`6068661`, and Task 6's `2dc5328`) `e995d5444d769da21245201c3771bb27d9026edc`. The exe of Task 6 and every GUI result are in `docs/superpowers/history/2026-10-10-03-f6-unreadable-dictionaries/auto-results.md`.
+
+1. **Review fixes.** The review (`docs/superpowers/history/2026-10-10-03-f6-unreadable-dictionaries/review_task.md`, verdict Ready) found eight Minor items. M-1 (the reason field selects all again when it gets focus), M-3 (two test assertions that kill two surviving mutants), M-6 (`read_problems` gets its logger when it logs, not at import) and M-7 (the zh-TW `CANNOT_OPEN` reason says 你; this section) were fixed after the review, so the trees and counts above are no longer the branch head's: the full suite is `Ran 1337`, and the template's `#:` references follow the moved lines. The spec's "Corrected after review" lists the changes; the "修正記錄" section of the review file records each item and the rebuilt exe (`N-f6b`). The plan's blocks above keep the original text (for example 您 in Task 4) as the record of what was applied.

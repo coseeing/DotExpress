@@ -34,6 +34,16 @@ plan（`docs/superpowers/plans/2026-10-10-f6-unreadable-dictionaries.md`，在 s
 8. **翻譯檔（D11）。** `msgmerge` 把兩個新條目標成 fuzzy：`Why this dictionary cannot be read:` 拿到 `The default dictionary cannot be deleted.` 的 msgstr，`Dictionary "{name}" cannot be read.` 拿到 `Dictionary "{name}" already exists.` 的；其他五個留空。`The file cannot be read: {error}` 沒有被誤配。plan 補上七個 msgstr，並移除兩個 fuzzy 標記。
 9. **Windows 驗證。** 項目 46 改為對可讀的 UTF-8 檔 `acl.csv`（而不是 `big5.csv`）設定拒絕存取，讓原因只可能來自 ACL。項目 47 的 `alpha.csv` 由腳本寫入，不是透過「新增」建立。項目 42–45 在同一個腳本（`item42.py`）執行，48 與 49 在 `item48.py`，50 與 51 在 `item50.py`；history 資料夾是 `docs/superpowers/history/2026-10-10-03-f6-unreadable-dictionaries/`。「編輯」的錯誤框是 task dialog，標題句是主要指示、原因是內容（訊息中的空行把兩者分開）。在原因欄位按 Shift+Tab 會回到清單中選取的項目。plan 的 dry run 以同一份程式碼的 build 執行了 GUI 腳本：項目 42–51 的結果與下表相同，在 N-f5b 上執行項目 42 則重現了 F-W12（什麼都沒開，也沒有 `gui.log`）。
 
+## 審查後的修正（2026-10-10）
+
+審查（`docs/superpowers/history/2026-10-10-03-f6-unreadable-dictionaries/review_task.md`，結論 Ready）帶來以下修改；與下文不同之處，以本節為準。
+
+1. **原因欄位每次取得焦點時都重新全選**（審查 M-1；D3）。綁在欄位 `EVT_SET_FOCUS` 的 `_on_read_problem_focus` 呼叫 `SelectAll()` 並 skip 事件。方向鍵把選取折疊之後，按 Shift+Tab 回清單再按 Tab 回來，整段原因又被選取，螢幕報讀器會讀出全文。用滑鼠點仍會把游標放在點的位置。
+2. **`read_problems` 在記錄時才取得 `dotexpress.gui` logger**（審查 M-6；D8）：由 `log_dictionary_read_error` 呼叫 `get_logger`，import 時不呼叫。import `dialog.py`、`dictionaries.presenter` 或 `dictionaries.read_problems` 都不會加上寫 `log/gui.log` 的 file handler。log 的內容不變。
+3. **zh-TW 的 `CANNOT_OPEN` 原因用「你」，不用「您」**（審查 M-7），與 catalog 其他第二人稱字串一致：`無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。`「使用者可見字串」的表格已是修正後的文字；msgid 不變（364 個已翻譯、0 fuzzy）。模板的 `#:` 參照跟著 `dialog.py` 與 `read_problems.py` 移動的行號更新。
+4. **多兩個測試斷言**（審查 M-3）：在變得讀不到的字典上按「編輯」之後，`_dictionary_counts` 是空的（D2）；匯入表頭錯誤、且 17 KB 的 ASCII 列之後才有 Big5 的檔案時，拒絕的是表頭的 `ValueError`，不是 `UnicodeDecodeError`（D9：先檢查表頭）。
+5. **數量。** 新增兩個測試（第 1、2 點）；完整套件為 `Ran 1337`、`FAILED (errors=1, skipped=7)`，只有 F-W6。
+
 ## 現況（2026-10-10 於 `fix/f6-unreadable-dictionaries` 驗證，HEAD `e46ff26`，Windows 11 26200，NTFS）
 
 `$PY` 是 `D:\workspace\DotExpress\client\.venv\Scripts\python.exe`（Python 3.13，wxPython 4.2.5 msw）。`$SP` 是本 session 的 scratchpad。本規格依據的原型在 `$SP\f6\`（`probe.py`、`today.py`、`proto.py`、`drive2.py`、`sizes.py`；不 commit），只對 `%TEMP%` 中的 scratch 複本執行。
@@ -262,7 +272,7 @@ D1、D8。模組 docstring："Why a dictionary file cannot be read, in words the
 | `Why this dictionary cannot be read:` | `無法讀取的原因：` | 原因欄位的標籤（`dialog.py`） |
 | `Dictionary "{name}" cannot be read.` | `無法讀取字典「{name}」。` | 「編輯」錯誤訊息框的第一句（`read_problems.py`） |
 | `The file is not saved as UTF-8. Save it again in the "CSV UTF-8 (Comma delimited)" format, for example with Save As in Excel.` | `檔案不是以 UTF-8 儲存。請重新存成「CSV UTF-8 (逗號分隔)」格式，例如在 Excel 中使用「另存新檔」。` | 原因 `NOT_UTF8` |
-| `The file cannot be opened. It may be in use by another program, or you may not have permission to read it. Close the other program and try again.` | `無法開啟檔案。檔案可能正被其他程式使用，或您沒有讀取權限。請關閉其他程式後再試一次。` | 原因 `CANNOT_OPEN` |
+| `The file cannot be opened. It may be in use by another program, or you may not have permission to read it. Close the other program and try again.` | `無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。` | 原因 `CANNOT_OPEN` |
 | `The file is not a valid CSV file. Check for a quotation mark that is not closed. Details: {error}` | `檔案不是有效的 CSV 檔案。請檢查是否有未成對的引號。詳細資訊：{error}` | 原因 `INVALID_CSV` |
 | `The file cannot be read: {error}` | `無法讀取檔案：{error}` | 原因 `OTHER` |
 

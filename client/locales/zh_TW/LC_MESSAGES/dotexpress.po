@@ -933,7 +933,8 @@ msgid "Type"
 msgstr "類型"
 
 #: dialog.py:154 dialog.py:171 dialog.py:309 dialog.py:761
-#: ui/conversion_presenter.py:133 ui/conversion_presenter.py:209
+#: ui/conversion_presenter.py:170 ui/conversion_presenter.py:289
+#: ui/conversion_presenter.py:306
 msgid "Info"
 msgstr "資訊"
 
@@ -1029,9 +1030,10 @@ msgstr "刪除"
 msgid "Source text \"{identifier}\" already exists."
 msgstr "來源文字「{identifier}」已存在。"
 
-#: dialog.py:497 dialog.py:506 dialog.py:764 documents/export_coordinator.py:89
-#: documents/export_coordinator.py:98 documents/export_coordinator.py:119
-#: gui.py:454 gui.py:729 gui.py:1045 ui/conversion_presenter.py:196
+#: dialog.py:497 dialog.py:506 dialog.py:764
+#: documents/export_coordinator.py:103 documents/export_coordinator.py:113
+#: documents/export_coordinator.py:135 gui.py:454 gui.py:729 gui.py:1045
+#: ui/conversion_presenter.py:273
 msgid "Error"
 msgstr "錯誤"
 
@@ -1183,16 +1185,16 @@ msgstr "無法讀取檔案：{error}"
 msgid "Dictionary \"{name}\" cannot be read."
 msgstr "無法讀取字典「{name}」。"
 
-#: documents/export_coordinator.py:119
+#: documents/export_coordinator.py:135
 #, python-brace-format
 msgid "Failed to export document: {error}"
 msgstr "匯出文件失敗：{error}"
 
-#: documents/export_coordinator.py:121
+#: documents/export_coordinator.py:137
 msgid "The document was exported successfully."
 msgstr "文件已成功匯出。"
 
-#: documents/export_coordinator.py:121
+#: documents/export_coordinator.py:137
 msgid "Export Complete"
 msgstr "匯出完成"
 
@@ -1260,11 +1262,11 @@ msgstr "可按快顯鍵開啟選單。"
 msgid "Braille Result"
 msgstr "點字結果"
 
-#: gui.py:249 gui.py:1109
+#: gui.py:249 gui.py:1111
 msgid "File"
 msgstr "檔案"
 
-#: gui.py:262 gui.py:1109 settings/dialogs.py:357
+#: gui.py:262 gui.py:1111 settings/dialogs.py:357
 msgid "Translation"
 msgstr "轉譯"
 
@@ -1426,25 +1428,25 @@ msgstr "匯入問題"
 msgid "Some files were skipped during import."
 msgstr "匯入時有部分檔案被略過。"
 
-#: gui.py:1153
+#: gui.py:1164
 msgid "Export Document"
 msgstr "匯出文件"
 
-#: gui.py:1163
+#: gui.py:1174
 msgid "Export All Documents"
 msgstr "匯出全部文件"
 
-#: gui.py:1172
+#: gui.py:1183
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr "目的資料夾中已有一個或多個檔案會被覆蓋。要全部覆蓋嗎？"
 
-#: gui.py:1175
+#: gui.py:1186
 msgid "Confirm Overwrite"
 msgstr "確認覆蓋"
 
-#: gui.py:1181
+#: gui.py:1192
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1461,7 +1463,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: gui.py:1184
+#: gui.py:1195
 msgid "Startup Error"
 msgstr "啟動錯誤"
 
@@ -1597,28 +1599,33 @@ msgstr "刪除全部"
 msgid "Export All"
 msgstr "匯出全部"
 
-#: ui/conversion_presenter.py:79
+#: ui/conversion_presenter.py:111
 msgid "Please select a translation table first."
 msgstr "請先選擇轉譯表。"
 
-#: ui/conversion_presenter.py:84
+#: ui/conversion_presenter.py:116
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr "ASCII 轉換失敗：{error}"
 
-#: ui/conversion_presenter.py:85
+#: ui/conversion_presenter.py:117
 #, python-brace-format
 msgid "Text processing failed: {error}"
 msgstr "文字處理失敗：{error}"
 
-#: ui/conversion_presenter.py:87
+#: ui/conversion_presenter.py:119
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr "轉譯失敗：{error}"
 
-#: ui/conversion_presenter.py:209
+#: ui/conversion_presenter.py:289
 msgid "Conversion completed."
 msgstr "轉換完成。"
+
+#: ui/conversion_presenter.py:305
+#, python-brace-format
+msgid "Conversion completed. The result was saved to document \"{name}\"."
+msgstr "轉換完成。結果已儲存到文件「{name}」。"
 
 #: ui/translation_menu.py:8
 msgid "Convert"

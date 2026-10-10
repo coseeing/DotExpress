@@ -15,8 +15,15 @@ from documents.controller import DocumentController
 from documents.workspace import Document
 from i18n import _
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
+from tests.file_log_isolation import isolate_file_logs
 
 PRESENTER_PATH = Path(__file__).resolve().parents[1] / "ui" / "conversion_presenter.py"
+LOGGER = "dotexpress.gui"
+
+
+def setUpModule() -> None:
+    # A discarded result is logged to gui.log (F-9 D3); keep the real file out of it.
+    unittest.addModuleCleanup(isolate_file_logs(LOGGER))
 
 
 class RecordingConversionView:
@@ -25,6 +32,7 @@ class RecordingConversionView:
     def __init__(self, events: list, source_text: str = ""):
         self.events = events
         self.source_text = source_text
+        self.save_result = True
 
     def get_source_text(self) -> str:
         self.events.append(("get_source_text",))
@@ -50,6 +58,10 @@ class RecordingConversionView:
 
     def show_error(self, message: str, caption: str) -> None:
         self.events.append(("show_error", message, caption))
+
+    def save_converted_document(self, document: Document) -> bool:
+        self.events.append(("save_converted_document", document))
+        return self.save_result
 
 
 class ConversionPresenterTest(unittest.TestCase):
@@ -118,6 +130,21 @@ class ConversionPresenterTest(unittest.TestCase):
 
     def _end(self, timer_number: int = 1) -> list:
         return [("timer.Stop", timer_number), ("close_converting_dialog",), ("busy", False)]
+
+    def _switch_to(self, name: str) -> None:
+        """Switch documents as the frame does: store the open document's editor text, then open ``name``."""
+        open_document = self.documents.get_document(self.documents.open_document_name)
+        if open_document is not None:
+            self.documents.replace_document(Document(open_document.name, self.view.source_text, open_document.braille))
+        document = self.documents.open_document(name)
+        self.view.source_text = document.text if document is not None else ""
+
+    def _saved_to(self, name: str) -> tuple:
+        return (
+            "show_info",
+            _('Conversion completed. The result was saved to document "{name}".').format(name=name),
+            _("Info"),
+        )
 
     # --- module helpers ------------------------------------------------------
 
@@ -320,6 +347,139 @@ class ConversionPresenterTest(unittest.TestCase):
         )
         self.assertEqual(self.documents.documents, [Document("alpha", "old", None), Document("beta", "b", "⠃")])
         self.assertEqual(self.documents.dual_view_results_by_document, {"ghost": ("segment",)})
+
+    # --- the document that started the conversion (F-9 D1-D3) -------------------
+
+    def test_result_goes_to_the_document_that_started_the_conversion(self) -> None:
+        # Was P1-4 defect 1: the result went to the document open at completion.
+        self.outputs["source"] = ConversionOutput("⠎", ("result",), ("segment",))
+        presenter = self._presenter()
+        presenter.convert()
+        self._switch_to("beta")
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end() + [("save_converted_document", Document("alpha", "source", "⠎")), self._saved_to("alpha")],
+        )
+        self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
+        self.assertEqual(self.documents.get_document("beta"), Document("beta", "b", "⠃"))
+        self.assertEqual(self.documents.open_document_name, "beta")
+
+    def test_result_for_the_open_document_follows_todays_path(self) -> None:
+        self.outputs["source"] = ConversionOutput("⠎", ("result",), ("segment",))
+        presenter = self._presenter()
+        presenter.convert()
+        self._switch_to("beta")
+        self._switch_to("alpha")
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [
+                ("show_conversion_output", "⠎"),
+                ("get_source_text",),
+                ("refresh_dual_view",),
+                ("show_info", _("Conversion completed."), _("Info")),
+            ],
+        )
+        self.assertEqual(self.documents.documents, [Document("alpha", "source", "⠎"), Document("beta", "b", "⠃")])
+        self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
+
+    def test_failed_save_of_the_originating_document_shows_no_completion_message(self) -> None:
+        # The view has shown the save error; the next queued job still starts.
+        self.outputs.update({"source": ConversionOutput("⠎", (), ("segment",)), "doc text": ConversionOutput("⠙", ())})
+        self.view.save_result = False
+        presenter = self._presenter()
+        presenter.convert()
+        presenter.convert_for_export("doc text", **self._export_callbacks())
+        self._switch_to("beta")
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [("save_converted_document", Document("alpha", "source", "⠎"))]
+            + [("busy", True), ("close_converting_dialog",), ("call_later", CONVERTING_DIALOG_DELAY_MS, (2,))],
+        )
+        self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
+
+    def _assert_discarded(self, presenter: ConversionPresenter, reason: str) -> None:
+        """Deliver the running job's result and check that it was dropped with one log line."""
+        self.threads[-1].run()
+        self._take()
+        documents_before = list(self.documents.documents)
+        with self.assertLogs(LOGGER, level="ERROR") as logs:
+            self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end(len(self.timers.timers)))
+        self.assertEqual([record.getMessage() for record in logs.records], [f"Discarded a conversion result: {reason}"])
+        self.assertEqual(self.documents.documents, documents_before)
+        self.assertEqual(self.documents.dual_view_results_by_document, {})
+        self.assertFalse(presenter.is_running())
+
+    def test_result_for_a_document_that_is_gone_is_discarded_and_logged(self) -> None:
+        # None of these can happen while a job runs today (the list and the File menu are
+        # disabled); the result is not guessed onto another document (F-9 D3, O2).
+        for case, remove in (
+            ("deleted", lambda: self.documents.delete_document("alpha")),
+            ("renamed", lambda: self.documents.rename_document("alpha", "gamma")),
+            ("delete all", lambda: self.documents.delete_all_documents()),
+        ):
+            with self.subTest(case=case):
+                self.setUp()
+                self.outputs["source"] = ConversionOutput("⠎", (), ("segment",))
+                presenter = self._presenter()
+                presenter.convert()
+                self._switch_to("beta")
+                remove()
+
+                self._assert_discarded(presenter, 'document "alpha" no longer exists')
+
+    def test_result_for_a_changed_text_is_discarded_and_logged(self) -> None:
+        self.outputs["source"] = ConversionOutput("⠎", (), ("segment",))
+        presenter = self._presenter()
+        presenter.convert()
+        self._switch_to("beta")
+        self.documents.replace_document(Document("alpha", "another text", None))
+
+        self._assert_discarded(presenter, 'the text of document "alpha" changed')
+
+    def test_result_without_a_starting_document(self) -> None:
+        # No document open at the start: today's output-only path if none is open at the end;
+        # if one was opened meanwhile, the result is discarded rather than given to it.
+        self.documents.open_name = None
+        self.outputs["source"] = ConversionOutput("⠎", (), ("segment",))
+        presenter = self._presenter()
+        presenter.convert()
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [
+                ("show_conversion_output", "⠎"),
+                ("refresh_dual_view",),
+                ("show_info", _("Conversion completed."), _("Info")),
+            ],
+        )
+
+        presenter.convert()
+        self.documents.open_document("beta")
+        self._assert_discarded(presenter, 'document "beta" was opened during a conversion without a document')
 
     def test_manual_failure_shows_error_after_busy_off(self) -> None:
         self.outputs["source"] = ConversionStageError("text_processing", RuntimeError("script boom"))

@@ -1143,6 +1143,15 @@ class BrailleFrame(wx.Frame):
 	def show_error(self, message: str, caption: str) -> None:
 		message_box(message, caption, wx.OK | wx.ICON_ERROR, parent=self)
 
+	def save_converted_document(self, document: Document) -> bool:
+		"""Save a conversion result for a document that is not open (F-9 D1); failures as every save."""
+		try:
+			self._workspace_service.save_document(document)
+		except Exception as exc:
+			self._show_document_save_error(exc)
+			return False
+		return True
+
 	# --- ExportView (documents/export_coordinator.py) -----------------------
 
 	def show_warning(self, message: str, caption: str) -> None:

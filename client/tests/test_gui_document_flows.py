@@ -3446,6 +3446,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
     CHARSET_MAPS = {"latinCharactersLanguage": "en", "CJKCharactersLanguage": "zh"}
     CTRL_S = 83
     CTRL_TAB = 9
+    CTRL_O = 79
 
     def setUp(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -3640,6 +3641,9 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
 
     def _completed(self, frame) -> tuple:
         return self._info(frame, gui._("Conversion completed."))
+
+    def _saved_to(self, frame, name: str) -> tuple:
+        return self._info(frame, gui._('Conversion completed. The result was saved to document "{name}".').format(name=name))
 
     def _exported(self, frame) -> tuple:
         return self._info(frame, gui._("The document was exported successfully."), gui._("Export Complete"))
@@ -4345,7 +4349,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._boxes(), [self._exported_box(), self._exported_box()])
         self.assertEqual(self.calls.pending, [])
 
-    def test_ctrl_tab_during_manual_conversion_sends_result_to_new_document(self) -> None:
+    def test_ctrl_tab_during_manual_conversion_sends_result_to_the_starting_document(self) -> None:
         segment = _dual_view_segment("a", "⠁")
         frame = self._make_frame([Document("alpha", "alpha text", None), Document("beta", "beta text", "⠃")], "alpha")
         self.outputs["alpha text"] = ConversionOutput("⠁⠁", ("result",), (segment,))
@@ -4369,18 +4373,148 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.threads[0].run()
         self.calls.run_next()
 
-        # KNOWN BUG (P1-4 spec, defect 1): alpha's result lands in beta, the document open now.
+        # Was the P1-4 KNOWN BUG (defect 1): alpha's result landed in beta, the document open
+        # then, and the next save wrote it into beta.dep. Now it goes to alpha (F-9 D1, U1):
+        # beta's editors, the focus and the Dual View are left alone.
         self.assertEqual(
             self._take(),
             [("convert", "alpha text"), ("call_after",), ("timer.Stop", 1)]
             + self._busy(False)
+            + [self._saved_to(frame, "alpha")],
+        )
+        controller = frame._document_controller
+        self.assertEqual(controller.documents, [Document("alpha", "alpha text", "⠁⠁"), Document("beta", "beta text", "⠃")])
+        self.assertEqual(controller.dual_view_results_by_document, {"alpha": (segment,)})
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "alpha text", "⠁⠁"))
+        self.assertFalse((self.workspace / "beta.dep").exists())
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("beta text", "⠃"))
+
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB))
+
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("alpha text", "⠁⠁"))
+        self.assertEqual(load_document_package(self.workspace / "beta.dep"), Document("beta", "beta text", "⠃"))
+
+    def test_ctrl_tab_away_and_back_during_conversion_keeps_todays_completion(self) -> None:
+        segment = _dual_view_segment("a", "⠁")
+        frame = self._make_frame([Document("alpha", "alpha text", None), Document("beta", "beta text", "⠃")], "alpha")
+        self.outputs["alpha text"] = ConversionOutput("⠁⠁", ("result",), (segment,))
+
+        frame.on_convert(None)
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB))
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB, shift=True))
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            [("timer.Stop", 1)]
+            + self._busy(False)
             + [("set", "output", "⠁⠁"), ("focus", "output"), ("dual_view.refresh",), self._completed(frame)],
         )
+        controller = frame._document_controller
+        self.assertEqual(controller.documents, [Document("alpha", "alpha text", "⠁⠁"), Document("beta", "beta text", "⠃")])
+        self.assertEqual(controller.dual_view_results_by_document, {"alpha": (segment,)})
+        # Case (a) writes nothing at completion; the next save does, as before.
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "alpha text", None))
+
+    def _import_dialog_class(self, paths: list[Path]):
+        test = self
+
+        class FakeImportFileDialog:
+            def __init__(self, parent, title, wildcard="", style=0):
+                test.events.append(("ImportDialog", title))
+                self.filter_index = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+            def SetFilterIndex(self, index):
+                self.filter_index = index
+
+            def GetFilterIndex(self):
+                return self.filter_index
+
+            def ShowModal(self):
+                return gui.wx.ID_OK
+
+            def GetPaths(self):
+                return [str(path) for path in paths]
+
+        return FakeImportFileDialog
+
+    def test_import_during_manual_conversion_does_not_receive_the_result(self) -> None:
+        # Was P1-4 defect 1 through Ctrl+O: the imported document, open at completion, got the result.
+        source = self.root / "imported.txt"
+        source.write_text("imported text", encoding="utf-8")
+        frame = self._make_frame([Document("alpha", "alpha text", None)], "alpha")
+        self.outputs["alpha text"] = ConversionOutput("⠁⠁", ("result",), (_dual_view_segment("a", "⠁"),))
+
+        frame.on_convert(None)
+        with patch.object(gui.wx, "FileDialog", self._import_dialog_class([source])):
+            frame.on_char_hook(_KeyEvent(self.CTRL_O))
+        self.assertEqual(frame._document_controller.open_document_name, "imported")
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._saved_to(frame, "alpha")])
         self.assertEqual(
             frame._document_controller.documents,
-            [Document("alpha", "alpha text", None), Document("beta", "beta text", "⠁⠁")],
+            [Document("alpha", "alpha text", "⠁⠁"), Document("imported", "imported text", None)],
         )
-        self.assertEqual(frame._document_controller.dual_view_results_by_document, {"beta": (segment,)})
+        self.assertEqual(load_document_package(self.workspace / "imported.dep"), Document("imported", "imported text", None))
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "alpha text", "⠁⠁"))
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("imported text", ""))
+
+    def test_failed_save_of_the_starting_document_reports_the_save_error(self) -> None:
+        frame = self._make_frame([Document("alpha", "alpha text", None), Document("beta", "beta text", "⠃")], "alpha")
+        self.outputs["alpha text"] = ConversionOutput("⠁⠁", ())
+        error = PermissionError(errno.EACCES, "injected")
+
+        frame.on_convert(None)
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB))
+        self.threads[0].run()
+        self._take()
+        with patch("os.replace", side_effect=error):
+            self.calls.run_next()
+
+        # The usual save error and no completion box (F-9 D1); the result stays in memory.
+        self.assertEqual(
+            self._take(),
+            [("timer.Stop", 1)]
+            + self._busy(False)
+            + [self._error(frame, gui._("Failed to save document: {error}").format(error=error))],
+        )
+        self.assertEqual(frame._document_controller.get_document("alpha"), Document("alpha", "alpha text", "⠁⠁"))
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "alpha text", None))
+
+        # Opening alpha shows the result; switching away retries the write.
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB))
+        self.assertEqual(frame.output_txt.value, "⠁⠁")
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB))
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "alpha text", "⠁⠁"))
+
+    def test_switch_away_stores_exactly_the_converted_text(self) -> None:
+        # The text guard of F-9 D3 compares the memory text with the converted text; both come
+        # from the same editor read, which replaces a lone surrogate (F-7), so the result is kept.
+        replaced = "A" + chr(0xFFFD) + "B"
+        frame = self._make_frame([Document("alpha", "a", None), Document("beta", "beta text", "⠃")], "alpha")
+        frame.input_txt.value = "A" + LONE_SURROGATE + "B"
+        self.outputs[replaced] = ConversionOutput("⠁", ())
+
+        frame.on_convert(None)
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB))
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._saved_to(frame, "alpha")])
+        self.assertEqual(frame._document_controller.get_document("alpha"), Document("alpha", replaced, "⠁"))
+        self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", replaced, "⠁"))
 
     def test_convert_between_export_all_steps_completes_before_the_next_step(self) -> None:
         frame = self._make_frame([Document("r1", "t1", "⠁"), Document("p1", "t2", None)], "r1")
@@ -4617,6 +4751,36 @@ class FrameViewMethodsTest(unittest.TestCase):
         frame.refresh_dual_view()
 
         frame._refresh_dual_view.assert_called_once_with()
+
+    def test_save_converted_document_reports_failures_like_every_save(self) -> None:
+        # F-9 D1: an OSError is shown; anything else is shown and logged (F-3, F-5).
+        frame = self._make_frame()
+        frame._workspace_service = Mock()
+        document = Document("alpha", "a", "⠁")
+        os_error, bug = OSError("disk full"), ValueError("injected")
+
+        frame._workspace_service.save_document.side_effect = os_error
+        with patch.object(gui, "message_box") as os_error_box, self.assertNoLogs("dotexpress.gui", "ERROR"):
+            self.assertFalse(frame.save_converted_document(document))
+        frame._workspace_service.save_document.side_effect = bug
+        with patch.object(gui, "message_box") as bug_box, self.assertLogs("dotexpress.gui", "ERROR") as logs:
+            self.assertFalse(frame.save_converted_document(document))
+
+        for box, error in ((os_error_box, os_error), (bug_box, bug)):
+            box.assert_called_once_with(
+                gui._("Failed to save document: {error}").format(error=error),
+                gui._("Error"),
+                gui.wx.OK | gui.wx.ICON_ERROR,
+                parent=frame,
+            )
+        self.assertEqual([record.getMessage() for record in logs.records], ["Unexpected error while saving a document"])
+        self.assertIs(logs.records[0].exc_info[1], bug)
+        frame._workspace_service.save_document.side_effect = None
+        with patch.object(gui, "message_box") as message_box:
+            self.assertTrue(frame.save_converted_document(document))
+
+        message_box.assert_not_called()
+        frame._workspace_service.save_document.assert_called_with(document)
 
     def test_message_methods_use_one_message_box_each(self) -> None:
         frame = self._make_frame()

@@ -109,6 +109,15 @@ class TranslationTest(unittest.TestCase):
             "\n\n轉換前請刪除或修改這些 \ufffd，否則每一個都會在點字中變成一段跳脫碼。",
         )
 
+    def test_conversion_result_saved_string_is_translated(self) -> None:
+        # F-9 (D2): a conversion result written to the document that started it while
+        # another document is open.
+        message = 'Conversion completed. The result was saved to document "{name}".'
+        translation = i18n.load_translation()
+
+        self.assertEqual(translation.gettext(message), "轉換完成。結果已儲存到文件「{name}」。")
+        self.assertEqual(translation.gettext(message).format(name="alpha"), "轉換完成。結果已儲存到文件「alpha」。")
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

@@ -1136,6 +1136,65 @@ class SaveOnlyWhenChangedTest(unittest.TestCase):
 
             self.assertEqual(self._disk(), before)
 
+    # --- save_document: a document that is not open (F-9 D1) -------------------
+    # A conversion result for a document that is no longer open is written at once; here
+    # alpha is open and the pending beta is not.
+
+    def _save_document(self, document: Document) -> tuple[Document | None, int]:
+        """Save ``document``; return what was saved and how many packages were written."""
+        with patch.object(workspace_service, "save_document_package", wraps=workspace_service.save_document_package) as save:
+            saved = self.service.save_document(document)
+        return saved, save.call_count
+
+    def test_save_document_writes_a_document_that_is_not_open(self) -> None:
+        saved, written = self._save_document(Document("beta", "b", "⠃"))
+
+        self.assertEqual((saved, written), (Document("beta", "b", "⠃"), 1))
+        self.assertEqual(self.controller.get_document("beta"), saved)
+        self.assertEqual(load_document_package(self._path("beta")), saved)
+        self.assertEqual(self.controller.open_document_name, "alpha")
+        # Recorded as written: opening beta and switching away does not write it again.
+        self.controller.open_document("beta")
+        self.assertEqual(self._save(text="b", braille="⠃"), 0)
+
+    def test_save_document_skips_an_unchanged_document(self) -> None:
+        before = self._disk("beta")
+
+        saved, written = self._save_document(Document("beta", "b", None))
+
+        self.assertEqual((saved, written), (Document("beta", "b", None), 0))
+        self.assertEqual(self._disk("beta"), before)
+
+    def test_save_document_failure_keeps_memory_and_the_package(self) -> None:
+        before = self._disk("beta")
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")):
+            with self.assertRaises(PermissionError):
+                self.service.save_document(Document("beta", "b", "⠃"))
+
+        self.assertEqual(self.controller.get_document("beta"), Document("beta", "b", "⠃"))
+        self.assertEqual(self._disk("beta"), before)
+        # The next save of beta retries the write.
+        self.assertEqual(self._save_document(Document("beta", "b", "⠃"))[1], 1)
+        self.assertEqual(load_document_package(self._path("beta")), Document("beta", "b", "⠃"))
+
+    def test_save_document_of_an_unknown_name_returns_none(self) -> None:
+        documents = list(self.controller.documents)
+
+        self.assertEqual(self._save_document(Document("ghost", "g", "⠛")), (None, 0))
+
+        self.assertEqual(self.controller.documents, documents)
+        self.assertFalse(self._path("ghost").exists())
+
+    def test_converted_braille_of_a_pending_document_is_saved(self) -> None:
+        # The editor path keeps a pending document's braille pending (prepare_document_for_save);
+        # save_document must not, or a converted result would be erased.
+        self._save_document(Document("beta", "b", "⠃"))
+
+        with zipfile.ZipFile(self._path("beta")) as archive:
+            self.assertEqual(sorted(archive.namelist()), ["beta.brl", "beta.txt"])
+            self.assertEqual(archive.read("beta.brl").decode("utf-8"), "⠃")
+
 
 class ReplacedNulCharactersTest(unittest.TestCase):
     """U+0000 in a package or an import reaches the controller as U+FFFD, counted once (F-8 D12)."""

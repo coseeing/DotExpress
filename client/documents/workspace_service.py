@@ -8,9 +8,11 @@ save leaves it as it was. Every rename stages the new package and moves the old 
 aside before installing it (``move_document_package``): a failure leaves exactly the
 old package, and a case-only rename (``Alpha`` to ``alpha``) is safe on a
 case-insensitive file system, where both names are the same file.
-Save writes only when the open document differs from what was last written to or
-loaded from its package; that record changes only after a successful write, so a
-failed save is retried by the next one.
+Save writes only when the document differs from what was last written to or loaded
+from its package; that record changes only after a successful write, so a failed save
+is retried by the next one. ``save_open_document`` saves the open document from the
+editors; ``save_document`` saves any listed document, such as a conversion result for
+a document that is no longer open (F-9).
 Add, Rename, Import and the default document never replace a package that is on disk
 but not listed, such as an invalid one kept at startup: its name counts as taken.
 Startup puts back a package that a crash during Save or Rename left only in a
@@ -188,7 +190,19 @@ class DocumentWorkspaceService:
         document = self._controller.get_document(self._controller.open_document_name)
         if document is None:
             return None
-        updated_document = prepare_document_for_save(document, text=text, braille=braille)
+        # A pending document's braille stays pending here: the editor shows none (F-5).
+        return self.save_document(prepare_document_for_save(document, text=text, braille=braille))
+
+    def save_document(self, document: Document) -> Document | None:
+        """Put ``document`` in memory, then write its package unless it already holds it (F-9 D1).
+
+        ``None`` if no listed document has its name. The braille is kept as given, also for
+        a document that was pending. Raises like ``save_document_package``; memory has the
+        new document then, and the next save of it retries the write.
+        """
+        if self._controller.get_document(document.name) is None:
+            return None
+        updated_document = _encodable(document)
         self._controller.replace_document(updated_document)
         if self._is_saved(updated_document):
             return updated_document

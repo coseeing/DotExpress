@@ -5,7 +5,7 @@ from unittest.mock import Mock, call, patch, sentinel
 from tests import wx_stub
 
 # The module that defines ConvertingDialog, loaded against stub wx.
-_SCOPE = wx_stub.StubScope(wx_stub.dialog_validation_stubs(), isolate=("dialog",))
+_SCOPE = wx_stub.StubScope(wx_stub.dialog_validation_stubs(), isolate=("dialog", "ui.message_box"))
 with _SCOPE.loading():
     import dialog as defining_module
 

@@ -286,6 +286,8 @@ class _EditorHarness:
         self.list: _FakeListCtrl | None = None
         self.ok_button = _FakeButton(self, "ok", "OK")
         self.cancel_button = _FakeButton(self, "cancel", "Cancel")
+        # The standard buttons of an older top-level window, such as an open Settings dialog (F-W9).
+        self.other_dialog_buttons: dict[int, _FakeButton] = {}
         self.script: list[tuple[int, DictionaryEntry | None]] = []
         self.entry_dialog_parents: list[object] = []
         self.message_box_parents: list[object] = []
@@ -303,7 +305,6 @@ class _EditorHarness:
             StaticText=self._static_text,
             TextCtrl=self._text_ctrl,
             Button=self._button,
-            MessageBox=self._message_box,
         )
 
     # construction
@@ -321,12 +322,14 @@ class _EditorHarness:
             stack.enter_context(patch.object(dialog, "wx", self.wx))
             stack.enter_context(patch.object(dialog, "CallbackVirtualListCtrl", self._list_ctrl))
             stack.enter_context(patch.object(dialog, "AddSymbolDialog", self._entry_dialog))
+            stack.enter_context(patch.object(dialog, "message_box", self._message_box))
             # Editor tests check the dialog and the saved bytes, not durability: every OK
             # would otherwise wait for a real fsync (40 in the trace replay alone).
             # tests.test_atomic_write keeps the real fsync.
             stack.enter_context(patch("os.fsync", _skip_fsync))
             editor = object.__new__(DictionaryEntriesDialog)
             editor.CreateButtonSizer = self._create_button_sizer
+            editor.FindWindow = self._find_own_window
             editor.FindWindowById = self._find_window_by_id
             editor.SetSizerAndFit = lambda _sizer: self.record("SetSizerAndFit")
             editor.GetParent = lambda: self.parent
@@ -378,8 +381,13 @@ class _EditorHarness:
         self.record("CreateButtonSizer", flags)
         return _FakeSizer()
 
-    def _find_window_by_id(self, window_id: int) -> _FakeButton | None:
+    def _find_own_window(self, window_id: int) -> _FakeButton | None:
+        """``wxWindow::FindWindow``: the editor and its children only."""
         return {ID_OK: self.ok_button, ID_CANCEL: self.cancel_button}.get(window_id)
+
+    def _find_window_by_id(self, window_id: int) -> _FakeButton | None:
+        """``wx.Window.FindWindowById`` without a parent: every top-level window, oldest first."""
+        return self.other_dialog_buttons.get(window_id) or self._find_own_window(window_id)
 
     def _message_box(self, message: str, caption: str, style: int, parent=None) -> int:
         self.record("MessageBox", message, caption, style)
@@ -860,6 +868,26 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
         self.assertEqual(harness.cancel_button.bindings, [])
         self.assertEqual(harness.ok_button.label, "\u78ba\u5b9a")
         self.assertEqual(harness.cancel_button.label, "\u53d6\u6d88")
+
+    def test_entries_dialog_binds_ok_to_its_own_button(self) -> None:
+        # F-7 (F-W9): while the Settings or Text Processing dialog is open, a global lookup of
+        # ID_OK finds that dialog's OK. The editor's own OK then closed without saving.
+        path = self.make_path()
+        _write_rows(path, [ALPHA])
+        harness = _EditorHarness(path)
+        other_ok = _FakeButton(harness, "other ok", "OK")
+        other_cancel = _FakeButton(harness, "other cancel", "Cancel")
+        harness.other_dialog_buttons = {ID_OK: other_ok, ID_CANCEL: other_cancel}
+        harness.open()
+        self.addCleanup(harness.close)
+        harness.script_entry(*BETA)
+        harness.click("Add")
+
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(load_dictionary_entries(path), [DictionaryEntry(*ALPHA), DictionaryEntry(*BETA)])
+        self.assertEqual((harness.ok_button.label, harness.cancel_button.label), (_("OK"), _("Cancel")))
+        self.assertEqual([event for event, _handler in other_ok.bindings], [])
+        self.assertEqual((other_ok.label, other_cancel.label), ("OK", "Cancel"))
 
 
 class DictionaryEntriesDialogCellTextTest(_EditorTestCase):

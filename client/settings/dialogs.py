@@ -14,6 +14,7 @@ from conversion.preprocessing.user_script import (
 )
 from i18n import _
 from ui.dialog_base import SingletonDialogMixin
+from ui.message_box import message_box
 from .options import (
     BRAILLE_FONT_OPTIONS,
     CONVERSION_WIDTH_RANGE,
@@ -155,7 +156,7 @@ class TextProcessingDialog(SingletonDialogMixin, SettingsDialog):
             save_preprocessing_script(self.script_path, self.editor.GetValue())
         except (OSError, SyntaxError, ValueError) as error:
             display_error = _(str(error)) if isinstance(error, ValueError) else error
-            wx.MessageBox(
+            message_box(
                 _("Unable to save text processing script: {error}").format(
                     error=display_error
                 ),
@@ -692,7 +693,7 @@ class DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog
                 focus_target: wx.Window | None = panel
                 if message_and_focus is not None:
                     message, focus_target = message_and_focus
-                    wx.MessageBox(
+                    message_box(
                         message,
                         self.base_title,
                         wx.OK | wx.ICON_ERROR,

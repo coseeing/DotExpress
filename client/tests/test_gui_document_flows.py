@@ -23,7 +23,7 @@ from tests.windows_file_handles import make_read_only
 
 _SCOPE = wx_stub.StubScope(
     wx_stub.gui_frame_stubs(),
-    isolate=("gui", "settings.dialogs", "ui.dual_view"),
+    isolate=("gui", "settings.dialogs", "ui.dual_view", "ui.message_box"),
 )
 with _SCOPE.loading():
     gui = importlib.import_module("gui")
@@ -54,6 +54,9 @@ from dual_view.html import render_dual_view_html
 from dual_view.model import build_dual_view_model
 from dictionaries.read_problems import describe_unreadable_dictionary
 from tests.unreadable_dictionary_files import big5_decode_error
+
+# Half of a surrogate pair, as pasting part of an emoji can leave it in an editor (F-5 review M-7).
+LONE_SURROGATE = chr(0xD83D)
 
 
 def make_paths(root: Path = Path("unused-root"), **folders: Path) -> app_paths.ApplicationPaths:
@@ -432,7 +435,7 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         frame = self._make_frame(documents, open_name="alpha", selected_name="beta")
         frame._workspace_service.delete_document.side_effect = frame._document_controller.delete_document
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_document(None)
 
         frame._workspace_service.delete_document.assert_called_once_with("beta")
@@ -445,7 +448,7 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         error = OSError("locked")
         frame._workspace_service.delete_document.side_effect = error
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_document(None)
 
         frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
@@ -462,7 +465,7 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
 
         frame._workspace_service.delete_all_documents.side_effect = delete_all_documents
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_all_documents(None)
 
         frame._workspace_service.delete_all_documents.assert_called_once_with(on_error=ANY)
@@ -490,7 +493,7 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
 
         frame._workspace_service.delete_all_documents.side_effect = delete_all_documents
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_all_documents(None)
 
         frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
@@ -521,7 +524,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame.dictionary_dir = Path("dictionary")
         with (
             patch.object(gui.TextProcessingDialog, "show_singleton", side_effect=OSError("denied")),
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
         ):
             frame.on_open_text_processing(None)
         message_box.assert_called_once_with(
@@ -581,7 +584,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             patch.object(gui, "prepare_application_directories", side_effect=error),
             patch.object(gui, "build_default_translation_runtime") as build_runtime,
             patch.object(gui, "BrailleFrame") as frame_class,
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
         ):
             app = gui.BrailleApp()
             result = app.OnInit()
@@ -645,7 +648,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             patch.object(gui, "prepare_application_directories", return_value=paths),
             patch.object(gui, "cleanup_dual_view_html", side_effect=cause),
             patch.object(gui, "build_default_translation_runtime") as build_runtime,
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
         ):
             app = gui.BrailleApp()
             result = app.OnInit()
@@ -703,7 +706,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         with ExitStack() as stack:
             for name, fake in self._startup_recorders(order).items():
                 stack.enter_context(patch.object(gui, name, side_effect=fake))
-            message_box = stack.enter_context(patch.object(gui.wx, "MessageBox"))
+            message_box = stack.enter_context(patch.object(gui, "message_box"))
             result = gui.BrailleApp().OnInit()
 
         self.assertTrue(result)
@@ -717,7 +720,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         with ExitStack() as stack:
             for name, fake in self._startup_recorders(order, prepare_error=error).items():
                 stack.enter_context(patch.object(gui, name, side_effect=fake))
-            message_box = stack.enter_context(patch.object(gui.wx, "MessageBox"))
+            message_box = stack.enter_context(patch.object(gui, "message_box"))
             result = gui.BrailleApp().OnInit()
 
         self.assertFalse(result)
@@ -892,7 +895,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._workspace_service = Mock()
         frame._workspace_service.delete_all_documents.side_effect = delete_all_documents
 
-        with patch.object(gui.wx, "MessageBox", return_value=gui.wx.YES):
+        with patch.object(gui, "message_box", return_value=gui.wx.YES):
             frame.on_delete_all_documents(None)
 
         frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
@@ -1117,7 +1120,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         error = big5_decode_error()
 
         with (
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
             self.assertLogs("dotexpress.gui", level="ERROR") as logs,
         ):
             _dialog_class, editor_class = self._open_management(frame, gui.wx.ID_EDIT, "alpha", editor_error=error)
@@ -1141,7 +1144,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         error = RuntimeError("injected")
 
         with (
-            patch.object(gui.wx, "MessageBox") as message_box,
+            patch.object(gui, "message_box") as message_box,
             self.assertLogs("dotexpress.gui", level="ERROR") as logs,
         ):
             self._open_management(frame, gui.wx.ID_EDIT, "alpha", editor_error=error)
@@ -1533,7 +1536,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
                 document = Document("alpha", "t", "b")
                 with (
                     patch.object(gui.wx, "FileDialog", Mock(return_value=dialog)),
-                    patch.object(gui.wx, "MessageBox", Mock()) as message_box,
+                    patch.object(gui, "message_box", Mock()) as message_box,
                 ):
                     frame._export_coordinator.export_document(document, "brl")
 
@@ -1734,12 +1737,14 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.events: list = []
         self.answers: list = []
         self.dialog_answers: list = []
+        # One-shot callbacks, each run by one MessageDialog while it is open (F-7, M-5).
+        self.dialog_hooks: list = []
         self.names: list = []
         self.delete_invalid = False
         self.import_paths: list[str] = []
         self.import_filter_index = gui.ALL_SUPPORTED_FILTER_INDEX
         for patcher in (
-            patch.object(gui.wx, "MessageBox", self._message_box),
+            patch.object(gui, "message_box", self._message_box),
             patch.object(gui.wx, "MessageDialog", self._message_dialog_class()),
             patch.object(gui, "DocumentNameDialog", self._name_dialog_class()),
             patch.object(gui, "InvalidWorkspaceFilesDialog", self._invalid_files_dialog_class()),
@@ -1778,6 +1783,9 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
             def ShowModal(self):
                 test.events.append(("MessageDialog", *self.shown))
+                hook = test.dialog_hooks.pop(0) if test.dialog_hooks else None
+                if hook is not None:
+                    hook()
                 return test.dialog_answers.pop(0) if test.dialog_answers else gui.wx.ID_CANCEL
 
         return FakeMessageDialog
@@ -2198,6 +2206,22 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._package("alpha"), Document("alpha", "x�", "1"))
         self.assertEqual(frame.input_txt.value, "x\ud800")
 
+    def test_save_reads_both_editors_through_the_replacement(self) -> None:
+        # F-7 (M-7): the frame reads the editors through replace_lone_surrogates; F-5's
+        # replacement in the documents layer stays as the second line of defense.
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a" + LONE_SURROGATE)
+        frame.output_txt.SetValue("1" + LONE_SURROGATE)
+        service = frame._workspace_service
+
+        with patch.object(service, "save_open_document", wraps=service.save_open_document) as save:
+            frame._save_open_document()
+
+        save.assert_called_once_with(text="a�", braille="1�")
+        self.assertEqual(frame.input_txt.value, "a" + LONE_SURROGATE)
+        self.assertEqual(frame.output_txt.value, "1" + LONE_SURROGATE)
+        self.assertEqual(self._package("alpha"), Document("alpha", "a�", "1�"))
+
     def test_close_save_failure_that_is_not_an_os_error_is_logged_and_asks(self) -> None:
         # Before F-3 the exception escaped _on_close: no message, and the window neither
         # closed nor said why. F-5 (D6, D9): the traceback is logged at each attempt and
@@ -2399,6 +2423,93 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         event.Skip.assert_called_once_with()
         self.assertEqual(self._disk(), before)
         self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
+    # --- a close that arrives while the close dialog is open (F-7, M-5) ------
+
+    def test_close_reentered_while_the_close_dialog_is_open_is_vetoed(self) -> None:
+        # Windows sends WM_QUERYENDSESSION again while the close dialog's modal loop runs, and
+        # wx delivers another close event to the frame. The open dialog decides.
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        before = self._disk()
+        outer = self._vetoable_close()
+        inner = self._vetoable_close()
+        self.dialog_hooks = [lambda: frame._on_close(inner)]
+        self.dialog_answers = [gui.wx.ID_CANCEL]
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")) as replace:
+            frame._on_close(outer)
+
+        self._assert_close_dialogs(frame, "[Errno 13] injected")
+        self.assertEqual(replace.call_count, 1)
+        inner.Veto.assert_called_once_with()
+        inner.Skip.assert_not_called()
+        outer.Veto.assert_called_once_with()
+        outer.Skip.assert_not_called()
+        frame.close_converting_dialog.assert_not_called()
+        self.assertEqual(frame.input_txt.value, "a edited")
+        self.assertEqual(self._disk(), before)
+
+    def test_close_reentered_that_cannot_be_vetoed_closes_once(self) -> None:
+        # Defensive: wx 3.2 ends a session without a close event, and DotExpress never forces a
+        # close. A nested close that cannot be vetoed runs F-5 D8 once, and the outer close
+        # stops when its dialog returns, whatever the answer.
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        viewer = Mock()
+        frame._dual_view_frame = viewer
+        before = self._disk()
+        outer = self._vetoable_close()
+        inner = Mock()
+        inner.CanVeto.return_value = False
+        self.dialog_hooks = [lambda: frame._on_close(inner)]
+        self.dialog_answers = [gui.wx.ID_YES]
+
+        with (
+            patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")) as replace,
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
+            frame._on_close(outer)
+
+        self._assert_close_dialogs(frame, "[Errno 13] injected")
+        self.assertEqual(replace.call_count, 2)
+        self.assertEqual([record.getMessage() for record in logs.records], ["Failed to save the open document while closing"])
+        frame.close_converting_dialog.assert_called_once_with()
+        viewer.Destroy.assert_called_once_with()
+        inner.Veto.assert_not_called()
+        inner.Skip.assert_called_once_with()
+        outer.Veto.assert_not_called()
+        outer.Skip.assert_not_called()
+        self.assertEqual(self._disk(), before)
+
+    def test_close_works_again_after_a_vetoed_close(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        first = self._vetoable_close()
+        second = self._vetoable_close()
+        self.dialog_answers = [gui.wx.ID_CANCEL]
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")):
+            frame._on_close(first)
+        frame._on_close(second)
+
+        first.Veto.assert_called_once_with()
+        second.Veto.assert_not_called()
+        second.Skip.assert_called_once_with()
+        self.assertEqual(self._package("alpha"), Document("alpha", "a edited", "1"))
+
+    def test_close_flag_is_reset_when_the_close_raises(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        event = self._vetoable_close()
+
+        with (
+            patch.object(frame, "_save_open_document_before_close", side_effect=RuntimeError("injected")),
+            self.assertRaisesRegex(RuntimeError, "injected"),
+        ):
+            frame._on_close(event)
+
+        # The wx stub answers every missing attribute, so read the frame's own attributes.
+        self.assertIs(vars(frame).get("_closing"), False)
 
     def test_close_that_cannot_be_vetoed_logs_a_failed_save_and_closes(self) -> None:
         # D8: Windows is ending the session; nobody could answer a dialog.
@@ -3103,7 +3214,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.threads = self.thread_factory.threads
         self.menu_bar = _RecordingMenuBar(self.events)
         for patcher in (
-            patch.object(gui.wx, "MessageBox", self._message_box),
+            patch.object(gui, "message_box", self._message_box),
             patch.object(gui.wx, "FileDialog", self._file_dialog_class()),
             patch.object(gui.wx, "DirDialog", self._dir_dialog_class()),
             patch.object(gui.wx, "CallAfter", self.calls),
@@ -3379,6 +3490,25 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         )
         self.assertEqual(frame._document_controller.documents, [Document("alpha", "a", None)])
         self.assertEqual(frame._document_controller.dual_view_results_by_document, {})
+
+    def test_manual_conversion_stores_replaced_text(self) -> None:
+        # F-7 (M-7): the conversion, its dual-view segments and the open document's text get
+        # U+FFFD; the source editor keeps what the user pasted.
+        frame = self._make_frame([Document("alpha", "a", None)], "alpha")
+        frame.input_txt.value = "A" + LONE_SURROGATE + "B"
+        segment = _dual_view_segment("A�B", "⠁")
+        self.outputs["A�B"] = ConversionOutput("⠁", ("result",), (segment,))
+
+        frame.on_convert(None)
+        self.threads[0].run()
+
+        self.assertEqual([request.raw_text for request in self.requests], ["A�B"])
+        self.calls.run_next()
+        controller = frame._document_controller
+        self.assertEqual(controller.documents, [Document("alpha", "A�B", "⠁")])
+        self.assertEqual(controller.dual_view_results_by_document, {"alpha": (segment,)})
+        self.assertEqual(frame.input_txt.value, "A" + LONE_SURROGATE + "B")
+        self.assertEqual([event for event in self.events if event[:2] == ("set", "input")], [])
 
     def test_conversion_failure_messages_by_stage_and_public_text(self) -> None:
         cases = (
@@ -4005,6 +4135,14 @@ class FrameViewMethodsTest(unittest.TestCase):
 
         self.assertEqual(frame.get_source_text(), "source")
 
+    def test_source_text_for_conversion_replaces_lone_surrogates_without_touching_the_editor(self) -> None:
+        # F-7 (M-7): no SetValue, so the caret stays where it is and NVDA does not re-read.
+        frame = self._make_frame()
+        frame.input_txt.GetValue.return_value = "A" + LONE_SURROGATE + "B"
+
+        self.assertEqual(frame.get_source_text(), "A�B")
+        self.assertEqual(frame.steps.mock_calls, [call.input_txt.GetValue()])
+
     def test_set_conversion_busy_toggles_file_and_translation_menus_list_and_source(self) -> None:
         menu_bar = Mock()
         menu_bar.FindMenu.side_effect = lambda title: {gui._("File"): 0, gui._("Translation"): 1}.get(
@@ -4074,7 +4212,7 @@ class FrameViewMethodsTest(unittest.TestCase):
 
     def test_message_methods_use_one_message_box_each(self) -> None:
         frame = self._make_frame()
-        with patch.object(gui.wx, "MessageBox") as message_box:
+        with patch.object(gui, "message_box") as message_box:
             frame.show_info("info text", "Info caption")
             frame.show_error("error text", "Error caption")
 
@@ -4086,9 +4224,18 @@ class FrameViewMethodsTest(unittest.TestCase):
             ],
         )
 
+    def test_about_box_uses_the_helper(self) -> None:
+        frame = self._make_frame()
+        with patch.object(gui, "message_box") as message_box:
+            frame.on_about(None)
+
+        message_box.assert_called_once_with(
+            gui.about.aboutMessage, gui._("About DotExpress"), gui.wx.OK | gui.wx.ICON_INFORMATION, parent=frame
+        )
+
     def test_show_file_error_formats_the_error_for_the_frame(self) -> None:
         frame = self._make_frame()
-        with patch.object(gui.wx, "MessageBox") as message_box:
+        with patch.object(gui, "message_box") as message_box:
             frame._show_file_error("Failed: {error}", OSError("disk full"))
 
         message_box.assert_called_once_with(
@@ -4228,7 +4375,7 @@ class FrameExportViewMethodsTest(unittest.TestCase):
 
     def test_confirm_overwrite_all_asks_only_for_conflicts(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
-        with patch.object(gui.wx, "MessageBox") as message_box:
+        with patch.object(gui, "message_box") as message_box:
             self.assertTrue(frame.confirm_overwrite_all([]))
             message_box.assert_not_called()
             for answer, expected in ((gui.wx.YES, True), (gui.wx.NO, False)):
@@ -4247,7 +4394,7 @@ class FrameExportViewMethodsTest(unittest.TestCase):
 
     def test_show_warning_uses_the_warning_icon(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
-        with patch.object(gui.wx, "MessageBox") as message_box:
+        with patch.object(gui, "message_box") as message_box:
             frame.show_warning("warning text", "Warning caption")
 
         message_box.assert_called_once_with(

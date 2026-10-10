@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from tests import wx_stub
 
-_SCOPE = wx_stub.StubScope(wx_stub.dialog_validation_stubs(), isolate=("dialog",))
+_SCOPE = wx_stub.StubScope(wx_stub.dialog_validation_stubs(), isolate=("dialog", "ui.message_box"))
 with _SCOPE.loading():
     import dialog as dialog_module
     from dialog import (
@@ -24,6 +24,7 @@ with _SCOPE.loading():
 setUpModule = _SCOPE.activate
 tearDownModule = _SCOPE.deactivate
 
+from dictionaries.entries import DictionaryEntry
 from dictionaries.manager import DEFAULT_DICTIONARY_NAME, MAX_DICTIONARY_NAME_LENGTH, normalize_dictionary_name
 from documents.workspace import normalize_document_name
 from i18n import _
@@ -264,7 +265,7 @@ class _NameDialogHarness:
             events.append(("MessageBox", args, kwargs))
 
         with (
-            patch.object(dialog_module.wx, "MessageBox", message_box, create=True),
+            patch.object(dialog_module, "message_box", message_box),
             patch.object(dialog_module.wx, "OK", 4, create=True),
             patch.object(dialog_module.wx, "ICON_INFORMATION", 128, create=True),
         ):
@@ -387,6 +388,28 @@ class NameDialogOkTest(_NameDialogHarness, unittest.TestCase):
 
     def test_document_on_ok_writes_back_the_normalized_name_then_skips(self) -> None:
         self.assert_accepts(DocumentNameDialog, ((" name", "name"), ("name\u3000", "name"), ("Default", "Default")))
+
+
+class AddSymbolDialogOkTest(unittest.TestCase):
+    def test_invalid_entry_shows_the_message_on_the_dialog_and_focuses_the_source_text(self) -> None:
+        # Message box call site 1 of F-7: the entry dialog's own validation message.
+        dialog = object.__new__(AddSymbolDialog)
+        dialog.identifier_ctrl = _TextCtrl()
+        dialog.braille_ctrl = _TextCtrl()
+        dialog.get_entry = lambda: DictionaryEntry("", "x", "General")
+        event = Mock()
+
+        with (
+            patch.object(dialog_module, "message_box") as message_box,
+            patch.object(dialog_module.wx, "OK", 4, create=True),
+            patch.object(dialog_module.wx, "ICON_INFORMATION", 128, create=True),
+        ):
+            AddSymbolDialog._on_ok(dialog, event)
+
+        message_box.assert_called_once_with(_("Please enter the source text."), INFO_TITLE, 132, parent=dialog)
+        self.assertTrue(dialog.identifier_ctrl.focused)
+        self.assertFalse(dialog.braille_ctrl.focused)
+        event.Skip.assert_not_called()
 
 
 class DialogContextManagerTest(unittest.TestCase):

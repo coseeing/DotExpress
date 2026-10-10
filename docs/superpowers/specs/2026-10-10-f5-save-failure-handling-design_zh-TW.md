@@ -194,7 +194,7 @@ with wx.MessageDialog(
 - `wx.MessageBox`：不能自訂標籤；按鈕顯示英文 `OK`（F-W9）。
 - 連續兩個問題（錯誤框，然後「仍要關閉？」）：螢幕報讀器使用者要多走幾步，而且做決定時錯誤文字已經不見了。
 
-**D8. 不可 veto 的關閉（Windows 結束工作階段）不詢問。** 若 `evt.CanVeto()` 為假，handler 嘗試存檔一次。失敗時記 log（`logger.error("Failed to save the open document while closing", exc_info=error)`，所有例外類型都記，因為沒有人會看到訊息）並關閉（`Skip`）。今天它顯示 modal 錯誤框，並且不呼叫 `Skip` 就返回，讓視窗留著，而 Windows 終究會結束程序。兩種情況下上次成功存檔之後的修改都會遺失；包是完整的（F-3）。wx 只在可 veto 的 query-end-session 關閉已經走過對話框之後才送出不可 veto 的關閉，所以這條路徑很少見。
+**D8. 不可 veto 的關閉（Windows 結束工作階段）不詢問。** 若 `evt.CanVeto()` 為假，handler 嘗試存檔一次。失敗時記 log（`logger.error("Failed to save the open document while closing", exc_info=error)`，所有例外類型都記，因為沒有人會看到訊息）並關閉（`Skip`）。今天它顯示 modal 錯誤框，並且不呼叫 `Skip` 就返回，讓視窗留著，而 Windows 終究會結束程序。兩種情況下上次成功存檔之後的修改都會遺失；包是完整的（F-3）。wx 只在可 veto 的 query-end-session 關閉已經走過對話框之後才送出不可 veto 的關閉，所以這條路徑很少見。（F-7 審查後的修正，2026-10-10：F-7 在 wx 3.2.9（wxPython 4.2.5）量到工作階段結束完全不會產生關閉事件。收到 `WM_ENDSESSION` 時，wx 呼叫 `OnExit()` 與 `exit()`，不會關閉視窗，所以 Windows 造成的關閉只有可 veto 的 query-end-session 關閉。不可 veto 的關閉只來自 `Close(force=True)`，而 DotExpress 從不呼叫它，所以這條路徑只是防禦性的。見 F-7 spec 的「現況」M-5。）
 
 **D9. 記錄 log。** M-3 的邏輯移到 `_log_unexpected_save_error(error)`，它以 traceback 記錄非 `OSError`。`_show_document_save_error` 呼叫它，D6 的步驟 3 也呼叫它，每次失敗的嘗試一次。`OSError` 仍不記（預期中，而且對話框已寫明），D8 除外。
 

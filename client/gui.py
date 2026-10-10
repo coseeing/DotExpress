@@ -28,12 +28,14 @@ from documents.workspace import (
     Document,
     create_default_document,
     normalize_document_name,
+    replace_lone_surrogates,
 )
 from documents.workspace_service import DocumentWorkspaceService
 from ui.action_menu import get_document_menu_enabled_state
 from ui.conversion_presenter import ConversionPresenter
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from ui.menu_builder import apply_document_menu_state, build_document_menu
+from ui.message_box import message_box
 from config import ConfigStore, DEFAULT_TRANSLATION_TABLES
 from settings.translation import (
 	TranslationSettings,
@@ -112,6 +114,10 @@ class NamedControlAccessible(wx.Accessible):
 
 
 class BrailleFrame(wx.Frame):
+	# Class attributes, so that frames built without __init__ (tests) have them too (F-7, M-5).
+	_closing = False
+	_close_finished = False
+
 	def __init__(
 		self,
 		*args,
@@ -443,7 +449,7 @@ class BrailleFrame(wx.Frame):
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
 
 	def _show_file_error(self, message: str, error: Exception) -> None:
-		wx.MessageBox(
+		message_box(
 			message.format(error=error),
 			_("Error"),
 			wx.OK | wx.ICON_ERROR,
@@ -490,13 +496,7 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to open website: {error}"), exc)
 
 	def on_about(self, _evt: wx.CommandEvent) -> None:
-		with wx.MessageDialog(
-			self,
-			about.aboutMessage,
-			_("About DotExpress"),
-			wx.OK | wx.ICON_INFORMATION,
-		) as dialog:
-			dialog.ShowModal()
+		message_box(about.aboutMessage, _("About DotExpress"), wx.OK | wx.ICON_INFORMATION, parent=self)
 
 	def on_open_dual_view(self, _evt) -> None:
 		self._open_dual_view_in_browser()
@@ -508,7 +508,7 @@ class BrailleFrame(wx.Frame):
 				script_path=preprocessing_script_path(self.dictionary_dir),
 			)
 		except OSError as error:
-			wx.MessageBox(
+			message_box(
 				_("Unable to open text processing script: {error}").format(error=error),
 				_("Text Processing"),
 				wx.OK | wx.ICON_ERROR,
@@ -621,10 +621,14 @@ class BrailleFrame(wx.Frame):
 		self._open_document_by_name(target_name)
 		self.input_txt.SetFocus()
 
+	def _editor_text(self, control: wx.TextCtrl) -> str:
+		"""The control's text with each lone surrogate replaced by U+FFFD (F-7, M-7); the control is not changed."""
+		return replace_lone_surrogates(control.GetValue())
+
 	def _save_open_document(self) -> None:
 		self._workspace_service.save_open_document(
-			text=self.input_txt.GetValue(),
-			braille=self.output_txt.GetValue(),
+			text=self._editor_text(self.input_txt),
+			braille=self._editor_text(self.output_txt),
 		)
 
 	def _save_open_document_with_feedback(self) -> bool:
@@ -652,6 +656,9 @@ class BrailleFrame(wx.Frame):
 					return True
 				self._log_unexpected_save_error(error)
 				answer = self._ask_after_close_save_failure(error)
+				if self._close_finished:
+					# A nested close that could not be vetoed closed the frame meanwhile (F-7, M-5).
+					return True
 				if answer == wx.ID_YES:
 					continue
 				return answer == wx.ID_NO
@@ -702,7 +709,7 @@ class BrailleFrame(wx.Frame):
 					return None
 				document_name = normalize_document_name(dialog.get_document_name())
 			if self._document_controller.document_name_exists(document_name, exclude_name=exclude_name):
-				wx.MessageBox(
+				message_box(
 					_('Document "{name}" already exists.').format(name=document_name),
 					_("Error"),
 					wx.OK | wx.ICON_ERROR,
@@ -827,7 +834,7 @@ class BrailleFrame(wx.Frame):
 			return
 		if not self._save_open_document_with_feedback():
 			return
-		confirmation = wx.MessageBox(
+		confirmation = message_box(
 			_('Do you want to delete document "{name}"?').format(name=selected_document.name),
 			_("Confirm Delete Document"),
 			wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
@@ -856,7 +863,7 @@ class BrailleFrame(wx.Frame):
 			return
 		if not self._save_open_document_with_feedback():
 			return
-		confirmation = wx.MessageBox(
+		confirmation = message_box(
 			_("Delete All will remove all documents. Do you want to continue?"),
 			_("Confirm Delete All"),
 			wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
@@ -1007,7 +1014,7 @@ class BrailleFrame(wx.Frame):
 		except Exception as error:
 			# F-6 (D6): the file could not be read after Dictionary Management checked it.
 			log_dictionary_read_error(dictionary_path, error)
-			wx.MessageBox(
+			message_box(
 				describe_unreadable_dictionary(edit_name, error),
 				_("Error"),
 				wx.OK | wx.ICON_ERROR,
@@ -1021,12 +1028,43 @@ class BrailleFrame(wx.Frame):
 		self._conversion_presenter.convert()
 
 	def _on_close(self, evt: wx.CloseEvent):
+		if self._closing:
+			self._on_close_reentered(evt)
+			return
+		self._closing = True
+		try:
+			self._close(evt)
+		finally:
+			self._closing = False
+
+	def _close(self, evt: wx.CloseEvent) -> None:
 		if self._conversion_presenter.is_running() and evt.CanVeto():
 			evt.Veto()
 			return
-		if not self._save_open_document_before_close(evt.CanVeto()):
+		may_close = self._save_open_document_before_close(evt.CanVeto())
+		if self._close_finished:
+			# A nested close that could not be vetoed already closed the frame (M-5).
+			return
+		if not may_close:
 			evt.Veto()
 			return
+		self._finish_close(evt)
+
+	def _on_close_reentered(self, evt: wx.CloseEvent) -> None:
+		"""A close event while another close is still asking (F-7, M-5).
+
+		Windows sends WM_QUERYENDSESSION again while the close dialog's modal loop runs.
+		A close that can be vetoed is vetoed: the open dialog decides. One that cannot
+		follows F-5 D8: one save attempt, a logged failure, and the frame closes.
+		"""
+		if evt.CanVeto():
+			evt.Veto()
+			return
+		self._save_open_document_before_close(False)
+		self._finish_close(evt)
+
+	def _finish_close(self, evt: wx.CloseEvent) -> None:
+		self._close_finished = True
 		self.close_converting_dialog()
 		if self._dual_view_frame is not None:
 			viewer = self._dual_view_frame
@@ -1037,7 +1075,7 @@ class BrailleFrame(wx.Frame):
 	# --- ConversionView (ui/conversion_presenter.py) ------------------------
 
 	def get_source_text(self) -> str:
-		return self.input_txt.GetValue()
+		return self._editor_text(self.input_txt)
 
 	def set_conversion_busy(self, busy: bool) -> None:
 		menu_bar = self.GetMenuBar()
@@ -1072,15 +1110,15 @@ class BrailleFrame(wx.Frame):
 		self._refresh_dual_view()
 
 	def show_info(self, message: str, caption: str) -> None:
-		wx.MessageBox(message, caption, wx.OK | wx.ICON_INFORMATION, parent=self)
+		message_box(message, caption, wx.OK | wx.ICON_INFORMATION, parent=self)
 
 	def show_error(self, message: str, caption: str) -> None:
-		wx.MessageBox(message, caption, wx.OK | wx.ICON_ERROR, parent=self)
+		message_box(message, caption, wx.OK | wx.ICON_ERROR, parent=self)
 
 	# --- ExportView (documents/export_coordinator.py) -----------------------
 
 	def show_warning(self, message: str, caption: str) -> None:
-		wx.MessageBox(message, caption, wx.OK | wx.ICON_WARNING, parent=self)
+		message_box(message, caption, wx.OK | wx.ICON_WARNING, parent=self)
 
 	def choose_export_path(self, default_file: str, descriptor: DocumentFormatDescriptor) -> Path | None:
 		wildcard = build_export_wildcard(descriptor, _)
@@ -1108,11 +1146,11 @@ class BrailleFrame(wx.Frame):
 			"The destination folder already contains one or more files that would be overwritten. Do you want to overwrite all of them?"
 		)
 		return (
-			wx.MessageBox(message, _("Confirm Overwrite"), wx.YES_NO | wx.ICON_WARNING, parent=self) == wx.YES
+			message_box(message, _("Confirm Overwrite"), wx.YES_NO | wx.ICON_WARNING, parent=self) == wx.YES
 		)
 
 def _show_application_data_error(error: ApplicationDataError) -> None:
-	wx.MessageBox(
+	message_box(
 		_(
 			"DotExpress cannot write to its application data directory:\n"
 			"{path}\n\nChoose a writable installation or execution location.\n\n{error}"

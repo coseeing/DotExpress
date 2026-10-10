@@ -5,6 +5,9 @@ first if the document is pending, write, report) and the Export All chain (choos
 folder, check conflicts, then one document per UI turn through ``call_after``, then
 one summary). The view owns its dialogs and their texts; the coordinator owns the
 outcome messages. The first Export All step runs in the caller's turn.
+
+Every write failure is reported: an ``OSError`` by its message, anything else also with
+its traceback in ``gui.log`` (F-7).
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from documents.export_results import ExportBatchResult
 from documents.formats import DocumentFormatDescriptor, ExportContext, get_format
 from documents.workspace import Document
 from i18n import _
+from log import get_logger
 
 CallAfter = Callable[..., object]
 
@@ -96,10 +100,22 @@ class ExportCoordinator:
             return
         self._write_single(document, destination_path, format_key)
 
+    def _log_unexpected_export_error(self, error: Exception) -> None:
+        """Log the traceback of a failed export if it is not an ``OSError`` (F-7).
+
+        An ``OSError`` (locked, read-only, disk full) is expected and the message names it
+        fully. Anything else is a bug or text the writer cannot encode, and the packaged
+        build has no console. The logger is bound here, not at import, so importing this
+        module adds no file handler (as in F-6 review M-6).
+        """
+        if not isinstance(error, OSError):
+            get_logger("dotexpress.gui", "gui.log").error("Unexpected error while exporting a document", exc_info=error)
+
     def _write_single(self, document: Document, destination_path: Path, format_key: str) -> None:
         try:
             self.write_document(destination_path, document, format_key)
-        except OSError as exc:
+        except Exception as exc:
+            self._log_unexpected_export_error(exc)
             self._view.show_error(_("Failed to export document: {error}").format(error=exc), _("Error"))
             return
         self._view.show_info(_("The document was exported successfully."), _("Export Complete"))
@@ -141,7 +157,8 @@ class ExportCoordinator:
         def write_document(export_document: Document) -> None:
             try:
                 self.write_document(destination_path, export_document, format_key)
-            except OSError as exc:
+            except Exception as exc:
+                self._log_unexpected_export_error(exc)
                 result.add_failure(document.name, str(exc))
             else:
                 result.add_success(document.name)

@@ -506,11 +506,29 @@ def gui_frame_stubs():
             return ""
 
     class _MessageDialog(Dialog):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
         def SetExtendedMessage(self, _message):
             return None
 
+        def SetOKLabel(self, _ok):
+            return True
+
+        def SetOKCancelLabels(self, _ok, _cancel):
+            return True
+
+        def SetYesNoLabels(self, _yes, _no):
+            return True
+
         def SetYesNoCancelLabels(self, _yes, _no, _cancel):
             return True
+
+        def ShowModal(self):
+            return wx.ID_OK
 
     wx.Window = Window
     wx.Frame = Frame
@@ -960,7 +978,7 @@ def evict_speech_roots(name):
 
 def load_speech_dialog():
     """Load ``dialog.py`` as ``SPEECH_DIALOG_MODULE_NAME``; return ``(module, scope)``."""
-    scope = StubScope(speech_dialog_stubs(), evict=evict_speech_roots)
+    scope = StubScope(speech_dialog_stubs(), isolate=("ui.message_box",), evict=evict_speech_roots)
     with scope.loading():
         module = scope.load_file(SPEECH_DIALOG_MODULE_NAME, DIALOG_PATH)
     return module, scope

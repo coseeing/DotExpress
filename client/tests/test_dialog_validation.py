@@ -221,6 +221,14 @@ class DialogValidationTextTest(unittest.TestCase):
                     "文件名稱不是有效的 Windows 檔名。",
                 )
 
+    def test_name_with_a_lone_surrogate_shows_the_existing_invalid_name_message(self) -> None:
+        # F-5 review M-1: no new string; the name dialogs reuse their invalid-name message.
+        for dialog_class, message in ((DocumentNameDialog, DOCUMENT_INVALID), (DictionaryNameDialog, DICTIONARY_INVALID)):
+            dialog = object.__new__(dialog_class)
+            for name in ("a\ud800", "\udc00b"):
+                with self.subTest(dialog=dialog_class.__name__, name=ascii(name)):
+                    self.assertEqual(dialog_class._validate_name(dialog, name), message)
+
 
 class _RecordingNameCtrl:
     def __init__(self, value: str, events: list[tuple]) -> None:

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import zipfile
@@ -20,6 +21,7 @@ TXT_EXTENSION = ".txt"
 BRL_EXTENSION = ".brl"
 PENDING_METADATA_SUFFIX = ".meta.json"
 DEFAULT_DOCUMENT_NAME = "new"
+_LONE_SURROGATE = re.compile(r"[\ud800-\udfff]")
 
 
 @dataclass(frozen=True)
@@ -53,8 +55,21 @@ def document_package_path_for_name(name: str, workspace_dir: Path) -> Path:
     return Path(workspace_dir) / f"{name}{DEP_EXTENSION}"
 
 
+def replace_lone_surrogates(text: str) -> str:
+    """Replace every unpaired UTF-16 surrogate with U+FFFD so the text can be encoded as UTF-8; a split pair is joined."""
+    if _LONE_SURROGATE.search(text) is None:
+        return text
+    return text.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
+
+
+def _encodable(document: Document) -> Document:
+    """``document`` with lone surrogates replaced in its text and braille (F-5); pending braille stays ``None``."""
+    braille = None if document.braille is None else replace_lone_surrogates(document.braille)
+    return Document(name=document.name, text=replace_lone_surrogates(document.text), braille=braille)
+
+
 def _normalized(document: Document) -> Document:
-    return Document(name=normalize_document_name(document.name), text=document.text, braille=document.braille)
+    return _encodable(Document(name=normalize_document_name(document.name), text=document.text, braille=document.braille))
 
 
 def _write_package(stream: BinaryIO, document: Document, *, include_pending_metadata: bool) -> None:
@@ -252,7 +267,7 @@ def prepare_document_for_save(
     braille: str,
 ) -> Document:
     saved_braille = None if document.braille is None else braille
-    return Document(name=document.name, text=text, braille=saved_braille)
+    return _encodable(Document(name=document.name, text=text, braille=saved_braille))
 
 
 def load_workspace_documents(workspace_dir: Path) -> tuple[list[Document], list[Path]]:

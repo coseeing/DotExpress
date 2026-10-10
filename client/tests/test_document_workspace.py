@@ -81,7 +81,7 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertEqual(normalize_document_name("a" * 32), "a" * 32)
 
     def test_normalize_document_name_raises_typed_errors(self) -> None:
-        cases = (("", "empty"), ("a?b", "invalid"), ("name ", "invalid"), ("a" * 33, "too_long"))
+        cases = (("", "empty"), ("a?b", "invalid"), ("name ", "invalid"), ("a" * 33, "too_long"), ("a\ud800", "invalid"))
         for value, code in cases:
             with self.subTest(value=value):
                 with self.assertRaises(name_validation.NameValidationError) as caught:
@@ -312,6 +312,33 @@ class DocumentWorkspaceTest(unittest.TestCase):
 
         self.assertEqual(prepared, Document(name="lesson1", text="new text", braille="⠃⠗⠇"))
 
+    def test_replace_lone_surrogates_replaces_each_unpaired_surrogate(self) -> None:
+        # F-5 (D4): one U+FFFD per surrogate that is not half of a pair, so UTF-8 can encode it.
+        cases = {
+            "lone high": ("a\ud800b", "a�b"),
+            "lone low": ("a\udc00b", "a�b"),
+            "reversed pair": ("a\ude00\ud83db", "a��b"),
+            "two highs": ("\ud800\ud800", "��"),
+            "high at the end": ("ab\ud83d", "ab�"),
+            "surrogate escape": ("x\udcff", "x�"),
+        }
+        for label, (text, expected) in cases.items():
+            with self.subTest(label):
+                self.assertEqual(workspace.replace_lone_surrogates(text), expected)
+
+    def test_replace_lone_surrogates_joins_split_pairs_and_keeps_other_text(self) -> None:
+        self.assertEqual(workspace.replace_lone_surrogates("a\ud83d\ude00b"), "a\U0001f600b")
+        for text in ("a\U0001f600b", "中文", "⠁⠃", "tab\tand\nnewline", ""):
+            with self.subTest(text=text):
+                self.assertIs(workspace.replace_lone_surrogates(text), text)
+
+    def test_prepare_document_for_save_replaces_lone_surrogates(self) -> None:
+        kept = prepare_document_for_save(Document("alpha", "old", "⠁"), text="x\ud800", braille="\udc00⠁")
+        pending = prepare_document_for_save(Document("alpha", "old", None), text="x\ud800", braille="\udc00")
+
+        self.assertEqual(kept, Document("alpha", "x�", "�⠁"))
+        self.assertEqual(pending, Document("alpha", "x�", None))
+
     def test_load_workspace_documents_sorts_valid_documents_and_collects_invalid_paths(self) -> None:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         save_document_package(self.workspace_dir / "Beta.dep", Document(name="Beta", text="b", braille="1"))
@@ -389,19 +416,51 @@ class AtomicSaveDocumentPackageTest(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), before)
         self.assertEqual(self._listing(), ["alpha.dep"])
 
-    def test_save_failure_from_a_lone_surrogate_keeps_the_existing_package(self) -> None:
-        # UTF-8 cannot encode a lone surrogate. The in-place save had already truncated
-        # the package and left a zip without the failing member (invalid at the next start).
+    def test_save_failure_that_is_not_an_os_error_keeps_the_existing_package(self) -> None:
+        # A bug in the writer (simulated: writestr raises ValueError) while the first or the
+        # second member is written. The in-place save had already truncated the package and
+        # left a zip without the failing member (invalid at the next start).
         before = self._write_alpha()
-        broken = {"text": Document("alpha", "\ud800", "1"), "braille": Document("alpha", "a", "\ud800")}
-        for field, document in broken.items():
-            with self.subTest(field=field):
-                with self.assertRaises(UnicodeEncodeError):
-                    save_document_package(self.path, document)
+        real_writestr = zipfile.ZipFile.writestr
+        for failing in (1, 2):
+            with self.subTest(failing_member=failing):
+                written = []
 
+                def writestr_failing(archive, name, data, *args, **kwargs):
+                    written.append(name)
+                    if len(written) == failing:
+                        raise ValueError("injected")
+                    return real_writestr(archive, name, data, *args, **kwargs)
+
+                with patch.object(zipfile.ZipFile, "writestr", writestr_failing):
+                    with self.assertRaises(ValueError):
+                        save_document_package(self.path, Document("alpha", "edited", "2"))
+
+                self.assertEqual(written, ["alpha.txt", "alpha.brl"][:failing])
                 self.assertEqual(self._listing(), ["alpha.dep"])
                 self.assertEqual(load_document_package(self.path), self.alpha)
                 self.assertEqual(self.path.read_bytes(), before)
+
+    def test_save_replaces_lone_surrogates_with_the_replacement_character(self) -> None:
+        # F-5 (D4): a lone surrogate (pasted text) used to make every save fail with
+        # "surrogates not allowed"; it is written as U+FFFD (EF BF BD in UTF-8).
+        cases = {
+            "text": (Document("alpha", "a\ud800", "1"), Document("alpha", "a�", "1"), "alpha.txt", b"a\xef\xbf\xbd"),
+            "braille": (
+                Document("alpha", "a", "\udc00⠁"),
+                Document("alpha", "a", "�⠁"),
+                "alpha.brl",
+                b"\xef\xbf\xbd\xe2\xa0\x81",
+            ),
+        }
+        for field, (document, expected, member, data) in cases.items():
+            with self.subTest(field=field):
+                save_document_package(self.path, document)
+
+                self.assertEqual(load_document_package(self.path), expected)
+                with zipfile.ZipFile(self.path) as archive:
+                    self.assertEqual(archive.read(member), data)
+                self.assertEqual(self._listing(), ["alpha.dep"])
 
     def test_save_failure_while_writing_keeps_the_existing_package(self) -> None:
         # A full disk while the second member is written (simulated).
@@ -623,8 +682,9 @@ class MoveDocumentPackageTest(unittest.TestCase):
     def test_staging_error_that_is_not_an_os_error_keeps_the_old_package(self) -> None:
         before = self._write_alpha()
 
-        with self.assertRaises(UnicodeEncodeError):
-            self._move("Alpha", Document("alpha", "\ud800", "1"))
+        with patch.object(zipfile.ZipFile, "writestr", side_effect=ValueError("injected")):
+            with self.assertRaises(ValueError):
+                self._move("Alpha", Document("alpha", "a", "1"))
 
         self.assertEqual(self._listing(), ["Alpha.dep"])
         self.assertEqual(self._path("Alpha").read_bytes(), before)
@@ -735,6 +795,21 @@ class MoveDocumentPackageTest(unittest.TestCase):
         with zipfile.ZipFile(staged) as archive:
             self.assertEqual(sorted(archive.namelist()), ["alpha.brl", "alpha.meta.json", "alpha.txt"])
             self.assertEqual(archive.read("alpha.txt"), b"a")
+
+    def test_staged_package_replaces_lone_surrogates(self) -> None:
+        # F-5 (D4): the staged package of a rename goes through the same normalization.
+        files = workspace.PackageFiles()
+        staged = files.temporary_path(self.workspace_dir, "alpha.dep")
+        files.write(staged, Document("alpha", "x\ud800", "1"))
+        with zipfile.ZipFile(staged) as archive:
+            self.assertEqual(archive.read("alpha.txt"), b"x\xef\xbf\xbd")
+        staged.unlink()
+        self._write_alpha()
+
+        self._move("Alpha", Document("alpha", "y\udc00", "1"))
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "y�", "1"))
 
 
 if __name__ == "__main__":

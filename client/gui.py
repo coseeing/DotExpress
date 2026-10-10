@@ -449,16 +449,38 @@ class BrailleFrame(wx.Frame):
 			parent=self,
 		)
 
-	def _show_document_save_error(self, error: Exception) -> None:
-		"""Report a failed document save; log the traceback if it is not an ``OSError``.
+	def _log_unexpected_save_error(self, error: Exception) -> None:
+		"""Log the traceback of a failed document save if it is not an ``OSError``.
 
-		An ``OSError`` (locked, read-only, disk full) is expected and the message box
+		An ``OSError`` (locked, read-only, disk full) is expected and the message
 		names it fully. Anything else means a bug or bad data in memory, and the
 		packaged build has no console, so its traceback goes to ``gui.log``.
 		"""
 		if not isinstance(error, OSError):
 			logger.error("Unexpected error while saving a document", exc_info=error)
+
+	def _show_document_save_error(self, error: Exception) -> None:
+		"""Report a failed document save; log the traceback if it is not an ``OSError``."""
+		self._log_unexpected_save_error(error)
 		self._show_file_error(_("Failed to save document: {error}"), error)
+
+	def _ask_after_close_save_failure(self, error: Exception) -> int:
+		"""Ask what Close does after a failed save (F-5 D7).
+
+		``wx.ID_YES``: retry; ``wx.ID_NO``: close without saving; anything else: cancel.
+		A Windows task dialog: Retry is the default, Esc and the close box cancel.
+		"""
+		with wx.MessageDialog(
+			self,
+			_("Failed to save document: {error}").format(error=error),
+			_("Cannot Save Document"),
+			wx.YES_NO | wx.CANCEL | wx.YES_DEFAULT | wx.ICON_ERROR,
+		) as dialog:
+			dialog.SetExtendedMessage(
+				_("Changes made since the last successful save have not been saved. If you close without saving, these changes will be lost.")
+			)
+			dialog.SetYesNoCancelLabels(_("&Retry"), _("Close &Without Saving"), _("Cancel"))
+			return dialog.ShowModal()
 
 	def on_open_coseeing_website(self, _evt: wx.CommandEvent) -> None:
 		try:
@@ -611,6 +633,27 @@ class BrailleFrame(wx.Frame):
 			self._show_document_save_error(exc)
 			return False
 		return True
+
+	def _save_open_document_before_close(self, can_veto: bool) -> bool:
+		"""Save before closing; ``True`` if the frame may close (F-5 D6, D8).
+
+		A failed save asks: Retry saves again, Close without saving drops the edits
+		since the last good save (the package keeps that save), Cancel keeps the
+		frame open. A close that cannot be vetoed only logs the failure.
+		"""
+		while True:
+			try:
+				self._save_open_document()
+				return True
+			except Exception as error:
+				if not can_veto:
+					logger.error("Failed to save the open document while closing", exc_info=error)
+					return True
+				self._log_unexpected_save_error(error)
+				answer = self._ask_after_close_save_failure(error)
+				if answer == wx.ID_YES:
+					continue
+				return answer == wx.ID_NO
 
 	def _review_invalid_workspace_files(self, invalid_paths: list[Path]) -> None:
 		if not invalid_paths:
@@ -968,9 +1011,8 @@ class BrailleFrame(wx.Frame):
 		if self._conversion_presenter.is_running() and evt.CanVeto():
 			evt.Veto()
 			return
-		if not self._save_open_document_with_feedback():
-			if evt.CanVeto():
-				evt.Veto()
+		if not self._save_open_document_before_close(evt.CanVeto()):
+			evt.Veto()
 			return
 		self.close_converting_dialog()
 		if self._dual_view_frame is not None:

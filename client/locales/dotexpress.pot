@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 16:06+0800\n"
+"POT-Creation-Date: 2026-10-10 12:00+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -875,7 +875,8 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: dialog.py:45 dialog.py:89 settings/dialogs.py:143 settings/dialogs.py:294
+#: dialog.py:45 dialog.py:89 gui.py:482 settings/dialogs.py:143
+#: settings/dialogs.py:294
 msgid "Cancel"
 msgstr ""
 
@@ -1006,7 +1007,7 @@ msgstr ""
 
 #: dialog.py:486 dialog.py:495 dialog.py:691 documents/export_coordinator.py:85
 #: documents/export_coordinator.py:94 documents/export_coordinator.py:103
-#: gui.py:447 gui.py:652 ui/conversion_presenter.py:196
+#: gui.py:447 gui.py:706 ui/conversion_presenter.py:196
 msgid "Error"
 msgstr ""
 
@@ -1039,27 +1040,27 @@ msgstr ""
 msgid "Export"
 msgstr ""
 
-#: dictionaries/entries.py:13
+#: dictionaries/entries.py:14
 msgid "General"
 msgstr ""
 
-#: dictionaries/entries.py:14
+#: dictionaries/entries.py:15
 msgid "Bopomofo"
 msgstr ""
 
-#: dictionaries/entries.py:15
+#: dictionaries/entries.py:16
 msgid "Unicode Braille"
 msgstr ""
 
-#: dictionaries/entries.py:37
+#: dictionaries/entries.py:56
 msgid "Please enter the source text."
 msgstr ""
 
-#: dictionaries/entries.py:42
+#: dictionaries/entries.py:61
 msgid "Please enter the a valid Bopomofo sequence."
 msgstr ""
 
-#: dictionaries/entries.py:46
+#: dictionaries/entries.py:65
 msgid "Please enter the a valid Unicode Braille sequence."
 msgstr ""
 
@@ -1194,11 +1195,11 @@ msgstr ""
 msgid "Braille Result"
 msgstr ""
 
-#: gui.py:242 gui.py:979
+#: gui.py:242 gui.py:1032
 msgid "File"
 msgstr ""
 
-#: gui.py:255 gui.py:979 settings/dialogs.py:356
+#: gui.py:255 gui.py:1032 settings/dialogs.py:356
 msgid "Translation"
 msgstr ""
 
@@ -1227,101 +1228,119 @@ msgstr ""
 msgid "Failed to open dual view: {error}"
 msgstr ""
 
-#: gui.py:456
-#, python-brace-format
-msgid "Failed to open website: {error}"
-msgstr ""
-
-#: gui.py:462
-msgid "About DotExpress"
-msgstr ""
-
-#: gui.py:478
-#, python-brace-format
-msgid "Unable to open text processing script: {error}"
-msgstr ""
-
-#: gui.py:479 settings/dialogs.py:122 settings/dialogs.py:162
-#: ui/translation_menu.py:10
-msgid "Text Processing"
-msgstr ""
-
-#: gui.py:600 gui.py:629 gui.py:761
+#: gui.py:465 gui.py:475
 #, python-brace-format
 msgid "Failed to save document: {error}"
 msgstr ""
 
-#: gui.py:614
+#: gui.py:476
+msgid "Cannot Save Document"
+msgstr ""
+
+#: gui.py:480
+msgid ""
+"Changes made since the last successful save have not been saved. If you "
+"close without saving, these changes will be lost."
+msgstr ""
+
+#: gui.py:482
+msgid "&Retry"
+msgstr ""
+
+#: gui.py:482
+msgid "Close &Without Saving"
+msgstr ""
+
+#: gui.py:489
+#, python-brace-format
+msgid "Failed to open website: {error}"
+msgstr ""
+
+#: gui.py:495
+msgid "About DotExpress"
+msgstr ""
+
+#: gui.py:511
+#, python-brace-format
+msgid "Unable to open text processing script: {error}"
+msgstr ""
+
+#: gui.py:512 settings/dialogs.py:122 settings/dialogs.py:162
+#: ui/translation_menu.py:10
+msgid "Text Processing"
+msgstr ""
+
+#: gui.py:668
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr ""
 
-#: gui.py:651
+#: gui.py:705
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr ""
 
-#: gui.py:736
+#: gui.py:790
 msgid "Add Document"
 msgstr ""
 
-#: gui.py:752
+#: gui.py:806
 msgid "Rename Document"
 msgstr ""
 
-#: gui.py:776
+#: gui.py:830
 #, python-brace-format
 msgid "Do you want to delete document \"{name}\"?"
 msgstr ""
 
-#: gui.py:777
+#: gui.py:831
 msgid "Confirm Delete Document"
 msgstr ""
 
-#: gui.py:786 gui.py:813
+#: gui.py:840 gui.py:867
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr ""
 
-#: gui.py:805
+#: gui.py:859
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr ""
 
-#: gui.py:806
+#: gui.py:860
 msgid "Confirm Delete All"
 msgstr ""
 
-#: gui.py:835
+#: gui.py:889
 msgid "Import Document"
 msgstr ""
 
-#: gui.py:855
+#: gui.py:909
 msgid "Import Issues"
 msgstr ""
 
-#: gui.py:856
+#: gui.py:910
 msgid "Some files were skipped during import."
 msgstr ""
 
-#: gui.py:1023
+#: gui.py:1076
 msgid "Export Document"
 msgstr ""
 
-#: gui.py:1033
+#: gui.py:1086
 msgid "Export All Documents"
 msgstr ""
 
-#: gui.py:1042
+#: gui.py:1095
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr ""
 
-#: gui.py:1045
+#: gui.py:1098
 msgid "Confirm Overwrite"
 msgstr ""
 
-#: gui.py:1051
+#: gui.py:1104
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1332,7 +1351,7 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: gui.py:1054
+#: gui.py:1107
 msgid "Startup Error"
 msgstr ""
 

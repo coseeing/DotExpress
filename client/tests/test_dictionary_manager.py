@@ -90,7 +90,14 @@ class DictionaryManagerTest(unittest.TestCase):
         self.assertEqual(normalize_dictionary_name("a" * 32), "a" * 32)
 
     def test_normalize_dictionary_name_raises_typed_errors(self) -> None:
-        cases = (("", "empty"), ("CON", "invalid"), ("name.", "invalid"), ("a" * 33, "too_long"), (" Default", "reserved"))
+        cases = (
+            ("", "empty"),
+            ("CON", "invalid"),
+            ("name.", "invalid"),
+            ("a" * 33, "too_long"),
+            (" Default", "reserved"),
+            ("a\ud800", "invalid"),
+        )
         for value, code in cases:
             with self.subTest(value=value):
                 with self.assertRaises(name_validation.NameValidationError) as caught:

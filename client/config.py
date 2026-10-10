@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from conversion.math_braille_codes import DEFAULT_MATH_BRAILLE_TABLE, MATH_BRAILLE_TABLES  # noqa: F401  (re-exported)
 from log import get_logger
+from shared.atomic_write import write_bytes_atomically, write_text_atomically
 
 logger = get_logger("dotexpress.config", "config.log", level=logging.WARNING)
 
@@ -49,11 +50,29 @@ _runtime_lang: Optional[str] = None
 
 # Config path -> signature of the last load failure that was logged for it.
 _logged_load_failures: dict[str, str] = {}
+# Config path -> signature of the read error of the last save that was skipped for it (F-8).
+_logged_skipped_saves: dict[str, str] = {}
 
 
-def _log_current_exception(level: int, message: str, *args: object) -> None:
+def _signature(error: BaseException) -> str:
+    return f"{type(error).__name__}: {error}"
+
+
+class _UnreadableConfig(dict):
+    """The empty settings ``_load`` returns for a config.json it could not use (F-8).
+
+    ``error`` is why: an ``OSError`` if the file could not be read, anything else if it
+    was read but is not a JSON object. ``_save`` keeps the file accordingly.
+    """
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error = error
+
+
+def _log_current_exception(level: int, message: str, *args: object, exc_info: object = True) -> None:
     try:
-        logger.log(level, message, *args, exc_info=True)
+        logger.log(level, message, *args, exc_info=exc_info)
     except OSError:
         # A delay=True FileHandler opens its file inside emit() and raises if
         # log/ is missing or unwritable. Config I/O must never raise, so a
@@ -80,7 +99,15 @@ def _get_section(data: dict, section: str) -> dict:
 
 
 class ConfigStore:
-    """config.json at one path. Each getter re-reads the file; nothing is cached."""
+    """config.json at one path. Each getter re-reads the file; nothing is cached.
+
+    The file is written through a synced temporary file: a failed save leaves it as it
+    was (F-8). It is read as UTF-8 with or without a BOM; a file that is not a JSON
+    object counts as damaged and gives the defaults. A setting changed after a failed
+    load never silently discards the file: one that could not be read is not written
+    (the change lasts for this session), and a damaged one is first copied to
+    ``config.json.bak``.
+    """
 
     def __init__(self, path: Path | str) -> None:
         self._path = Path(path)
@@ -92,13 +119,16 @@ class ConfigStore:
     def _load(self) -> dict:
         path = str(self._path)
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError(f"config.json does not hold a JSON object ({type(data).__name__})")
         except FileNotFoundError:
             _logged_load_failures.pop(path, None)
+            _logged_skipped_saves.pop(path, None)
             return {}
         except Exception as error:
-            signature = f"{type(error).__name__}: {error}"
+            signature = _signature(error)
             if _logged_load_failures.get(path) != signature:
                 _logged_load_failures[path] = signature
                 _log_current_exception(
@@ -106,13 +136,37 @@ class ConfigStore:
                     "Failed to read config file %s; using defaults",
                     path,
                 )
-            return {}
+            return _UnreadableConfig(error)
         _logged_load_failures.pop(path, None)
+        _logged_skipped_saves.pop(path, None)
         return data
+
+    def _skip_save_of_unreadable_file(self, error: OSError) -> None:
+        """The file exists but could not be read: keep it, log once per distinct error."""
+        path = str(self._path)
+        signature = _signature(error)
+        if _logged_skipped_saves.get(path) != signature:
+            _logged_skipped_saves[path] = signature
+            _log_current_exception(
+                logging.WARNING,
+                "Config file %s was not saved because it could not be read",
+                path,
+                exc_info=error,
+            )
+
+    def _backup_unreadable(self) -> None:
+        """Copy the damaged file's bytes to config.json.bak, replacing an older one."""
+        content = self._path.read_bytes()
+        write_bytes_atomically(self._path.with_name(f"{self._path.name}.bak"), lambda stream: stream.write(content))
 
     def _save(self, data: dict) -> None:
         path = str(self._path)
+        if isinstance(data, _UnreadableConfig) and isinstance(data.error, OSError):
+            self._skip_save_of_unreadable_file(data.error)
+            return
         try:
+            if isinstance(data, _UnreadableConfig):
+                self._backup_unreadable()
             if not os.path.exists(path):
                 data = {
                     "language_detection": {
@@ -121,8 +175,12 @@ class ConfigStore:
                     **data,
                 }
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            write_text_atomically(
+                path,
+                lambda stream: json.dump(data, stream, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+                newline=None,
+            )
         except Exception:
             _log_current_exception(logging.ERROR, "Failed to save config file %s", path)
 

@@ -1,3 +1,4 @@
+import errno
 import json
 import logging
 import os
@@ -10,6 +11,14 @@ from unittest.mock import patch
 from uuid import UUID
 
 import config
+from tests.file_log_isolation import isolate_file_logs
+from tests.full_disk import full_disk
+
+
+def setUpModule() -> None:
+    # A test that makes config.py log outside assertLogs must not append to the real
+    # log/config.log (F-8); assertLogs still captures the records.
+    unittest.addModuleCleanup(isolate_file_logs("dotexpress.config"))
 
 
 class ConfigTest(unittest.TestCase):
@@ -542,6 +551,185 @@ class ConfigStoreTest(unittest.TestCase):
             store_path.read_text(encoding="utf-8"),
             json.dumps(expected, ensure_ascii=False, indent=2),
         )
+
+
+GOOD_CONFIG = b'{"view": {"font_size": 20}, "conversion": {"width": 30}}'
+
+
+class ConfigDataSafetyTest(unittest.TestCase):
+    """F-8 (D9-D11): config.json is written atomically and an unusable one is never silently discarded."""
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.directory = Path(temp_dir.name)
+        self.path = self.directory / "config.json"
+        self.backup = self.directory / "config.json.bak"
+        self.store = config.ConfigStore(self.path)
+        config._logged_load_failures.clear()
+        self.addCleanup(config._logged_load_failures.clear)
+
+    def _listing(self) -> list[str]:
+        return sorted(os.listdir(self.directory))
+
+    def _saved(self) -> dict:
+        return json.loads(self.path.read_text(encoding="utf-8"))
+
+    def _backup_bytes(self) -> bytes | None:
+        return self.backup.read_bytes() if self.backup.exists() else None
+
+    # --- atomic save (D9) --------------------------------------------------
+
+    def test_save_installs_through_a_synced_temporary_file(self) -> None:
+        with patch("os.fsync", wraps=os.fsync) as fsync:
+            self.store.set_output_mode("ascii")
+            self.store.set_conversion_width(52)
+
+        self.assertEqual(fsync.call_count, 2)
+        self.assertEqual(self._listing(), ["config.json"])
+        self.assertEqual(self._saved()["conversion"], {"output_mode": "ascii", "width": 52})
+
+    def test_save_failure_keeps_the_previous_file(self) -> None:
+        self.path.write_bytes(GOOD_CONFIG)
+
+        with full_disk(self.directory, after=10), self.assertLogs("dotexpress.config", level="ERROR") as captured:
+            self.store.set_output_mode("ascii")
+
+        self.assertEqual(self.path.read_bytes(), GOOD_CONFIG)
+        self.assertEqual(self._listing(), ["config.json"])
+        self.assertEqual(len(captured.records), 1)
+        self.assertEqual(captured.records[0].getMessage(), f"Failed to save config file {self.path}")
+
+    @unittest.skipUnless(os.name == "nt", "Windows line ends")
+    def test_saved_bytes_use_crlf_on_windows(self) -> None:
+        self.store.set_view_settings(18, "dark", "default")
+
+        expected = {
+            "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
+            "view": {"font_size": 18, "scheme": "dark", "braille_font": "default"},
+        }
+        self.assertEqual(
+            self.path.read_bytes(),
+            json.dumps(expected, ensure_ascii=False, indent=2).replace("\n", "\r\n").encode("utf-8"),
+        )
+
+    # --- load (D10) --------------------------------------------------------
+
+    def test_a_utf8_bom_is_read(self) -> None:
+        # Older Notepad writes "UTF-8" with a BOM.
+        self.path.write_bytes(b"\xef\xbb\xbf" + GOOD_CONFIG)
+
+        with patch.object(config, "logger") as logger:
+            self.assertEqual(self.store.get_view_font_size(), 20)
+            self.assertEqual(self.store.get_conversion_width(), 30)
+
+        self.assertEqual(logger.mock_calls, [])
+
+    def test_json_that_is_not_an_object_gives_defaults_and_one_warning(self) -> None:
+        # Before, every getter raised AttributeError, and the app did not start.
+        for content, type_name in ((b"null", "NoneType"), (b"[1, 2]", "list"), (b'"text"', "str"), (b"3", "int")):
+            with self.subTest(content=content):
+                self.path.write_bytes(content)
+
+                with self.assertLogs("dotexpress.config", level="WARNING") as captured:
+                    self.assertEqual(self.store.get_output_mode(), config.DEFAULT_OUTPUT_MODE)
+                    self.assertEqual(self.store.get_view_font_size(), config.DEFAULT_VIEW_FONT_SIZE)
+
+                self.assertEqual(len(captured.records), 1)
+                self.assertEqual(captured.records[0].getMessage(), f"Failed to read config file {self.path}; using defaults")
+                self.assertEqual(
+                    str(captured.records[0].exc_info[1]),
+                    f"config.json does not hold a JSON object ({type_name})",
+                )
+
+    # --- save after a failed load (D11) ------------------------------------
+
+    def test_a_change_after_a_damaged_load_keeps_a_backup(self) -> None:
+        cases = (
+            ("truncated JSON", b'{"view": {"font_size": 2'),
+            ("cp950 bytes", '{"language": "臺灣"}'.encode("cp950")),
+            ("a list", b"[1, 2]"),
+        )
+        for label, content in cases:
+            with self.subTest(label):
+                self.path.write_bytes(content)
+                self.backup.unlink(missing_ok=True)
+
+                with self.assertLogs("dotexpress.config", level="WARNING"):
+                    self.store.set_output_mode("ascii")
+
+                self.assertEqual(self._backup_bytes(), content)
+                self.assertEqual(self._saved(), {"conversion": {"output_mode": "ascii"}})
+                self.assertEqual(self._listing(), ["config.json", "config.json.bak"])
+
+    def test_a_second_backup_replaces_the_first(self) -> None:
+        for content in (b"{first", b"[second"):
+            self.path.write_bytes(content)
+            with self.assertLogs("dotexpress.config", level="WARNING"):
+                self.store.set_output_mode("ascii")
+
+        self.assertEqual(self._backup_bytes(), b"[second")
+        self.assertEqual(self._listing(), ["config.json", "config.json.bak"])
+
+    def test_a_change_after_an_unreadable_load_does_not_write(self) -> None:
+        # Locked or denied: the file still holds the user's settings, so it is kept.
+        self.path.write_bytes(GOOD_CONFIG)
+        real_open = open
+
+        def open_denying_reads(file, mode="r", *args, **kwargs):
+            if os.fspath(file) == str(self.path) and "r" in mode:
+                raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(file))
+            return real_open(file, mode, *args, **kwargs)
+
+        with (
+            patch("builtins.open", open_denying_reads),
+            self.assertLogs("dotexpress.config", level="WARNING") as captured,
+        ):
+            self.store.set_output_mode("ascii")
+            self.store.set_conversion_width(52)
+
+        self.assertEqual(self.path.read_bytes(), GOOD_CONFIG)
+        self.assertEqual(self._listing(), ["config.json"])
+        refusals = [record for record in captured.records if "was not saved" in record.getMessage()]
+        self.assertEqual(
+            [(record.levelno, record.getMessage()) for record in refusals],
+            [(logging.WARNING, f"Config file {self.path} was not saved because it could not be read")],
+        )
+
+    def test_a_failed_backup_prevents_the_write(self) -> None:
+        self.path.write_bytes(b"{damaged")
+
+        with (
+            patch("config.write_bytes_atomically", side_effect=OSError(errno.ENOSPC, "injected"), create=True),
+            self.assertLogs("dotexpress.config", level="WARNING") as captured,
+        ):
+            self.store.set_output_mode("ascii")
+
+        self.assertEqual(self.path.read_bytes(), b"{damaged")
+        self.assertEqual(self._listing(), ["config.json"])
+        errors = [record for record in captured.records if record.levelno == logging.ERROR]
+        self.assertEqual([record.getMessage() for record in errors], [f"Failed to save config file {self.path}"])
+        self.assertEqual(str(errors[0].exc_info[1]), f"[Errno {errno.ENOSPC}] injected")
+
+    def test_a_missing_file_is_created_without_backup(self) -> None:
+        self.store.set_output_mode("ascii")
+
+        self.assertEqual(self._listing(), ["config.json"])
+        self.assertEqual(
+            self._saved(),
+            {
+                "language_detection": {"charset_maps": config.DEFAULT_CHARSET_MAPS},
+                "conversion": {"output_mode": "ascii"},
+            },
+        )
+
+    def test_a_good_file_is_updated_without_backup(self) -> None:
+        self.path.write_bytes(GOOD_CONFIG)
+
+        self.store.set_output_mode("ascii")
+
+        self.assertEqual(self._listing(), ["config.json"])
+        self.assertEqual(self._saved(), {"view": {"font_size": 20}, "conversion": {"width": 30, "output_mode": "ascii"}})
 
 
 class ConfigModuleShapeTest(unittest.TestCase):

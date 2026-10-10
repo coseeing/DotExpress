@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import ast
-import os
-import tempfile
 from pathlib import Path
 
 from i18n import N_
+from shared.atomic_write import write_text_atomically
 
 
 PREPROCESSING_FILENAME = "preprocessing.py"
@@ -51,27 +50,15 @@ def validate_preprocessing_script(
 
 
 def save_preprocessing_script(path: Path | str, source: str) -> None:
+    """Validate ``source`` and write it to ``path`` through a synced temporary file (F-8).
+
+    The text is written as is (no newline translation). On an error the script keeps
+    its bytes and no temporary file is left.
+    """
     destination = Path(path)
     validate_preprocessing_script(source, filename=str(destination))
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
-            newline="",
-            dir=destination.parent,
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary:
-            temporary.write(source)
-            temporary_path = Path(temporary.name)
-        os.replace(temporary_path, destination)
-        temporary_path = None
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+    write_text_atomically(destination, lambda stream: stream.write(source), encoding="utf-8", newline="")
 
 
 def execute_preprocessing_script(path: Path | str, input_text: str) -> str:

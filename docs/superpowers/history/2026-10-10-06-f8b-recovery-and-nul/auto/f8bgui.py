@@ -6,7 +6,8 @@ the main window appears (the recovery box, the U+0000 box of the first document)
 well as the invalid-files dialog: ``start`` answers each one and returns what it showed.
 Work folders are built by script: packages are written with zipfile, and U+0000 reaches
 the app only through files. Nothing here touches the clipboard. Output shows U+FFFD as
-<U+FFFD>.
+<U+FFFD>. The review fix (F-8b2 build) added ``gui_log``, ``REPLACED_CONTENT`` and
+``replaced_box_ok``.
 """
 import os
 import subprocess
@@ -22,6 +23,9 @@ from f8agui import D, F, G, X, dx  # noqa: E402
 
 IMPORT_DIALOG = "匯入文件"
 REPLACEMENT = chr(0xFFFD)
+REPLACED_TITLE = "已取代字元"
+# The second paragraph of the U+0000 box since the review fix (M-5: 轉換前, before 轉譯前).
+REPLACED_CONTENT = "轉換前請刪除或修改這些 <U+FFFD>，否則每一個都會在點字中變成一段跳脫碼。"
 
 
 def show(value):
@@ -38,6 +42,24 @@ def leftover(d, file_name, name, text, braille, age_s=0):
 	modified = time.time() - age_s
 	os.utime(path, (modified, modified))
 	return path
+
+
+def replaced_box_ok(box):
+	"""Whether ``box`` (an f5gui.describe dict) is the 已取代字元 box with the expected content."""
+	return box.get("title") == REPLACED_TITLE and box.get("content", "").replace(REPLACEMENT, "<U+FFFD>") == REPLACED_CONTENT
+
+
+def replaced_boxes_ok(boxes):
+	"""``replaced_box_ok`` for each 已取代字元 box among ``boxes`` (dicts; other entries are skipped)."""
+	return [replaced_box_ok(box) for box in boxes if isinstance(box, dict) and box.get("title") == REPLACED_TITLE]
+
+
+def gui_log(d):
+	"""The lines of log\\gui.log without their timestamps ([] if there is none)."""
+	data = A.read(os.path.join(d, "log", "gui.log"))
+	if data is None:
+		return []
+	return [line[24:] for line in data.decode("utf-8", "replace").splitlines() if line[:4].isdigit()]
 
 
 def temporary_files(d):

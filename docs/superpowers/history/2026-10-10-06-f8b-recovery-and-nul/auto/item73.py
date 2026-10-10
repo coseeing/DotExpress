@@ -10,7 +10,8 @@ Usage: python item73.py <exe> <work folder> <73|74|75>
 75: File > Import data\\zero.txt and data\\code0.pdf (an untagged PDF whose text string
     holds code 0): the box (none); then File > Open code0, zero and code0 again: the boxes.
 Before F-8b (N-f8a2): no box; the editor ends at the first U+0000, and in 73 the first
-switch writes that cut text to alpha.dep.
+switch writes that cut text to alpha.dep. Since the review fix (F-8b2) each 已取代字元 box
+is also compared with f8bgui.REPLACED_CONTENT (M-5: 轉換前).
 """
 import os
 import sys
@@ -53,6 +54,7 @@ if item == "73":
 	A.package(d, "beta", "beta body", "⠃")
 	app, w, shown = B.start(d)
 	print(f"73 start: shown {B.show(shown)}")
+	print(f"73 start: replaced box content as expected {B.replaced_boxes_ok(shown)}")
 	print(f"73 docs {D.docs(w)} title {w.window_text()!r} input {B.show(D.get_input(w))}")
 	print(f"73 alpha.dep {B.show(B.members(d, 'alpha'))}")
 	print(f"73 Ctrl+Tab: {B.show(B.switch(app, w))}")
@@ -72,11 +74,15 @@ else:
 	app, w, shown = B.start(d)
 	print(f"{item} start: shown {B.show(shown)} docs {D.docs(w)}")
 	B.import_files(app, w, data, names)
-	print(f"{item} import: box {B.show(B.box(app))}")
+	imported = B.box(app)
+	print(f"{item} import: box {B.show(imported)}")
+	print(f"{item} import: replaced box content as expected {B.replaced_boxes_ok([imported])}")
 	print(f"{item} docs {D.docs(w)} title {w.window_text()!r} input {B.show(D.get_input(w))}")
 	if item == "75":
 		for name in ("code0", "zero", "code0"):
-			print(f"75 open {name}: box {B.show(B.open_document(app, w, name))}")
+			opened = B.open_document(app, w, name)
+			print(f"75 open {name}: box {B.show(opened)}")
+			print(f"75 open {name}: replaced box content as expected {B.replaced_boxes_ok([opened])}")
 			print(f"75 title {w.window_text()!r} input {B.show(D.get_input(w))}")
 	print("close:", D.close(app, w))
 	for name in ("zero", "code0")[: len(names)]:

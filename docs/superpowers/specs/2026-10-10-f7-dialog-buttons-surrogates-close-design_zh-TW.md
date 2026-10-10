@@ -48,8 +48,26 @@ F-6 正在平行撰寫 spec。它會修改 `client/dialog.py` 的字典管理對
 - 呼叫處以函式名稱標示，不以行號標示。下面的行號取自 `main` `e46ff26`，只供參考。
 - **F-6 在正式程式碼中新增的每個 `wx.MessageBox` 呼叫，以及每個沒有設定全部自訂標籤的 `wx.MessageDialog`，也都改用 helper（D3）。** plan 會在 F-6 之後的 `main` 上用「測試計畫」C1 的掃描重新列舉呼叫處，掃描測試也會持續守住這一點。
 - F-6 在 `tests/test_dictionary_management_dialog.py` 中 patch `wx.MessageBox` 的測試，也和既有測試一樣改為 patch helper（測試計畫 C）。
-- Windows 驗證項目編在 F-6 的項目之後。本文用 `4a`–`4l`，最終編號由 plan 決定。
+- Windows 驗證項目編在 F-6 的項目之後：53–64（plan 的編號；本規格最初使用預留的 `4a`–`4l`）。
 - 基準數字（`Ran`、msgid）由 plan 在 F-6 之後的 `main` 上重新量測。
+
+## 規劃後的修正（2026-10-10）
+
+plan（`docs/superpowers/plans/2026-10-10-f7-dialog-buttons-surrogates-close.md`，在 `d10dd94` 的 scratch clone 上 dry run：Task 0–4、6、7 完全重現，每個步驟也以 plan 自己的區塊腳本套用過，GUI 項目 53–64 對同一份程式碼的 packaged build 與 `N-f6b` 都執行過）沒有發現決策 D1–D9 或行為對照表的錯誤。plan 細化本規格之處，以本節為準。下文 Windows 驗證的項目 `4a`–`4l` 重新編為 **53–64**；NVDA 的人工項目是 **65**。
+
+1. **F-6 之後的呼叫處**（`fb7aff9`）：正式程式碼中有 20 處 `wx.MessageBox`（`dialog.py` 7 處、`gui.py` 11 處、`settings/dialogs.py` 2 處），加上「關於」對話框。F-6 新增了**第 21 處**：`BrailleFrame.on_open_dictionary_management`（編輯器的保護：`describe_unreadable_dictionary(...)`、`_("Error")`、`OK | ICON_ERROR`、`parent=self`），與其他各處一樣改用 helper。F-6 在字典管理中「編輯」的錯誤框是第 6 處。F-6 沒有新增 `wx.MessageDialog`，也沒有新增 `FindWindowById`。在 `fb7aff9` 上的行號：`dialog.py` 149、166、489、500、755、758、761（第 1–7 處）；`gui.py` 446、511、705、830、859、1075、1078、1083、1111、1115（第 8–17 處），493（`on_about`，第 20 處），1010（第 21 處）；`settings/dialogs.py` 158、695（第 18、19 處）。D1 的兩處查找在 `dialog.py` 56 與 393。
+2. **數量。** 基準是 `Ran 1337`（F-6 之後）；每個遷移步驟之後分別是 `Ran 1342`、`1352`、`1355`、`1361`、`1365`（新增 5、10、3、6、4 個測試，共 28 個），全程 `FAILED (errors=1, skipped=7)`，只有 F-W6。msgid 維持 364 個。測試計畫 A–E 之外的新測試：`test_scan_reads_the_production_modules`（掃描不是空的）、`test_invalid_entry_shows_the_message_on_the_dialog_and_focuses_the_source_text`（第 1 處原本沒有測試）與 `test_importing_binds_no_log_file`（第 7 點）。
+3. **掃描測試**（C1–C3）放在新模組 `client/tests/test_wx_call_sites.py`（4 個空白）；命中的位置寫成 `<檔案>:<類別>.<函式>`。
+4. **改指向**（C4）在遷移步驟 2 的綠燈步驟中進行，不在紅燈步驟：helper 存在之前 patch `message_box`，每個改指向的測試都會以 `AttributeError` 失敗。記錄的事件名稱保留 `"MessageBox"`。第 18 處既有的測試原本只檢查有訊息框出現，現在也斷言訊息、標題、樣式與 parent（C5）。
+5. **編輯器的測試工具**（`test_dictionary_entries_dialog.py`）兩種查找都提供：`FindWindow`（編輯器自己的按鈕），以及模擬 wx 全域搜尋的 `FindWindowById`（測試設定了較早開啟的對話框的按鈕時，先找到那些）。因此既有的編輯器測試在 D1 前後都通過，B3 則設定另一個對話框的按鈕。
+6. **Stub scope：** 每個受測程式碼會 import `ui.message_box` 的 scope 都把它列為 `isolate`（`wx_stub.load_speech_dialog`、`test_dialog_validation`、`test_converting_dialog`、`test_settings_dialogs`、`test_gui_document_flows`）。`gui_frame_stubs` 的 `_MessageDialog` 另外加上 `__enter__`／`__exit__` 與回傳 `wx.ID_OK` 的 `ShowModal`，讓沒有 patch 的訊息框仍回答 `wx.OK`，與舊的 stub `wx.MessageBox` 相同。
+7. **D6 的 logger** 在寫 log 時才綁定（在 `_log_unexpected_export_error` 裡面），不在 import 時綁定，做法同 F-6 審查 M-6 對 `read_problems` 的修正；`test_export_coordinator` 隔離 `dotexpress.gui`。
+8. **D6 也修好 P1-4 的缺陷 7**（以沒有 writer 的格式「全部匯出」時拋出 `ValueError`，沒有摘要）；原本釘住這個 KNOWN BUG 的測試改寫成修好之後的行為。
+9. **翻譯檔（D8）：** 逐位元組不變。重新執行 `generate-pot.bat` 產生的模板，與 commit 的模板只差 `POT-Creation-Date` 與 `#:` 參照行（行號移動，以及 `ui/message_box.py` 現在參照 `OK` 與 `Cancel`）；這些留到下一次字串變更重新產生模板時再更新。
+10. **GUI 腳本與項目：** `item53.py`（53、56、57）、`item54.py`（54、55）、`item58.py`（58–60）、`item61.py`（61–63），共用 `f7gui.py`；64 直接以 `38`、`39` 執行 F-5 的 `item38.py`（F-5 的 `rerun.py` 不傳這個參數）。56 讓一份文件匯出失敗的方法，是在匯出資料夾放一個名為 `alpha.brl` 的資料夾（覆蓋的問題回答「是」），不是鎖住檔案。61 先轉換 `A` U+FFFD `B` 作為比較：F-7 之後，貼上的 surrogate 得到相同的點字（`⡳⠭⠋⠋⠋⠙`，即 `\xfffd` 的跳脫）；之前是 `⡳⠭⠙⠦⠒⠙`（`\xd83d`）。58 計算程序中標題為 `無法儲存文件` 的頂層視窗數量，並先回答最上層的對話框；F-7 之後呼叫立即回傳（`0.0 s`，結果 0），不是「約 1 秒內」。
+11. **62、63 的改前結果：** 沒有訊息，但留下空的 `alpha.html`（`Path.write_text` 在編碼器失敗之前就建立了檔案）；「全部匯出」留下空的 `alpha.html`，沒有 `new.html`，也沒有摘要。F-7 之後，writer 不論因何種錯誤失敗，仍可能留下空的或不完整的檔案（writer 不是原子寫入）；列為後續項目。
+12. **plan 已確認 D9：** 在 `D:\dxtest\N-f6b\DotExpress.exe`（`fb7aff9` 的程式碼）上，項目 58 在 3 秒內出現兩個關閉對話框，`SendMessageTimeoutW` 要等內層對話框被回答才回傳（結果 0；兩次執行分別在 3.6 秒與 4.2 秒）。同一個 build 上的項目 55：編輯器顯示 `OK`／`Cancel`，文字處理或設定對話框開著時按它的「確定」都不存檔就關閉（`d1.csv` 只剩表頭）。plan 的 Task 5 在 D7 的 commit 之前重做這兩項。
+13. **小修正：** 遷移步驟 5 改為「（本步驟之前：D9，項目 58……）」；驗收標準 2 加上 `tests.test_wx_call_sites` 與 `tests.test_converting_dialog`；標準 7 的檔案清單加上 `test_wx_call_sites.py`、`test_converting_dialog.py` 與 `test_dialog_validation.py`；`_editor_text` 標註為 `control: wx.TextCtrl`；`localize_standard_buttons` 的 docstring 不提 `FindWindowById`，所以直接 `grep` 正式程式碼也找不到。
 
 ## 現況（2026-10-10 於 `main` `e46ff26`、worktree `D:\workspace\DotExpress-f7`、Windows 11 26200 驗證）
 
@@ -93,7 +111,7 @@ F-6 正在平行撰寫 spec。它會修改 `client/dialog.py` 的字典管理對
 - 字典名稱的詢問迴圈（`prompt_dictionary_name_until_success`：名稱對話框、`show_error`、再一次名稱對話框）是同樣的模式，所以有同樣的症狀（讀程式碼推得）。
 - wxPython 4.2.5 的 `wx.StdDialogButtonSizer` 只有 `SetAffirmativeButton`、`SetCancelButton`、`SetNegativeButton`，沒有 `Get*Button` 這些 getter。因此在出貨的 wxPython 上，`localize_standard_buttons` 的 sizer 退路永遠找不到按鈕，目前真正有作用的只有 `FindWindowById` 那條查找。
 
-**新發現：字典編輯器的「確定」可能丟掉修改**（以 `probe_modeless.py` 在純 wx 中量測；app 中的路徑由讀程式碼推得，由 GUI 項目 4c 確認）。
+**新發現：字典編輯器的「確定」可能丟掉修改**（以 `probe_modeless.py` 在純 wx 中量測；app 中的路徑由讀程式碼推得，由 GUI 項目 55 確認）。
 
 - `TextProcessingDialog` 與 `DotExpressSettingsDialog` 是非 modal 的單例對話框，各有一個 `wx.Button(self, wx.ID_OK, ...)`。其中之一開著時，使用者仍可以開啟字典管理並選「編輯」。
 - 這時 `DictionaryEntriesDialog.__init__` 透過 `self.FindWindowById(wx.ID_OK)` 找到的是**那個對話框**的確定按鈕，並把 `_on_ok` 綁在它上面。`_on_ok` 正是呼叫 `self._model.save(...)` 的處理函式。
@@ -190,7 +208,7 @@ F-6 正在平行撰寫 spec。它會修改 `client/dialog.py` 的字典管理對
 - **加上會否決可否決重入的 `_closing` 防護：** 第二次進入立刻否決。`SendMessageTimeoutW` 在同一個 tick 內返回，結果 `0`。始終只有一個對話框，之後正常回答。
 - **對話框開著時送 `WM_ENDSESSION`（`wParam = TRUE`）：** 兩種寫法下程序都立刻以結束碼 0 結束，而且**沒有第二個 close 事件**。wx 3.2 預設的 `wxApp::OnEndSession` 呼叫 `OnExit()` 與 `exit()`，而不是關閉視窗。磁碟上的包此時是上次成功的存檔（F-3 原子寫入）。因此 F-5 D8 所說「wx 只會在可否決的 query-end-session 關閉之後才送不可否決的關閉」並不符合 wx 3.2.9：session 結束從不產生不可否決的 close 事件。不可否決的關閉只來自 `Close(force=True)`，而 DotExpress 從不呼叫它。D8 的程式路徑保留為防禦分支。
 
-因此 `WM_QUERYENDSESSION` 的 M-5 已在純 wx 中確認：巢狀對話框，以及巢狀的「不儲存就關閉」在外層對話框的 modal 迴圈還在時銷毀視窗。packaged build 在撰寫防護之前，由 D9／項目 4f 檢查。
+因此 `WM_QUERYENDSESSION` 的 M-5 已在純 wx 中確認：巢狀對話框，以及巢狀的「不儲存就關閉」在外層對話框的 modal 迴圈還在時銷毀視窗。packaged build 在撰寫防護之前，由 D9／項目 58 檢查。
 
 ### 釘住今天行為的測試
 
@@ -383,7 +401,7 @@ def _editor_text(self, control) -> str:
 **D9. 撰寫 D7 之前，先在 packaged build 上確認 M-5。**
 
 1. 實作 agent 建置 F-7 之前的 `main`（F-6 之後；或沿用 F-6 任務的 build）。
-2. 對它執行項目 4f（見「Windows 驗證」）。
+2. 對它執行項目 58（見「Windows 驗證」）。
 3. 把巢狀對話框與被擋住的 `SendMessageTimeoutW` 記錄在 history 資料夾中。
 4. 然後才撰寫 D7 的 commit。
 
@@ -544,7 +562,7 @@ GUI 測試在 `client/tests/test_gui_document_flows.py`。含 surrogate 的字�
 2. `fix: show message boxes with the translated OK button (F-7)`：D2–D4。新增 `ui/message_box.py`，改寫 20 個呼叫處（加上 F-6 的），加入 `wx_stub` 的修改，搭配 A1–A6、C1、C2、C4 與 C5。
 3. `fix: read the editors without lone surrogates (F-7)`：D5，測試計畫 D 的 D1–D3。
 4. `fix: report every export failure (F-7)`：D6，測試計畫 D4–D8。
-5. （第 5 步之前：D9，在 F-7 之前的 build 上執行並記錄項目 4f。）`fix: veto a close that arrives while another close is asking (F-7)`：D7，E1–E4。
+5. （本步驟之前：D9，在 F-7 之前的 build 上執行並記錄項目 58。）`fix: veto a close that arrives while another close is asking (F-7)`：D7，E1–E4。
 
 每個 commit 以 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` 結尾，只 stage 明確的路徑。不碰翻譯檔（D8）。
 
@@ -589,31 +607,31 @@ GUI 測試在 `client/tests/test_gui_document_flows.py`。含 surrogate 的字�
 
 它們在 pywinauto venv（`$SP\uia`）中執行；缺少時以 `py -3.13 -m venv` 重建，並 `pip install pywinauto==0.6.9 psutil`。訊息框與 F-5 對話框都是 task dialog，所以用 UIA 讀取，做法同 `f5gui.describe`：標題、`MainInstruction`／`ContentText`、按鈕名稱、焦點。
 
-項目編號是預留的 `4a`–`4l`。最終編號由 plan 在 F-6 的項目之後指定。
+項目編號為 53–64，接在 F-6 的 42–52 之後（由 plan 指定；預留的編號是 `4a`–`4l`）。
 
 | # | 步驟 | F-7 之後的預期 | 改前 |
 | --- | --- | --- | --- |
-| 4a | 新增 `alpha`；再新增一次，輸入 `alpha`，按 Enter | 「已存在」訊息框：一個按鈕，翻譯後的確定；Enter 關閉它；重新顯示的名稱對話框有翻譯後的確定／取消，預填 `alpha`；Esc 取消；清單不變 | 訊息框按鈕是 `OK`；重新顯示的對話框是 `OK`／`Cancel`（F-W9） |
-| 4b | 字典管理：新增 `d1`；再新增一次 `d1` | 字典名稱對話框同 4a；「已存在」訊息框有翻譯後的確定 | 英文，同 4a |
-| 4c | 開啟文字處理（保持開著），開啟字典管理，選 `d1`，按編輯；新增詞條 `x`／`1`；按確定。再編輯一次 `d1` | 編輯器的按鈕有翻譯。確定會存檔：重新開啟時列出 `x`，`dictionary\d1.csv` 中有它。之後文字處理對話框自己的取消可以正常關閉它。改為在設定對話框開著時再做一次 | **編輯器的按鈕是 `OK`／`Cancel`；確定不存檔就關閉：沒有 `x`，`d1.csv` 不變**（記錄新發現的缺陷） |
-| 4d | 只有確定的訊息框，每種各一：「已存在」錯誤（4a）；Ctrl+Enter 之後的「轉換完成。」；「關於」對話框；一次有一份文件失敗的「全部匯出」（摘要警告；如何讓它失敗由 plan 指定，例如用 `lock.py` 開著目標檔） | 每個都顯示原本的文字、標題與圖示，以及翻譯後的確定，焦點在它上面；用 Enter 關閉其中一個、用 Esc 關閉另一個 | 同樣的訊息框，按鈕是 `OK` |
-| 4e | 刪除文件 `alpha`（先選否，再一次選是）；「全部匯出」到有衝突的資料夾（覆寫：否） | 系統的是／否標籤與以前相同；刪除時焦點在「否」，覆寫時在「是」；Alt+N／Alt+Y 可以回答；選否時文件／檔案保留 | 相同 |
-| 4f（D9） | 開著 `alpha`；輸入修改；`lock.py` 開著 `alpha.dep`（共用 `r`）；送出 `WM_CLOSE`。關閉對話框出現。在 driver 的執行緒中：`SendMessageTimeoutW(main, WM_QUERYENDSESSION, 0, ENDSESSION_LOGOFF, SMTO_NORMAL, 10000)`。在 3 秒內計數主視窗底下的「無法儲存文件」對話框，並記錄呼叫返回的時間與結果。對開著的對話框按 Esc；然後解除鎖定，按 Enter（重試）關閉 | 約 1 秒內呼叫返回，結果 0；全程恰好一個對話框；按 Esc 後 app 仍在執行，修改仍在編輯框中；解除鎖定＋Enter 後 app 結束，重新啟動後 `alpha` 有這個修改 | **兩個對話框（巢狀）；呼叫要等內層被回答後才返回**（確認 M-5） |
-| 4g | 開著 `alpha` 且未修改；同 4f 送出 `WM_QUERYENDSESSION` | 呼叫回傳 1；app 結束；`alpha.dep` 不變 | 相同（驗證工具本身） |
-| 4h | 同 4f 直到對話框出現；送出 `WM_ENDSESSION`（`wParam` 1、`lParam` `ENDSESSION_LOGOFF`） | 程序在 5 秒內以結束碼 0 結束；`alpha.dep` 的成員不變（上次成功的存檔），沒有 `.tmp`；`log\gui.log` 沒有新的 traceback | 相同（wx 不送 close 事件就結束） |
-| 4i | 貼上 `A`＋U+D83D＋`B`（`f5gui.paste_text_with_lone_surrogate`）；按 Ctrl+Enter | 「轉換完成。」，按鈕是翻譯後的確定；點字顯示 U+FFFD 的跳脫寫法（`\xfffd` 的點字方格），不是 `\xd83d`；編輯框仍是 `A`＋U+D83D＋`B` | 點字顯示 `\xd83d` 的跳脫寫法 |
-| 4j | 接續 4i：檔案 > 匯出 > HTML（雙視），存成新檔 | 「文件已成功匯出。」；檔案存在，內容有 `EF BF BD`，沒有 `ED A0 BD` | **沒有訊息，沒有檔案** |
-| 4k | 接續 4i：以 HTML「全部匯出」到空資料夾 | 成功的摘要；每份文件一個檔案 | **沒有摘要；批次停在 `alpha`** |
-| 4l | 重跑 F-5 的項目 38 與 39（既有的 `item38.py`，經由 `rerun.py`） | 與 F-5 的記錄相同，只是 Ctrl+Tab 的錯誤框現在顯示翻譯後的確定 | F-5 的結果 |
+| 53 | 新增 `alpha`；再新增一次，輸入 `alpha`，按 Enter | 「已存在」訊息框：一個按鈕，翻譯後的確定；Enter 關閉它；重新顯示的名稱對話框有翻譯後的確定／取消，預填 `alpha`；Esc 取消；清單不變 | 訊息框按鈕是 `OK`；重新顯示的對話框是 `OK`／`Cancel`（F-W9） |
+| 54 | 字典管理：新增 `d1`；再新增一次 `d1` | 字典名稱對話框同 53；「已存在」訊息框有翻譯後的確定 | 英文，同 53 |
+| 55 | 開啟文字處理（保持開著），開啟字典管理，選 `d1`，按編輯；新增詞條 `x`／`1`；按確定。再編輯一次 `d1` | 編輯器的按鈕有翻譯。確定會存檔：重新開啟時列出 `x`，`dictionary\d1.csv` 中有它。之後文字處理對話框自己的取消可以正常關閉它。改為在設定對話框開著時再做一次 | **編輯器的按鈕是 `OK`／`Cancel`；確定不存檔就關閉：沒有 `x`，`d1.csv` 不變**（記錄新發現的缺陷） |
+| 56 | 只有確定的訊息框，每種各一：「已存在」錯誤（53）；Ctrl+Enter 之後的「轉換完成。」；「關於」對話框；一次有一份文件失敗的「全部匯出」（摘要警告；如何讓它失敗由 plan 指定，例如用 `lock.py` 開著目標檔） | 每個都顯示原本的文字、標題與圖示，以及翻譯後的確定，焦點在它上面；用 Enter 關閉其中一個、用 Esc 關閉另一個 | 同樣的訊息框，按鈕是 `OK` |
+| 57 | 刪除文件 `alpha`（先選否，再一次選是）；「全部匯出」到有衝突的資料夾（覆寫：否） | 系統的是／否標籤與以前相同；刪除時焦點在「否」，覆寫時在「是」；Alt+N／Alt+Y 可以回答；選否時文件／檔案保留 | 相同 |
+| 58（D9） | 開著 `alpha`；輸入修改；`lock.py` 開著 `alpha.dep`（共用 `r`）；送出 `WM_CLOSE`。關閉對話框出現。在 driver 的執行緒中：`SendMessageTimeoutW(main, WM_QUERYENDSESSION, 0, ENDSESSION_LOGOFF, SMTO_NORMAL, 10000)`。在 3 秒內計數主視窗底下的「無法儲存文件」對話框，並記錄呼叫返回的時間與結果。對開著的對話框按 Esc；然後解除鎖定，按 Enter（重試）關閉 | 約 1 秒內呼叫返回，結果 0；全程恰好一個對話框；按 Esc 後 app 仍在執行，修改仍在編輯框中；解除鎖定＋Enter 後 app 結束，重新啟動後 `alpha` 有這個修改 | **兩個對話框（巢狀）；呼叫要等內層被回答後才返回**（確認 M-5） |
+| 59 | 開著 `alpha` 且未修改；同 58 送出 `WM_QUERYENDSESSION` | 呼叫回傳 1；app 結束；`alpha.dep` 不變 | 相同（驗證工具本身） |
+| 60 | 同 58 直到對話框出現；送出 `WM_ENDSESSION`（`wParam` 1、`lParam` `ENDSESSION_LOGOFF`） | 程序在 5 秒內以結束碼 0 結束；`alpha.dep` 的成員不變（上次成功的存檔），沒有 `.tmp`；`log\gui.log` 沒有新的 traceback | 相同（wx 不送 close 事件就結束） |
+| 61 | 貼上 `A`＋U+D83D＋`B`（`f5gui.paste_text_with_lone_surrogate`）；按 Ctrl+Enter | 「轉換完成。」，按鈕是翻譯後的確定；點字顯示 U+FFFD 的跳脫寫法（`\xfffd` 的點字方格），不是 `\xd83d`；編輯框仍是 `A`＋U+D83D＋`B` | 點字顯示 `\xd83d` 的跳脫寫法 |
+| 62 | 接續 61：檔案 > 匯出 > HTML（雙視），存成新檔 | 「文件已成功匯出。」；檔案存在，內容有 `EF BF BD`，沒有 `ED A0 BD` | **沒有訊息，沒有檔案** |
+| 63 | 接續 61：以 HTML「全部匯出」到空資料夾 | 成功的摘要；每份文件一個檔案 | **沒有摘要；批次停在 `alpha`** |
+| 64 | 重跑 F-5 的項目 38 與 39（既有的 `item38.py`，經由 `rerun.py`） | 與 F-5 的記錄相同，只是 Ctrl+Tab 的錯誤框現在顯示翻譯後的確定 | F-5 的結果 |
 
-絕不觸發真正的登出或關機；訊息只送給測試實例的主視窗。需要 NVDA 的項目維持人工，加入給使用者的清單。人工項目（使用者）：在 NVDA 下，一個只有確定的訊息框（4d）與重新顯示的名稱對話框（4a）讀出翻譯後的標籤。
+絕不觸發真正的登出或關機；訊息只送給測試實例的主視窗。需要 NVDA 的項目維持人工，加入給使用者的清單。人工項目（使用者）：在 NVDA 下，一個只有確定的訊息框（56）與重新顯示的名稱對話框（53）讀出翻譯後的標籤。這是項目 65。
 
 ## 風險
 
 - **非中文 Windows 上的是／否**（低，D4）。不變：由系統決定標籤。英文 Windows 上會在中文文字旁顯示英文的是／否，和今天相同。
 - **`FindWindow` 找到 id 相同的巢狀子視窗**（極低）。app 的對話框中沒有任何一個有兩個 id 相同的標準視窗。
 - **標籤改變影響自動化或 NVDA 使用習慣**（低）。新的文字就是第一次顯示時已在用的翻譯。舊腳本兩種標籤都接受。
-- **`_closing` 的否決讓 Windows 在登出時等待**（設計如此）。對話框開著時，DotExpress 回答「不可結束」，Windows 顯示「此 app 正在阻止登出」的畫面。「仍要登出」會經由 wx 的 `OnEndSession` 結束程序（4h）；上次成功存檔之後的修改會遺失，包完整無損。今天同樣的選擇出現在一個巢狀對話框之後。
+- **`_closing` 的否決讓 Windows 在登出時等待**（設計如此）。對話框開著時，DotExpress 回答「不可結束」，Windows 顯示「此 app 正在阻止登出」的畫面。「仍要登出」會經由 wx 的 `OnEndSession` 結束程序（60）；上次成功存檔之後的修改會遺失，包完整無損。今天同樣的選擇出現在一個巢狀對話框之後。
 - **lone surrogate 的點字改變**（極低）。顯示 U+FFFD 的跳脫寫法，而不是 surrogate 的跳脫寫法；這個字元本來就看不見，也從來不是合法的文字。
 - **documents 層寫 `gui.log`**（低）。coordinator 現在 import `log`；若有測試讓它寫 log 卻沒有用 `assertLogs`，就會在 checkout 中寫出 `client/log/gui.log`。上面的測試規則與驗收條件 6 守住這一點。
 

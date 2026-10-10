@@ -48,8 +48,26 @@ F-6 is specified in parallel. It changes the Dictionary Management dialog in `cl
 - Call sites are named by function, not by line. The line numbers below are from `main` `e46ff26` and serve as orientation only.
 - **Every `wx.MessageBox` call, and every `wx.MessageDialog` without full custom labels, that F-6 adds to production code is migrated to the helper too (D3).** The plan enumerates the call sites again on the post-F-6 `main` with the scan of Test Plan C1, and the scan tests keep it that way.
 - F-6's tests that patch `wx.MessageBox` in `tests/test_dictionary_management_dialog.py` are pointed at the helper, like the existing ones (Test Plan C).
-- The Windows verification items are numbered after F-6's. Here they are `4a`-`4l`; the plan assigns the final numbers.
+- The Windows verification items are numbered after F-6's: 53-64 (the plan's numbering; this spec first used the placeholders `4a`-`4l`).
 - The baseline counts (`Ran`, msgids) are taken again on the post-F-6 `main` by the plan.
+
+## Corrected after planning (2026-10-10)
+
+The plan (`docs/superpowers/plans/2026-10-10-f7-dialog-buttons-surrogates-close.md`, dry-run on scratch clones of `d10dd94`: Tasks 0-4, 6 and 7 replayed exactly, every step also applied with the plan's own block script, and the GUI items 53-64 run against a packaged build of the same code and against `N-f6b`) found no error in decisions D1-D9 or in the behavior table. Where the plan refines this spec, this section wins. The Windows verification items `4a`-`4l` below are renumbered **53-64**; the manual NVDA item is **65**.
+
+1. **Call sites after F-6** (`fb7aff9`): 20 production `wx.MessageBox` calls (7 in `dialog.py`, 11 in `gui.py`, 2 in `settings/dialogs.py`) plus the About box. F-6 added **site 21**, `BrailleFrame.on_open_dictionary_management` (its editor guard: `describe_unreadable_dictionary(...)`, `_("Error")`, `OK | ICON_ERROR`, `parent=self`); it is migrated like the others. F-6's Edit error box in Dictionary Management is site 6. F-6 added no `wx.MessageDialog` and no `FindWindowById`. Lines on `fb7aff9`: `dialog.py` 149, 166, 489, 500, 755, 758, 761 (sites 1-7); `gui.py` 446, 511, 705, 830, 859, 1075, 1078, 1083, 1111, 1115 (sites 8-17), 493 (`on_about`, site 20), 1010 (site 21); `settings/dialogs.py` 158, 695 (sites 18, 19). The two lookups of D1 are `dialog.py` 56 and 393.
+2. **Counts.** Baseline `Ran 1337` (after F-6); per migration step `Ran 1342`, `1352`, `1355`, `1361`, `1365` (5, 10, 3, 6, 4 new tests, 28 in all), `FAILED (errors=1, skipped=7)` throughout, F-W6 only. msgids stay 364. The new tests beyond Test Plan A-E: `test_scan_reads_the_production_modules` (the scan is not empty), `test_invalid_entry_shows_the_message_on_the_dialog_and_focuses_the_source_text` (site 1 had no test) and `test_importing_binds_no_log_file` (item 7).
+3. **Scan tests** (C1-C3) are in a new module `client/tests/test_wx_call_sites.py` (4 spaces); a hit reads `<file>:<class>.<function>`.
+4. **Re-pointing** (C4) is done in the green step of migration step 2, not in its red step: a patch of `message_box` before the helper exists fails with `AttributeError` in every re-pointed test. The recorded events keep their label `"MessageBox"`. Site 18's existing test only checked that a box was shown; it now asserts message, caption, style and parent (C5).
+5. **The editor harness** (`test_dictionary_entries_dialog.py`) keeps both lookups: `FindWindow` (the editor's own buttons) and `FindWindowById` modeled as wx's global search (an older dialog's buttons first, when a test sets them). The existing editor tests therefore pass before and after D1, and B3 sets the other dialog's buttons.
+6. **Stub scopes:** `ui.message_box` is an `isolate` name of every scope whose code under test imports it (`wx_stub.load_speech_dialog`, `test_dialog_validation`, `test_converting_dialog`, `test_settings_dialogs`, `test_gui_document_flows`). The `gui_frame_stubs` `_MessageDialog` also gets `__enter__`/`__exit__` and a `ShowModal` returning `wx.ID_OK`, so an unpatched box still answers `wx.OK` like the old stub `wx.MessageBox`.
+7. **D6's logger** is bound when an error is logged (inside `_log_unexpected_export_error`), not at import, as F-6 review M-6 did for `read_problems`; `test_export_coordinator` isolates `dotexpress.gui`.
+8. **D6 also fixes P1-4 defect 7** (Export All with a format that has no writer raised `ValueError` without a summary); the test that pinned that KNOWN BUG is rewritten to the fixed behavior.
+9. **Catalogs (D8):** byte-identical. A fresh `generate-pot.bat` differs from the committed template only in `POT-Creation-Date` and in `#:` reference lines (moved lines, and `ui/message_box.py` now refers to `OK` and `Cancel`); they stay until the next string change regenerates the template.
+10. **GUI scripts and items:** `item53.py` (53, 56, 57), `item54.py` (54, 55), `item58.py` (58-60), `item61.py` (61-63), shared `f7gui.py`; 64 runs F-5's `item38.py` directly with `38` and `39` (F-5's `rerun.py` does not pass that argument). 56's failing document is a folder named `alpha.brl` in the export folder (overwrite question: Yes), not a lock. 61 first converts `A` U+FFFD `B` and compares: after F-7 the pasted surrogate gives the same braille (`⡳⠭⠋⠋⠋⠙`, the escape `\xfffd`); before, `⡳⠭⠙⠦⠒⠙` (`\xd83d`). 58 counts the process's top-level windows titled `無法儲存文件` and answers the topmost first; after F-7 the call returns at once (`0.0 s`, result 0), not "within about 1 s".
+11. **62 and 63, Before:** no message, but an empty `alpha.html` is left (`Path.write_text` creates the file before the encoder fails); Export All leaves an empty `alpha.html`, no `new.html` and no summary. A writer that fails with any error can still leave an empty or partial file after F-7 (the writers are not atomic); follow-up.
+12. **D9 confirmed by the planner** on `D:\dxtest\N-f6b\DotExpress.exe` (`fb7aff9`'s code): item 58 showed two close dialogs within 3 s, and the `SendMessageTimeoutW` call returned (`result 0`, after 3.6 s and 4.2 s in two runs) only when the inner dialog was answered. Item 55 on the same build: the editor showed `OK` / `Cancel`, and its OK closed without saving with either Text Processing or Settings open (`d1.csv` kept only its header). The plan's Task 5 repeats both before the D7 commit.
+13. **Small fixes:** migration step 5 reads "(Before this step: D9, item 58 ...)"; acceptance criterion 2 adds `tests.test_wx_call_sites` and `tests.test_converting_dialog`; criterion 7's list adds `test_wx_call_sites.py`, `test_converting_dialog.py` and `test_dialog_validation.py`; `_editor_text` is annotated `control: wx.TextCtrl`; the docstring of `localize_standard_buttons` does not name `FindWindowById`, so a plain `grep` of the production code finds none.
 
 ## Current State (verified 2026-10-10 on `main` `e46ff26`, worktree `D:\workspace\DotExpress-f7`, Windows 11 26200)
 
@@ -93,7 +111,7 @@ Two more dialogs have standard buttons:
 - The dictionary name prompt (`prompt_dictionary_name_until_success`: name dialog, `show_error`, name dialog again) follows the same pattern, so it has the same symptom (by code reading).
 - `wx.StdDialogButtonSizer` in wxPython 4.2.5 has only `SetAffirmativeButton`, `SetCancelButton` and `SetNegativeButton`; the `Get*Button` getters do not exist. The sizer fallback of `localize_standard_buttons` therefore never finds a button on the shipping wxPython. Only the `FindWindowById` lookup works today.
 
-**Newly found: the dictionary editor's OK can lose the edits** (measured in plain wx with `probe_modeless.py`; the app path is by code reading and is confirmed by GUI item 4c).
+**Newly found: the dictionary editor's OK can lose the edits** (measured in plain wx with `probe_modeless.py`; the app path is by code reading and is confirmed by GUI item 55).
 
 - `TextProcessingDialog` and `DotExpressSettingsDialog` are modeless singletons, and each has a `wx.Button(self, wx.ID_OK, ...)`. While one of them is open, the user can open Dictionary Management and choose Edit.
 - `DictionaryEntriesDialog.__init__` then finds **that dialog's** OK through `self.FindWindowById(wx.ID_OK)` and binds `_on_ok` to it. `_on_ok` is the handler that calls `self._model.save(...)`.
@@ -190,7 +208,7 @@ There is no re-entrancy guard. Only the frame binds this handler (`self.Bind(wx.
 - **With a `_closing` guard that vetoes a re-entered vetoable close:** the second entry vetoes at once. `SendMessageTimeoutW` returns within the same tick with result `0`. Only one dialog is open, and it is answered normally afterwards.
 - **`WM_ENDSESSION` (`wParam = TRUE`) while the dialog is open:** the process exits at once with exit code 0, in both variants, and **no second close event is delivered**. wx 3.2's default `wxApp::OnEndSession` calls `OnExit()` and `exit()` instead of closing the window. The package on disk is then the last good save (F-3 atomic writes). F-5 D8's remark "wx only sends a non-vetoable close after the vetoable query-end-session close" therefore does not describe wx 3.2.9: a session end never produces a non-vetoable close event. A non-vetoable close comes only from `Close(force=True)`, which DotExpress never calls. D8's code path stays as a defensive branch.
 
-So M-5 is confirmed in plain wx for `WM_QUERYENDSESSION`: the nested dialog, and a nested Close without saving destroying the frame under the outer dialog's modal loop. The packaged build is checked in D9 / item 4f before the guard is written.
+So M-5 is confirmed in plain wx for `WM_QUERYENDSESSION`: the nested dialog, and a nested Close without saving destroying the frame under the outer dialog's modal loop. The packaged build is checked in D9 / item 58 before the guard is written.
 
 ### Tests that pin today's behavior
 
@@ -383,7 +401,7 @@ def _editor_text(self, control) -> str:
 **D9. M-5 is confirmed on a packaged build before D7 is written.**
 
 1. The implementation agent builds the pre-F-7 `main` (after F-6, or reuses that task's build).
-2. It runs item 4f against it (Windows Verification).
+2. It runs item 58 against it (Windows Verification).
 3. It records the nested dialog and the blocked `SendMessageTimeoutW` in the history folder.
 4. Only then is the D7 commit written.
 
@@ -544,7 +562,7 @@ New tests: A 6, B 3 (+1 changed harness hook, 3 changed), C 4 (+ any site tests 
 2. `fix: show message boxes with the translated OK button (F-7)`: D2-D4. This adds `ui/message_box.py`, migrates the 20 sites (plus F-6's) and adds the `wx_stub` changes, with A1-A6, C1, C2, C4 and C5.
 3. `fix: read the editors without lone surrogates (F-7)`: D5, D1-D3 of Test Plan D.
 4. `fix: report every export failure (F-7)`: D6, Test Plan D4-D8.
-5. (Before step 6: D9, item 4f on the pre-F-7 build, recorded.) `fix: veto a close that arrives while another close is asking (F-7)`: D7, E1-E4.
+5. (Before this step: D9, item 58 on the pre-F-7 build, recorded.) `fix: veto a close that arrives while another close is asking (F-7)`: D7, E1-E4.
 
 Each commit ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and stages explicit paths only. Locale files are not touched (D8).
 
@@ -589,31 +607,31 @@ The scripts go to the implementation's history folder `auto/`. They reuse, witho
 
 They run in the pywinauto venv (`$SP\uia`; rebuild it with `py -3.13 -m venv` and `pip install pywinauto==0.6.9 psutil` if missing). Message boxes and the F-5 dialog are task dialogs, so they are read through UIA, as in `f5gui.describe`: title, `MainInstruction`/`ContentText`, button names, focus.
 
-Item numbers are placeholders `4a`-`4l`. The plan assigns the final numbers after F-6's items.
+Items are numbered 53-64, after F-6's 42-52 (assigned by the plan; the placeholders were `4a`-`4l`).
 
 | # | Steps | Expected after F-7 | Before |
 | --- | --- | --- | --- |
-| 4a | Add `alpha`; Add again, type `alpha`, Enter | the "already exists" box: one button, the translated OK; Enter closes it; the name dialog shown again has the translated OK / Cancel, prefilled `alpha`; Esc cancels; the list is unchanged | box button `OK`; the dialog shown again has `OK` / `Cancel` (F-W9) |
-| 4b | Dictionary Management: Add `d1`; Add again `d1` | as 4a for the dictionary name dialog; the "already exists" box has the translated OK | English, as 4a |
-| 4c | Open Text Processing (keep it open), open Dictionary Management, select `d1`, Edit; Add the entry `x` / `1`; OK. Edit `d1` again | the editor's buttons are translated. OK saves: on reopening, `x` is listed and `dictionary\d1.csv` holds it. Then the Text Processing dialog's own Cancel closes it normally. Repeat with the Settings dialog open instead | **the editor's buttons are `OK` / `Cancel`; OK closes without saving: `x` is missing and `d1.csv` is unchanged** (records the newly found defect) |
-| 4d | The OK-only boxes, one of each kind: the "already exists" error (4a); "Conversion completed." after Ctrl+Enter; the About box; an Export All with one failing document (the summary warning; the plan names how to make one fail, for example a destination file held open by `lock.py`) | each shows its old text, caption and icon, the translated OK, focus on it; Enter closes one and Esc another | the same boxes with `OK` |
-| 4e | Delete document `alpha` (No, then again Yes); Export All into a folder with a conflict (Overwrite: No) | system Yes/No labels as before; the focus is on No for Delete and on Yes for Overwrite; Alt+N / Alt+Y answer; No keeps the document / files | identical |
-| 4f (D9) | `alpha` open; type an edit; `lock.py` holds `alpha.dep` (share `r`); post `WM_CLOSE`. The close dialog appears. From a driver thread: `SendMessageTimeoutW(main, WM_QUERYENDSESSION, 0, ENDSESSION_LOGOFF, SMTO_NORMAL, 10000)`. Count the `Cannot Save Document` dialogs under the main window for 3 s, and record the call's return time and result. Answer whatever is open with Esc; then unlock and close with Enter (Retry) | within about 1 s the call returns with result 0; there is exactly one dialog throughout; after Esc the app runs and the edit is in the editor; after unlock + Enter the app exits and `alpha` holds the edit after a restart | **two dialogs (nested); the call returns only after the inner one is answered** (confirms M-5) |
-| 4g | `alpha` open and unchanged; send `WM_QUERYENDSESSION` as in 4f | the call returns 1; the app exits; `alpha.dep` unchanged | identical (harness check) |
-| 4h | As 4f up to the dialog; send `WM_ENDSESSION` (`wParam` 1, `lParam` `ENDSESSION_LOGOFF`) | the process exits within 5 s with code 0; `alpha.dep` members are unchanged (the last good save), no `.tmp`; no new traceback in `log\gui.log` | identical (wx exits without a close event) |
-| 4i | Paste `A` + U+D83D + `B` (`f5gui.paste_text_with_lone_surrogate`); Ctrl+Enter | "Conversion completed." with the translated OK; the braille shows the U+FFFD escape (`\xfffd` cells), not `\xd83d`; the editor still reads `A` + U+D83D + `B` | the braille shows the `\xd83d` escape |
-| 4j | After 4i: File > Export > HTML (dual view) to a new file | "The document was exported successfully."; the file exists and holds `EF BF BD`, no `ED A0 BD` | **no message, no file** |
-| 4k | After 4i: Export All as HTML into an empty folder | the success summary; one file per document | **no summary; the batch stops at `alpha`** |
-| 4l | Re-run F-5 items 38 and 39 (the existing `item38.py` through `rerun.py`) | as recorded for F-5, except the Ctrl+Tab error box now shows the translated OK | the F-5 results |
+| 53 | Add `alpha`; Add again, type `alpha`, Enter | the "already exists" box: one button, the translated OK; Enter closes it; the name dialog shown again has the translated OK / Cancel, prefilled `alpha`; Esc cancels; the list is unchanged | box button `OK`; the dialog shown again has `OK` / `Cancel` (F-W9) |
+| 54 | Dictionary Management: Add `d1`; Add again `d1` | as 53 for the dictionary name dialog; the "already exists" box has the translated OK | English, as 53 |
+| 55 | Open Text Processing (keep it open), open Dictionary Management, select `d1`, Edit; Add the entry `x` / `1`; OK. Edit `d1` again | the editor's buttons are translated. OK saves: on reopening, `x` is listed and `dictionary\d1.csv` holds it. Then the Text Processing dialog's own Cancel closes it normally. Repeat with the Settings dialog open instead | **the editor's buttons are `OK` / `Cancel`; OK closes without saving: `x` is missing and `d1.csv` is unchanged** (records the newly found defect) |
+| 56 | The OK-only boxes, one of each kind: the "already exists" error (53); "Conversion completed." after Ctrl+Enter; the About box; an Export All with one failing document (the summary warning; the plan names how to make one fail, for example a destination file held open by `lock.py`) | each shows its old text, caption and icon, the translated OK, focus on it; Enter closes one and Esc another | the same boxes with `OK` |
+| 57 | Delete document `alpha` (No, then again Yes); Export All into a folder with a conflict (Overwrite: No) | system Yes/No labels as before; the focus is on No for Delete and on Yes for Overwrite; Alt+N / Alt+Y answer; No keeps the document / files | identical |
+| 58 (D9) | `alpha` open; type an edit; `lock.py` holds `alpha.dep` (share `r`); post `WM_CLOSE`. The close dialog appears. From a driver thread: `SendMessageTimeoutW(main, WM_QUERYENDSESSION, 0, ENDSESSION_LOGOFF, SMTO_NORMAL, 10000)`. Count the `Cannot Save Document` dialogs under the main window for 3 s, and record the call's return time and result. Answer whatever is open with Esc; then unlock and close with Enter (Retry) | within about 1 s the call returns with result 0; there is exactly one dialog throughout; after Esc the app runs and the edit is in the editor; after unlock + Enter the app exits and `alpha` holds the edit after a restart | **two dialogs (nested); the call returns only after the inner one is answered** (confirms M-5) |
+| 59 | `alpha` open and unchanged; send `WM_QUERYENDSESSION` as in 58 | the call returns 1; the app exits; `alpha.dep` unchanged | identical (harness check) |
+| 60 | As 58 up to the dialog; send `WM_ENDSESSION` (`wParam` 1, `lParam` `ENDSESSION_LOGOFF`) | the process exits within 5 s with code 0; `alpha.dep` members are unchanged (the last good save), no `.tmp`; no new traceback in `log\gui.log` | identical (wx exits without a close event) |
+| 61 | Paste `A` + U+D83D + `B` (`f5gui.paste_text_with_lone_surrogate`); Ctrl+Enter | "Conversion completed." with the translated OK; the braille shows the U+FFFD escape (`\xfffd` cells), not `\xd83d`; the editor still reads `A` + U+D83D + `B` | the braille shows the `\xd83d` escape |
+| 62 | After 61: File > Export > HTML (dual view) to a new file | "The document was exported successfully."; the file exists and holds `EF BF BD`, no `ED A0 BD` | **no message, no file** |
+| 63 | After 61: Export All as HTML into an empty folder | the success summary; one file per document | **no summary; the batch stops at `alpha`** |
+| 64 | Re-run F-5 items 38 and 39 (the existing `item38.py` through `rerun.py`) | as recorded for F-5, except the Ctrl+Tab error box now shows the translated OK | the F-5 results |
 
-Never trigger a real logoff or shutdown; messages go only to the test instance's main window. Items needing NVDA stay manual and are added to the user's list. The manual item (user): with NVDA, one OK box (4d) and the re-shown name dialog (4a) read the translated labels.
+Never trigger a real logoff or shutdown; messages go only to the test instance's main window. Items needing NVDA stay manual and are added to the user's list. The manual item (user): with NVDA, one OK box (56) and the re-shown name dialog (53) read the translated labels. This is item 65.
 
 ## Risks
 
 - **Yes/No on a non-Chinese Windows** (low, D4). Unchanged: the system labels them. An English Windows shows English Yes/No beside Chinese text, as today.
 - **`FindWindow` finds a nested child with the same id** (very low). None of the app's dialogs has two windows with the same standard id.
 - **A changed label disturbs automation or NVDA habits** (low). The text is the translation the first showing already used. The old scripts accept both labels.
-- **The `_closing` veto keeps Windows waiting at logoff** (by design). While the dialog is open, DotExpress answers "may not end", and Windows shows its "this app is preventing sign-out" screen. "Sign out anyway" ends the process through wx's `OnEndSession` (4h); the edits since the last good save are then lost, and the package is intact. Today the same choice comes after a nested dialog.
+- **The `_closing` veto keeps Windows waiting at logoff** (by design). While the dialog is open, DotExpress answers "may not end", and Windows shows its "this app is preventing sign-out" screen. "Sign out anyway" ends the process through wx's `OnEndSession` (60); the edits since the last good save are then lost, and the package is intact. Today the same choice comes after a nested dialog.
 - **Braille of a lone surrogate changes** (very low). It shows the U+FFFD escape instead of the surrogate's escape, for a character that was invisible and never valid.
 - **`gui.log` from the documents layer** (low). The coordinator now imports `log`; a test that makes it log without `assertLogs` would write `client/log/gui.log` in the checkout. The test rule above, and acceptance 6, guard this.
 

@@ -38,6 +38,18 @@
 - D6–D8：成功寫入的位元組與改前完全相同（BRL、HTML 的 CRLF 76；字典、匯出、文字處理腳本 82），資料夾中沒有留下 `.tmp`。匯出失敗時舊檔逐位元組保留（77、78）；被其他程式以共用讀寫開著的目的檔現在會匯出失敗並顯示 `[WinError 5]`，這是 spec Risks／O6 已知的取捨。
 - D9–D11：`config.json` 為 `null` 時程式可以啟動，並先把原檔保留為 `config.json.bak`（79；改前直接結束，沒有訊息）；有 BOM 的檔案正常讀取，設定都保留（80；改前啟動時就被清掉）；讀不到的檔案不會被寫入，`config.log` 只記一次警告，釋放後原本的設定還在（81；改前被換成單一設定）。
 
+## N-f8a2：審查修正後的重建（2026-10-10）
+
+審查（`review_task.md`）之後的修正改了兩個 production 檔：M-1（`823fb55`，`documents/workspace_service.py`：`import_files` 在寫入每份匯入文件前再看一次磁碟）與 M-5（`46a4ce2`，`dictionaries/manager.py`：`export_dictionary` 對資料夾目的地先給 `[Errno 13] Permission denied: '<目的地>'`）。因此重建，並重跑碰到這兩段程式的項目：68（匯入）與 82（字典匯出）。
+
+| 項目 | 結果 |
+| --- | --- |
+| build | 主 checkout（`46a4ce2`，`HEAD:client` `1d6780c8f7a5e53bc494e0c54bbeadcb0fdea500`），與 Task 6 Step 1 相同的指令：`pyinstaller` 是 `D:\workspace\DotExpress\client\.venv\Scripts\pyinstaller.exe`，PyInstaller 6.21.0（Python 3.13.15），log 有 `Build complete!`；六個 F-8a 改動的模組都 `bundled from the checkout`，`gui.py analyzed from the checkout`。`D:\dxtest\N-f8a2\DotExpress.exe`，48,756,071 bytes，sha256 `9944656AA3DE4D7E9E089463FA2650878E9DAA5E082550635F240641AC1782FE`。`git status --short -- client scripts` 無輸出 |
+| 68 ✔ | `auto68-f8a2`（`item66.py … 68`）：與 `auto68-f8a.log` 逐行相同（`diff --strip-trailing-cr` 無差異）：匯入問題 `['bad.txt: Document "bad" already exists.']`，`docs: ['alpha', 'ok']`，`bad.dep unchanged: True`，`close: exited` |
+| 82 ✔ | `auto82-f8a2`（`item82.py`）：與 `auto82-f8a.log` 逐行相同：四個 sha256 前綴、`out d1.csv equals dictionary d1.csv: True`、`preprocessing.py` 的位元組都不變，`out` 只有 `d1.csv`（沒有 `.tmp`），`close: exited` |
+
+每個情境都在新的 `D:\dxtest\auto<N>-f8a2` 資料夾執行，腳本是已 commit 的 `auto/item66.py`、`auto/item82.py`（未修改）；只結束該資料夾底下的程序，結束後 `tasklist` 沒有 DotExpress 程序；沒有任何腳本讀寫剪貼簿。其他項目（66、67、69、76–81）碰到的程式碼沒有改變，不重跑。新的檢查是在名稱比對之後才出現的檔案（M-1）與資料夾目的地（M-5），packaged build 中無法以這些腳本穩定重現，由單元測試涵蓋。N-f8a2 是之後要用的 build；項目 84 只走 BRL 匯出（`write_export_text`，兩個 build 相同），用 N-f8a 或 N-f8a2 都可以。
+
 ## 仍需人工（使用者）
 
 - [ ] 84（可選）：在磁碟快滿時匯出，確認舊檔不會被破壞。請沿用項目 34 的小型 VHD（需要系統管理員權限），把它寫到只剩幾 KB 可用空間，並在其中放一個內容正常的 `old.brl`。把 `D:\dxtest\N-f8a\DotExpress.exe` 複製到新資料夾 `D:\dxtest\manual84-f8a\` 執行，新增文件、貼上一段長文字並轉換，再用「檔案 → 匯出 → 點字檔 BRL」覆蓋那個 `old.brl`。預期：出現「匯出文件失敗：…」訊息，訊息中是磁碟已滿的錯誤；`old.brl` 的內容和大小完全不變；資料夾中沒有留下 `.old.brl.….tmp`。如果舊檔變空或只剩一部分，請告訴我們。

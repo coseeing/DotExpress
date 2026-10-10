@@ -442,6 +442,8 @@ class ReadProblemReasonTest(_DictionaryFilesTestCase):
 		target.EndModal.assert_not_called()
 		self.assertIsNone(target.edit_dictionary_name)
 		self.assertEqual(self.counts(target), [dialog._("Unreadable")])
+		# D2: only dictionaries that can be read keep a count (F-6 review M-3).
+		self.assertEqual(target._dictionary_counts, {})
 		self.assertTrue(target.read_problem_ctrl.shown)
 
 

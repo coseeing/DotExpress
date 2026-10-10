@@ -1247,6 +1247,22 @@ class ReplacedNulCharactersTest(unittest.TestCase):
         self.controller.open_document("gamma")
         self.assertEqual(self._save("A\ufffdB\nline2\ufffd\ufffdend\n", ""), 0)
 
+    def test_import_whose_save_fails_records_no_count(self) -> None:
+        # F-8b review M-4: only a document that was written is counted; a later Add of the
+        # same name must not show the notice for an empty document.
+        sources = self.root / "sources"
+        sources.mkdir()
+        (sources / "beta.txt").write_bytes(b"b\x00")
+        (sources / "gamma.txt").write_bytes(b"g\x00\x00")
+        self.service.load_documents()
+
+        with full_disk(self.workspace, pattern=r"^\.beta\.dep\."):
+            result = self.service.import_files(sorted(sources.iterdir()), format_key="all")
+
+        self.assertEqual(result.saved, [Document("gamma", "g\ufffd\ufffd", None)])
+        self.assertEqual(result.issues, [BatchIssue(path=self._path("beta"), reason=NO_SPACE)])
+        self.assertEqual(self._counts("beta", "gamma"), [0, 2])
+
     def test_pending_count_follows_rename_and_is_dropped_by_delete(self) -> None:
         self._write(Document("alpha", "a\x00", "1"), Document("beta", "b\x00\x00", "2"), Document("zoo", "z\x00", "3"))
         self.service.load_documents()

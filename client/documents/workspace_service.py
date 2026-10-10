@@ -13,6 +13,14 @@ loaded from its package; that record changes only after a successful write, so a
 failed save is retried by the next one.
 Add, Rename, Import and the default document never replace a package that is on disk
 but not listed, such as an invalid one kept at startup: its name counts as taken.
+Startup puts back a package that a crash during Save or Rename left only in a
+temporary file, and reports its name once; it never replaces a file. It then removes
+the temporary files it did not use that hold no package or a package whose content a
+document on disk holds; one that holds the only copy of its text stays.
+U+0000, which the Windows editors cannot hold, reaches the controller as U+FFFD when
+packages are loaded and files imported; the count is kept per document until the
+frame takes it to tell the user, and a loaded package is recorded as read, so the
+first save of such a document writes the replaced text.
 """
 
 from __future__ import annotations
@@ -31,6 +39,7 @@ from documents.workspace import (
     DEP_EXTENSION,
     Document,
     PackageFiles,
+    _displayable,
     _encodable,
     batch_import_documents,
     document_package_path_for_name,
@@ -38,6 +47,7 @@ from documents.workspace import (
     load_workspace_documents,
     move_document_package,
     prepare_document_for_save,
+    recover_interrupted_packages,
     save_document_package,
 )
 
@@ -73,6 +83,18 @@ def _package_fingerprint(path: Path) -> tuple[int, int] | None:
     return status.st_size, status.st_mtime_ns
 
 
+def _displayable_documents(documents: Iterable[Document]) -> tuple[list[Document], dict[str, int]]:
+    """``documents`` with U+0000 replaced (F-8 D12), and the count of each name that had any."""
+    shown: list[Document] = []
+    counts: dict[str, int] = {}
+    for document in documents:
+        displayable, count = _displayable(document)
+        shown.append(displayable)
+        if count:
+            counts[document.name] = count
+    return shown, counts
+
+
 class DocumentWorkspaceService:
     def __init__(
         self,
@@ -85,6 +107,9 @@ class DocumentWorkspaceService:
         self._workspace_dir = Path(workspace_dir)
         self._package_files = package_files or PackageFiles()
         self._saved: dict[str, _SavedPackage] = {}
+        self._recovered_names: list[str] = []
+        # Document name -> how many U+0000 were replaced, until the frame reports it (F-8 D12).
+        self._nul_pending: dict[str, int] = {}
 
     @property
     def workspace_dir(self) -> Path:
@@ -134,9 +159,23 @@ class DocumentWorkspaceService:
     def load_documents(self) -> list[Path]:
         ensure_workspace_directory(self._workspace_dir)
         documents, invalid_paths = load_workspace_documents(self._workspace_dir)
-        self._controller.load_documents(documents)
+        recovered = recover_interrupted_packages(self._workspace_dir, documents)
+        self._recovered_names = [document.name for document in recovered]
+        documents = sorted([*documents, *recovered], key=lambda document: (document.name.casefold(), document.name))
+        displayable, self._nul_pending = _displayable_documents(documents)
+        self._controller.load_documents(displayable)
+        # Recorded as read: the replaced text differs, so the first save writes it.
         self._reset_saved(documents)
         return invalid_paths
+
+    def take_recovered_document_names(self) -> list[str]:
+        """The documents the last ``load_documents`` put back from temporary files, once (F-8 D4)."""
+        names, self._recovered_names = self._recovered_names, []
+        return names
+
+    def take_replaced_character_count(self, name: str) -> int:
+        """How many U+0000 of ``name`` were replaced and not yet reported; 0 from then on (F-8 D12)."""
+        return self._nul_pending.pop(name, 0)
 
     def delete_invalid_files(self, paths: Iterable[Path], *, on_error: Callable[[OSError], None]) -> None:
         for path in paths:
@@ -176,6 +215,8 @@ class DocumentWorkspaceService:
         saved: list[Document] = []
         save_issues: list[BatchIssue] = []
         for document in documents:
+            # The replaced text is what gets saved (F-8 D12).
+            document, count = _displayable(document)
             package_path = self.package_path(document.name)
             try:
                 if os.path.lexists(package_path):
@@ -187,6 +228,8 @@ class DocumentWorkspaceService:
                 continue
             self._remember(document)
             saved.append(document)
+            if count:
+                self._nul_pending[document.name] = count
         self._controller.add_documents(saved)
         return ImportResult(saved=saved, issues=load_issues + save_issues)
 
@@ -205,6 +248,8 @@ class DocumentWorkspaceService:
         )
         self._saved.pop(source_name, None)
         self._remember(renamed)
+        if source_name in self._nul_pending:
+            self._nul_pending[new_name] = self._nul_pending.pop(source_name)
         return self._controller.rename_document(source_name, new_name)
 
     def delete_document(self, name: str) -> DeleteDocumentDecision:
@@ -212,6 +257,7 @@ class DocumentWorkspaceService:
         if package_path.exists():
             package_path.unlink()
         self._saved.pop(name, None)
+        self._nul_pending.pop(name, None)
         return self._controller.delete_document(name)
 
     def delete_all_documents(self, *, on_error: Callable[[OSError], None]) -> DeleteAllResult:
@@ -223,9 +269,14 @@ class DocumentWorkspaceService:
             except OSError as exc:
                 on_error(exc)
                 remaining_documents, invalid_paths = load_workspace_documents(self._workspace_dir)
-                self._controller.restore_documents_after_delete_all_failure(remaining_documents)
+                displayable, _counts = _displayable_documents(remaining_documents)
+                self._controller.restore_documents_after_delete_all_failure(displayable)
                 self._reset_saved(remaining_documents)
+                # Only documents that were still to be reported are reported later.
+                remaining = {document.name for document in remaining_documents}
+                self._nul_pending = {name: count for name, count in self._nul_pending.items() if name in remaining}
                 return DeleteAllResult(completed=False, invalid_paths=invalid_paths)
         self._saved = {}
+        self._nul_pending = {}
         self._controller.delete_all_documents()
         return DeleteAllResult(completed=True, invalid_paths=[])

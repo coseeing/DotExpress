@@ -8,12 +8,14 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import tempfile
 import zipfile
 from collections.abc import Callable
 from typing import BinaryIO
 
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
+from log import get_logger
 from shared.atomic_write import ensure_writable, write_bytes_atomically, write_text_atomically
 from shared.name_validation import normalize_base_name
 
@@ -23,6 +25,9 @@ BRL_EXTENSION = ".brl"
 PENDING_METADATA_SUFFIX = ".meta.json"
 DEFAULT_DOCUMENT_NAME = "new"
 _LONE_SURROGATE = re.compile(r"[\ud800-\udfff]")
+# ".<name>.dep.<random>.tmp": a Save's temporary file (16 hex digits) or the staged or
+# moved-aside package of a Rename (8 characters of tempfile's alphabet).
+_INTERRUPTED_PACKAGE = re.compile(r"^\.(?P<stem>.+)\.(?i:dep)\.[A-Za-z0-9_]+\.tmp$")
 
 
 @dataclass(frozen=True)
@@ -61,6 +66,30 @@ def replace_lone_surrogates(text: str) -> str:
     if _LONE_SURROGATE.search(text) is None:
         return text
     return text.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
+
+
+def replace_nul_characters(text: str) -> tuple[str, int]:
+    """Replace each U+0000 with U+FFFD; return the text and how many were replaced (F-8).
+
+    The Windows Edit control ends its text at U+0000, so a document shown with one
+    would be saved without everything after it. Text without U+0000 is returned as is.
+    """
+    count = text.count("\x00")
+    if not count:
+        return text, 0
+    return text.replace("\x00", "\ufffd"), count
+
+
+def _displayable(document: Document) -> tuple[Document, int]:
+    """``document`` with U+0000 replaced in its text and braille, and how many were replaced (F-8).
+
+    Pending braille stays ``None``; a document without U+0000 is returned as is.
+    """
+    text, count = replace_nul_characters(document.text)
+    braille, braille_count = (None, 0) if document.braille is None else replace_nul_characters(document.braille)
+    if not count and not braille_count:
+        return document, 0
+    return Document(name=document.name, text=text, braille=braille), count + braille_count
 
 
 def _encodable(document: Document) -> Document:
@@ -219,7 +248,11 @@ def load_document_package(path: Path | str) -> Document:
     package_path = Path(path)
     if package_path.suffix.casefold() != DEP_EXTENSION:
         raise ValueError("Document package must use the .dep extension.")
-    package_name = normalize_document_name(package_path.stem)
+    return _read_package(package_path, normalize_document_name(package_path.stem))
+
+
+def _read_package(package_path: Path, package_name: str) -> Document:
+    """The document of the package archive at ``package_path``, whose members must be named ``package_name``."""
     with zipfile.ZipFile(package_path, "r") as archive:
         names = [info.filename for info in archive.infolist() if not info.is_dir()]
         txt_names = [name for name in names if name.endswith(".txt")]
@@ -304,6 +337,88 @@ def load_workspace_documents(workspace_dir: Path) -> tuple[list[Document], list[
             invalid_paths.append(path)
     documents.sort(key=lambda document: (document.name.casefold(), document.name))
     return documents, invalid_paths
+
+
+def recover_interrupted_packages(directory: Path, listed: list[Document]) -> list[Document]:
+    """Put back the packages that a crash left only in temporary files (F-8); never replaces a file.
+
+    A Rename moves the old package aside to ``.<name>.dep.<random>.tmp`` before it
+    installs the staged new one, and a Save writes ``.<name>.dep.<random>.tmp`` before it
+    replaces the package, so a crash in between can leave a document only there. Each
+    such file in ``directory`` that is a valid package of a valid document name is
+    renamed to ``<name>.dep``, oldest first (a moved-aside package keeps the old
+    package's modification time, so an interrupted Rename gives the document back under
+    its old name, as a failed Rename does), unless a ``.dep`` of that name exists in any
+    case or ``listed`` or a document recovered before it holds the same text and braille.
+    A rename that fails is logged and leaves the file in place.
+
+    Then, after every rename, the leftovers that were not used are removed (the user's
+    decision of 2026-10-10): a file of a valid document name that is no zip archive at
+    all (empty, or its write was cut short), and a skipped package whose text and
+    braille ``listed`` or a recovered document holds. A skipped package that holds the
+    only copy of its text stays, as do a file whose rename failed, anything that is not
+    a leftover of a valid document name, folders and symbolic links. Only ``os.unlink``
+    of this call's regular-file candidates is used, never on a ``.dep``; a file that
+    changed after it was read is left, and a removal that fails is logged and leaves the
+    file. Returns the recovered documents, in recovery order.
+    """
+    directory = Path(directory)
+    candidates = []
+    unreadable = []
+    for path in sorted(directory.iterdir()):
+        match = _INTERRUPTED_PACKAGE.match(path.name)
+        if match is None or path.is_symlink() or not path.is_file():
+            continue
+        stem = match.group("stem")
+        try:
+            if normalize_document_name(stem) != stem:
+                continue
+            status = path.stat()
+            document = _read_package(path, stem)
+        except zipfile.BadZipFile:
+            # Only a file that is no zip archive at all; damaged member data is kept.
+            if not zipfile.is_zipfile(path):
+                unreadable.append((path, status))
+            continue
+        except Exception:
+            continue
+        candidates.append((status.st_mtime_ns, stem.casefold(), stem, path, document, status))
+    taken = {path.stem.casefold() for path in directory.glob(f"*{DEP_EXTENSION}")}
+    contents = {(document.text, document.braille) for document in listed}
+    recovered: list[Document] = []
+    unused = []
+    for _modified, folded, stem, path, document, status in sorted(candidates, key=lambda candidate: candidate[:3]):
+        if folded in taken or (document.text, document.braille) in contents:
+            unused.append((path, document, status))
+            continue
+        try:
+            # On Windows os.rename never replaces an existing file, unlike os.replace.
+            os.rename(path, directory / f"{stem}{DEP_EXTENSION}")
+        except OSError as error:
+            # Bound here, not at import, so importing this module adds no file handler.
+            get_logger("dotexpress.gui", "gui.log").error("Cannot recover interrupted document package %s: %s", path, error)
+            continue
+        taken.add(folded)
+        contents.add((document.text, document.braille))
+        recovered.append(document)
+    # Classified only now: a file skipped early can duplicate a document recovered after it.
+    duplicates = [(path, status) for path, document, status in unused if (document.text, document.braille) in contents]
+    for path, status in [*unreadable, *duplicates]:
+        _remove_unused_leftover(path, status)
+    return recovered
+
+
+def _remove_unused_leftover(path: Path, status: os.stat_result) -> None:
+    """``os.unlink`` the leftover ``path`` unless it changed since ``status`` was taken; a failure is logged."""
+    try:
+        current = os.lstat(path)
+        if not stat.S_ISREG(current.st_mode) or (current.st_size, current.st_mtime_ns) != (status.st_size, status.st_mtime_ns):
+            return
+        os.unlink(path)
+    except OSError as error:
+        # Bound here, not at import, as for a failed recovery. ERROR, because dotexpress.gui
+        # and its gui.log handler pass nothing below ERROR (log.get_logger's default).
+        get_logger("dotexpress.gui", "gui.log").error("Cannot remove unused temporary file %s: %s", path, error)
 
 
 def batch_import_documents(

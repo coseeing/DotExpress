@@ -15,8 +15,15 @@ from documents.workspace import BatchIssue, Document, PackageFiles, load_documen
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
 from shared import name_validation
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
+from tests.file_log_isolation import isolate_file_logs
 from tests.full_disk import full_disk
 from tests.windows_file_handles import SHARE_DELETE, SHARE_MODES, hold_open, make_read_only
+
+
+def setUpModule() -> None:
+    # load_documents can log a failed recovery to dotexpress.gui (F-8 D3): never to the real gui.log.
+    unittest.addModuleCleanup(isolate_file_logs("dotexpress.gui"))
+
 
 NO_SPACE = f"[Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}"
 
@@ -154,6 +161,44 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
 
         self.assertEqual(invalid_paths, [self.workspace / "bad.dep"])
         self.assertEqual(self.controller.documents, [Document("Alpha", "a", None), Document("beta", "b", "2")])
+
+    def _interrupted_rename(self, old_name: str, new_name: str, text: str) -> None:
+        """The two temporary files a crash inside Rename leaves: the old package moved aside
+        (with its older modification time) and the staged new one (F-8 D3)."""
+        self.workspace.mkdir(exist_ok=True)
+        files = PackageFiles()
+        aside = self.workspace / f".{old_name}.dep._vw4x6f_.tmp"
+        files.write(aside, Document(old_name, text, "1"))
+        older = aside.stat().st_mtime_ns - 60_000_000_000
+        os.utime(aside, ns=(older, older))
+        files.write(self.workspace / f".{new_name}.dep.mlw4jang.tmp", Document(new_name, text, "1"))
+
+    def test_load_documents_recovers_and_reports_names_once(self) -> None:
+        self._write(Document("beta", "b", "2"))
+        self._interrupted_rename("alpha", "gamma", "a")
+        service = self._service()
+
+        self.assertEqual(service.load_documents(), [])
+
+        self.assertEqual(self.controller.documents, [Document("alpha", "a", "1"), Document("beta", "b", "2")])
+        # The staged twin of the interrupted rename duplicates alpha and is removed.
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+        self.assertEqual(service.take_recovered_document_names(), ["alpha"])
+        self.assertEqual(service.take_recovered_document_names(), [])
+        # The recovered package is recorded as loaded: an unchanged save writes nothing (F-5).
+        self.controller.open_document("alpha")
+        with patch.object(workspace_service, "save_document_package") as save:
+            service.save_open_document(text="a", braille="1")
+        save.assert_not_called()
+
+    def test_load_documents_without_leftovers_recovers_nothing(self) -> None:
+        self._write(Document("alpha", "a", "1"))
+        service = self._service()
+
+        self.assertEqual(service.load_documents(), [])
+
+        self.assertEqual(service.take_recovered_document_names(), [])
+        self.assertEqual(self.controller.documents, [Document("alpha", "a", "1")])
 
     def test_delete_invalid_files_reports_each_error_and_continues(self) -> None:
         blocked = self._block("a-blocked")
@@ -828,6 +873,22 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(calls, ["on_error"])
         self.assertEqual(self.controller.documents, documents)
 
+    def test_delete_all_failure_reload_does_not_recover(self) -> None:
+        # Only startup recovers (F-8 D3): the reload after a failed Delete All lists what
+        # is on disk and leaves the temporary files alone.
+        documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
+        self._write(documents[0])
+        self._block("beta")
+        self._interrupted_rename("delta", "gamma", "d")
+        service = self._service(documents)
+
+        result = service.delete_all_documents(on_error=lambda _error: None)
+
+        self.assertFalse(result.completed)
+        self.assertEqual(self.controller.documents, [])
+        self.assertEqual(service.take_recovered_document_names(), [])
+        self.assertEqual(self._listing(), [".delta.dep._vw4x6f_.tmp", ".gamma.dep.mlw4jang.tmp", "beta.dep"])
+
 
 class SaveOnlyWhenChangedTest(unittest.TestCase):
     """Save writes only when the open document differs from its last write or load (F-5, D1-D3).
@@ -1074,6 +1135,214 @@ class SaveOnlyWhenChangedTest(unittest.TestCase):
             self.assertEqual(self._save(), 0)
 
             self.assertEqual(self._disk(), before)
+
+
+class ReplacedNulCharactersTest(unittest.TestCase):
+    """U+0000 in a package or an import reaches the controller as U+FFFD, counted once (F-8 D12)."""
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.root = Path(temp_dir.name)
+        self.workspace = self.root / "workspace"
+        self.controller = DocumentController()
+        self.service = DocumentWorkspaceService(self.controller, self.workspace)
+
+    def _path(self, name: str) -> Path:
+        return self.workspace / f"{name}.dep"
+
+    def _write(self, *documents: Document) -> None:
+        for document in documents:
+            save_document_package(self._path(document.name), document)
+
+    def _save(self, text: str, braille: str) -> int:
+        """Save the open document from these editor values; return how many packages were written."""
+        with patch.object(workspace_service, "save_document_package", wraps=workspace_service.save_document_package) as save:
+            self.service.save_open_document(text=text, braille=braille)
+        return save.call_count
+
+    def _counts(self, *names: str) -> list[int]:
+        return [self.service.take_replaced_character_count(name) for name in names]
+
+    def test_load_replaces_nul_for_the_controller_and_keeps_the_package(self) -> None:
+        self._write(Document("alpha", "a\x00b", "⠁\x00"))
+        before = self._path("alpha").read_bytes()
+
+        self.assertEqual(self.service.load_documents(), [])
+
+        self.assertEqual(self.controller.documents, [Document("alpha", "a\ufffdb", "⠁\ufffd")])
+        self.assertEqual(self._path("alpha").read_bytes(), before)
+        self.assertEqual(self._counts("alpha", "alpha"), [2, 0])
+
+    def test_recovered_package_with_nul_is_replaced_and_counted(self) -> None:
+        # F-8b review M-1: a package that recovery puts back reaches the controller as a
+        # loaded one does, with U+FFFD and counted, and is recorded as read.
+        self.workspace.mkdir()
+        files = PackageFiles()
+        aside = self.workspace / ".alpha.dep._vw4x6f_.tmp"
+        files.write(aside, Document("alpha", "a\x00b", "1\x00"))
+        older = aside.stat().st_mtime_ns - 60_000_000_000
+        os.utime(aside, ns=(older, older))
+        before = aside.read_bytes()
+
+        self.assertEqual(self.service.load_documents(), [])
+
+        self.assertEqual(self.service.take_recovered_document_names(), ["alpha"])
+        self.assertEqual(self.controller.documents, [Document("alpha", "a\ufffdb", "1\ufffd")])
+        self.assertEqual(self._path("alpha").read_bytes(), before)
+        self.assertEqual(self._counts("alpha", "alpha"), [2, 0])
+        self.controller.open_document("alpha")
+        self.assertEqual(self._save("a\ufffdb", "1\ufffd"), 1)
+        self.assertEqual(self._save("a\ufffdb", "1\ufffd"), 0)
+
+    def test_first_save_after_load_writes_the_replaced_text(self) -> None:
+        # The record keeps the package as read (with U+0000), so the editors' text differs
+        # from it and the first save writes; from then on the package holds U+FFFD.
+        self._write(Document("alpha", "a\x00b", "⠁\x00"))
+        self.service.load_documents()
+        self.controller.open_document("alpha")
+
+        self.assertEqual(self._save("a\ufffdb", "⠁\ufffd"), 1)
+        self.assertEqual(self._save("a\ufffdb", "⠁\ufffd"), 0)
+
+        self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a\ufffdb", "⠁\ufffd"))
+        self.service.load_documents()
+        self.assertEqual(self._counts("alpha"), [0])
+
+    def test_unopened_document_keeps_its_package_and_count(self) -> None:
+        self._write(Document("alpha", "a\x00b", "⠁"), Document("beta", "b", "⠃"))
+        self.service.load_documents()
+        before = self._path("alpha").read_bytes()
+        self.controller.open_document("beta")
+
+        self.assertEqual(self._save("b edited", "⠃"), 1)
+
+        self.assertEqual(self._path("alpha").read_bytes(), before)
+        self.assertEqual(self._counts("alpha", "beta"), [1, 0])
+        # Replaced again at the next load; nothing is written without the user.
+        self.service.load_documents()
+        self.assertEqual(self._counts("alpha"), [1])
+        self.assertEqual(self._path("alpha").read_bytes(), before)
+
+    def test_import_saves_the_replaced_text_and_counts_it(self) -> None:
+        sources = self.root / "sources"
+        sources.mkdir()
+        (sources / "gamma.txt").write_bytes(b"A\x00B\nline2\x00\x00end\n")
+        save_document_package(sources / "delta.dep", Document("delta", "d\x00", "\x00⠙"))
+        (sources / "zeta.txt").write_bytes(b"clean")
+        self.service.load_documents()
+
+        result = self.service.import_files(sorted(sources.iterdir()), format_key="all")
+
+        expected = [
+            Document("delta", "d\ufffd", "\ufffd⠙"),
+            Document("gamma", "A\ufffdB\nline2\ufffd\ufffdend\n", None),
+            Document("zeta", "clean", None),
+        ]
+        self.assertEqual(result, ImportResult(saved=expected, issues=[]))
+        self.assertEqual(self.controller.documents, expected)
+        self.assertEqual([load_document_package(self._path(document.name)) for document in expected], expected)
+        self.assertEqual(self._counts("delta", "gamma", "zeta"), [2, 3, 0])
+        # The record holds what was written: the unchanged text is not written again.
+        self.controller.open_document("gamma")
+        self.assertEqual(self._save("A\ufffdB\nline2\ufffd\ufffdend\n", ""), 0)
+
+    def test_import_whose_save_fails_records_no_count(self) -> None:
+        # F-8b review M-4: only a document that was written is counted; a later Add of the
+        # same name must not show the notice for an empty document.
+        sources = self.root / "sources"
+        sources.mkdir()
+        (sources / "beta.txt").write_bytes(b"b\x00")
+        (sources / "gamma.txt").write_bytes(b"g\x00\x00")
+        self.service.load_documents()
+
+        with full_disk(self.workspace, pattern=r"^\.beta\.dep\."):
+            result = self.service.import_files(sorted(sources.iterdir()), format_key="all")
+
+        self.assertEqual(result.saved, [Document("gamma", "g\ufffd\ufffd", None)])
+        self.assertEqual(result.issues, [BatchIssue(path=self._path("beta"), reason=NO_SPACE)])
+        self.assertEqual(self._counts("beta", "gamma"), [0, 2])
+
+    def test_pending_count_follows_rename_and_is_dropped_by_delete(self) -> None:
+        self._write(Document("alpha", "a\x00", "1"), Document("beta", "b\x00\x00", "2"), Document("zoo", "z\x00", "3"))
+        self.service.load_documents()
+
+        self.service.rename_document("alpha", "gamma")
+        self.service.delete_document("beta")
+
+        self.assertEqual(self._counts("alpha", "beta", "gamma"), [0, 0, 1])
+        self.assertTrue(self.service.delete_all_documents(on_error=lambda _error: None).completed)
+        self.assertEqual(self._counts("zoo"), [0])
+
+    def test_delete_all_failure_reload_keeps_only_pending_counts(self) -> None:
+        self._write(Document("alpha", "a\x00", "1"), Document("beta", "b\x00\x00", "2"), Document("zoo", "z\x00", "3"))
+        self.service.load_documents()
+        self.assertEqual(self._counts("alpha"), [1])
+        real_unlink = Path.unlink
+
+        def unlink(path, *args, **kwargs):
+            if path.name == "alpha.dep":
+                raise PermissionError(errno.EACCES, "injected", str(path))
+            return real_unlink(path, *args, **kwargs)
+
+        errors: list[OSError] = []
+        with patch("pathlib.Path.unlink", autospec=True, side_effect=unlink):
+            result = self.service.delete_all_documents(on_error=errors.append)
+
+        self.assertFalse(result.completed)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(
+            self.controller.documents,
+            [
+                Document("alpha", "a\ufffd", "1"),
+                Document("beta", "b\ufffd\ufffd", "2"),
+                Document("zoo", "z\ufffd", "3"),
+            ],
+        )
+        self.assertEqual(self._counts("alpha", "beta", "zoo"), [0, 2, 1])
+
+    def test_delete_all_failure_after_a_deletion_drops_the_deleted_count(self) -> None:
+        # F-8b review M-3: alpha is deleted and beta is refused; alpha's count goes with
+        # its package, so a later Import of a clean alpha shows no notice.
+        self._write(Document("alpha", "a\x00", "1"), Document("beta", "b\x00\x00", "2"), Document("zoo", "z\x00", "3"))
+        self.service.load_documents()
+        real_unlink = Path.unlink
+
+        def unlink(path, *args, **kwargs):
+            if path.name == "beta.dep":
+                raise PermissionError(errno.EACCES, "injected", str(path))
+            return real_unlink(path, *args, **kwargs)
+
+        errors: list[OSError] = []
+        with patch("pathlib.Path.unlink", autospec=True, side_effect=unlink):
+            result = self.service.delete_all_documents(on_error=errors.append)
+
+        self.assertFalse(result.completed)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(
+            self.controller.documents,
+            [Document("beta", "b\ufffd\ufffd", "2"), Document("zoo", "z\ufffd", "3")],
+        )
+        self.assertEqual(self._counts("alpha", "beta", "zoo"), [0, 2, 1])
+
+    def test_text_without_nul_is_unchanged(self) -> None:
+        self._write(Document("alpha", "a", "1"), Document("beta", "b", None))
+        loaded: list[Document] = []
+        real_load = workspace_service.load_workspace_documents
+
+        def load(directory):
+            result = real_load(directory)
+            loaded.extend(result[0])
+            return result
+
+        with patch.object(workspace_service, "load_workspace_documents", side_effect=load):
+            self.service.load_documents()
+
+        self.assertEqual(len(loaded), 2)
+        self.assertTrue(all(shown is read for shown, read in zip(self.controller.documents, loaded)))
+        self.assertEqual(self._counts("alpha", "beta"), [0, 0])
+        self.controller.open_document("alpha")
+        self.assertEqual(self._save("a", "1"), 0)
 
 
 if __name__ == "__main__":

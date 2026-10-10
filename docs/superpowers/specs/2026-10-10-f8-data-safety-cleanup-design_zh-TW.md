@@ -18,14 +18,14 @@
 本任務完成後：
 
 - 程式的任何動作都不會覆寫或移除不在文件清單中的 `.dep`。新增與重新命名會以既有的「已存在」訊息拒絕這個名稱，匯入把它列為匯入問題，預設文件改用一個沒被占用的名稱。
-- 啟動時，若某份文件的重新命名或存檔因當機而中斷，只要名稱沒被占用、清單裡也沒有內容相同的文件，就把它放回原本的包名稱，並告訴使用者復原了哪些文件。程式從不刪除任何暫存檔。
+- 啟動時，若某份文件的重新命名或存檔因當機而中斷，只要名稱沒被占用、清單裡也沒有內容相同的文件，就把它放回原本的包名稱，並告訴使用者復原了哪些文件。接著刪除復原決定不使用的暫存檔，但保存某段文字唯一副本的那種不刪（F-8b 審查後使用者 2026-10-10 的決定；「規劃後的修正（F-8b）」第 10 點）。
 - 其餘所有寫入使用者資料的地方都改走 `shared/atomic_write.py`：文字處理程式、新增／匯入／預設字典建立的字典檔、字典匯出、`config.json`，以及 BRL 與 HTML 匯出。失敗時目標檔逐位元組不變（或仍不存在），也不留下暫存檔。成功時寫出的位元組與現在相同。
 - 不能用的 `config.json` 不再讓程式無法啟動，也不會被默默丟掉：不是 JSON 物件的檔案視同損壞；接受 UTF-8 BOM；讀不到的檔案不會被覆寫；損壞的檔案在被取代前會先複製成 `config.json.bak`。
 - U+0000 永遠不會進到編輯框。開啟原本含 U+0000 的文件時，會跳出訊息框，寫出文件名稱與字元數；每份文件每次執行只出現一次。第一次存檔就寫入取代後的文字，所以下次啟動不會再出現。
 
 新的使用者可見字串：4 個（msgid 364 -> 368），見「使用者可見字串」。
 
-非目標：字典條目與文字處理程式中的 U+0000（見範圍外）；刪除或清理暫存檔；取代時保留屬性、ACL 或替代資料流（沿用 F-3 D11）；不同執行緒之間 `config.json` 的讀改寫競態；F-9 的轉換結果去向。
+非目標：字典條目與文字處理程式中的 U+0000（見範圍外）；刪除或清理暫存檔（啟動時復原不使用的包殘留檔除外，D3 第 7 步）；取代時保留屬性、ACL 或替代資料流（沿用 F-3 D11）；不同執行緒之間 `config.json` 的讀改寫競態；F-9 的轉換結果去向。
 
 **拆分建議。** 工作可以乾淨地分成兩個任務。建議實作為 **F-8a**（D1–D2、D6–D11：沒有新字串、沒有新 UI），接著 **F-8b**（D3–D5、D12–D15：兩個提示與 4 個新 msgid），各自有 plan、review 與 build。本 spec 同時涵蓋兩者，讓決策保持一致。若協調者決定維持一個任務，下面的遷移步驟依序執行即可，不需更動（Decided by orchestrator with the recommended default; user may override before merge）。
 
@@ -55,6 +55,29 @@ F-8a 的 plan（`docs/superpowers/plans/2026-10-10-f8a-data-safety-cleanup.md`�
 11. **程式在啟動時就會寫入 `config.json`。** client-init 執行緒在主視窗顯示後立刻存入 client id，所以行為對照表中的「下一次變更」在啟動時就發生：F-8 之前，含 BOM 的檔案在啟動時就被 `{"client": {"id": ...}}` 取代（在 `N-f7` 上實測，項目 80；截斷或不是 UTF-8 的檔案走同一條路）；F-8 之後，檔案損壞時這第一次寫入會先保留 `config.json.bak`（項目 79），檔案讀不到時則略過並記錄一次警告（項目 81）。
 12. **Windows 項目。** 字型大小以「Ctrl＋在原文編輯框上滾動滑輪一格」改變。項目 80 檢查含 BOM 的檔案中的寬度 30 被保留，不在「設定」中改寬度。項目 81 以**只允許寫入**的共用模式（其他程式可寫不可讀）佔用 `config.json`，而不是「不共用」：不共用時，啟動時既有的可寫入檢查（`prepare_application_directories` 以附加模式開啟 `config.json`）會失敗，兩個版本都顯示既有的「啟動錯誤」，那不是 D11 的情況。F-8 之前的項目 79：沒有主視窗，程序約 3 秒後以結束碼 1 結束，沒有任何記錄。項目 77、78 以 `lockshare.py`（共用讀寫）佔用目標檔。項目 82 比較兩個版本做同樣步驟後的位元組。
 13. **驗收條件 7。** `shared/atomic_write.py` 之外，正式程式碼中剩下的直接寫入是：`app_paths.py` 對 `config.json` 的附加模式檢查（不寫入任何內容）、`PackageFiles.write` 與 `PackageFiles.temporary_path`（F-3 重新命名時私有的暫存套件檔，同步到磁碟後以 `os.replace` 安裝），以及 `dual_view/files.py`（規格已排除）。
+
+## 規劃後的修正（F-8b，2026-10-10）
+
+F-8b 的 plan（`docs/superpowers/plans/2026-10-10-f8b-recovery-and-nul.md`，在 `main` `1b19290` 的 scratch clone 上 dry run：Task 0–3 完全重現，每個步驟也以 plan 自己的區塊腳本套用、翻譯檔指令照 plan 執行，GUI 項目 70–75 對同一份程式碼的 packaged build 與 `N-f8a2` 都執行過）依 F-8a 之後的程式碼重新檢查了 D3–D5 與 D12–D15，沒有發現這些決策或其行為對照列的錯誤。plan 細化本規格之處，以本節為準。
+
+1. **數量。** 步驟 5 之後 `Ran 1419`（新增 16 個測試），步驟 6 之後 `Ran 1434`（新增 15 個）；基準 1403（F-8a 的 1400 加上其審查補的 3 個）；全程 `FAILED (errors=1, skipped=7)`，只有 F-W6；msgid 364 -> 366 -> 368。測試計畫 D 有 15 個：`test_document_workspace` 的 D1–D9 再加兩個（不是包殘留的檔案被忽略；兩個中斷的重新命名依舊到新復原），D8 也記錄 `os.replace`（`test_recovery_never_deletes_or_replaces_a_file`，審查修正時改名，見第 10 點）；`test_workspace_service` 的 D11、D12 與「沒有殘留時不復原任何東西」；D13。測試計畫 E 有 14 個：E1–E13（E13 是 `test_editors_receive_the_full_text`）再加 `test_import_of_two_files_with_nul_shows_each_notice_when_it_is_opened`（項目 75 的流程）。驗收條件 2 的測試組從 `Ran 537` 變為 `Ran 568`，`OK (skipped=7)`。
+2. **F1 拆成兩個，** 每個步驟一個，讓每次重新產生翻譯檔之前都先紅燈：`test_recovery_strings_are_translated`（步驟 5）與 `test_replaced_character_strings_are_translated`（步驟 6）。
+3. **log 隔離。** `test_document_workspace` 與 `test_workspace_service` 在 `setUpModule` 隔離 `dotexpress.gui`。復原的測試斷言沒有任何記錄，D9 除外：在 Windows 上 `os.rename` 會拒絕已被占用的名稱，所以少了名稱規則時只會在 log 中出現。
+4. **D9** 以 patch 過的 `os.rename`（先建出目標檔再改名）模擬競態。記錄為 `ERROR` 層級的一行 `Cannot recover interrupted document package <path>: [WinError 183] ...`，不附 traceback。
+5. **D3 的細節。** 樣式為 `^\.(?P<stem>.+)\.(?i:dep)\.[A-Za-z0-9_]+\.tmp$`，只看一般檔案。主檔名不是合法文件名稱的檔案，光靠 `_read_package(package_path, package_name)` 就會略過（成員名稱經正規化後必須等於主檔名）；規則 1 的明確檢查保留，由 D6 釘住行為。logger 在呼叫時才取得。復原的文件依載入清單的順序（先 `casefold`，再比名稱）併入；訊息框依復原順序（最舊的先）列出名稱。
+6. **D12 的輔助函式。** `documents/workspace_service.py` 新增 `_displayable_documents(documents) -> (documents, counts)`，載入與全部刪除後的重新載入都用它；`take_replaced_character_count` 取出並移除數量。
+7. **翻譯檔。** 步驟 5 中 `msgmerge` 把 `Documents Recovered` 模糊配對到 `Documents`（`文件`）；plan 去掉這個旗標。步驟 6 沒有模糊配對。兩次重新產生也一併更新 F-8a 留下的過時 `#:` 參照行。
+8. **Windows 項目。** 「改前」是 `N-f8a2`。wx 把每個訊息框顯示成 task dialog：第一段是主要說明，其餘是內容；UIA 讀不到圖示（由單元測試釘住）。啟動時的訊息框出現在主視窗之前。項目 74、75 匯入 `zero.txt`：`nul` 是 Windows 的保留名稱，`nul.txt` 會成為匯入問題。F-8b 之前，項目 73–75 也顯示磁碟上的遺失：文件開啟後關閉程式（或開啟另一份文件），包裡只剩第一個 U+0000 之前的文字。項目 70 多一次啟動：改 alpha 的文字、關閉後再啟動（見 9）。
+9. **新的風險（已實測）：被略過的殘留檔，之後的某次啟動可能被復原。** 規則 1–4 每次啟動都重新判斷，被略過的檔案留在磁碟上。重新命名 alpha 為 gamma 時中斷：alpha 被復原，staged 的 `.gamma.dep.<8>.tmp` 留著；使用者一旦修改 alpha，下次啟動就把那份 staged 檔以舊文字復原成新文件 `gamma`，並顯示列出 `gamma` 的「已復原文件」（F-8b build 上項目 70 的第三次啟動）。同理，已完成的重新命名留下的舊包，在改名後的文件被修改後會以舊名稱回來；中斷的存檔留下的暫存檔，在其文件被改名或刪除後會回來。不會遺失資料；只是多出一份文件，可能在當機很久之後才出現，訊息框會列出它。要避免這種情況，需要本規格沒有做的決定（例如記住處理過的殘留檔，或把它們改名移出樣式，那會動到使用者的檔案）。這是給使用者的待決問題，不阻擋實作；F-8b 照上面的 D3 實作。**使用者已於 2026-10-10 決定，見第 10 點：**復原不使用的殘留檔會被刪除，所以只剩保存某段文字唯一副本的殘留檔，之後的某次啟動仍可能被復原（見風險）。
+10. **F-8b 審查後的修正（2026-10-10，I-1）：啟動時，復原決定不使用的暫存檔會被刪除**（使用者 2026-10-10 的決定）。D3 新增第 7 步。最後一次改名之後，符合樣式的每個檔案都屬於下列其中一類：
+    - **L0**，不是合法文件名稱的殘留檔：資料夾或符號連結、主檔名不等於其正規化結果、是 zip 封存檔但不是 `stem` 的包，或成員資料已損壞。不動（不可能是 DotExpress 自己的檔案）。
+    - **L1**，合法名稱的殘留檔，但根本不是 zip 封存檔（`zipfile.BadZipFile`，且 `zipfile.is_zipfile` 為假）：預先建立的空檔、寫到一半中斷的檔案。刪除：它從來不會是使用者文字的唯一副本。
+    - **L2**，已復原（改名為 `<stem>.dep`）。
+    - **L3**，被略過的有效包，且清單中或已復原的文件有相同的 `(text, braille)`：中斷的重新命名的 staged 雙胞胎、已完成的重新命名留下的舊包、與包內容相同的存檔暫存檔、兩份空白文件（見風險）。刪除。比對要等所有改名都完成：較早被略過的檔案，可能和之後才復原的文件重複。
+    - **L4**，因名稱已被占用而被略過、且沒有任何包有相同內容的有效包：中斷存檔的較新文字、被保留的無效包或名為 `<stem>.dep` 的資料夾後面的殘留檔。**保留、不動**，因為它是那段文字的唯一副本，所以不算「決定不使用」（Decided by orchestrator with the recommended default; user may override before merge）。
+    - **L5**，改名失敗的有效包（D9）：照舊保留並寫進 log；下次啟動再判斷一次。
+    刪除是同一次呼叫的最後一步，在所有改名之後。只對這次呼叫的候選路徑使用 `os.unlink`：絕不刪 `.dep`、絕不刪符號連結、絕不用 `os.replace` 或 `shutil.rmtree`。刪除前先再 `lstat` 一次，若它已不是一般檔案，或大小、修改時間與讀取時不同（另一個程式動過它），就不刪。`OSError`（檔案被開著、唯讀、已經不見）在 `dotexpress.gui` 記一行 `Cannot remove unused temporary file <path>: <error>`，不附 traceback，檔案留到下次啟動。這一行是 `ERROR` 而不是審查寫的 `WARNING`：`dotexpress.gui` 與它的 `gui.log` handler 不記錄低於 `ERROR` 的訊息（`log.get_logger` 的預設），警告永遠不會寫進 `gui.log`。沒有新字串：刪除的是程式自己的暫存檔，不告知使用者。只有啟動時會刪除；全部刪除失敗後的重新載入照舊不復原。測試：`Ran 1444`（1434 加上 `test_document_workspace` 7 個、`test_workspace_service` 3 個，後者與前者其中一個是審查的 M-1 到 M-4），`FAILED (errors=1, skipped=7)`，只有 F-W6；`test_recovery_never_deletes_or_replaces_a_file` 改為 `test_recovery_never_replaces_and_removes_only_unused_leftovers`，`test_invalid_and_empty_temporary_files_are_ignored` 改為 `test_invalid_and_empty_temporary_files_are_removed`，`test_startup_ignores_leftover_temporary_files` 改為 `test_startup_removes_unreadable_leftover_temporary_files_without_a_message`。Windows 項目新增 70b；項目 70、71 改為預期殘留檔已被刪除。
+11. **F-8b 審查後的修正（2026-10-10，M-5）。** U+0000 訊息框的 zh-TW 文字改為 `轉換前`，因為程式把這個動作叫做轉換（`執行轉換`），轉譯只用在轉譯表（`轉譯表`）；`替代字元` 不變（U+FFFD 常用的 zh-TW 名稱）。「使用者可見字串」顯示新的文字；msgid 不變。
 
 ## 現況（2026-10-10 於 `main` `861d110`、Windows 11 26200、NTFS 驗證）
 
@@ -196,7 +219,7 @@ DotExpress 也會把 NUL 寫進自己的包：含 NUL 的匯入原樣存成 `.de
 
 ### 中斷的存檔與重新命名
 
-**D3. 啟動時把中斷的包放回去，不刪除也不取代任何東西。** `documents/workspace.py` 新增 `recover_interrupted_packages(directory: Path, listed: list[Document]) -> list[Document]`：
+**D3. 啟動時把中斷的包放回去，不取代任何東西，接著刪除沒有用到的殘留檔。** `documents/workspace.py` 新增 `recover_interrupted_packages(directory: Path, listed: list[Document]) -> list[Document]`：
 
 1. 候選者是 `directory` 中檔名符合 `^\.(?P<stem>.+)\.dep\.[A-Za-z0-9_]+\.tmp$`（`.dep` 不分大小寫）的一般檔案。現況中的兩種命名都符合。`stem` 必須等於 `normalize_document_name(stem)`，否則略過。
 2. 每個候選者都以包載入程式的檢查讀取，並以 `stem` 為名稱比對（新的私有函式 `_read_package(path, package_name)`；`load_document_package` 保留它的 `.dep` 檢查並呼叫它）。不是有效包的檔案（寫到一半中斷的、預先建立的空檔）略過。
@@ -204,14 +227,15 @@ DotExpress 也會把 NUL 寫進自己的包：含 NUL 的匯入原樣存成 `.de
 4. 若資料夾中任何 `*.dep`（不論是否在清單中、不分大小寫）的主檔名（`casefold`）與它相同，或清單中、已復原的文件有相同的 `(text, braille)`，就略過。第二條規則略過「已完成的重新命名」留下的舊包，以及剛復原的檔案的 staged 雙胞胎。
 5. 否則以 `os.rename(candidate, directory / f"{stem}.dep")` 改名。在 Windows 上這永遠不會取代既有檔案（見現況）。在 POSIX 上由第 4 步把關（不是出貨平台）。復原的 `Document` 加入結果。
 6. 改名時的 `OSError` 寫進 log（`dotexpress.gui` logger，在呼叫時才綁定，同 F-7 D6：`Cannot recover interrupted document package %s: %s`，一行），檔案留著。
+7. （F-8b 審查後新增，使用者 2026-10-10 的決定；細節見「規劃後的修正（F-8b）」第 10 點。）所有改名之後，以 `os.unlink` 刪除沒有用到的殘留檔：合法名稱、但根本不是 zip 封存檔的候選者，以及被略過、且清單中或已復原的文件現在有相同 `(text, braille)` 的包。保存某段文字唯一副本的被略過的包留著，改名失敗的檔案與第 1 步不接受的檔案也都留著。讀取之後被改過的檔案不刪；刪除失敗寫進 log（`Cannot remove unused temporary file %s: %s`，一行），檔案留著。
 
-不刪除任何東西：被略過的候選者照舊留在磁碟上（F-3 D13）。`DocumentWorkspaceService.load_documents` 在 `load_workspace_documents` 之後呼叫它，在 controller 與存檔記錄看到之前，把復原的文件加進載入清單，並保留它們的名稱給 D4。只有啟動時會復原，全部刪除失敗後的重新載入不會。
+其他東西都不刪除：其餘檔案照舊留在磁碟上（F-3 D13）。`DocumentWorkspaceService.load_documents` 在 `load_workspace_documents` 之後呼叫它，在 controller 與存檔記錄看到之前，把復原的文件加進載入清單，並保留它們的名稱給 D4。只有啟動時會復原，全部刪除失敗後的重新載入不會。
 
-對實測殘留的結果：重新命名中斷 -> `alpha` 帶著它的文字回來，`.gamma.dep.<8>.tmp` 留著（內容相同）。重新命名已完成、留下舊包 -> 什麼都不做。存檔中斷而 `alpha.dep` 存在 -> 什麼都不做（名稱已被占用）。不提供那份完整的較新暫存檔：從使用者的角度，那次存檔從未完成，就像當機時遺失的編輯。否決：用對話框列出每個殘留檔（為幾乎都是重複的檔案新增 UI）；復原最新的檔案（會把中斷的重新命名變成已完成，F-3 從不這樣做）；刪除重複的檔案（使用者的資料，絕不默默刪除）。
+對實測殘留的結果：重新命名中斷 -> `alpha` 帶著它的文字回來，`.gamma.dep.<8>.tmp` 被刪除（內容相同）。重新命名已完成、留下舊包 -> 舊包被刪除（與改名後的文件內容相同）。存檔中斷而 `alpha.dep` 存在 -> 什麼都不做（名稱已被占用），`.tmp` 留著：它是較新文字的唯一副本。不提供那份完整的較新暫存檔：從使用者的角度，那次存檔從未完成，就像當機時遺失的編輯。兩份內容相同的文件（例如兩份空白文件）其中一份的重新命名中斷：中斷的那份不復原，它的殘留檔被刪除（見風險）。名稱被無效包占用的有效殘留檔會被略過並保留；使用者若在之後才出現的無效檔案對話框中刪除那個包，殘留檔會在下次啟動時被復原（F-8b 審查 M-7）。否決：用對話框列出每個殘留檔（為幾乎都是重複的檔案新增 UI）；復原最新的檔案（會把中斷的重新命名變成已完成，F-3 從不這樣做）。「刪除重複的檔案」原本在這裡被否決（使用者的資料，絕不默默刪除）；使用者在 2026-10-10 做了相反的決定（第 7 步）。
 
 **D4. 告訴使用者復原了什麼。** `DocumentWorkspaceService.take_recovered_document_names() -> list[str]` 回傳並清空 D3 的名稱。`BrailleFrame._load_workspace_documents_at_startup` 在 `_review_invalid_workspace_files` 之後呼叫它；若不是空的，呼叫 `self.show_info(_("DotExpress was interrupted ...").format(names="\n".join(names)), _("Documents Recovered"))`（字串見下）。接著照舊執行 `_ensure_open_document_exists` 與更新標題。用訊息框，是因為主視窗沒有狀態列，而 NVDA 會完整讀出訊息框（見現況）。用資訊圖示：現在沒有任何問題（Decided by orchestrator with the recommended default; user may override before merge）。
 
-**D5. 其他的暫存檔名與殘留不變。** `PackageFiles.temporary_path` 保留 `NamedTemporaryFile`（F 審查 M-3／M-4 仍是後續）。啟動時從不刪除 `.tmp`、從不把它列為無效、也從不提議刪除它。
+**D5. 其他的暫存檔名與殘留不變。** `PackageFiles.temporary_path` 保留 `NamedTemporaryFile`（F 審查 M-3／M-4 仍是後續）。啟動時只刪除 D3 第 7 步那些沒有用到的殘留檔，從不把 `.tmp` 列為無效、也從不提議刪除它。
 
 ### 原子寫入
 
@@ -292,10 +316,10 @@ def replace_nul_characters(text: str) -> tuple[str, int]:
 | 重新命名，詢問名稱之後目標處出現第三個檔案（競態） | 被取代 | `儲存文件失敗：[Errno 17] File exists: '...\bad.dep'`；舊包放回去，沒有 `.tmp` |
 | 匯入 `bad.txt`（同上） | `bad.dep` 被取代 | 匯入問題：`bad.txt: Document "bad" already exists.`；`bad.dep` 不變 |
 | 啟動時只有一份被保留的無效 `new.dep` | `new.dep` 被空的 `new` 取代 | 建立並開啟 `new (2)`；`new.dep` 不變 |
-| 重新命名中當機後啟動（沒有 `.dep`，兩個 `.tmp`） | 文件不見；沒有任何提示 | 文件以舊名稱回來；「已復原文件」訊息框；另一個 `.tmp` 留著 |
-| 啟動時有已完成重新命名留下的舊包 | 無 | 相同（清單中有相同內容） |
-| 啟動時包旁邊有存檔留下的 `.tmp` | 無 | 相同 |
-| 啟動時有無效或空的 `.tmp` | 無 | 相同 |
+| 重新命名中當機後啟動（沒有 `.dep`，兩個 `.tmp`） | 文件不見；沒有任何提示 | 文件以舊名稱回來；「已復原文件」訊息框；另一個 `.tmp`（內容相同）被刪除 |
+| 啟動時有已完成重新命名留下的舊包 | 無 | 沒有訊息；`.tmp` 被刪除（清單中有相同內容） |
+| 啟動時包旁邊有存檔留下的 `.tmp` | 無 | 相同：`.tmp` 留著（較新文字的唯一副本） |
+| 啟動時有空的或不是 zip 封存檔的 `.tmp` | 無 | 沒有訊息；`.tmp` 被刪除（被其他程式開著的那個留著，log 一行） |
 | 文字處理「套用」 | 原子寫入但沒有 `fsync`；寫入錯誤後可能留下 `.tmp` | 原子寫入並 `fsync`；不留東西；位元組相同；唯讀：`[Errno 13]` 文字 |
 | 建立預設字典、新增字典 | 就地寫入 | 原子寫入；位元組相同 |
 | 匯入字典 | `copyfile`；失敗時留下半個檔案 | 原子複製；失敗時什麼都沒有 |
@@ -320,7 +344,7 @@ def replace_nul_characters(text: str) -> tuple[str, int]:
 
 - `replace_nul_characters`、`_displayable`（D12）。
 - `_read_package(path, package_name) -> Document`：目前 `load_document_package` 在副檔名檢查之後的本體；`load_document_package` 以 `normalize_document_name(path.stem)` 呼叫它。
-- `_INTERRUPTED_PACKAGE`（編譯好的 pattern）與 `recover_interrupted_packages`（D3），docstring 寫明「從不刪除、從不取代」。
+- `_INTERRUPTED_PACKAGE`（編譯好的 pattern）與 `recover_interrupted_packages`（D3），docstring 寫明「從不取代」以及它會刪除哪些殘留檔（第 7 步，`_remove_unused_leftover`）。
 - `move_document_package`：在安裝區塊開頭檢查 `files.exists(new_path)`（D1）。docstring：「A file already at ``new_path`` (a package that is not listed) raises ``FileExistsError``; the old package is put back.」
 - `export_document_brl`：`write_text_atomically`（D8）；從 `shared.atomic_write` import。
 
@@ -369,7 +393,7 @@ D9–D11：`_UnreadableConfig`、`_load`、`_save`、`_backup_unreadable(path)`�
 - 所有既有的訊息、標題與按鈕。F-5 的存檔比對與關閉對話框，F-7 的匯出回報。
 - 磁碟上沒有不在清單中的 `.dep`、也沒有可復原的中斷包時，啟動、新增、重新命名與匯入。
 - 不含 U+0000 的文件：編輯框顯示的、存檔與匯出的內容都不變，也沒有訊息。
-- 程式從不刪除暫存檔。
+- 程式從不刪除暫存檔，啟動時復原不使用的包殘留檔除外（D3 第 7 步）。
 - 兩個 fixture 的 sha256（`translation_golden.json` `e67d95a1...`、`dictionary_entries_trace.json` `f493da52...`）。
 
 ## 使用者可見字串
@@ -379,7 +403,7 @@ D9–D11：`_UnreadableConfig`、`_load`、`_save`、`_backup_unreadable(path)`�
 | msgid | msgstr（zh_TW） | 位置 |
 | --- | --- | --- |
 | `Characters Replaced` | `已取代字元` | U+0000 訊息框的標題（D13） |
-| `Some characters in document "{name}" cannot be shown ({count} in all). Each one has been replaced with the replacement character {mark}, so the text after it is kept.\n\nDelete or change these {mark} characters before converting. Otherwise each one appears in the braille as an escape code.` | `文件「{name}」中有 {count} 個無法顯示的字元，已全部以替代字元 {mark} 標示，後面的文字都保留下來了。\n\n轉譯前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。` | U+0000 訊息框的內文；`{mark}` 是 U+FFFD（D13） |
+| `Some characters in document "{name}" cannot be shown ({count} in all). Each one has been replaced with the replacement character {mark}, so the text after it is kept.\n\nDelete or change these {mark} characters before converting. Otherwise each one appears in the braille as an escape code.` | `文件「{name}」中有 {count} 個無法顯示的字元，已全部以替代字元 {mark} 標示，後面的文字都保留下來了。\n\n轉換前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。` | U+0000 訊息框的內文；`{mark}` 是 U+FFFD（D13） |
 | `Documents Recovered` | `已復原文件` | 復原訊息框的標題（D4） |
 | `DotExpress was interrupted while saving or renaming a document. These documents were recovered:\n\n{names}\n\nCheck that their content is what you expect.` | `DotExpress 上次在儲存或重新命名文件時中斷，已復原以下文件：\n\n{names}\n\n請確認內容是否正確。` | 復原訊息框的內文；每行一個名稱（D4） |
 
@@ -393,7 +417,7 @@ U+0000 訊息框的 zh-TW 內容（U+FFFD 以 `<U+FFFD>` 表示）：
 
 文件「alpha」中有 3 個無法顯示的字元，已全部以替代字元 <U+FFFD> 標示，後面的文字都保留下來了。
 
-轉譯前請刪除或修改這些 <U+FFFD>，否則每一個都會在點字中變成一段跳脫碼。
+轉換前請刪除或修改這些 <U+FFFD>，否則每一個都會在點字中變成一段跳脫碼。
 
 [確定]
 ```
@@ -467,14 +491,14 @@ TDD：每一步的新測試先寫、並因所述的原因失敗，再由程式�
 
 `test_document_workspace.py`：
 
-1. `test_interrupted_rename_is_recovered_under_the_old_name`：照探針看到的樣子寫兩個 `.tmp`（旁邊那份以 `os.utime` 設成舊 mtime，staged 較新）；結果 `[alpha]`；`alpha.dep` 存在且是舊位元組；staged 的 `.tmp` 留著。紅燈：函式不存在。
+1. `test_interrupted_rename_is_recovered_under_the_old_name`：照探針看到的樣子寫兩個 `.tmp`（旁邊那份以 `os.utime` 設成舊 mtime，staged 較新）；結果 `[alpha]`；`alpha.dep` 存在且是舊位元組；staged 的 `.tmp` 留著（F-8b 審查修正後依第 7 步刪除）。紅燈：函式不存在。
 2. `test_leftover_of_a_completed_rename_is_not_recovered`（清單中的 `gamma.dep` 內容相同）。紅燈（函式不存在），之後由規則 4 轉綠。
 3. `test_leftover_save_next_to_its_package_is_not_recovered`。
 4. `test_invalid_and_empty_temporary_files_are_ignored`（也含 `b"not a zip"`、零位元組檔）。
 5. `test_name_held_by_an_unlisted_package_is_not_recovered`（保留的無效 `alpha.dep`，任何大小寫）。
 6. `test_names_that_are_not_valid_document_names_are_ignored`（`.CON.dep.x.tmp`；`.a<b.dep.x.tmp` 在 Windows 上無法建立，plan 選用能存在的名稱）。
 7. `test_member_names_must_match_the_temporary_file_name`。
-8. `test_recovery_never_deletes_a_file`：記錄用的 `os.unlink`／`os.remove`／`Path.unlink` patch 沒有被呼叫。
+8. `test_recovery_never_deletes_a_file`：記錄用的 `os.unlink`／`os.remove`／`Path.unlink` patch 沒有被呼叫。F-8b 審查修正後：`test_recovery_never_replaces_and_removes_only_unused_leftovers`，`os.unlink` 只用於沒有用到的殘留檔（第 7 步），沒有其他呼叫。
 9. 只在 Windows：`test_recovery_does_not_replace_a_file_created_meanwhile`：把磁碟檢查 patch 成看不到；`os.rename` 拋出 `FileExistsError`；既有檔案不變；`.tmp` 留著；一行 log（`assertLogs("dotexpress.gui", "ERROR")`）。
 10. F-3 的 `test_load_workspace_documents_ignores_leftover_temporary_files` 不改、維持綠燈。
 
@@ -486,7 +510,7 @@ TDD：每一步的新測試先寫、並因所述的原因失敗，再由程式�
 `test_gui_document_flows.py`（在暫存工作區用真的 service，和既有的啟動測試相同）：
 
 13. `test_startup_reports_recovered_documents`：事件：若有則先是無效檔案對話框，接著 `message_box(<含 "alpha" 的復原文字>, "Documents Recovered", OK | ICON_INFORMATION, parent=frame)`，然後是標題。紅燈。
-14. `test_startup_ignores_leftover_temporary_files` 不改、維持綠燈（沒有訊息）。
+14. `test_startup_ignores_leftover_temporary_files` 不改、維持綠燈（沒有訊息）。F-8b 審查修正後：`test_startup_removes_unreadable_leftover_temporary_files_without_a_message`（沒有訊息；檔案被刪除）。
 
 ### E. U+0000
 
@@ -549,7 +573,7 @@ F-8b：
 7. 原始碼掃描（或 `grep`）在 `client/` 的 production code 中，`shared/atomic_write.py` 與 `dual_view/files.py` 以外，找不到寫入使用者資料的 `shutil.copyfile`、`Path.write_text` 或 `open(..., "w")`。
 8. Mutation 檢查（plan）。每個 mutant 至少被一個測試抓到：
    - 名稱對話框沒有磁碟檢查；`package_name_taken` 忽略 `exclude_name`；`create_document` 沒有檢查；移動防護放在移到旁邊之前（弄壞只改大小寫的重新命名）或被移除；`import_files` 只用 controller 的名稱；`free_document_name` 一律回傳 `base`；
-   - 復原：刪除被略過的候選者；用 `os.replace` 取代 `os.rename`；沒有內容重複規則；最新的優先；復原無效的封存檔；在全部刪除後的重新載入中復原；
+   - 復原：刪除被略過的候選者（F-8b 審查修正後：刪除第 7 步要保留的殘留檔，或在所有改名完成前就刪除）；用 `os.replace` 取代 `os.rename`；沒有內容重複規則；最新的優先；復原無效的封存檔；在全部刪除後的重新載入中復原；
    - 每個寫入者改回舊的呼叫（`copyfile`、`write_text`、`open("w")`、`NamedTemporaryFile`）；BRL、HTML 或 config 用 `newline=""`；
    - `_load` 不用 `utf-8-sig`；接受非 dict；`OSError` 的載入之後 `_save` 仍寫入；沒有 `.bak`；`.bak` 失敗仍寫入；
    - `replace_nul_characters` 不計點字；以取代後的文字建立記錄；每次開啟都提示；不提示；重新命名時數量沒有移動；在 `_encodable` 中取代 U+0000。
@@ -569,9 +593,10 @@ F-8b：
 | 67 | 同 66；把 `alpha` 重新命名為 `bad`；再把 `alpha` 重新命名為 `Alpha` | 第一次：同樣的訊息框，什麼都不變；第二次：改名成功（只改大小寫） | 第一次：`bad.dep` 被取代，`alpha.dep` 消失 |
 | 68 | 同 66；匯入 `bad.txt` 與 `ok.txt` | 匯入問題列出 `bad.txt: Document "bad" already exists.`；`ok` 匯入；`bad.dep` 不變 | `bad.dep` 被取代 |
 | 69 | 工作區只有無效的 `new.dep`；保留 | 清單中有 `new (2)` 並開啟；`new.dep` 不變 | 建立 `new`，`new.dep` 被取代 |
-| 70 | 照重新命名中斷的樣子建立工作區（舊 mtime 的 `.alpha.dep.<8>.tmp`、staged 的 `.gamma.dep.<8>.tmp`、沒有 `.dep`）；啟動 | `已復原文件` 訊息框列出 `alpha`，資訊圖示，`確定`；清單 `alpha`，文字正確；`alpha.dep` 存在；`.gamma.dep.*.tmp` 仍在；重新啟動：沒有訊息框 | 清單空的，建立新的 `new` 文件，沒有訊息 |
-| 71 | `gamma.dep` 加上內容相同、殘留的 `.alpha.dep.<8>.tmp`；啟動 | 沒有訊息框；清單 `gamma`；`.tmp` 未動 | 相同 |
-| 72 | `alpha.dep` 加上文字較新、殘留的 `.alpha.dep.<16 hex>.tmp`；啟動 | 沒有訊息框；`alpha` 是包中的文字；`.tmp` 未動 | 相同 |
+| 70 | 照重新命名中斷的樣子建立工作區（舊 mtime 的 `.alpha.dep.<8>.tmp`、staged 的 `.gamma.dep.<8>.tmp`、沒有 `.dep`）；啟動 | `已復原文件` 訊息框列出 `alpha`，資訊圖示，`確定`；清單 `alpha`，文字正確；`alpha.dep` 存在；`.gamma.dep.*.tmp` 已刪除（F-8b 審查修正；修正前留著）；重新啟動：沒有訊息框；修改 alpha 後第三次啟動：沒有訊息框 | 清單空的，建立新的 `new` 文件，沒有訊息 |
+| 70b | （F-8b 審查修正新增）`alpha.dep` 加上空的 `.beta.dep.k2j1abcd.tmp`、內容為 `not a zip` 的 `.alpha.dep.0123456789abcdef.tmp`，以及被 `lockshare.py`（共用讀取）開著、內容為 `not a zip` 的 `.gamma.dep.x2y3z4w5.tmp`；啟動；結束開著它的程式；再啟動 | 沒有訊息框；前兩個被刪除；被開著的那個留著，`log\gui.log` 有一行 `Cannot remove unused temporary file ...`；第二次啟動刪除它 | 沒有訊息框；三個都留著 |
+| 71 | `gamma.dep` 加上內容相同、殘留的 `.alpha.dep.<8>.tmp`；啟動 | 沒有訊息框；清單 `gamma`；`.tmp` 已刪除（F-8b 審查修正；修正前未動） | 沒有訊息框；`.tmp` 未動 |
+| 72 | `alpha.dep` 加上文字較新、殘留的 `.alpha.dep.<16 hex>.tmp`；啟動 | 沒有訊息框；`alpha` 是包中的文字；`.tmp` 未動（較新文字的唯一副本） | 相同 |
 | 73 | `alpha.dep` 文字 `"first line\nsecond\x00 after\nthird"`，點字有一個 U+0000；`beta.dep` 乾淨；啟動 | `已取代字元` 訊息框，警告圖示，內文寫出 `alpha` 與 `2`，`確定`；原文編輯框（`WM_GETTEXT`）是含 U+FFFD 的全文；Ctrl+Tab 到 `beta` 再回來：沒有第二次；關閉；`alpha.dep` 含 U+FFFD 與 `third`；重新啟動：沒有訊息框 | 編輯框是 `first line\nsecond`；Ctrl+Tab 之後 `alpha.dep` 只剩 `first line\nsecond`（**資料遺失**） |
 | 74 | 匯入含 NUL 位元組的 `.txt`（單一檔案） | 文件開啟，訊息框寫出它的名稱；包含 U+FFFD | 編輯框只顯示到 NUL；包含 U+0000 |
 | 75 | 匯入該 `.txt` 與文字中有碼 0 的 `.pdf`（兩個檔案）；再各自開啟 | 匯入時沒有訊息框；每份文件第一次開啟時各一次 | 沒有訊息框；文字被截斷 |
@@ -596,8 +621,10 @@ F-8b：
 - **隱藏或唯讀的目標**（低，F-3 D11）。隱藏的匯出檔、字典檔、程式檔與 `config.json` 會被取代並失去該屬性；唯讀的照舊被拒。
 - **匯出資料夾中的暫存檔**（低）。匯出時會在目標旁短暫建立 `.<名稱>.<16 hex>.tmp`（USB 隨身碟、網路磁碟也一樣）。監看資料夾的程式可能看得到它；通常匯出結束前它就被移除或改名。F-8a 審查後的修正（2026-10-10，M-4）：若掃描程式（例如防毒軟體）在 `os.replace` 當下開著暫存檔，匯出會失敗（`[WinError 32]`），舊檔保持完整，但暫存檔會留下，因為移除它也會失敗（`shared/atomic_write.py` 忽略這個錯誤，套件自 F-3 起就是如此）；使用者可以手動刪除。重試移除留作後續項目。
 - **可以覆寫檔案、但不能建立檔案的資料夾**（很低；F 審查）。原子寫入需要在那裡建立暫存檔。
-- **復原把使用者刻意改過名的文件放回舊名稱**（低）。只發生在重新命名被當機打斷時：文件以舊名稱回來，和失敗的重新命名一樣（F-3）。staged 的那份留在磁碟上。
-- **兩份內容相同的不同文件**（很低）。若中斷的文件與清單中另一份文件的文字和點字完全相同，就不復原（規則 4）；沒有遺失文字，只少了名稱。
+- **復原把使用者刻意改過名的文件放回舊名稱**（低）。只發生在重新命名被當機打斷時：文件以舊名稱回來，和失敗的重新命名一樣（F-3）。staged 的那份與它重複，會被刪除（第 7 步）。
+- **保存某段文字唯一副本的殘留檔，之後的某次啟動可能被復原**（低；F-8b 規劃後新增，使用者 2026-10-10 的決定縮小了範圍，見「規劃後的修正（F-8b）」第 9、10 點）。其他被略過的殘留檔，在略過它的那次啟動就被刪除。沒有任何包有相同內容的被略過殘留檔（L4 類：中斷存檔的較新文字、被保留的無效包後面的殘留檔）會留著，等它自己的名稱空出來（使用者改名或刪除那份文件，或刪除那個無效包）之後的某次啟動被復原。不會遺失資料；訊息框會列出它。
+- **兩份內容相同的不同文件**（低，空白文件；F-8b 審查後修正，M-6）。若中斷的文件與清單中或已復原的另一份文件的文字和點字完全相同，就不復原（規則 4），它的殘留檔也被刪除（第 7 步）：沒有遺失文字，但少了這份文件與它的名稱。空白文件（`new` 與 `new (2)`）或同一個檔案以不同名稱匯入兩次時並不罕見。內容規則無法區分這種情況與已完成的重新命名留下的舊包，而後者必須略過。
+- **在無效檔案對話框中空出來的名稱，要到下次啟動才復原**（低；F-8b 審查 M-7）。復原在載入時執行，比無效檔案對話框早。名稱被無效包占用的有效殘留檔會被略過並保留（L4）；使用者之後選「刪除無效檔案」的話，殘留檔會在下次啟動時復原，並顯示訊息框。不會遺失資料。要立刻復原，需要在對話框之後再呼叫一次 service，並改變啟動順序；不做。
 - **不提供中斷存檔的較新文字**（低，D3）。等同當機時遺失的編輯；`.tmp` 留在磁碟上，可手動救回。
 - **只匯出、從未開啟的文件以 U+FFFD 匯出，沒有提示**（低，D13）。
 - **沒有 BOM 的 UTF-16 檔案產生大量 U+FFFD**（低）。每個 ASCII 字元後面都是 U+FFFD；提示中的數量讓編碼錯誤一目了然。偵測 UTF-16 不在範圍內。
@@ -613,18 +640,22 @@ Decided by orchestrator with the recommended default; user may override before m
 
 - **O1.** 拆成 F-8a（沒有字串）與 F-8b（提示與 4 個 msgid），依此順序（目標、遷移步驟）。
 - **O2.** `new.dep` 在磁碟上但不在清單中時，預設文件使用 `new (2)`、`new (3)`……（D2）。
-- **O3.** 啟動時自動復原中斷的包，並以一個資訊訊息框告知；從不刪除任何東西，重複的檔案留在磁碟上（D3、D4）。
+- **O3.** 啟動時自動復原中斷的包，並以一個資訊訊息框告知（D3、D4）。（F-8b 審查前是「從不刪除任何東西，重複的檔案留在磁碟上」；使用者在 2026-10-10 決定刪除沒有用到的殘留檔，D3 第 7 步。）
 - **O4.** `config.json`：損壞的檔案在第一次變更取代它之前，先複製成 `config.json.bak`；讀不到的檔案不會被覆寫；接受 BOM；非物件視同損壞（D10、D11）。
 - **O5.** U+0000 的提示是警告訊息框，在每次執行中每份受影響的文件第一次開啟時顯示，不是啟動時的總表（D13）。
 - **O6.** 匯出改為原子寫入，因此覆寫被其他程式開著的目標時會失敗，和 F-3 Q1 對包的處理相同（D8、風險）。
 - **O7.** 不在 `_encodable`／`prepare_document_for_save` 中取代 U+0000（D12）。
+- **O8.** 啟動時，沒有任何包有相同內容的被略過殘留檔（L4 類）保留、不刪除：它是那段文字的唯一副本（D3 第 7 步，「規劃後的修正（F-8b）」第 10 點）。若照字面解讀使用者的決定，它也會被刪除。
+
+F-8b 的 plan 提出：被復原略過的殘留檔，之後的某次啟動可不可以被復原（「規劃後的修正（F-8b）」第 9 點）。使用者已於 2026-10-10 決定：復原決定不使用的殘留檔會被刪除（「規劃後的修正（F-8b）」第 10 點）；保留文字的唯一副本是 O8。
 
 ## 不在範圍內／後續項目
 
 - **字典條目中的 U+0000。** Python 3.13 的 `csv` 會讀出 `a\x00b`（實測）；條目編輯器的文字欄會截斷它，按「確定」就存下截斷的條目。字典相關任務應在載入條目時做同樣的取代。
 - **文字處理程式中的 U+0000。** 程式編輯框會截斷它；轉換時 `ast.parse` 已經會拒絕這種程式。
 - **使用者的文字處理程式回傳 U+0000** 到點字輸出。
-- **統一兩種暫存檔命名**（F 審查 M-3／M-4），以及清理殘留的 `.tmp`（需要使用者同意；未規劃）。
+- **統一兩種暫存檔命名**（F 審查 M-3／M-4），以及清理其他殘留的 `.tmp`（匯出、字典與 `config.json` 的寫入；未規劃）。啟動時復原不使用的包殘留檔，自 F-8b 審查修正起會被刪除（使用者 2026-10-10 的決定，D3 第 7 步）。
+- **啟動時的訊息框出現在主視窗顯示之前**（F-8b 審查 M-8）：復原訊息框與第一份文件的 U+0000 訊息框的擁有者是還沒顯示的主視窗，自 F-3 起的無效檔案對話框也是如此。延到 F-12（UI 修飾）；人工項目 83 檢查 NVDA 讀出的內容。
 - **提供中斷存檔的較新文字。**
 - **`dual_view/files.write_dual_view_html`**（程式自己的暫存頁面）。
 - **UTF-16 文字匯入**（有 BOM：目前是匯入問題；沒有 BOM：大量 U+FFFD）。

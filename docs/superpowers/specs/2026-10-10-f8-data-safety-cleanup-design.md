@@ -18,14 +18,14 @@ Decided by the user (2026-10-10), `task.md`; not asked again here:
 After this task:
 
 - No action of the app replaces or removes a `.dep` that is not in the document list. Add and Rename refuse such a name with the existing "already exists" message, Import lists it as an import issue, and the default document takes a free name.
-- At startup, a document whose Rename or Save was interrupted by a crash is put back under its package name, if that name is free and no listed document already holds the same content. The user is told which documents were recovered. No temporary file is ever deleted.
+- At startup, a document whose Rename or Save was interrupted by a crash is put back under its package name, if that name is free and no listed document already holds the same content. The user is told which documents were recovered. The temporary files that recovery decided not to use are then deleted, except one that holds the only copy of its text (the user's decision of 2026-10-10, after the F-8b review; "Corrected after planning (F-8b)" 10).
 - Every remaining writer of user data goes through `shared/atomic_write.py`: the text-processing script, the dictionary files that Add, Import and the default dictionary create, dictionary Export, `config.json`, and the BRL and HTML exports. A failure leaves the target byte-identical (or still absent) and leaves no temporary file. The bytes written on success are unchanged.
 - `config.json` that cannot be used no longer stops the app or is silently thrown away: a file that is not a JSON object is treated like a damaged one, a UTF-8 BOM is accepted, a file that cannot be read is not overwritten, and a damaged file is copied to `config.json.bak` before it is replaced.
 - U+0000 never reaches the editors. Opening a document that had U+0000 shows a message box that names the document and the number of characters, once per document per session. The first save writes the replaced text, so the next start shows nothing.
 
 New user-visible strings: 4 (msgid 364 -> 368). See "User-Visible Strings".
 
-Non-goals: U+0000 in dictionary entries and in the text-processing script (Out of Scope); deleting or cleaning up temporary files; keeping attributes, ACLs or alternate data streams on replace (F-3 D11 applies); the `config.json` read-modify-write race between threads; F-9's conversion routing.
+Non-goals: U+0000 in dictionary entries and in the text-processing script (Out of Scope); deleting or cleaning up temporary files other than the package leftovers that startup recovery does not use (D3 step 7); keeping attributes, ACLs or alternate data streams on replace (F-3 D11 applies); the `config.json` read-modify-write race between threads; F-9's conversion routing.
 
 **Split proposal.** The work divides cleanly into two tasks. The recommendation is to implement it as **F-8a** (D1-D2, D6-D11: no strings, no new UI) and then **F-8b** (D3-D5, D12-D15: the two notices and the 4 new msgids), each with its own plan, review and build. This spec covers both, so that the decisions stay consistent. If the orchestrator keeps one task, the migration steps below run in order unchanged (Decided by orchestrator with the recommended default; user may override before merge).
 
@@ -55,6 +55,29 @@ The plan for F-8a (`docs/superpowers/plans/2026-10-10-f8a-data-safety-cleanup.md
 11. **The app writes `config.json` at startup.** The client-init thread stores the client id right after the main window is shown, so "the next change" of the behavior table happens at startup: before F-8, a file with a BOM is already replaced by `{"client": {"id": ...}}` at startup (measured on `N-f7`, item 80; a truncated or non-UTF-8 file takes the same path); after F-8 that first write keeps `config.json.bak` first when the file is damaged (item 79) and is skipped with one warning when it cannot be read (item 81).
 12. **Windows items.** The font size is changed with Ctrl + one wheel notch over the source editor. 80 checks that the BOM file's width 30 is kept instead of changing the width in Settings. 81 holds `config.json` with share mode **write only** (others may write but not read), not "none": with "none" the existing writability probe at startup (`prepare_application_directories` opens `config.json` for append) fails and both builds show the existing "Startup Error", which is not the D11 case. 79 before F-8: no main window, the process exits with code 1 after about 3 s, nothing is logged. 77 and 78 hold the target with `lockshare.py` (share read+write). 82 compares the bytes of both builds for the same steps.
 13. **Acceptance criterion 7.** The remaining direct writes in production code outside `shared/atomic_write.py` are `app_paths.py`'s append probe of `config.json` (writes nothing), `PackageFiles.write` and `PackageFiles.temporary_path` (F-3's private staged file of a Rename, synced and installed with `os.replace`), and `dual_view/files.py` (excluded).
+
+## Corrected after planning (F-8b, 2026-10-10)
+
+The plan for F-8b (`docs/superpowers/plans/2026-10-10-f8b-recovery-and-nul.md`, dry-run on scratch clones of `main` at `1b19290`: Tasks 0-3 replayed exactly, every step also applied with the plan's own block script and the catalog commands as written, and the GUI items 70-75 run against a packaged build of the same code and against `N-f8a2`) re-checked D3-D5 and D12-D15 against the code after F-8a and found no error in them or in their rows of the behavior table. Where the plan refines this spec, this section wins.
+
+1. **Counts.** `Ran 1419` after step 5 (16 new tests) and `Ran 1434` after step 6 (15 new); baseline 1403 (F-8a's 1400 plus its three review tests); `FAILED (errors=1, skipped=7)` throughout, F-W6 only; msgids 364 -> 366 -> 368. Test Plan D has 15 tests: D1-D9 in `test_document_workspace` plus two (files that are not package leftovers are ignored; two interrupted renames are recovered oldest first), D8 also recording `os.replace` (`test_recovery_never_deletes_or_replaces_a_file`, renamed in the review fix, see 10); D11, D12 and "a load without leftovers recovers nothing" in `test_workspace_service`; D13. Test Plan E has 14: E1-E13 (E13 is `test_editors_receive_the_full_text`) plus `test_import_of_two_files_with_nul_shows_each_notice_when_it_is_opened` (item 75's flow). The acceptance-criterion-2 set goes from `Ran 537` to `Ran 568`, `OK (skipped=7)`.
+2. **F1 is split in two,** one per step, so that each catalog regeneration is red first: `test_recovery_strings_are_translated` (step 5) and `test_replaced_character_strings_are_translated` (step 6).
+3. **Log isolation.** `test_document_workspace` and `test_workspace_service` isolate `dotexpress.gui` in `setUpModule`. The recovery tests assert that nothing is logged, except D9: on Windows `os.rename` refuses a taken name, so a missing name rule would otherwise only show in the log.
+4. **D9** simulates the race with a patched `os.rename` that creates the target first. The log line is `Cannot recover interrupted document package <path>: [WinError 183] ...` at `ERROR`, without traceback.
+5. **D3 details.** The pattern is `^\.(?P<stem>.+)\.(?i:dep)\.[A-Za-z0-9_]+\.tmp$`, regular files only. `_read_package(package_path, package_name)` alone already skips a file whose stem is not a valid document name (member names are normalized and must equal the stem); rule 1's explicit check stays and D6 pins the behavior. The logger is bound at call time. The recovered documents are merged into the loaded list in its order (`casefold`, then name); the box names them in recovery order, oldest first.
+6. **D12 helper.** `documents/workspace_service.py` gets `_displayable_documents(documents) -> (documents, counts)`, used at load and in the Delete All reload; `take_replaced_character_count` pops the count.
+7. **Catalogs.** `msgmerge` fuzzy-matches `Documents Recovered` to `Documents` (`文件`) in step 5; the plan drops the flag. Nothing is fuzzy in step 6. Both regenerations also refresh `#:` reference lines that F-8a left stale.
+8. **Windows items.** "Before" is `N-f8a2`. wx shows each box as a task dialog whose main instruction is the first paragraph and whose content is the rest; UIA does not expose the icon (the unit tests pin it). The boxes that startup shows come before the main window. Items 74 and 75 import `zero.txt`: `nul` is a reserved Windows name, so `nul.txt` is an import issue. Before F-8b, items 73-75 also show the loss on disk: once the document was opened and the app closed (or another document opened), the package holds only the text before the first U+0000. Item 70 gets a third start: alpha's text is changed, the app closed and started again (see 9).
+9. **New Risk, measured: a leftover that recovery skips can be recovered at a later start.** Rules 1-4 are checked again at every start, and skipped files stay on disk. After an interrupted Rename of alpha to gamma, alpha is recovered and the staged `.gamma.dep.<8>.tmp` stays; once the user edits alpha, the next start recovers the staged copy as a new document `gamma` with the old text and shows "已復原文件" naming `gamma` (item 70, third start, on the F-8b build). Likewise the leftover of a completed Rename comes back under the old name once the renamed document is edited, and the leftover of an interrupted Save once its document is renamed or deleted. Nothing is lost; an extra document appears, possibly long after the crash, and the box names it. Avoiding it needs a decision this spec does not make (for example remembering handled leftovers, or renaming them out of the pattern, which touches the user's files). Open question for the user, not blocking; F-8b implements D3 as written above. **Decided by the user on 2026-10-10, see 10:** the leftovers recovery does not use are deleted, so only a leftover that holds the only copy of its text can still come back at a later start (Risks).
+10. **Corrected after the F-8b review (2026-10-10, I-1): at startup, the temporary files that recovery has decided not to use are deleted** (decided by the user, 2026-10-10). D3 gains step 7. After the last rename every file the pattern matches is in one class:
+    - **L0**, not a leftover of a valid document name: a folder or symbolic link, a stem that is not its own normalization, a zip archive that is not a package of `stem` or whose member data is damaged. Untouched (it cannot be DotExpress's own file).
+    - **L1**, a leftover of a valid name that is no zip archive at all (`zipfile.BadZipFile`, and `zipfile.is_zipfile` is false): an empty pre-created file, a write cut short. Deleted: it never holds the only copy of the user's text.
+    - **L2**, recovered (renamed to `<stem>.dep`).
+    - **L3**, a valid package that was skipped and whose `(text, braille)` a listed or recovered document holds: the staged twin of an interrupted Rename, the aside file of a completed Rename, a Save file identical to its package, two empty documents (Risks). Deleted. The comparison waits until every rename is done: a file skipped early can duplicate a document recovered after it.
+    - **L4**, a valid package that was skipped because its name is taken and whose content no package holds: the newer text of an interrupted Save, a leftover behind a kept invalid package or a folder named `<stem>.dep`. **Kept, untouched**, because it is the only copy of that text and so not "decided not to use" (Decided by orchestrator with the recommended default; user may override before merge).
+    - **L5**, a valid package whose rename failed (D9): kept and logged, as before; looked at again at the next start.
+    Deletion is the last step of the same call, after every rename. It uses only `os.unlink` on this call's candidate paths: never a `.dep`, never a symbolic link, never `os.replace` or `shutil.rmtree`. Each file is `lstat`ed again first and left alone if it is no longer a regular file or its size or modification time changed since it was read (another program touched it). An `OSError` (the file is held open, read-only, already gone) is logged as one line `Cannot remove unused temporary file <path>: <error>` on `dotexpress.gui`, without traceback, and the file stays until the next start. The line is at `ERROR`, not the review's `WARNING`: `dotexpress.gui` and its `gui.log` handler pass nothing below `ERROR` (`log.get_logger`'s default), so a warning would never reach `gui.log`. No new string: the deletions are the app's own temporary files and are not reported. Only startup deletes; the Delete All reload still does not recover. Tests: `Ran 1444` (1434 + 7 in `test_document_workspace` + 3 in `test_workspace_service`, the latter and one of the former being the review's M-1 to M-4), `FAILED (errors=1, skipped=7)`, F-W6 only; `test_recovery_never_deletes_or_replaces_a_file` became `test_recovery_never_replaces_and_removes_only_unused_leftovers`, `test_invalid_and_empty_temporary_files_are_ignored` became `test_invalid_and_empty_temporary_files_are_removed`, `test_startup_ignores_leftover_temporary_files` became `test_startup_removes_unreadable_leftover_temporary_files_without_a_message`. Windows item 70b is added; items 70 and 71 now expect the leftover gone.
+11. **Corrected after the F-8b review (2026-10-10, M-5).** The zh-TW text of the U+0000 box says `轉換前` (before converting), because the app calls the action 轉換 (`執行轉換`) and keeps 轉譯 for the translation tables (`轉譯表`); `替代字元` stays (the usual zh-TW name of U+FFFD). "User-Visible Strings" shows the new text; the msgid is unchanged.
 
 ## Current State (verified 2026-10-10 on `main` `861d110`, Windows 11 26200, NTFS)
 
@@ -196,7 +219,7 @@ Save of the open document is unchanged: its own package is the target.
 
 ### Interrupted saves and renames
 
-**D3. Startup puts interrupted packages back, without deleting or replacing anything.** New `recover_interrupted_packages(directory: Path, listed: list[Document]) -> list[Document]` in `documents/workspace.py`:
+**D3. Startup puts interrupted packages back without replacing anything, then deletes the leftovers it did not use.** New `recover_interrupted_packages(directory: Path, listed: list[Document]) -> list[Document]` in `documents/workspace.py`:
 
 1. Candidates are the regular files in `directory` whose name matches `^\.(?P<stem>.+)\.dep\.[A-Za-z0-9_]+\.tmp$` (`.dep` case-insensitive). Both schemes of Current State match. `stem` must equal `normalize_document_name(stem)`; otherwise the file is skipped.
 2. Each candidate is read with the package loader's checks, against the name `stem` (a new private `_read_package(path, package_name)`; `load_document_package` keeps its `.dep` check and calls it). A file that is not a valid package (an interrupted write, an empty pre-created file) is skipped.
@@ -204,14 +227,15 @@ Save of the open document is unchanged: its own package is the target.
 4. A candidate is skipped if any `*.dep` in the folder (listed or not, any case) has its stem (`casefold`), or if a listed or already recovered document has the same `(text, braille)`. The second rule skips the leftover aside file of a Rename that completed, and the staged twin of a file just recovered.
 5. Otherwise the file is renamed with `os.rename(candidate, directory / f"{stem}.dep")`. On Windows this never replaces an existing file (Current State). On POSIX, step 4 is the guard (not a shipping platform). The recovered `Document` is added to the result.
 6. An `OSError` from the rename is logged (`dotexpress.gui` logger bound at call time, as F-7 D6: `Cannot recover interrupted document package %s: %s`, one line) and the file stays.
+7. (Added after the F-8b review, the user's decision of 2026-10-10; details in "Corrected after planning (F-8b)" 10.) After every rename, the leftovers that were not used are deleted with `os.unlink`: a candidate of a valid name that is no zip archive at all, and a skipped package whose `(text, braille)` a listed or recovered document now holds. A skipped package that holds the only copy of its text stays, as do a file whose rename failed and every file that step 1 does not accept. A file that changed after it was read is left; a failed deletion is logged (`Cannot remove unused temporary file %s: %s`, one line) and the file stays.
 
-Nothing is deleted: skipped candidates stay on disk, as today (F-3 D13). `DocumentWorkspaceService.load_documents` calls it after `load_workspace_documents`, adds the recovered documents to the loaded list before the controller and the saved records see it, and keeps their names for D4. Only startup recovers. The reload after a failed Delete All does not.
+Nothing else is deleted: every other file stays on disk, as today (F-3 D13). `DocumentWorkspaceService.load_documents` calls it after `load_workspace_documents`, adds the recovered documents to the loaded list before the controller and the saved records see it, and keeps their names for D4. Only startup recovers. The reload after a failed Delete All does not.
 
-Results for the measured leftovers: interrupted Rename -> `alpha` is back with its text, and `.gamma.dep.<8>.tmp` stays (same content). Completed Rename with a leftover aside file -> nothing happens. Interrupted Save with `alpha.dep` present -> nothing happens (the name is taken). The complete newer temporary file is not offered: from the user's point of view that save never completed, like edits lost in a crash. Rejected: offering every leftover in a dialog (new UI for files that are almost always duplicates); restoring the newest file (would turn an interrupted Rename into a completed one, which F-3 never does); deleting duplicates (the user's data, never deleted silently).
+Results for the measured leftovers: interrupted Rename -> `alpha` is back with its text, and `.gamma.dep.<8>.tmp` is deleted (same content). Completed Rename with a leftover aside file -> the aside file is deleted (same content as the renamed document). Interrupted Save with `alpha.dep` present -> nothing happens (the name is taken), and the `.tmp` stays: it holds the only copy of the newer text. The complete newer temporary file is not offered: from the user's point of view that save never completed, like edits lost in a crash. Two documents with identical content (two empty documents, for example) whose Rename was interrupted: the interrupted one is not recovered and its leftover is deleted (Risks). A valid leftover whose name an invalid package holds is skipped and kept; if the user deletes that package in the invalid-files dialog, which comes after recovery, the leftover is recovered at the next start (F-8b review M-7). Rejected: offering every leftover in a dialog (new UI for files that are almost always duplicates); restoring the newest file (would turn an interrupted Rename into a completed one, which F-3 never does). "Deleting duplicates" was rejected here at first (the user's data, never deleted silently); the user decided otherwise on 2026-10-10 (step 7).
 
 **D4. The user is told what was recovered.** `DocumentWorkspaceService.take_recovered_document_names() -> list[str]` returns and clears the names of D3. `BrailleFrame._load_workspace_documents_at_startup` calls it after `_review_invalid_workspace_files` and, if it is not empty, calls `self.show_info(_("DotExpress was interrupted ...").format(names="\n".join(names)), _("Documents Recovered"))` (strings below). Then `_ensure_open_document_exists` and the title update run as today. A message box, because the main window has no status bar and NVDA reads a message box completely (Current State). Information icon: nothing is wrong now (Decided by orchestrator with the recommended default; user may override before merge).
 
-**D5. Temporary names and leftovers are otherwise unchanged.** `PackageFiles.temporary_path` keeps `NamedTemporaryFile` (F review M-3/M-4 stay follow-ups). Startup never deletes a `.tmp`, never lists one as invalid and never offers to delete one.
+**D5. Temporary names and leftovers are otherwise unchanged.** `PackageFiles.temporary_path` keeps `NamedTemporaryFile` (F review M-3/M-4 stay follow-ups). Startup deletes only the unused leftovers of D3 step 7, never lists a `.tmp` as invalid and never offers to delete one.
 
 ### Atomic writers
 
@@ -292,10 +316,10 @@ It returns `(text, 0)` for clean text, the same object. `_displayable(document) 
 | Rename, a third file appears at the target after the prompt (race) | replaced | `儲存文件失敗：[Errno 17] File exists: '...\bad.dep'`; old package back, no `.tmp` |
 | Import `bad.txt` (same) | `bad.dep` replaced | Import Issues: `bad.txt: Document "bad" already exists.`; `bad.dep` unchanged |
 | Start with only a kept invalid `new.dep` | `new.dep` replaced by an empty `new` | `new (2)` created and opened; `new.dep` unchanged |
-| Start after a crash inside Rename (no `.dep`, two `.tmp`) | the document is missing; nothing said | the document is back under its old name; "Documents Recovered" box; the other `.tmp` stays |
-| Start with the leftover aside file of a completed Rename | nothing | identical (same content is listed) |
-| Start with a leftover Save `.tmp` next to its package | nothing | identical |
-| Start with an invalid or empty `.tmp` | nothing | identical |
+| Start after a crash inside Rename (no `.dep`, two `.tmp`) | the document is missing; nothing said | the document is back under its old name; "Documents Recovered" box; the other `.tmp` (same content) is deleted |
+| Start with the leftover aside file of a completed Rename | nothing | no message; the `.tmp` is deleted (same content is listed) |
+| Start with a leftover Save `.tmp` next to its package | nothing | identical: the `.tmp` stays (the only copy of the newer text) |
+| Start with an empty `.tmp` or one that is no zip archive | nothing | no message; the `.tmp` is deleted (one held open by another program stays, one log line) |
 | Text Processing Apply | atomic without `fsync`; `.tmp` may stay after a write error | atomic with `fsync`; nothing left; same bytes; read-only: `[Errno 13]` text |
 | Default dictionary created, dictionary Add | in place | atomic; same bytes |
 | Dictionary Import | `copyfile`; partial file on failure | atomic copy; nothing on failure |
@@ -320,7 +344,7 @@ It returns `(text, 0)` for clean text, the same object. `_displayable(document) 
 
 - `replace_nul_characters`, `_displayable` (D12).
 - `_read_package(path, package_name) -> Document`: today's body of `load_document_package` after the suffix check; `load_document_package` calls it with `normalize_document_name(path.stem)`.
-- `_INTERRUPTED_PACKAGE` (compiled pattern) and `recover_interrupted_packages` (D3), with a docstring that states "never deletes, never replaces".
+- `_INTERRUPTED_PACKAGE` (compiled pattern) and `recover_interrupted_packages` (D3), with a docstring that states "never replaces" and which leftovers it deletes (step 7, `_remove_unused_leftover`).
 - `move_document_package`: the `files.exists(new_path)` check at the start of the install block (D1). Docstring: "A file already at ``new_path`` (a package that is not listed) raises ``FileExistsError``; the old package is put back."
 - `export_document_brl`: `write_text_atomically` (D8); import it from `shared.atomic_write`.
 
@@ -369,7 +393,7 @@ D9-D11: `_UnreadableConfig`, `_load`, `_save`, `_backup_unreadable(path)`; the m
 - Every existing message, caption and button. The F-5 save comparison and close dialog, F-7's export reporting.
 - Startup, Add, Rename and Import when no unlisted `.dep` is on disk and no interrupted package can be recovered.
 - Documents without U+0000: what the editors show, what is saved and exported, and no message.
-- Temporary files are never deleted by the app.
+- Temporary files are never deleted by the app, except the package leftovers that startup recovery does not use (D3 step 7).
 - Both fixture sha256 values (`translation_golden.json` `e67d95a1...`, `dictionary_entries_trace.json` `f493da52...`).
 
 ## User-Visible Strings
@@ -379,7 +403,7 @@ New msgids (364 -> 368), all in `gui.py`:
 | msgid | msgstr (zh_TW) | Where |
 | --- | --- | --- |
 | `Characters Replaced` | `已取代字元` | caption of the U+0000 box (D13) |
-| `Some characters in document "{name}" cannot be shown ({count} in all). Each one has been replaced with the replacement character {mark}, so the text after it is kept.\n\nDelete or change these {mark} characters before converting. Otherwise each one appears in the braille as an escape code.` | `文件「{name}」中有 {count} 個無法顯示的字元，已全部以替代字元 {mark} 標示，後面的文字都保留下來了。\n\n轉譯前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。` | text of the U+0000 box; `{mark}` is U+FFFD (D13) |
+| `Some characters in document "{name}" cannot be shown ({count} in all). Each one has been replaced with the replacement character {mark}, so the text after it is kept.\n\nDelete or change these {mark} characters before converting. Otherwise each one appears in the braille as an escape code.` | `文件「{name}」中有 {count} 個無法顯示的字元，已全部以替代字元 {mark} 標示，後面的文字都保留下來了。\n\n轉換前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。` | text of the U+0000 box; `{mark}` is U+FFFD (D13) |
 | `Documents Recovered` | `已復原文件` | caption of the recovery box (D4) |
 | `DotExpress was interrupted while saving or renaming a document. These documents were recovered:\n\n{names}\n\nCheck that their content is what you expect.` | `DotExpress 上次在儲存或重新命名文件時中斷，已復原以下文件：\n\n{names}\n\n請確認內容是否正確。` | text of the recovery box; one name per line (D4) |
 
@@ -393,7 +417,7 @@ The U+0000 box reads, in zh-TW (U+FFFD shown as `<U+FFFD>`):
 
 文件「alpha」中有 3 個無法顯示的字元，已全部以替代字元 <U+FFFD> 標示，後面的文字都保留下來了。
 
-轉譯前請刪除或修改這些 <U+FFFD>，否則每一個都會在點字中變成一段跳脫碼。
+轉換前請刪除或修改這些 <U+FFFD>，否則每一個都會在點字中變成一段跳脫碼。
 
 [確定]
 ```
@@ -467,14 +491,14 @@ TDD: each step's new tests are written first and fail for the stated reason; the
 
 `test_document_workspace.py`:
 
-1. `test_interrupted_rename_is_recovered_under_the_old_name`: the two `.tmp` files written as the probe found them (aside with the old mtime set by `os.utime`, staged newer); result `[alpha]`; `alpha.dep` exists with the old bytes; the staged `.tmp` stays. Red: function missing.
+1. `test_interrupted_rename_is_recovered_under_the_old_name`: the two `.tmp` files written as the probe found them (aside with the old mtime set by `os.utime`, staged newer); result `[alpha]`; `alpha.dep` exists with the old bytes; the staged `.tmp` stays (deleted since the F-8b review fix, step 7). Red: function missing.
 2. `test_leftover_of_a_completed_rename_is_not_recovered` (`gamma.dep` listed with the same content). Red (function missing), then green by rule 4.
 3. `test_leftover_save_next_to_its_package_is_not_recovered`. 
 4. `test_invalid_and_empty_temporary_files_are_ignored` (also `b"not a zip"`, a zero-byte file).
 5. `test_name_held_by_an_unlisted_package_is_not_recovered` (kept invalid `alpha.dep`, any case).
 6. `test_names_that_are_not_valid_document_names_are_ignored` (`.CON.dep.x.tmp`, `.a<b.dep.x.tmp` is not creatable on Windows; the plan uses names that can exist).
 7. `test_member_names_must_match_the_temporary_file_name`.
-8. `test_recovery_never_deletes_a_file`: a recording `os.unlink`/`os.remove`/`Path.unlink` patch sees no call.
+8. `test_recovery_never_deletes_a_file`: a recording `os.unlink`/`os.remove`/`Path.unlink` patch sees no call. Since the F-8b review fix: `test_recovery_never_replaces_and_removes_only_unused_leftovers`, `os.unlink` only for the unused leftovers (step 7), no other call.
 9. Windows only: `test_recovery_does_not_replace_a_file_created_meanwhile`: the disk check patched to miss; `os.rename` raises `FileExistsError`; the existing file unchanged; the `.tmp` stays; one log line (`assertLogs("dotexpress.gui", "ERROR")`).
 10. The F-3 test `test_load_workspace_documents_ignores_leftover_temporary_files` stays green unchanged.
 
@@ -486,7 +510,7 @@ TDD: each step's new tests are written first and fail for the stated reason; the
 `test_gui_document_flows.py` (real service in a temporary workspace, as the existing startup tests):
 
 13. `test_startup_reports_recovered_documents`: events: the invalid-files dialog if any, then `message_box(<recovery text with "alpha">, "Documents Recovered", OK | ICON_INFORMATION, parent=frame)`, then the title. Red.
-14. `test_startup_ignores_leftover_temporary_files` stays green unchanged (no message).
+14. `test_startup_ignores_leftover_temporary_files` stays green unchanged (no message). Since the F-8b review fix: `test_startup_removes_unreadable_leftover_temporary_files_without_a_message` (no message; the files are deleted).
 
 ### E. U+0000
 
@@ -549,7 +573,7 @@ Run on Windows from `client/` with `$PY`, the runtime copied as in F-3 plan Task
 7. A source scan (or `grep`) finds no `shutil.copyfile`, no `Path.write_text` and no `open(..., "w")` writing user data in `client/` production code outside `shared/atomic_write.py` and `dual_view/files.py`.
 8. Mutation check (plan). Each mutant is caught by at least one test:
    - the prompt without the disk check; `package_name_taken` ignoring `exclude_name`; `create_document` without its check; the move guard before the move aside (breaks case-only renames) or removed; `import_files` with controller names only; `free_document_name` returning `base`;
-   - recovery: deleting a skipped candidate; using `os.replace` instead of `os.rename`; no content-duplicate rule; newest-first order; recovering invalid archives; recovering in the Delete All reload;
+   - recovery: deleting a skipped candidate (since the F-8b review fix: deleting a leftover that step 7 keeps, or deleting before every rename is done); using `os.replace` instead of `os.rename`; no content-duplicate rule; newest-first order; recovering invalid archives; recovering in the Delete All reload;
    - each writer back to its old call (`copyfile`, `write_text`, `open("w")`, `NamedTemporaryFile`); `newline=""` for BRL, HTML or config;
    - `_load` without `utf-8-sig`; accepting a non-dict; `_save` writing after an `OSError` load; no `.bak`; writing when the `.bak` fails;
    - `replace_nul_characters` not counting braille; the record built from the replaced text; the notice on every open; no notice; the count not moved on Rename; U+0000 replaced in `_encodable`.
@@ -569,9 +593,10 @@ Items continue after F-7's 65:
 | 67 | As 66; Rename `alpha` to `bad`; then Rename `alpha` to `Alpha` | first: same box, nothing changes; second: renamed (case-only) | first: `bad.dep` replaced, `alpha.dep` gone |
 | 68 | As 66; Import `bad.txt` and `ok.txt` | Import Issues lists `bad.txt: Document "bad" already exists.`; `ok` imported; `bad.dep` unchanged | `bad.dep` replaced |
 | 69 | Workspace with only an invalid `new.dep`; Keep | `new (2)` listed and open; `new.dep` unchanged | `new` created, `new.dep` replaced |
-| 70 | Workspace built like the interrupted Rename (aside `.alpha.dep.<8>.tmp` with the old mtime, staged `.gamma.dep.<8>.tmp`, no `.dep`); start | `已復原文件` box listing `alpha`, information icon, `確定`; list `alpha` with its text; `alpha.dep` exists; `.gamma.dep.*.tmp` still there; restart: no box | empty list, a new `new` document, no message |
-| 71 | `gamma.dep` + leftover `.alpha.dep.<8>.tmp` with the same content; start | no box; list `gamma`; `.tmp` untouched | identical |
-| 72 | `alpha.dep` + leftover `.alpha.dep.<16 hex>.tmp` with newer text; start | no box; `alpha` with the package's text; `.tmp` untouched | identical |
+| 70 | Workspace built like the interrupted Rename (aside `.alpha.dep.<8>.tmp` with the old mtime, staged `.gamma.dep.<8>.tmp`, no `.dep`); start | `已復原文件` box listing `alpha`, information icon, `確定`; list `alpha` with its text; `alpha.dep` exists; `.gamma.dep.*.tmp` deleted (F-8b review fix; before the fix it stayed); restart: no box; after alpha is edited, a third start: no box | empty list, a new `new` document, no message |
+| 70b | (added by the F-8b review fix) `alpha.dep` plus an empty `.beta.dep.k2j1abcd.tmp`, a `not a zip` `.alpha.dep.0123456789abcdef.tmp` and a `not a zip` `.gamma.dep.x2y3z4w5.tmp` held open by `lockshare.py` (share read); start; end the holder; start again | no box; the first two are deleted; the held one stays and `log\gui.log` has one line `Cannot remove unused temporary file ...`; the second start deletes it | no box; all three stay |
+| 71 | `gamma.dep` + leftover `.alpha.dep.<8>.tmp` with the same content; start | no box; list `gamma`; `.tmp` deleted (F-8b review fix; before the fix it stayed untouched) | no box; `.tmp` untouched |
+| 72 | `alpha.dep` + leftover `.alpha.dep.<16 hex>.tmp` with newer text; start | no box; `alpha` with the package's text; `.tmp` untouched (the only copy of the newer text) | identical |
 | 73 | `alpha.dep` text `"first line\nsecond\x00 after\nthird"`, braille with one U+0000; `beta.dep` clean; start | `已取代字元` box, warning icon, text naming `alpha` and `2`, `確定`; source editor (`WM_GETTEXT`) holds the whole text with U+FFFD; Ctrl+Tab to `beta` and back: no second box; close; `alpha.dep` holds U+FFFD and `third`; restart: no box | editor holds `first line\nsecond`; after Ctrl+Tab `alpha.dep` holds only `first line\nsecond` (**the data loss**) |
 | 74 | Import a `.txt` with NUL bytes (single file) | the document opens and the box names it; the package holds U+FFFD | the editor shows the text up to the NUL; the package holds U+0000 |
 | 75 | Import the `.txt` and a `.pdf` whose text has code 0 (two files); then open each | no box at import; one box per document on first open | no box; cut text |
@@ -596,8 +621,10 @@ Manual items for the user (the implementation adds them to the user's list; neve
 - **Hidden or read-only targets** (low, F-3 D11). Hidden exports, dictionary files, scripts and `config.json` are replaced and lose the attribute; read-only ones are refused as before.
 - **Temporary files in the export folder** (low). An export briefly creates `.<name>.<16 hex>.tmp` next to the target (also on USB sticks and network shares). A program that watches the folder may see it; it is normally removed or renamed within the export. Corrected after the F-8a review (2026-10-10, M-4): if a scanner such as antivirus software holds the temporary file open at the moment of `os.replace`, the export fails (`[WinError 32]`), the old file stays intact, and the temporary file is left behind, because removing it fails too (`shared/atomic_write.py` ignores that error, as it has for packages since F-3); the user can delete it by hand. Retrying the removal is a follow-up.
 - **A folder where files can be overwritten but not created** (very low; F review). Atomic writes need to create the temporary file there.
-- **Recovery restores a document the user had deliberately renamed** (low). Only when the Rename was interrupted by a crash: the document comes back under its old name, as a failed Rename leaves it (F-3). The staged copy stays on disk.
-- **Two different documents with identical content** (very low). If the interrupted document's text and braille are identical to another listed document's, it is not recovered (rule 4); no text is lost, only the name.
+- **Recovery restores a document the user had deliberately renamed** (low). Only when the Rename was interrupted by a crash: the document comes back under its old name, as a failed Rename leaves it (F-3). The staged copy duplicates it and is deleted (step 7).
+- **A leftover that holds the only copy of its text can be recovered at a later start** (low; added after planning F-8b, narrowed by the user's decision of 2026-10-10, see "Corrected after planning (F-8b)" 9 and 10). Every other skipped leftover is deleted at the start that skips it. A skipped leftover whose content no package holds (class L4: the newer text of an interrupted Save, a leftover behind a kept invalid package) stays, and comes back at a later start once its own name is free: the user renames or deletes that document, or deletes the invalid package. Nothing is lost; the box names it.
+- **Two different documents with identical content** (low, empty documents; corrected after the F-8b review, M-6). If the interrupted document's text and braille are identical to another listed or recovered document's, it is not recovered (rule 4) and its leftover is deleted (step 7): no text is lost, but the document and its name are. This is not rare for empty documents (`new` and `new (2)`) or two imports of the same file under different names. The content rule cannot tell this case from the aside file of a completed Rename, which must be skipped.
+- **A name freed in the invalid-files dialog is recovered one start later** (low; F-8b review M-7). Recovery runs inside the load, before the invalid-files dialog. A valid leftover whose name an invalid package holds is skipped and kept (L4); if the user then chooses "Delete Invalid Files", the leftover is recovered at the next start, with the box. Nothing is lost. Recovering it at once would need a second service call after the dialog and a change of the startup order; not done.
 - **The newer text of an interrupted Save is not offered** (low, D3). It is the same as edits lost in a crash; the `.tmp` stays on disk for manual recovery.
 - **A document that is only exported, never opened, is exported with U+FFFD without a notice** (low, D13).
 - **Many U+FFFD from a UTF-16 file without BOM** (low). Every ASCII character is followed by U+FFFD; the notice's count makes the wrong encoding obvious. Detecting UTF-16 is out of scope.
@@ -613,18 +640,22 @@ Decided by orchestrator with the recommended default; user may override before m
 
 - **O1.** Split into F-8a (no strings) and F-8b (notices and 4 msgids), in that order (Goal, Migration Steps).
 - **O2.** The default document takes `new (2)`, `new (3)`, ... when `new.dep` is on disk but not listed (D2).
-- **O3.** Interrupted packages are recovered automatically at startup and reported in one information box; nothing is ever deleted, and duplicates are left on disk (D3, D4).
+- **O3.** Interrupted packages are recovered automatically at startup and reported in one information box (D3, D4). (Before the F-8b review: "nothing is ever deleted, and duplicates are left on disk"; the user decided on 2026-10-10 that the unused leftovers are deleted, D3 step 7.)
 - **O4.** `config.json`: a damaged file is copied to `config.json.bak` before the first change replaces it; an unreadable file is not overwritten; a BOM is accepted; a non-object counts as damaged (D10, D11).
 - **O5.** The U+0000 notice is a warning box shown the first time each affected document is opened in a session, not a startup summary (D13).
 - **O6.** Exports become atomic and therefore fail over a target that another program holds open, like F-3 Q1 for packages (D8, Risks).
 - **O7.** U+0000 is not replaced in `_encodable` / `prepare_document_for_save` (D12).
+- **O8.** At startup, a skipped leftover whose content no package holds (class L4) is kept, not deleted: it is the only copy of that text (D3 step 7, "Corrected after planning (F-8b)" 10). The literal reading of the user's decision would delete it too.
+
+Raised by the F-8b plan: whether a leftover that recovery skipped may be recovered at a later start ("Corrected after planning (F-8b)" 9). Decided by the user on 2026-10-10: the leftovers that recovery decides not to use are deleted ("Corrected after planning (F-8b)" 10); keeping the only copy of a text is O8.
 
 ## Out of Scope / Follow-ups
 
 - **U+0000 in dictionary entries.** Python 3.13's `csv` reads `a\x00b` (measured); the entries editor's text field would cut it, and OK would save the cut entry. A dictionary task should apply the same replacement when entries are loaded.
 - **U+0000 in the text-processing script.** The script editor would cut it; `ast.parse` already refuses such a script at conversion.
 - **U+0000 returned by the user's text-processing script** into the braille output.
-- **Unifying the temporary-name schemes** (F review M-3/M-4) and cleaning up leftover `.tmp` files (would need the user's consent; not planned).
+- **Unifying the temporary-name schemes** (F review M-3/M-4) and cleaning up other leftover `.tmp` files (export, dictionary and `config.json` writers; not planned). The package leftovers that startup recovery does not use are deleted since the F-8b review fix (the user's decision of 2026-10-10, D3 step 7).
+- **The startup boxes come before the main window is shown** (F-8b review M-8): the recovery box and the first document's U+0000 box are owned by a frame that is not shown yet, as the invalid-files dialog has been since F-3. Deferred to F-12 (UI polish); manual item 83 checks what NVDA reads.
 - **Offering the newer text of an interrupted Save.**
 - **`dual_view/files.write_dual_view_html`** (app-owned temporary page).
 - **UTF-16 text import** (with BOM: today an import issue; without BOM: many U+FFFD).

@@ -1070,6 +1070,17 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
         self.assertEqual(recovered, [Document("beta", "b", "2"), Document("alpha", "a", "1")])
         self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
 
+    def test_same_text_with_different_braille_is_recovered(self) -> None:
+        # The content rule compares text and braille together (F-8b review M-2): a document
+        # converted differently from a listed one with the same text is its own document.
+        alpha = Document("alpha", "same", "1")
+        save_document_package(self.workspace_dir / "alpha.dep", alpha)
+        self._leftover(".beta.dep.k2j1abcd.tmp", Document("beta", "same", "2"))
+
+        self.assertEqual(self._recover([alpha]), [Document("beta", "same", "2")])
+
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
     def test_a_duplicate_is_removed_only_after_its_twin_is_on_disk(self) -> None:
         # alpha was saved with newer text, then a Rename of the old alpha to gamma was
         # interrupted. The aside is skipped first (alpha is taken) and duplicates nothing

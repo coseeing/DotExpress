@@ -828,10 +828,18 @@ class SaveOnlyWhenChangedTest(unittest.TestCase):
     def test_package_replaced_on_disk_is_written_again(self) -> None:
         # Another program replaced the package; the unchanged document is written back,
         # as every save did before F-5.
-        for replaced in ("other size", "same bytes, other time"):
+        # "other size, same time" pins the size half of the fingerprint (review M-4): the
+        # other two cases also change the modification time.
+        for replaced in ("other size", "same bytes, other time", "other size, same time"):
             with self.subTest(replaced=replaced):
                 if replaced == "other size":
                     save_document_package(self._path(), Document("alpha", "written by another program", "1"))
+                elif replaced == "other size, same time":
+                    status = self._path().stat()
+                    save_document_package(self._path(), Document("alpha", "written by another program", "1"))
+                    os.utime(self._path(), ns=(status.st_atime_ns, status.st_mtime_ns))
+                    self.assertNotEqual(self._path().stat().st_size, status.st_size)
+                    self.assertEqual(self._path().stat().st_mtime_ns, status.st_mtime_ns)
                 else:
                     status = self._path().stat()
                     os.utime(self._path(), ns=(status.st_atime_ns, status.st_mtime_ns + 2_000_000_000))

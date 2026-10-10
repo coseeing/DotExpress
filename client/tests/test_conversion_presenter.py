@@ -700,6 +700,91 @@ class ConversionPresenterTest(unittest.TestCase):
         self.assertEqual(self._take(), self._end() + self._started(2))
         self.assertTrue(presenter.is_running())
 
+    def test_request_during_a_failed_completion_waits_until_it_returns(self) -> None:
+        # F-9 review M-1: the failure completion queues a request made inside it, as the success
+        # completion does, so its error box closes before the next job starts.
+        self.outputs.update(
+            {"first": ConversionStageError("translation", RuntimeError("boom")), "second": ConversionOutput("2", ())}
+        )
+        presenter = self._presenter()
+
+        def first_failed(message) -> None:
+            self.events.append(("on_error", message))
+            presenter.convert_for_export("second", **self._export_callbacks())
+            self.events.append(("callback returns",))
+
+        presenter.convert_for_export("first", on_success=self.fail, on_error=first_failed)
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [("on_error", _("Translation failed: {error}").format(error="boom"))]
+            + [("build_request", "second"), ("callback returns",)]
+            + self._started(2),
+        )
+
+    def test_queue_drains_when_a_failed_completion_raises(self) -> None:
+        # F-9 review M-2: the failure completion drains in its finally too; otherwise the queued
+        # job would never start and every later close would be vetoed.
+        self.outputs.update(
+            {"first": ConversionStageError("translation", RuntimeError("boom")), "second": ConversionOutput("2", ())}
+        )
+        presenter = self._presenter()
+
+        def first_failed(_message) -> None:
+            raise RuntimeError("callback boom")
+
+        presenter.convert_for_export("first", on_success=self.fail, on_error=first_failed)
+        presenter.convert_for_export("second", **self._export_callbacks())
+        self.threads[0].run()
+        self._take()
+
+        with self.assertRaisesRegex(RuntimeError, "callback boom"):
+            self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end() + self._started(2))
+        self.threads[1].run()
+        self.calls.run_next()
+        self.assertEqual(self._take(), [("convert", "second"), ("call_after",)] + self._end(2) + [("on_success", "2")])
+        self.assertFalse(presenter.is_running())
+
+    def test_queued_manual_job_keeps_its_target(self) -> None:
+        # F-9 review M-3: a manual Convert asked for during a completion (is_running() is False
+        # then) is queued with the document open at that time, and its result goes there.
+        self.outputs.update({"first": ConversionOutput("1", ()), "source": ConversionOutput("⠎", (), ("segment",))})
+        presenter = self._presenter()
+
+        def first_done(output) -> None:
+            self.events.append(("on_success", output.display_text))
+            presenter.convert()
+
+        presenter.convert_for_export("first", on_success=first_done, on_error=self.fail)
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end() + [("on_success", "1"), ("get_source_text",), ("build_request", "source")] + self._started(2),
+        )
+
+        self._switch_to("beta")
+        self.threads[1].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end(2) + [("save_converted_document", Document("alpha", "source", "⠎")), self._saved_to("alpha")],
+        )
+        self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
+        self.assertEqual(self.documents.get_document("beta"), Document("beta", "b", "⠃"))
+        self.assertFalse(presenter.is_running())
+
     def test_convert_returns_while_a_job_is_queued_or_in_the_delivery_gap(self) -> None:
         self.outputs.update(
             {"source": ConversionOutput("⠎", ()), "first": ConversionOutput("1", ()), "second": ConversionOutput("2", ())}

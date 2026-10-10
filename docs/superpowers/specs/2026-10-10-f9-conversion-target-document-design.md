@@ -40,6 +40,39 @@ F-8 (atomic writes for the remaining writers, orphan `.tmp` recovery, U+0000 to 
 - The text guard of D3 compares the document's text in memory with the converted text. Both come from the same editor read (`BrailleFrame._editor_text`). A test pins that a switch-away save stores exactly the text that `get_source_text()` returns (Test Plan E14). If F-8 normalizes more in that path, that test shows it.
 - The plan takes the baseline counts again (`Ran`, msgids) on the post-F-8 `main`. Windows verification items are numbered after F-8's (placeholders `9a`-`9i` here).
 
+## Corrected after planning (F-9, 2026-10-10)
+
+The plan (`docs/superpowers/plans/2026-10-10-f9-conversion-target-document.md`) was dry-run on scratch clones of the spec commit `a39d207`, which is on `main` `7aba2be` (after F-8a and F-8b): on a fresh replay every red and green output, the catalog steps, the per-commit tree ids, the shuffle seeds and the 30 mutants matched; every step was also applied with the plan's own block script; a packaged build of the same code and `D:\dxtest\N-f8b2` (the "before" build, the code of `7aba2be`) ran the Windows items. Every decision D1-D9, the behavior table and the list of what is reachable while a conversion runs were re-checked against `7aba2be` and hold. F-8 did not touch `ui/conversion_presenter.py`, `conversion/jobs.py` or `documents/export_coordinator.py`; their line numbers below are still right. Corrections and refinements:
+
+1. **Baseline and counts.** On `7aba2be` the suite gives `Ran 1444`, `FAILED (errors=1, skipped=7)` (F-W6 only), and the catalogs hold **368** msgids. The D2 msgid makes **369**, not 364 -> 365. F-9 adds 34 tests (and flips 5): `Ran` 1445, 1450, 1459, 1461, 1478 after the five steps. The acceptance-criterion-2 set goes from `Ran 330` to `Ran 363`, `OK`. Beyond Test Plan A-E there is one catalog test, F1 `test_conversion_result_saved_string_is_translated` (`test_i18n`).
+2. **Migration steps 4 and 5 are swapped**: step 4 is D8 (`shutdown`), step 5 is D1-D3 with D9. D8 adds a line to `gui.py` above several msgids. Done after the catalog regeneration, it would leave their `#:` references stale, and the check "a fresh template differs only in `POT-Creation-Date`" would fail. The steps are independent; the commit subjects stay as listed.
+3. **Line references on `7aba2be`** (orientation only): `save_open_document` is `workspace_service.py:187-197` (above: 124-134). In `gui.py`: `_open_adjacent_document` 627-634, `_editor_text` 636-638, `on_import_document` 918-946, `on_output_text_key_down` 986-995, `on_char_hook` 1006-1027, `_close` 1066-1077, `_finish_close` 1092-1099, `get_source_text` 1103-1104, `set_conversion_busy` 1106-1114 (above: 1080-1088 and so on).
+4. **D3 logs at `ERROR`, not `WARNING`.** `dotexpress.gui` and its `gui.log` handler are bound with `log.get_logger`'s default level `ERROR`, so a `WARNING` would never reach `gui.log` (found in the F-8b fix phase). The line is `Discarded a conversion result: %s`, with one of: `document "<name>" no longer exists`, `the text of document "<name>" changed`, `document "<name>" was opened during a conversion without a document`. D7's line is `Unexpected error in a conversion job`, with `exc_info`. Both loggers are bound at call time. This is O11. Decided by orchestrator with the recommended default; user may override before merge.
+5. **After `shutdown()` no new job starts** (D8). `_submit` returns at once: an Export All step's `CallAfter` that runs after the close would otherwise start a job and call the destroyed frame. The converting-dialog timer also checks `_shut_down`. The drain checks it too, as written above. This is O10. Decided by orchestrator with the recommended default; user may override before merge.
+6. **Tests that change beyond the Test Plan:**
+   - `FrameConversionDelegationTest.test_close_asks_presenter_before_saving` expects `call.presenter.shutdown()` after the save and before `close_converting_dialog` (D8).
+   - `test_is_running_and_missing_table_message_read_live_state` expects `is_running()` to stay `True` after the worker ends until the delivery (D5).
+   - Three coordinator tests call a stored `on_success` with a `ConversionOutput` instead of a string, and the presenter tests' `_export_callbacks` record `output.display_text` (D6).
+7. **Test placement and names.**
+   - C3 is `test_write_document_uses_the_given_results_instead_of_the_cache`: `None` reads the cache; `()` and a tuple are used as given; `()` writes "No conversion data" even with a cache entry.
+   - D1-D5 are methods of `SaveOnlyWhenChangedTest`, whose loaded workspace has alpha open and the pending beta not open.
+   - E13 is in `FrameViewMethodsTest`.
+   - E3 drives Ctrl+O with a fake import dialog (`GetPaths`, `SetFilterIndex`, `GetFilterIndex`).
+   - The new frame tests compare message boxes without the frame, so no object address appears in a failure line.
+8. **`_write_single(..., **results)`** passes `dual_view_results` to `write_document` only for a pending export. The existing tests that mock `write_document` and expect `(path, document, format_key)` stay unchanged.
+9. **Catalogs.** `msgmerge` does not fuzzy-match the new msgid. The reference is `ui/conversion_presenter.py:305`. The regeneration also refreshes the `#:` lines that steps 3-5 moved.
+10. **Windows items.**
+    - Placeholders `9a`-`9i` are items **85-93**, in order: F-8a's manual item 84 was the last number used. The manual NVDA item is **94**.
+    - "Before" is `D:\dxtest\N-f8b2\DotExpress.exe`. The new build goes to `D:\dxtest\N-f9`.
+    - The slow conversion comes from a long source text written into the package by script: 8000 copies of a 65-character mixed Chinese and English line, 520,000 characters, about 15 s per conversion.
+    - The keys are sent right after Ctrl+Enter, before the converting dialog appears at 2 s. Disabling the source editor moves the focus to the Braille Result editor, so Ctrl+Tab, Ctrl+O and Ctrl+S reach the frame's char hook (measured). 9e and 9f focus the Braille Result editor directly instead of pressing F6.
+    - The scripts send a key only while the main window is the foreground window, and stop the item otherwise.
+    - The dry run measured every item as the table above predicts, on both builds, except the "Before" of 9e and 9f (see 14).
+11. **Observed while planning (not caused by F-9, not blocking).** A `WM_ENDSESSION` sent while a conversion runs (item 93, the second conversion) ended the process once with exit code `-1073740940` (`0xC0000374`, a heap corruption at process exit) instead of 0. This happened in one of five runs on F-9 builds; the other runs, and the run on N-f8b2, exited with 0. wx 3.2.9 sends no close event on `WM_ENDSESSION` (F-7 item 60), so no F-9 code runs there: Windows ends the process while the worker thread is inside the converter. Added to Risks. The plan records such a run and repeats the item once.
+12. **Item 93 (9i)** sends `WM_QUERYENDSESSION` after the switch away: the query returns 0 at once, the app keeps running and the D2 box follows.
+13. **Item 91 (9g)** also exports the default document `new` as HTML. It is not pending and has no cache, so its page is "No conversion data", before and after F-9 (Out of Scope, first item).
+14. **Before F-9, a second conversion during a long one crashes the app** (measured while planning; corrects the "Before" of 9e and 9f and of the table rows "Convert, Ctrl+S on the pending open document" and "Export All with pending documents, Ctrl+S during it"). The superseding job starts a second worker thread while the first one still converts, so two liblouis conversions run at once. With the long texts of 9e and 9f, N-f8b2 ended without any box in four of four runs (Windows' Application log: `ntdll.dll`, exception `0xc0000374`, a heap corruption). Probes 2 and 3 used fake threads and could not show this; with short texts the first thread usually ends before the second starts. D4 runs one job at a time, so it also removes this crash. Defect 2 was therefore worse than "a result is dropped".
+
 ## Current State (verified 2026-10-10 on `main` `861d110`, worktree `D:\workspace\DotExpress-f9`, Windows 11 26200)
 
 `$PY` is `D:\workspace\DotExpress\client\.venv\Scripts\python.exe`. Baseline, with the runtime copied as in F-3 plan Task 0: `cd client && $PY -m unittest discover -s tests` gives `Ran 1368`, `FAILED (errors=1, skipped=7)`. The only error is F-W6. The AST msgid scan and the catalog have 364 msgids.
@@ -460,6 +493,7 @@ Never trigger a real logoff or shutdown; messages go only to the test instance's
 - **F-8 rebase** (medium, mechanical). `workspace_service.py` and possibly `gui.py` are touched by both. Everything is named by function, and the plan rebases on the post-F-8 `main`.
 - **Logging from the presenter and the runner** (low). Tests must use `assertLogs`, or the suite writes `client/log/gui.log` (acceptance 6).
 - **Test churn** (low). The export callback type changes for every fake `ExportConversions`; the close-order test gains `timer.Stop`.
+- **Ending the process while a conversion runs** (low, pre-existing; added after planning F-9, see "Corrected after planning (F-9)" 11). Windows ending the session during a conversion can end the process with a heap-corruption code instead of 0 (seen once in five runs). No data is written at that moment: the open document was saved before, and the conversion's result is lost as with any other end of the process.
 
 ## Open Questions
 
@@ -476,6 +510,11 @@ Decided by orchestrator with the recommended default; user may override before m
 - **O7.** Case (b) writes `alpha.dep` at once instead of keeping the result in memory only (D1).
 - **O8.** `is_running()` covers the delivery gap and the queue, so a vetoable close is vetoed then too; a completion box alone does not veto (D5).
 - **O9.** `shutdown()` on close drops running and queued results (D8).
+
+Added by the F-9 plan ("Corrected after planning (F-9)" 4 and 5). Decided by orchestrator with the recommended default; user may override before merge:
+
+- **O10.** After `shutdown()` no new job starts, so an Export All step that runs after the close does nothing (D8).
+- **O11.** A discarded result (O3) is logged at `ERROR`, the level `gui.log` records, not at `WARNING` (D3).
 
 ## Out of Scope / Follow-ups
 

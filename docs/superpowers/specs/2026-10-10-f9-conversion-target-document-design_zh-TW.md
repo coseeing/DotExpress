@@ -40,6 +40,39 @@ F-8（其餘寫入改為原子寫入、孤兒 `.tmp` 回收、載入與匯入時
 - D3 的文字檢查比對記憶體中文件的文字與被轉換的文字。兩者都來自同一個編輯框讀取（`BrailleFrame._editor_text`）。有一個測試釘住「切走時的存檔所存的文字，正是 `get_source_text()` 回傳的文字」（測試計畫 E14）。如果 F-8 在那條路徑上多做了正規化，該測試會顯示出來。
 - plan 會在 F-8 之後的 `main` 上重新取得基準數字（`Ran`、msgid）。Windows 驗證項目排在 F-8 之後（此處以 `9a`-`9i` 作為佔位）。
 
+## 規劃後的修正（F-9，2026-10-10）
+
+plan（`docs/superpowers/plans/2026-10-10-f9-conversion-target-document.md`）在 spec commit `a39d207` 的 scratch clone 上完整 dry run。`a39d207` 位於 `main` `7aba2be` 之上（F-8a、F-8b 之後）。重新從頭 replay 時，每個紅燈與綠燈輸出、翻譯檔步驟、每個 commit 的 tree id、打亂順序的 seed 與 30 個 mutant 都吻合；每一步也用 plan 自己的區塊腳本套用過；同一份程式碼的 packaged build 與 `D:\dxtest\N-f8b2`（「改前」build，即 `7aba2be` 的程式碼）都跑過 Windows 項目。D1-D9 每個決定、行為對照表、轉換進行中仍可操作的清單，都已對照 `7aba2be` 重新確認，仍然成立。F-8 沒有改到 `ui/conversion_presenter.py`、`conversion/jobs.py` 與 `documents/export_coordinator.py`，上文這些檔案的行號仍正確。修正與補充如下：
+
+1. **基準與數量。** 在 `7aba2be` 上，測試得到 `Ran 1444`、`FAILED (errors=1, skipped=7)`（只有 F-W6），翻譯檔有 **368** 個 msgid。D2 的 msgid 使數量成為 **369**，不是 364 -> 365。F-9 新增 34 個測試（另有 5 個翻轉）：五個步驟後的 `Ran` 依序是 1445、1450、1459、1461、1478。驗收條件 2 的模組組合從 `Ran 330` 變成 `Ran 363`、`OK`。測試計畫 A-E 之外還有一個翻譯檔測試 F1 `test_conversion_result_saved_string_is_translated`（`test_i18n`）。
+2. **移轉步驟 4 與 5 對調**：步驟 4 是 D8（`shutdown`），步驟 5 是 D1-D3 加 D9。D8 在 `gui.py` 中、好幾個 msgid 的上方加了一行。如果在翻譯檔重新產生之後才做，那些 msgid 的 `#:` 參照就會過時，「重新產生的範本只有 `POT-Creation-Date` 不同」這項檢查也會失敗。兩個步驟互不依賴；commit 標題維持上文所列。
+3. **`7aba2be` 上的行號**（僅供定位）：`save_open_document` 是 `workspace_service.py:187-197`（上文：124-134）。`gui.py` 中：`_open_adjacent_document` 627-634、`_editor_text` 636-638、`on_import_document` 918-946、`on_output_text_key_down` 986-995、`on_char_hook` 1006-1027、`_close` 1066-1077、`_finish_close` 1092-1099、`get_source_text` 1103-1104、`set_conversion_busy` 1106-1114（上文：1080-1088 等）。
+4. **D3 以 `ERROR` 層級寫 log，不是 `WARNING`。** `dotexpress.gui` 與它的 `gui.log` handler 都以 `log.get_logger` 的預設層級 `ERROR` 建立，`WARNING` 永遠不會寫進 `gui.log`（F-8b 修正階段發現）。訊息是 `Discarded a conversion result: %s`，原因為下列之一：`document "<name>" no longer exists`、`the text of document "<name>" changed`、`document "<name>" was opened during a conversion without a document`。D7 的訊息是 `Unexpected error in a conversion job`，附 `exc_info`。兩個 logger 都在呼叫時才綁定。這是 O11。Decided by orchestrator with the recommended default; user may override before merge.
+5. **`shutdown()` 之後不再開始新的工作**（D8）。`_submit` 直接返回：否則在關閉之後才執行的「全部匯出」步驟 `CallAfter` 會開始一個工作，呼叫已銷毀的 frame。「轉換中」對話框的 timer 也檢查 `_shut_down`。佇列的取出同樣檢查它，與上文相同。這是 O10。Decided by orchestrator with the recommended default; user may override before merge.
+6. **測試計畫以外會改到的測試：**
+   - `FrameConversionDelegationTest.test_close_asks_presenter_before_saving` 預期在存檔之後、`close_converting_dialog` 之前有 `call.presenter.shutdown()`（D8）。
+   - `test_is_running_and_missing_table_message_read_live_state` 預期 worker 結束後到投遞之前，`is_running()` 仍是 `True`（D5）。
+   - coordinator 的三個測試以 `ConversionOutput` 而不是字串呼叫存起來的 `on_success`；presenter 測試的 `_export_callbacks` 記錄 `output.display_text`（D6）。
+7. **測試的位置與名稱。**
+   - C3 是 `test_write_document_uses_the_given_results_instead_of_the_cache`：`None` 讀快取；`()` 與 tuple 照原樣使用；即使有快取，`()` 也寫出「No conversion data」。
+   - D1-D5 是 `SaveOnlyWhenChangedTest` 的方法；它載入的 workspace 中 alpha 開著，待轉換的 beta 沒有開。
+   - E13 在 `FrameViewMethodsTest`。
+   - E3 以假的匯入對話框（`GetPaths`、`SetFilterIndex`、`GetFilterIndex`）驅動 Ctrl+O。
+   - 新的 frame 測試比對訊息框時不含 frame，所以失敗訊息中不會出現物件位址。
+8. **`_write_single(..., **results)`** 只有在匯出待轉換文件時才把 `dual_view_results` 傳給 `write_document`。既有的、mock `write_document` 並預期 `(path, document, format_key)` 的測試不需修改。
+9. **翻譯檔。** `msgmerge` 沒有把新的 msgid 誤配成 fuzzy。參照是 `ui/conversion_presenter.py:305`。重新產生時，步驟 3-5 移動過的 `#:` 參照也一併更新。
+10. **Windows 項目。**
+    - 佔位的 `9a`-`9i` 依序是項目 **85-93**：F-8a 的手動項目 84 是目前用過的最後一個編號。NVDA 手動項目是 **94**。
+    - 「改前」是 `D:\dxtest\N-f8b2\DotExpress.exe`，新的 build 放在 `D:\dxtest\N-f9`。
+    - 慢的轉換來自腳本寫進包裡的長原文：一行 65 字元的中英混合文字重複 8000 次，共 520,000 字元，每次轉換約 15 秒。
+    - 按鍵在 Ctrl+Enter 之後立刻送出，在 2 秒時「轉換中」對話框出現之前。原文編輯框停用時焦點移到點字結果編輯框，所以 Ctrl+Tab、Ctrl+O、Ctrl+S 都會到達 frame 的 char hook（已實測）。9e 與 9f 直接把焦點放到點字結果編輯框，不按 F6。
+    - 腳本只在主視窗位於前景時才送按鍵，否則停止該項目。
+    - dry run 實測每個項目在兩個 build 上的結果都與上表預期相同，只有 9e 與 9f 的「改前」不同（見第 14 點）。
+11. **規劃時觀察到的現象（不是 F-9 造成，不阻擋）。** 在轉換進行中送出 `WM_ENDSESSION`（項目 93 的第二次轉換），有一次程序以結束碼 `-1073740940`（`0xC0000374`，程序結束時的 heap 損毀）結束，而不是 0。這在 F-9 build 的五次執行中發生一次；其他次與 N-f8b2 上的執行都以 0 結束。wx 3.2.9 在 `WM_ENDSESSION` 時不送關閉事件（F-7 項目 60），所以不會執行任何 F-9 的程式碼：是 Windows 在 worker 執行緒還在轉換器裡時結束了程序。已加入「風險」。plan 會記錄這樣的執行，並把該項目再跑一次。
+12. **項目 93（9i）** 在切走之後送出 `WM_QUERYENDSESSION`：查詢立刻回傳 0，程式繼續執行，接著出現 D2 訊息框。
+13. **項目 91（9g）** 也把預設文件 `new` 匯出為 HTML。它不是待轉換文件，也沒有快取，所以頁面是「No conversion data」，改前改後相同（「不在範圍內」第一項）。
+14. **F-9 之前，在長轉換進行中開始第二個轉換會讓程式當掉**（規劃時實測；修正 9e、9f 的「改前」，以及對照表中「轉換中對開著的待轉換文件按 Ctrl+S」與「含待轉換文件的「全部匯出」中按 Ctrl+S」兩列的「改前」）。取代的工作在第一個還在轉換時就啟動第二個 worker 執行緒，於是兩個 liblouis 轉換同時進行。以 9e、9f 的長原文，N-f8b2 四次執行都在沒有任何訊息框的情況下結束（Windows 應用程式記錄：`ntdll.dll`，例外狀況代碼 `0xc0000374`，heap 損毀）。探測 2、3 使用假的執行緒，所以看不到這點；原文短時，第一個執行緒通常在第二個開始前就結束了。D4 一次只執行一個工作，因此也消除了這個當機。所以 defect 2 比「丟掉一個結果」更嚴重。
+
 ## 現況（2026-10-10 於 `main` `861d110`、worktree `D:\workspace\DotExpress-f9`、Windows 11 26200 驗證）
 
 `$PY` 是 `D:\workspace\DotExpress\client\.venv\Scripts\python.exe`。依 F-3 plan Task 0 複製 runtime 後的基準：`cd client && $PY -m unittest discover -s tests` 得到 `Ran 1368`、`FAILED (errors=1, skipped=7)`，唯一的 error 是 F-W6。AST msgid 掃描與翻譯檔都是 364 個 msgid。
@@ -460,6 +493,7 @@ build 與行程的規則同 F-7：
 - **F-8 的 rebase**（中，機械性的）。`workspace_service.py`，可能還有 `gui.py`，兩邊都會修改。一切以函式命名，plan 在 F-8 之後的 `main` 上 rebase。
 - **presenter 與 runner 寫 log**（低）。測試必須使用 `assertLogs`，否則測試會寫出 `client/log/gui.log`（驗收 6）。
 - **測試異動**（低）。每個 fake `ExportConversions` 的匯出 callback 型別都要改；關閉順序的測試多一個 `timer.Stop`。
+- **轉換進行中程序被結束**（低，既有的；F-9 規劃後新增，見「規劃後的修正（F-9）」第 11 點）。轉換進行中 Windows 結束工作階段時，程序可能以 heap 損毀的結束碼結束，而不是 0（五次中出現一次）。那一刻不會寫入任何資料：開著的文件之前已存檔，轉換結果則和程序因其他原因結束時一樣遺失。
 
 ## 待決問題
 
@@ -476,6 +510,11 @@ Decided by orchestrator with the recommended default; user may override before m
 - **O7.** 情況 (b) 立即寫入 `alpha.dep`，而不是只把結果放在記憶體（D1）。
 - **O8.** `is_running()` 涵蓋投遞空檔與佇列，所以這時可拒絕的關閉也會被拒絕；只有完成訊息框時不拒絕（D5）。
 - **O9.** 關閉時的 `shutdown()` 丟棄正在跑與排隊中的結果（D8）。
+
+F-9 的 plan 新增（「規劃後的修正（F-9）」第 4、5 點）。Decided by orchestrator with the recommended default; user may override before merge：
+
+- **O10.** `shutdown()` 之後不再開始新的工作，所以關閉之後才執行的「全部匯出」步驟什麼都不做（D8）。
+- **O11.** 丟棄的結果（O3）以 `gui.log` 會記錄的 `ERROR` 層級寫 log，而不是 `WARNING`（D3）。
 
 ## 不在範圍內／後續項目
 

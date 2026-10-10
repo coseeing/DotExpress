@@ -15,7 +15,10 @@ from documents.workspace import BatchIssue, Document, PackageFiles, load_documen
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
 from shared import name_validation
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
+from tests.full_disk import full_disk
 from tests.windows_file_handles import SHARE_DELETE, SHARE_MODES, hold_open, make_read_only
+
+NO_SPACE = f"[Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}"
 
 SERVICE_PATH = Path(__file__).resolve().parents[1] / "documents" / "workspace_service.py"
 
@@ -269,6 +272,122 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(self._package("alpha"), Document("alpha", "a", "1"))
         self.assertEqual(self._state(), before)
 
+    # --- packages on disk that are not listed (F-8, D1, D2) ----------------
+
+    def _start_with_a_kept_invalid_package(self, name: str = "bad") -> DocumentWorkspaceService:
+        """alpha listed and open; ``<name>.dep`` invalid, kept at startup (not listed)."""
+        self._write(Document("alpha", "a", "1"))
+        (self.workspace / f"{name}.dep").write_bytes(b"not a zip")
+        service = self._service()
+        self.assertEqual(service.load_documents(), [self.workspace / f"{name}.dep"])
+        self.controller.open_document("alpha")
+        return service
+
+    def _exists_error(self, name: str) -> str:
+        return f"[Errno {errno.EEXIST}] {os.strerror(errno.EEXIST)}: {str(self.workspace / name)!r}"
+
+    def test_create_document_refuses_a_package_that_is_not_listed(self) -> None:
+        service = self._start_with_a_kept_invalid_package()
+        before = self._state()
+
+        with self.assertRaises(FileExistsError) as raised:
+            service.create_document(Document("bad", "", ""))
+
+        self.assertEqual(str(raised.exception), self._exists_error("bad.dep"))
+        self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+        self.assertEqual(self._state(), before)
+
+    def test_rename_onto_a_package_that_is_not_listed_keeps_both_files(self) -> None:
+        service = self._start_with_a_kept_invalid_package()
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        before = self._state()
+
+        with self.assertRaises(FileExistsError) as raised:
+            service.rename_document("alpha", "bad")
+
+        self.assertEqual(str(raised.exception), self._exists_error("bad.dep"))
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+        self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
+        self.assertEqual(self._state(), before)
+
+    def test_import_treats_packages_on_disk_as_existing(self) -> None:
+        # The kept package is spelled Bad.dep: names on disk are compared ignoring case.
+        service = self._start_with_a_kept_invalid_package("Bad")
+        sources = self._sources(bad="b", ok="o")
+
+        result = service.import_files(sources, format_key="all")
+
+        self.assertEqual(
+            result,
+            ImportResult(
+                saved=[Document("ok", "o", None)],
+                issues=[BatchIssue(path=sources[0], reason='Document "bad" already exists.')],
+            ),
+        )
+        self.assertEqual(self.controller.document_names, ["alpha", "ok"])
+        self.assertEqual(self._listing(), ["Bad.dep", "alpha.dep", "ok.dep"])
+        self.assertEqual((self.workspace / "Bad.dep").read_bytes(), b"not a zip")
+
+    def test_import_does_not_replace_a_package_that_appeared_after_the_names_were_checked(self) -> None:
+        # F-8a review M-1: like Add and Rename, each imported package is checked on disk
+        # right before it is written; one created since the batch began is kept.
+        service = self._service([Document("zoo", "z", "1")])
+        real_batch = workspace_service.batch_import_documents
+
+        def batch(*args, **kwargs):
+            result = real_batch(*args, **kwargs)
+            self.workspace.mkdir(exist_ok=True)
+            (self.workspace / "beta.dep").write_bytes(b"not a zip")
+            return result
+
+        with patch.object(workspace_service, "batch_import_documents", side_effect=batch):
+            result = service.import_files(self._sources(beta="b", delta="d"), format_key="all")
+
+        self.assertEqual(result.saved, [Document("delta", "d", None)])
+        self.assertEqual(
+            result.issues,
+            [BatchIssue(path=self.workspace / "beta.dep", reason=self._exists_error("beta.dep"))],
+        )
+        self.assertEqual(self.controller.document_names, ["zoo", "delta"])
+        self.assertEqual(self._listing(), ["beta.dep", "delta.dep"])
+        self.assertEqual((self.workspace / "beta.dep").read_bytes(), b"not a zip")
+
+    def test_package_name_taken(self) -> None:
+        service = self._start_with_a_kept_invalid_package()
+        self._block("folder")
+        cases = [
+            ("missing", "gamma", None, False),
+            ("listed", "alpha", None, True),
+            ("unlisted file", "bad", None, True),
+            ("folder", "folder", None, True),
+            ("its own package, any case", "Alpha", "alpha", False),
+            ("another package than the excluded one", "bad", "alpha", True),
+        ]
+        if os.name == "nt":
+            cases.append(("other case on NTFS", "BAD", None, True))
+        for label, name, exclude_name, expected in cases:
+            with self.subTest(label):
+                self.assertIs(service.package_name_taken(name, exclude_name=exclude_name), expected)
+
+    def test_free_document_name(self) -> None:
+        cases = (
+            ("free", (), (), "new"),
+            ("new.dep on disk", ("new",), (), "new (2)"),
+            ("new.dep and new (2).dep on disk", ("new", "new (2)"), (), "new (3)"),
+            ("new listed, no file", (), (Document("new", "", None),), "new (2)"),
+        )
+        for label, on_disk, listed, expected in cases:
+            with self.subTest(label):
+                self.workspace = self.root / label
+                self.workspace.mkdir()
+                for name in on_disk:
+                    (self.workspace / f"{name}.dep").write_bytes(b"not a zip")
+                service = self._service(listed)
+
+                self.assertEqual(service.free_document_name("new"), expected)
+
     # --- import ------------------------------------------------------------
 
     def _sources(self, **texts: str) -> list[Path]:
@@ -292,18 +411,20 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(self._listing(), ["beta.dep", "delta.dep"])
 
     def test_import_files_lists_load_issues_before_save_issues(self) -> None:
-        self._block("delta")
+        # F-8 (D1): a folder at delta.dep would now make the name taken (a load issue),
+        # so the save of delta fails on a full disk instead.
         service = self._service([Document("alpha", "a", "1")])
         sources = self._sources(Alpha="dup", beta="b", delta="d")
 
-        result = service.import_files(sources, format_key="all")
+        with full_disk(self.workspace, pattern=r"^\.delta\.dep\."):
+            result = service.import_files(sources, format_key="all")
 
         self.assertEqual(result.saved, [Document("beta", "b", None)])
         self.assertEqual(self.controller.document_names, ["alpha", "beta"])
         self.assertEqual(len(result.issues), 2)
         self.assertEqual(result.issues[0], BatchIssue(path=sources[0], reason='Document "Alpha" already exists.'))
-        self.assertEqual(result.issues[1].path, self.workspace / "delta.dep")
-        self.assertIn("delta.dep", result.issues[1].reason)
+        self.assertEqual(result.issues[1], BatchIssue(path=self.workspace / "delta.dep", reason=NO_SPACE))
+        self.assertEqual(self._listing(), ["beta.dep"])
 
     def test_import_files_reports_any_save_error_as_an_issue(self) -> None:
         # F-3 (D9): an error that is not an OSError becomes an issue too; before, it
@@ -328,15 +449,14 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
     def test_import_files_continues_after_a_failed_save(self) -> None:
         # F-3 (D9): a failed save is an issue and the batch goes on; the
         # documents after it are still saved and added.
-        blocked = self._block("beta")
         service = self._service([Document("zoo", "z", "1")])
 
-        result = service.import_files(self._sources(beta="b", delta="d", epsilon="e"), format_key="all")
+        with full_disk(self.workspace, pattern=r"^\.beta\.dep\."):
+            result = service.import_files(self._sources(beta="b", delta="d", epsilon="e"), format_key="all")
 
         expected = [Document("delta", "d", None), Document("epsilon", "e", None)]
         self.assertEqual(result.saved, expected)
-        self.assertEqual(len(result.issues), 1)
-        self.assertEqual(result.issues[0].path, blocked)
+        self.assertEqual(result.issues, [BatchIssue(path=self.workspace / "beta.dep", reason=NO_SPACE)])
         self.assertEqual(self.controller.document_names, ["zoo", "delta", "epsilon"])
         self.assertEqual(self._package("delta"), expected[0])
         self.assertEqual(self._package("epsilon"), expected[1])

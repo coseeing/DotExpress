@@ -708,7 +708,10 @@ class BrailleFrame(wx.Frame):
 				if dialog.ShowModal() != wx.ID_OK:
 					return None
 				document_name = normalize_document_name(dialog.get_document_name())
-			if self._document_controller.document_name_exists(document_name, exclude_name=exclude_name):
+			# A package on disk that is not listed (kept invalid at startup) counts too (F-8).
+			if self._document_controller.document_name_exists(
+				document_name, exclude_name=exclude_name
+			) or self._workspace_service.package_name_taken(document_name, exclude_name=exclude_name):
 				message_box(
 					_('Document "{name}" already exists.').format(name=document_name),
 					_("Error"),
@@ -722,7 +725,8 @@ class BrailleFrame(wx.Frame):
 	def _create_default_document(self) -> bool:
 		default_document = create_default_document()
 		return self._create_document(
-			DEFAULT_DOCUMENT_NAME,
+			# "new (2)", "new (3)", ... when a package that is not listed holds "new" (F-8).
+			self._workspace_service.free_document_name(DEFAULT_DOCUMENT_NAME),
 			default_document.text,
 			default_document.braille,
 			focus_input=True,

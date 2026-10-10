@@ -1,4 +1,6 @@
+import errno
 import inspect
+import os
 import unittest
 import zipfile
 from pathlib import Path
@@ -18,6 +20,7 @@ from documents.formats import (
     get_importable_formats,
 )
 from documents.workspace import Document
+from tests.full_disk import full_disk
 
 
 class DocumentFormatsTest(unittest.TestCase):
@@ -68,6 +71,32 @@ class DocumentFormatsTest(unittest.TestCase):
 
             self.assertEqual(destination.read_text(encoding="utf-8"), "雙視內容")
             render.assert_called_once()
+
+    def test_html_export_failure_keeps_the_existing_file(self) -> None:
+        # F-8 (D8): the page is rendered first; a write that failed part way left the
+        # first part of the page in place of the old file.
+        with TemporaryDirectory() as directory:
+            destination = Path(directory) / "alpha.html"
+            destination.write_bytes(b"OLD GOOD EXPORT")
+            with patch("documents.formats.render_dual_view_html", return_value="<p>雙視</p>\n<p>內容</p>\n"):
+                with full_disk(directory, after=5), self.assertRaises(OSError) as raised:
+                    get_format("html").writer(destination, Document("alpha", "a", "1"), ExportContext())
+
+            self.assertEqual(raised.exception.errno, errno.ENOSPC)
+            self.assertEqual(destination.read_bytes(), b"OLD GOOD EXPORT")
+            self.assertEqual(sorted(path.name for path in Path(directory).iterdir()), ["alpha.html"])
+
+    def test_exports_keep_their_crlf_bytes(self) -> None:
+        # F-8 (D8): the atomic writes translate newlines as Path.write_text did (CRLF on Windows).
+        text = "line 1\nline 2\n"
+        with TemporaryDirectory() as directory:
+            for key in ("brl", "html"):
+                with self.subTest(key):
+                    destination = Path(directory) / f"alpha.{key}"
+                    with patch("documents.formats.render_dual_view_html", return_value=text):
+                        get_format(key).writer(destination, Document("alpha", "a", text), ExportContext())
+
+                    self.assertEqual(destination.read_bytes(), text.replace("\n", os.linesep).encode("utf-8"))
 
     def test_writers_take_path_document_and_context(self) -> None:
         for descriptor in get_exportable_formats():

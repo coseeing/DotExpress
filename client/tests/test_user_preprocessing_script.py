@@ -1,3 +1,4 @@
+import errno
 import os
 import tempfile
 import unittest
@@ -12,6 +13,8 @@ from conversion.preprocessing.user_script import (
     save_preprocessing_script,
     validate_preprocessing_script,
 )
+from tests.full_disk import full_disk
+from tests.windows_file_handles import make_read_only
 
 
 class UserPreprocessingScriptTest(unittest.TestCase):
@@ -69,11 +72,53 @@ class UserPreprocessingScriptTest(unittest.TestCase):
 
     def test_save_uses_utf8_and_atomic_replace(self) -> None:
         source = "def main(text):\n    return text + '臺灣'\n"
-        with patch("conversion.preprocessing.user_script.os.replace", wraps=os.replace) as replace:
+        with patch("os.replace", wraps=os.replace) as replace:
             save_preprocessing_script(self.path, source)
         self.assertEqual(self.path.read_text(encoding="utf-8"), source)
         replace.assert_called_once()
         self.assertEqual(list(self.directory.glob(".preprocessing.py.*.tmp")), [])
+
+    def _temporary_files(self) -> list[str]:
+        return sorted(path.name for path in self.directory.iterdir() if path.name.endswith(".tmp"))
+
+    def test_save_installs_through_the_shared_atomic_writer(self) -> None:
+        # F-8 (D6): synced before the replace, through the temporary-file name of
+        # shared.atomic_write (16 hex digits).
+        source = "def main(text):\r\n    return text\n"
+        with patch("shared.atomic_write.os.fsync", wraps=os.fsync) as fsync, patch("os.replace", wraps=os.replace) as replace:
+            save_preprocessing_script(self.path, source)
+
+        fsync.assert_called_once()
+        replace.assert_called_once()
+        self.assertRegex(Path(replace.call_args.args[0]).name, r"^\.preprocessing\.py\.[0-9a-f]{16}\.tmp$")
+        self.assertEqual(self.path.read_bytes(), source.encode("utf-8"))
+        self.assertEqual(self._temporary_files(), [])
+
+    def test_write_error_leaves_no_temporary_file_and_keeps_the_script(self) -> None:
+        old = b"def main(text):\n    return text\n"
+        self.path.write_bytes(old)
+
+        with full_disk(self.directory, after=10), self.assertRaises(OSError) as raised:
+            save_preprocessing_script(self.path, "def main(text):\n    return text.upper()\n")
+
+        self.assertEqual(raised.exception.errno, errno.ENOSPC)
+        self.assertEqual(self.path.read_bytes(), old)
+        self.assertEqual(self._temporary_files(), [])
+
+    @unittest.skipUnless(os.name == "nt", "Windows read-only attribute")
+    def test_read_only_script_is_refused_with_the_in_place_verdict(self) -> None:
+        # F-8 (D6): the message names the script, as an in-place write would (F-3 D3).
+        old = b"def main(text):\n    return text\n"
+        self.path.write_bytes(old)
+        make_read_only(self, self.path)
+
+        with self.assertRaises(PermissionError) as raised:
+            save_preprocessing_script(self.path, "def main(text):\n    return text.upper()\n")
+
+        self.assertEqual(Path(raised.exception.filename).name, "preprocessing.py")
+        self.assertEqual(str(raised.exception), f"[Errno 13] Permission denied: {str(self.path)!r}")
+        self.assertEqual(self.path.read_bytes(), old)
+        self.assertEqual(self._temporary_files(), [])
 
     def test_invalid_save_does_not_overwrite_existing_file(self) -> None:
         original = "def main(text):\n    return text\n"

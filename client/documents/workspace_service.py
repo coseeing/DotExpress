@@ -11,12 +11,15 @@ case-insensitive file system, where both names are the same file.
 Save writes only when the open document differs from what was last written to or
 loaded from its package; that record changes only after a successful write, so a
 failed save is retried by the next one.
+Add, Rename, Import and the default document never replace a package that is on disk
+but not listed, such as an invalid one kept at startup: its name counts as taken.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+import errno
 import os
 from pathlib import Path
 import stat
@@ -25,6 +28,7 @@ from documents.controller import DocumentController
 from documents.session import DeleteDocumentDecision
 from documents.workspace import (
     BatchIssue,
+    DEP_EXTENSION,
     Document,
     PackageFiles,
     _encodable,
@@ -89,6 +93,26 @@ class DocumentWorkspaceService:
     def package_path(self, name: str) -> Path:
         return document_package_path_for_name(name, self._workspace_dir)
 
+    def package_name_taken(self, name: str, *, exclude_name: str | None = None) -> bool:
+        """Whether something is on disk at ``name``'s package path (F-8 D1).
+
+        A listed package, one that is not listed, a folder or a broken link all count; on
+        a case-insensitive file system any spelling does. ``exclude_name`` is a Rename's
+        own document: a name equal to it ignoring case is never taken.
+        """
+        if exclude_name is not None and name.casefold() == exclude_name.casefold():
+            return False
+        return os.path.lexists(self.package_path(name))
+
+    def free_document_name(self, base: str) -> str:
+        """``base`` if no document and no package has it, else ``"base (2)"``, ``"base (3)"``... (F-8 D2)."""
+        name = base
+        number = 1
+        while self._controller.document_name_exists(name) or self.package_name_taken(name):
+            number += 1
+            name = f"{base} ({number})"
+        return name
+
     def _remember(self, document: Document) -> None:
         """Record ``document`` as its package holds it now, right after a write or a load."""
         fingerprint = _package_fingerprint(self.package_path(document.name))
@@ -134,21 +158,29 @@ class DocumentWorkspaceService:
         return updated_document
 
     def create_document(self, document: Document) -> None:
-        save_document_package(self.package_path(document.name), document)
+        package_path = self.package_path(document.name)
+        if os.path.lexists(package_path):
+            # Created after the name was checked, or never listed (F-8 D1): not replaced.
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(package_path))
+        save_document_package(package_path, document)
         self._remember(document)
         self._controller.add_document(document)
 
     def import_files(self, paths: Iterable[Path], *, format_key: str) -> ImportResult:
+        on_disk = {path.stem for path in self._workspace_dir.glob(f"*{DEP_EXTENSION}")}
         documents, load_issues = batch_import_documents(
             list(paths),
             format_key=format_key,
-            existing_names=set(self._controller.document_names),
+            existing_names=set(self._controller.document_names) | on_disk,
         )
         saved: list[Document] = []
         save_issues: list[BatchIssue] = []
         for document in documents:
             package_path = self.package_path(document.name)
             try:
+                if os.path.lexists(package_path):
+                    # Created after the names were checked (F-8 D1): not replaced.
+                    raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(package_path))
                 save_document_package(package_path, document)
             except Exception as exc:
                 save_issues.append(BatchIssue(path=package_path, reason=str(exc)))

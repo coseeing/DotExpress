@@ -1,9 +1,19 @@
+"""The dictionary files: create, import, rename, export, delete.
+
+Every file this module writes goes through ``shared.atomic_write`` (F-8): a failed
+write leaves the target as it was (or absent) and no temporary file.
+"""
+
 from __future__ import annotations
 
 import csv
+import errno
+import os
 from pathlib import Path
 import shutil
+from typing import BinaryIO, TextIO
 
+from shared.atomic_write import write_bytes_atomically, write_text_atomically
 from shared.name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEFAULT_DICTIONARY_NAME = "default"
@@ -15,14 +25,22 @@ def dictionary_path_for_name(name: str, dictionary_dir: Path) -> Path:
     return Path(dictionary_dir) / f"{name}.csv"
 
 
+def _write_header(stream: TextIO) -> None:
+    csv.writer(stream).writerow(DEFAULT_HEADER)
+
+
+def _copy_file_into(source: Path, stream: BinaryIO) -> None:
+    """Copy the bytes of ``source`` into ``stream``; an error opening or reading it is raised."""
+    with open(source, "rb") as source_stream:
+        shutil.copyfileobj(source_stream, stream)
+
+
 def ensure_default_dictionary(dictionary_dir: Path) -> Path:
     directory = Path(dictionary_dir)
     directory.mkdir(parents=True, exist_ok=True)
     default_path = directory / f"{DEFAULT_DICTIONARY_NAME}.csv"
     if not default_path.exists():
-        with default_path.open("w", newline="", encoding="utf-8") as fp:
-            writer = csv.writer(fp)
-            writer.writerow(DEFAULT_HEADER)
+        write_text_atomically(default_path, _write_header, encoding="utf-8", newline="")
     return default_path
 
 
@@ -62,9 +80,7 @@ def create_dictionary(dictionary_dir: Path, name: str) -> Path:
     path = directory / f"{normalized}.csv"
     if path.exists():
         raise FileExistsError(f"Dictionary '{normalized}' already exists.")
-    with path.open("w", newline="", encoding="utf-8") as fp:
-        writer = csv.writer(fp)
-        writer.writerow(DEFAULT_HEADER)
+    write_text_atomically(path, _write_header, encoding="utf-8", newline="")
     return path
 
 
@@ -77,7 +93,7 @@ def import_dictionary(dictionary_dir: Path, source_path: Path | str, name: str) 
         raise FileExistsError(f"Dictionary '{normalized}' already exists.")
     source = Path(source_path)
     validate_dictionary_csv(source)
-    shutil.copyfile(source, destination_path)
+    write_bytes_atomically(destination_path, lambda stream: _copy_file_into(source, stream))
     return destination_path
 
 
@@ -97,7 +113,14 @@ def rename_dictionary(dictionary_dir: Path, source_name: str, new_name: str) -> 
 def export_dictionary(dictionary_dir: Path, name: str, destination_path: Path | str) -> Path:
     source_path = dictionary_path_for_name(name.strip(), dictionary_dir)
     destination = Path(destination_path)
-    shutil.copyfile(source_path, destination)
+    if destination.is_dir():
+        # The error copying onto a folder gave, as documents.workspace.write_export_text
+        # gives for a BRL or HTML export, not a failed replace naming the temporary file.
+        if os.name == "nt":
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(destination))
+        raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(destination))
+    # An existing file there is replaced only once the copy is complete and synced.
+    write_bytes_atomically(destination, lambda stream: _copy_file_into(source_path, stream))
     return destination
 
 

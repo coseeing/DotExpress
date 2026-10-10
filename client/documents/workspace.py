@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass
+import errno
 import json
 import os
 from pathlib import Path
@@ -13,7 +14,7 @@ from collections.abc import Callable
 from typing import BinaryIO
 
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
-from shared.atomic_write import ensure_writable, write_bytes_atomically
+from shared.atomic_write import ensure_writable, write_bytes_atomically, write_text_atomically
 from shared.name_validation import normalize_base_name
 
 DEP_EXTENSION = ".dep"
@@ -169,6 +170,10 @@ def move_document_package(
 
     An old package the user may not write (a read-only file) raises ``PermissionError``
     before anything is created or moved, as saving it does (F-3).
+
+    A file already at ``new_path`` (a package that is not listed) raises
+    ``FileExistsError``; the old package is put back (F-8). The check runs after the old
+    package is moved aside, so a case-only rename does not find the old package itself.
     """
     old_path = Path(old_path)
     new_path = Path(new_path)
@@ -193,6 +198,8 @@ def move_document_package(
                 files.remove(aside_path)
         raise
     try:
+        if files.exists(new_path):
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(new_path))
         if aside_path is not None:
             files.copy_permissions(aside_path, staged_path)
         files.replace(staged_path, new_path)
@@ -253,10 +260,26 @@ IMPORT_LOADERS: dict[str, Callable[[Path | str], Document]] = {
 }
 
 
+def write_export_text(path: Path | str, text: str) -> None:
+    """Write an exported file through a synced temporary file (F-8).
+
+    Newlines are translated as ``Path.write_text`` did (CRLF on Windows), so the bytes do
+    not change. On an error an existing file keeps its bytes and no temporary file is
+    left. A folder at ``path`` fails with the error an in-place write gives, as exports
+    always reported it, not with a failed replace that names the temporary file.
+    """
+    destination = Path(path)
+    if destination.is_dir():
+        if os.name == "nt":
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(destination))
+        raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(destination))
+    write_text_atomically(destination, lambda stream: stream.write(text), encoding="utf-8", newline=None)
+
+
 def export_document_brl(path: Path | str, document: Document) -> Path:
     destination_path = Path(path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
-    destination_path.write_text(document.braille or "", encoding="utf-8")
+    write_export_text(destination_path, document.braille or "")
     return destination_path
 
 

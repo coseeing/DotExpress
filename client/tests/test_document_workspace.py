@@ -183,6 +183,20 @@ class DocumentWorkspaceTest(unittest.TestCase):
         export_document_brl(output_path, document)
         self.assertEqual(output_path.read_text(encoding="utf-8"), "⠇⠑⠎⠎")
 
+    def test_brl_export_failure_keeps_the_existing_file(self) -> None:
+        # F-8 (D8): the in-place write emptied an existing export before it failed. Here
+        # the encoder fails part way (a lone surrogate in the braille).
+        self.workspace_dir.mkdir(parents=True)
+        output_path = self.workspace_dir / "lesson1.brl"
+        output_path.write_bytes(b"OLD GOOD EXPORT")
+        document = Document(name="lesson1", text="source", braille="⠇⠑" + chr(0xD800) + "⠎")
+
+        with self.assertRaises(UnicodeEncodeError):
+            export_document_brl(output_path, document)
+
+        self.assertEqual(output_path.read_bytes(), b"OLD GOOD EXPORT")
+        self.assertEqual(sorted(path.name for path in self.workspace_dir.iterdir()), ["lesson1.brl"])
+
     def test_batch_import_documents_imports_txt_only_and_reports_duplicates(self) -> None:
         source_dir = Path(self._tmpdir.name) / "incoming"
         source_dir.mkdir(parents=True, exist_ok=True)

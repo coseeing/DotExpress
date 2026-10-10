@@ -14,7 +14,7 @@ from collections.abc import Callable
 from typing import BinaryIO
 
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
-from shared.atomic_write import ensure_writable, write_bytes_atomically
+from shared.atomic_write import ensure_writable, write_bytes_atomically, write_text_atomically
 from shared.name_validation import normalize_base_name
 
 DEP_EXTENSION = ".dep"
@@ -260,10 +260,26 @@ IMPORT_LOADERS: dict[str, Callable[[Path | str], Document]] = {
 }
 
 
+def write_export_text(path: Path | str, text: str) -> None:
+    """Write an exported file through a synced temporary file (F-8).
+
+    Newlines are translated as ``Path.write_text`` did (CRLF on Windows), so the bytes do
+    not change. On an error an existing file keeps its bytes and no temporary file is
+    left. A folder at ``path`` fails with the error an in-place write gives, as exports
+    always reported it, not with a failed replace that names the temporary file.
+    """
+    destination = Path(path)
+    if destination.is_dir():
+        if os.name == "nt":
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(destination))
+        raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(destination))
+    write_text_atomically(destination, lambda stream: stream.write(text), encoding="utf-8", newline=None)
+
+
 def export_document_brl(path: Path | str, document: Document) -> Path:
     destination_path = Path(path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
-    destination_path.write_text(document.braille or "", encoding="utf-8")
+    write_export_text(destination_path, document.braille or "")
     return destination_path
 
 

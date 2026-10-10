@@ -15,7 +15,7 @@ Decided by the user (2026-10-10), `task.md` section 3 question 2; not asked agai
 
 After this task:
 
-- A manual conversion result goes to the document that was open when the user pressed Convert. If that document is still open (or open again), everything happens as today. If another document is open, the braille editor, the focus and the Dual View of the open document are left alone. The result is stored in the originating document in memory and on disk, and a message names that document.
+- A manual conversion result goes to the document that was open when the user pressed Convert. If that document is still open (or open again), everything happens as today. If another document is open, the braille editor and the Dual View of the open document are left alone. The result is stored in the originating document in memory and on disk, and a message names that document. After the message the focus is in the open document's source editor (F-9 review M-6).
 - If the originating document no longer exists, or its text no longer matches what was converted, the result is discarded and the event is logged. This cannot happen through today's UI (D3).
 - An export conversion requested while another conversion is running or being completed waits in a queue and runs afterwards. Nothing is dropped. Each completion keeps its own message, in request order.
 - HTML export of a pending document shows the fresh conversion.
@@ -72,6 +72,16 @@ The plan (`docs/superpowers/plans/2026-10-10-f9-conversion-target-document.md`) 
 12. **Item 93 (9i)** sends `WM_QUERYENDSESSION` after the switch away: the query returns 0 at once, the app keeps running and the D2 box follows.
 13. **Item 91 (9g)** also exports the default document `new` as HTML. It is not pending and has no cache, so its page is "No conversion data", before and after F-9 (Out of Scope, first item).
 14. **Before F-9, a second conversion during a long one crashes the app** (measured while planning; corrects the "Before" of 9e and 9f and of the table rows "Convert, Ctrl+S on the pending open document" and "Export All with pending documents, Ctrl+S during it"). The superseding job starts a second worker thread while the first one still converts, so two liblouis conversions run at once. With the long texts of 9e and 9f, N-f8b2 ended without any box in four of four runs (Windows' Application log: `ntdll.dll`, exception `0xc0000374`, a heap corruption). Probes 2 and 3 used fake threads and could not show this; with short texts the first thread usually ends before the second starts. D4 runs one job at a time, so it also removes this crash. Defect 2 was therefore worse than "a result is dropped".
+
+## Corrected after review (F-9, 2026-10-11)
+
+The review (`docs/superpowers/history/2026-10-10-07-f9-conversion-target-document/review_task.md`, "Ready to merge after the cheap Minor fixes") led to these changes. Where they differ from the text below, this section wins; the sentences of D1, the behavior table, Risks and O10 that it changes name the review finding.
+
+1. **After a case (b) box the focus goes to the open document's source editor** (review M-6; D1 "Focus"). Measured on N-f9 (review section 2.1; `auto/focus_check.py` in the fix phase): disabling the source editor at the start of a conversion moves the focus to the Braille Result editor, and the `input_txt.SetFocus()` of `_open_adjacent_document` (Ctrl+Tab) does nothing on the disabled control. So the focus stayed in the new document's read-only Braille Result editor, and the modal box returned it there: a keyboard user had to press Shift+Tab or F6 before typing. D1 said "normally the source editor of the newly opened document", which was wrong. Now `_complete_manual` calls the new `ConversionView.focus_source_editor()` at the end of case (b), after the D2 box or the save error box. The busy state has ended by then, so the source editor is enabled. The frame implements it as `if self.IsActive(): self.input_txt.SetFocus()`: while another window is active (a file dialog opened with Ctrl+S during the conversion, review section 7 observation 3, or another program), nothing changes. Cases (a) and (c) and the discard cases are unchanged; case (a) still focuses the Braille Result editor that shows the output. A job queued behind the manual one starts right after this and disables the source editor again, as before. Twelve added lines in `ui/conversion_presenter.py` and `gui.py` (eight without blank and comment lines), no new string; the catalogs only refresh their `#:` references. Why the code and not the spec: the spec's intent and the NVDA item 94 expect the source editor, and leaving a screen reader user in a read-only field is the worse default; the change is small and pinned by tests (B1, B3, E1, E3, E4, E14 and a frame-method test). Measured on the fix build `N-f9b`: after the box of items 85 and 88 the focus is in `beta`'s source editor, enabled (on N-f9: the Braille Result editor). Decided by orchestrator with the recommended default; user may override before merge. The alternative is to drop the call: the focus then stays in the Braille Result editor, as on N-f9.
+2. **A result whose case (b) save failed is retried only by a save of that document** (review M-5; D1 "Why write at once", the behavior table, Risks). The frame saves only the open document. If the user does not open the starting document again before closing the app, the close saves the open document only, and the result is lost with no second message (the first one was the save error). The text is safe on disk and the conversion can be repeated. Having the close also save every document whose memory differs from its saved record is F-5 scope; recorded for F-12.
+3. **O10 holds for conversions only** (review M-7; "Corrected after planning" 5, O10). After `shutdown()` no new conversion starts, so an Export All step for a pending document does nothing. A step for a document that already has braille needs no conversion: it still writes its file, and the last step shows the summary on the destroyed frame. This was so before F-9, and it cannot happen today: no close that cannot be vetoed arrives between Export All steps.
+4. **Deferred to F-12, no code in F-9.** Review M-8: `BrailleApp.OnExit` frees liblouis (`runtime.close()`) while a worker may still be inside it, the suspected cause of the `0xC0000374` exit code (Risks, last bullet; a hypothesis, not measured). Review M-9: a failed manual conversion whose document is no longer open shows "Translation failed: {error}" without the document's name; naming it needs a new string.
+5. **Tests and counts.** Five new tests: `test_request_during_a_failed_completion_waits_until_it_returns` (M-1), `test_queue_drains_when_a_failed_completion_raises` (M-2), `test_queued_manual_job_keeps_its_target` (M-3), `test_ctrl_s_then_ctrl_tab_during_manual_conversion` (M-4) and `test_focus_source_editor_only_while_the_window_is_active` (M-6, `FrameViewMethodsTest`). B1, B3, E1, E3, E4 and E14 expect the focus call after the box. The review's surviving mutants r1, r2 and r3 are each caught by the new test for them; M-4 had no mutant, and its test catches a new one (r17: a saved case (b) result drops the queue) that every other test misses. Full suite `Ran 1483`, `FAILED (errors=1, skipped=7)`, F-W6 only; the acceptance-criterion-2 set `Ran 368`, `OK`. Windows items 85, 87, 88 and 93 were run again on `N-f9b` and give the same logs as on N-f9.
 
 ## Current State (verified 2026-10-10 on `main` `861d110`, worktree `D:\workspace\DotExpress-f9`, Windows 11 26200)
 
@@ -146,12 +156,12 @@ Rename, Delete and Delete All are **not** reachable while a job is active. The d
 
   `prepare_document_for_save`'s "pending stays `None`" rule belongs to the editor path only. `save_document` must not apply it, or the braille of a pending document that has just been converted would be erased (Test Plan D5).
 - **`ConversionView.save_converted_document(document) -> bool`** is new. The frame implements it as `try: self._workspace_service.save_document(document)`, `except Exception as exc: self._show_document_save_error(exc); return False`, then `return True`. A non-`OSError` is logged, an `OSError` shown, exactly like every other save (F-3, F-5). No new message.
-- **Why write at once** (Decided by orchestrator with the recommended default; user may override before merge). The frame saves only the open document. A result kept only in memory for a document that is not open would be lost at exit, unless the user opened that document again before closing. Writing at once is the only way the user's request ("write the result back to the document") survives a restart. The write is the same atomic package write as every save. The F-5 fingerprint record is updated, so a later open-and-switch-away does not rewrite it. When the save fails, the memory copy keeps the result. The next save of that document (open it, then switch away) retries the write, as F-5 retries any failed save.
+- **Why write at once** (Decided by orchestrator with the recommended default; user may override before merge). The frame saves only the open document. A result kept only in memory for a document that is not open would be lost at exit, unless the user opened that document again before closing. Writing at once is the only way the user's request ("write the result back to the document") survives a restart. The write is the same atomic package write as every save. The F-5 fingerprint record is updated, so a later open-and-switch-away does not rewrite it. When the save fails, the memory copy keeps the result. The next save of that document (open it, then switch away) retries the write, as F-5 retries any failed save. Closing the app while another document is open does not retry it: the close saves the open document only, so the result is lost without a second message; the text is safe (F-9 review M-5, "Corrected after review" 2).
 - **F-5 interplay.**
   - Case (a): unchanged. The result is in memory and the next save writes it.
   - Case (b): the result is on disk at once and `_saved[target]` matches. Opening the target loads the result into the editors, and switching away does not write again.
   - A save failure in (b) leaves `_saved[target]` stale, so the next save retries.
-- **Focus.** In (b) nothing in the main window changes focus. The info box is modal and returns the focus to where it was, normally the source editor of the newly opened document.
+- **Focus.** In (b) the open document's editors and Dual View do not change. The switch has left the focus in its read-only Braille Result editor, because the source editor was disabled (measured). After the box (the D2 message or the save error) the focus goes to the open document's source editor, if the main window is active (F-9 review M-6, "Corrected after review" 1).
 
 Rejected:
 
@@ -250,10 +260,10 @@ O6: Decided by orchestrator with the recommended default; user may override befo
 | Path | Before | After |
 | --- | --- | --- |
 | Convert `alpha`, it completes while `alpha` is open | output set and focused, memory updated, cache, Dual View, "Conversion completed." | identical |
-| Convert `alpha`, Ctrl+Tab to `beta`, it completes | `beta` gets alpha's braille (editor, memory, cache); saved into `beta.dep` on the next save | `beta` untouched; `alpha` gets the braille in memory, cache and `alpha.dep`; D2 message |
+| Convert `alpha`, Ctrl+Tab to `beta`, it completes | `beta` gets alpha's braille (editor, memory, cache); saved into `beta.dep` on the next save | `beta` untouched; `alpha` gets the braille in memory, cache and `alpha.dep`; D2 message; then the focus is in `beta`'s source editor (review M-6) |
 | Same, Ctrl+Tab back to `alpha` before completion | (a) | identical |
 | Convert `alpha`, Ctrl+O imports one file, it completes | the imported document gets the braille | as Ctrl+Tab: `alpha` gets it; the imported document stays pending |
-| Same, `alpha.dep` cannot be written at completion | (n/a) | "Failed to save document: {error}" error box; `alpha` keeps the result in memory; the next save of `alpha` retries |
+| Same, `alpha.dep` cannot be written at completion | (n/a) | "Failed to save document: {error}" error box; `alpha` keeps the result in memory; the next save of `alpha` retries, which needs `alpha` to be opened again before the app closes (review M-5) |
 | Convert, Ctrl+S on the pending open document | export replaces the manual job; output never shown; one "Export Complete" | "Conversion completed." (output shown), then the export runs, then "Export Complete" |
 | File > Export pending `beta`, Ctrl+S pending `alpha` | only `alpha.brl`, one box | `beta.brl` then `alpha.brl`, two boxes in that order |
 | Export All with pending documents, Ctrl+S during it | chain stops, no summary, folder empty | the Ctrl+S export waits its turn; every document written; the summary appears |
@@ -272,7 +282,7 @@ O6: Decided by orchestrator with the recommended default; user may override befo
 - `_Job(request, export: _ExportCallbacks | None, manual: _ManualTarget | None)` replaces `_ActiveJob`'s role for queued jobs; `_ActiveJob(job_id, job)` for the running one (the plan may merge them).
 - `self._queue: collections.deque[_Job]`, `self._completing = False`, `self._shut_down = False`.
 - `is_running()` (D5), `convert()` and `convert_for_export()` through `_submit` (D4), `_start_next()`, `_on_job_success` / `_on_job_failure` with the `try`/`finally` drain, `_complete_manual(job, output)` with branches (a), (b), (c) and D3, `shutdown()` (D8).
-- `ConversionView` gains `save_converted_document(document: Document) -> bool`.
+- `ConversionView` gains `save_converted_document(document: Document) -> bool`, and `focus_source_editor()` (review M-6).
 - The export success callback gets the `ConversionOutput` (D6).
 - The module still imports neither `wx` nor `gui` (`test_module_imports_neither_wx_nor_gui`).
 - The D3 logger is bound at call time.
@@ -291,7 +301,7 @@ O6: Decided by orchestrator with the recommended default; user may override befo
 
 ### `client/gui.py` (tabs)
 
-- `save_converted_document` in the `ConversionView` block.
+- `save_converted_document` in the `ConversionView` block, and `focus_source_editor` (review M-6).
 - `_finish_close` calls `shutdown()` (D8).
 - Nothing else. `_close`'s check stays `self._conversion_presenter.is_running()`; its meaning widens in the presenter.
 
@@ -378,7 +388,7 @@ The fake `ExportConversions` of the module passes a `ConversionOutput` to `on_su
 ### E. Frame and characterization (`client/tests/test_gui_document_flows.py`, `ConversionExportFlowsCharacterizationTest`)
 
 1. **Flip** `test_ctrl_tab_during_manual_conversion_sends_result_to_new_document` to `test_ctrl_tab_during_manual_conversion_sends_result_to_the_starting_document`:
-   - after delivery: `timer.Stop`, busy off, the D2 box, and nothing else (no `set output`, no focus, no `dual_view.refresh`);
+   - after delivery: `timer.Stop`, busy off, the D2 box, and nothing else (no `set output`, no focus, no `dual_view.refresh`); since the review fix the box is followed by the source editor's focus ("Corrected after review" 1);
    - memory: `alpha` has the braille and `beta` is unchanged;
    - cache: `{"alpha": (segment,)}`;
    - `alpha.dep` holds the braille; `beta.dep` is not rewritten;
@@ -482,18 +492,18 @@ Items `9a`-`9i` are placeholders; the final numbers are assigned at plan time, a
 
 Never trigger a real logoff or shutdown; messages go only to the test instance's main window. Items that need NVDA stay manual.
 
-**Manual for the user** (number assigned at plan time): with NVDA, item 9a's D2 box is read with the document name, and after OK the focus is back in `beta`'s source editor. Item 9e's two boxes are read one after the other.
+**Manual for the user** (number assigned at plan time): with NVDA, item 9a's D2 box is read with the document name, and after OK the focus is in `beta`'s source editor (since the review fix; measured on `N-f9b`, "Corrected after review" 1). Item 9e's two boxes are read one after the other.
 
 ## Risks
 
-- **A new disk write outside the open document** (low). It is the same atomic package write and fingerprint record as every save (F-3, F-5). A failure shows the usual save error and keeps the result in memory.
+- **A new disk write outside the open document** (low). It is the same atomic package write and fingerprint record as every save (F-3, F-5). A failure shows the usual save error and keeps the result in memory. Only a later save of that document writes it; if the app is closed from another document, the result is lost and only the text remains (review M-5).
 - **The queue lengthens the busy time** (low, intended). Ctrl+S during a long conversion now waits for it instead of replacing it; the converting dialog shows meanwhile.
 - **A hanging converter blocks the queue** (low). This is the same as today's busy state, which never ends either. D7 rules out the "no delivery" case.
 - **Discarding on a text mismatch** (low). If a later change makes the switch-away save store text that differs from `get_source_text()`, results would be discarded and logged. E14 pins the invariant; the log names the case.
 - **F-8 rebase** (medium, mechanical). `workspace_service.py` and possibly `gui.py` are touched by both. Everything is named by function, and the plan rebases on the post-F-8 `main`.
 - **Logging from the presenter and the runner** (low). Tests must use `assertLogs`, or the suite writes `client/log/gui.log` (acceptance 6).
 - **Test churn** (low). The export callback type changes for every fake `ExportConversions`; the close-order test gains `timer.Stop`.
-- **Ending the process while a conversion runs** (low, pre-existing; added after planning F-9, see "Corrected after planning (F-9)" 11). Windows ending the session during a conversion can end the process with a heap-corruption code instead of 0 (seen once in five runs). No data is written at that moment: the open document was saved before, and the conversion's result is lost as with any other end of the process.
+- **Ending the process while a conversion runs** (low, pre-existing; added after planning F-9, see "Corrected after planning (F-9)" 11). Windows ending the session during a conversion can end the process with a heap-corruption code instead of 0 (seen once in five runs). No data is written at that moment: the open document was saved before, and the conversion's result is lost as with any other end of the process. Suspected cause (review M-8, a hypothesis): if wx ends the main loop, `BrailleApp.OnExit` calls `runtime.close()`, which frees liblouis while the worker is still inside it. Deferred to F-12.
 
 ## Open Questions
 
@@ -513,7 +523,7 @@ Decided by orchestrator with the recommended default; user may override before m
 
 Added by the F-9 plan ("Corrected after planning (F-9)" 4 and 5). Decided by orchestrator with the recommended default; user may override before merge:
 
-- **O10.** After `shutdown()` no new job starts, so an Export All step that runs after the close does nothing (D8).
+- **O10.** After `shutdown()` no new job starts, so an Export All step for a pending document that runs after the close does nothing (D8). A step for a document that has braille needs no conversion and still writes its file, as before F-9; this cannot happen today (review M-7, "Corrected after review" 3).
 - **O11.** A discarded result (O3) is logged at `ERROR`, the level `gui.log` records, not at `WARNING` (D3).
 
 ## Out of Scope / Follow-ups
@@ -522,5 +532,8 @@ Added by the F-9 plan ("Corrected after planning (F-9)" 4 and 5). Decided by orc
 - **Ctrl+S during a manual conversion of a converted document** exports the previous braille (probe 7). Unchanged.
 - **A vetoed close gives no feedback** while a conversion runs. Unchanged (would need a string).
 - The Export All summary localization (P1-4 defect 4, F-12); `FindMenu` by title (defect 5).
+- A failed manual conversion whose document is no longer open does not name the document (review M-9; a new string; F-12).
+- Saving, at close, a document whose case (b) save failed and that is not open (review M-5; F-5 scope; F-12).
+- Not freeing liblouis in `OnExit` while a worker runs (review M-8; F-12).
 - Delete All failure state (P1-3 defect 4).
 - Persisting export conversions into the document (a pending document stays pending after export).

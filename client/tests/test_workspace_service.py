@@ -14,7 +14,7 @@ from documents.controller import DocumentController
 from documents.workspace import BatchIssue, Document, PackageFiles, load_document_package, save_document_package
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
-from tests.windows_file_handles import SHARE_DELETE, SHARE_MODES, hold_open
+from tests.windows_file_handles import SHARE_DELETE, SHARE_MODES, hold_open, make_read_only
 
 SERVICE_PATH = Path(__file__).resolve().parents[1] / "documents" / "workspace_service.py"
 
@@ -689,6 +689,245 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
 
         self.assertEqual(calls, ["on_error"])
         self.assertEqual(self.controller.documents, documents)
+
+
+class SaveOnlyWhenChangedTest(unittest.TestCase):
+    """Save writes only when the open document differs from its last write or load (F-5, D1-D3).
+
+    Each test starts from ``load_documents()`` of a workspace with alpha ("a", "1") and the
+    pending beta ("b"), with alpha open. "Written" counts the calls of the service's
+    ``save_document_package``; "unchanged" compares the package bytes and ``st_mtime_ns``.
+    """
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.root = Path(temp_dir.name)
+        self._start("workspace")
+
+    def _start(self, folder: str, *, package_files=None) -> None:
+        self.workspace = self.root / folder
+        for document in (Document("alpha", "a", "1"), Document("beta", "b", None)):
+            save_document_package(self.workspace / f"{document.name}.dep", document)
+        self.controller = DocumentController()
+        if package_files is None:
+            self.service = DocumentWorkspaceService(self.controller, self.workspace)
+        else:
+            self.service = DocumentWorkspaceService(self.controller, self.workspace, package_files=package_files)
+        self.assertEqual(self.service.load_documents(), [])
+        self.controller.open_document("alpha")
+
+    def _path(self, name: str = "alpha") -> Path:
+        return self.workspace / f"{name}.dep"
+
+    def _disk(self, name: str = "alpha") -> tuple[bytes, int]:
+        return self._path(name).read_bytes(), self._path(name).stat().st_mtime_ns
+
+    def _save(self, text: str = "a", braille: str = "1") -> int:
+        """Save the open document from these editor values; return how many packages were written."""
+        with patch.object(workspace_service, "save_document_package", wraps=workspace_service.save_document_package) as save:
+            self.service.save_open_document(text=text, braille=braille)
+        return save.call_count
+
+    def _fail_save(self, text: str) -> None:
+        """A save of ``text`` whose write fails (``os.replace`` refused); memory takes ``text``."""
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")):
+            with self.assertRaises(PermissionError):
+                self.service.save_open_document(text=text, braille="1")
+        self.assertEqual(self.controller.get_document("alpha"), Document("alpha", text, "1"))
+
+    def test_unchanged_document_is_not_written(self) -> None:
+        before = self._disk()
+
+        self.assertEqual(self._save(), 0)
+
+        self.assertEqual(self._disk(), before)
+        self.assertEqual(self.controller.get_document("alpha"), Document("alpha", "a", "1"))
+
+    def test_changed_text_is_written(self) -> None:
+        self.assertEqual(self._save(text="edited"), 1)
+
+        self.assertEqual(load_document_package(self._path()), Document("alpha", "edited", "1"))
+
+    def test_changed_braille_is_written(self) -> None:
+        self.assertEqual(self._save(braille="2"), 1)
+
+        self.assertEqual(load_document_package(self._path()), Document("alpha", "a", "2"))
+
+    def test_converted_pending_document_is_written(self) -> None:
+        # Conversion replaces the pending document in memory with its braille and writes
+        # nothing (ConversionPresenter._complete_manual); the next save must write it.
+        self.controller.open_document("beta")
+        self.assertEqual(self._save(text="b", braille="ignored while pending"), 0)
+        self.controller.replace_document(Document("beta", "b", "⠃"))
+
+        self.assertEqual(self._save(text="b", braille="⠃"), 1)
+
+        self.assertEqual(load_document_package(self._path("beta")), Document("beta", "b", "⠃"))
+        with zipfile.ZipFile(self._path("beta")) as archive:
+            self.assertEqual(sorted(archive.namelist()), ["beta.brl", "beta.txt"])
+
+    def test_failed_save_is_retried_by_the_next_save(self) -> None:
+        # The must-have case. Memory is updated before the write, so a baseline taken from
+        # the controller, or a record updated before or despite the failed write, would
+        # skip this retry and lose the edit.
+        before = self._disk()
+        self._fail_save("edited")
+        self.assertEqual(self._disk(), before)
+
+        self.assertEqual(self._save(text="edited"), 1)
+
+        self.assertEqual(load_document_package(self._path()), Document("alpha", "edited", "1"))
+
+    def test_reverting_after_a_failed_save_is_not_written(self) -> None:
+        before = self._disk()
+        self._fail_save("edited")
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")):
+            self.assertEqual(self._save(text="a"), 0)
+
+        self.assertEqual(self._disk(), before)
+        self.assertEqual(self.controller.get_document("alpha"), Document("alpha", "a", "1"))
+
+    def test_lone_surrogate_text_is_saved_once(self) -> None:
+        # The editor keeps the surrogate (D5); each save replaces it again and then
+        # matches what was written.
+        self.assertEqual(self._save(text="x\ud800"), 1)
+        before = self._disk()
+
+        self.assertEqual(self._save(text="x\ud800"), 0)
+
+        self.assertEqual(self._disk(), before)
+        self.assertEqual(load_document_package(self._path()), Document("alpha", "x�", "1"))
+
+    def test_package_removed_on_disk_is_written_again(self) -> None:
+        self._path().unlink()
+
+        self.assertEqual(self._save(), 1)
+
+        self.assertEqual(load_document_package(self._path()), Document("alpha", "a", "1"))
+
+    def test_package_replaced_on_disk_is_written_again(self) -> None:
+        # Another program replaced the package; the unchanged document is written back,
+        # as every save did before F-5.
+        for replaced in ("other size", "same bytes, other time"):
+            with self.subTest(replaced=replaced):
+                if replaced == "other size":
+                    save_document_package(self._path(), Document("alpha", "written by another program", "1"))
+                else:
+                    status = self._path().stat()
+                    os.utime(self._path(), ns=(status.st_atime_ns, status.st_mtime_ns + 2_000_000_000))
+
+                self.assertEqual(self._save(), 1)
+
+                self.assertEqual(load_document_package(self._path()), Document("alpha", "a", "1"))
+
+    def test_document_without_a_record_is_written(self) -> None:
+        # A controller filled without the service has no record: every save writes.
+        self.controller = DocumentController(documents=[Document("alpha", "a", "1")], open_name="alpha")
+        self.service = DocumentWorkspaceService(self.controller, self.workspace)
+
+        self.assertEqual(self._save(), 1)
+
+    def test_created_document_is_not_written_again(self) -> None:
+        # The record holds what was written: a lone surrogate as U+FFFD (D3), so the
+        # editor's unchanged text compares equal after its own replacement.
+        cases = (Document("gamma", "", ""), Document("new", "", None), Document("delta", "x\ud800", "\udc00"))
+        for document in cases:
+            with self.subTest(name=document.name):
+                self.service.create_document(document)
+                self.controller.open_document(document.name)
+                before = self._disk(document.name)
+
+                self.assertEqual(self._save(text=document.text, braille=document.braille or ""), 0)
+
+                self.assertEqual(self._disk(document.name), before)
+
+    def test_imported_document_is_not_written_again(self) -> None:
+        source = self.root / "delta.txt"
+        source.write_text("d", encoding="utf-8")
+        result = self.service.import_files([source], format_key="all")
+        self.assertEqual(result.saved, [Document("delta", "d", None)])
+        self.controller.open_document("delta")
+        before = self._disk("delta")
+
+        self.assertEqual(self._save(text="d", braille=""), 0)
+
+        self.assertEqual(self._disk("delta"), before)
+
+    def test_renamed_document_is_not_written_again(self) -> None:
+        for new_name in ("gamma", "Alpha"):
+            with self.subTest(new_name=new_name):
+                self._start(f"rename-to-{new_name.lower()}")
+                self.assertEqual(self.service.rename_document("alpha", new_name), Document(new_name, "a", "1"))
+                self.assertEqual(self.controller.open_name, new_name)
+                before = self._disk(new_name)
+
+                self.assertEqual(self._save(), 0)
+
+                self.assertEqual(self._disk(new_name), before)
+
+    def test_failed_rename_keeps_the_record_of_the_old_name(self) -> None:
+        self._start("failing-rename", package_files=_FailingReplacePackageFiles(source_name="alpha.dep"))
+        with self.assertRaises(PermissionError):
+            self.service.rename_document("alpha", "gamma")
+        before = self._disk()
+
+        self.assertEqual(self._save(), 0)
+
+        self.assertEqual(self._disk(), before)
+
+    def test_deleted_then_created_document_is_written(self) -> None:
+        self.service.delete_document("beta")
+        self.service.create_document(Document("beta", "", ""))
+        self.controller.open_document("beta")
+
+        self.assertEqual(self._save(text="b edited", braille=""), 1)
+
+        self.assertEqual(load_document_package(self._path("beta")), Document("beta", "b edited", ""))
+
+    def test_documents_reloaded_after_a_failed_delete_all_are_not_written_again(self) -> None:
+        # A controller filled without the service (no record): only the reload after the
+        # failed Delete All can record zoo. beta.dep is a folder, so its unlink fails.
+        self.workspace = self.root / "delete-all"
+        save_document_package(self._path("alpha"), Document("alpha", "a", "1"))
+        save_document_package(self._path("zoo"), Document("zoo", "z", "3"))
+        (self._path("beta") / "keep").mkdir(parents=True)
+        self.controller = DocumentController(
+            documents=[Document("alpha", "a", "1"), Document("beta", "b", "2"), Document("zoo", "z", "3")]
+        )
+        self.service = DocumentWorkspaceService(self.controller, self.workspace)
+        errors: list[OSError] = []
+
+        result = self.service.delete_all_documents(on_error=errors.append)
+
+        self.assertFalse(result.completed)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(self.controller.documents, [Document("zoo", "z", "3")])
+        self.controller.open_document("zoo")
+        before = self._disk("zoo")
+        self.assertEqual(self._save(text="z", braille="3"), 0)
+        self.assertEqual(self._disk("zoo"), before)
+
+    @unittest.skipUnless(os.name == "nt", "Windows sharing modes and read-only attribute")
+    def test_unchanged_unwritable_package_saves_without_error(self) -> None:
+        # F-W10: each of these made every save fail, so every action and Close were blocked.
+        before = self._disk()
+        for label, share in SHARE_MODES:
+            with self.subTest(fault=f"held open, share {label}"):
+                release = hold_open(self, self._path(), share)
+                try:
+                    self.assertEqual(self._save(), 0)
+                finally:
+                    release()
+
+                self.assertEqual(self._disk(), before)
+        with self.subTest(fault="read-only"):
+            make_read_only(self, self._path())
+
+            self.assertEqual(self._save(), 0)
+
+            self.assertEqual(self._disk(), before)
 
 
 if __name__ == "__main__":

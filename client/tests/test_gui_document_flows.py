@@ -2132,6 +2132,89 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self._assert_error_box(self.events[0], "Failed to save document: {error}", "injected", frame)
         self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
 
+    # --- save only when changed (F-5) ----------------------------------------
+
+    def _start_with_alpha_and_beta(self) -> gui.BrailleFrame:
+        """Packages alpha ("a", "1") and beta ("b", "2") loaded at startup; alpha is open."""
+        self._write_packages(Document("alpha", "a", "1"), Document("beta", "b", "2"))
+        frame = self._make_workspace_frame()
+        frame._load_workspace_documents_at_startup()
+        self.assertEqual(frame._document_controller.open_name, "alpha")
+        self.events.clear()
+        return frame
+
+    def _disk(self, name: str = "alpha") -> tuple[bytes, int]:
+        path = self.workspace / f"{name}.dep"
+        return path.read_bytes(), path.stat().st_mtime_ns
+
+    def _vetoable_close(self) -> Mock:
+        event = Mock()
+        event.CanVeto.return_value = True
+        return event
+
+    def test_switch_from_an_unchanged_document_whose_save_would_fail_opens_the_next(self) -> None:
+        # F-W10: before F-5 the unchanged document was rewritten, the write failed, and the
+        # error box blocked the switch.
+        frame = self._start_with_alpha_and_beta()
+        before = self._disk()
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")) as replace:
+            frame._open_adjacent_document(1)
+
+        replace.assert_not_called()
+        self.assertEqual(frame._document_controller.open_name, "beta")
+        self.assertEqual(frame.input_txt.value, "b")
+        self.assertEqual([item for item in self.events if item[0] != "title"], [("focus", "input")])
+        self.assertEqual(self._disk(), before)
+
+    @unittest.skipUnless(os.name == "nt", "Windows read-only attribute")
+    def test_unchanged_read_only_document_blocks_neither_switch_nor_close(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        make_read_only(self, self.workspace / "alpha.dep")
+        before = self._disk()
+        event = self._vetoable_close()
+
+        frame._open_adjacent_document(1)
+        frame._open_adjacent_document(1)
+        frame._on_close(event)
+
+        self.assertEqual(frame._document_controller.open_name, "alpha")
+        self.assertEqual([item[0] for item in self.events if item[0] not in ("title", "focus")], [])
+        event.Veto.assert_not_called()
+        event.Skip.assert_called_once_with()
+        self.assertEqual(self._disk(), before)
+
+    def test_switch_from_a_changed_document_whose_save_fails_still_blocks(self) -> None:
+        # Decision C: an action whose save really writes and fails is still blocked.
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        before = self._disk()
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")):
+            frame._open_adjacent_document(1)
+
+        self.assertEqual(len(self.events), 1)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "injected", frame)
+        self.assertEqual(frame._document_controller.open_name, "alpha")
+        self.assertEqual(frame._document_controller.get_document("alpha"), Document("alpha", "a edited", "1"))
+        self.assertEqual(frame.input_txt.value, "a edited")
+        self.assertEqual(self._disk(), before)
+
+    def test_close_with_an_unchanged_document_whose_save_would_fail_closes(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        before = self._disk()
+        event = self._vetoable_close()
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")) as replace:
+            frame._on_close(event)
+
+        replace.assert_not_called()
+        self.assertEqual(self.events, [])
+        event.Veto.assert_not_called()
+        event.Skip.assert_called_once_with()
+        frame.close_converting_dialog.assert_called_once_with()
+        self.assertEqual(self._disk(), before)
+
     # --- rename ------------------------------------------------------------
 
     def test_rename_writes_new_package_deletes_old_and_moves_state(self) -> None:

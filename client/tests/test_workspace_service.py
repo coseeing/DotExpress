@@ -181,7 +181,8 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(service.load_documents(), [])
 
         self.assertEqual(self.controller.documents, [Document("alpha", "a", "1"), Document("beta", "b", "2")])
-        self.assertEqual(self._listing(), [".gamma.dep.mlw4jang.tmp", "alpha.dep", "beta.dep"])
+        # The staged twin of the interrupted rename duplicates alpha and is removed.
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
         self.assertEqual(service.take_recovered_document_names(), ["alpha"])
         self.assertEqual(service.take_recovered_document_names(), [])
         # The recovered package is recorded as loaded: an unchanged save writes nothing (F-5).

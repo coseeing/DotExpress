@@ -14,7 +14,9 @@ failed save is retried by the next one.
 Add, Rename, Import and the default document never replace a package that is on disk
 but not listed, such as an invalid one kept at startup: its name counts as taken.
 Startup puts back a package that a crash during Save or Rename left only in a
-temporary file, and reports its name once; it never deletes or replaces a file.
+temporary file, and reports its name once; it never replaces a file. It then removes
+the temporary files it did not use that hold no package or a package whose content a
+document on disk holds; one that holds the only copy of its text stays.
 U+0000, which the Windows editors cannot hold, reaches the controller as U+FFFD when
 packages are loaded and files imported; the count is kept per document until the
 frame takes it to tell the user, and a loaded package is recorded as read, so the

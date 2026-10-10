@@ -2131,9 +2131,10 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self.events[2:], [("title", "good - DotExpress"), ("title", "good - DotExpress")])
         self.assertEqual(self._listing(), ["a-blocked.dep", "good.dep"])
 
-    def test_startup_ignores_leftover_temporary_files(self) -> None:
+    def test_startup_removes_unreadable_leftover_temporary_files_without_a_message(self) -> None:
         # F-3 (D13): temporary files a crash can leave next to the packages are neither
-        # listed nor offered for deletion; they stay on disk untouched.
+        # listed nor offered for deletion. F-8b (the user's decision of 2026-10-10): those
+        # that hold no package are removed at startup, without a message.
         self._write_packages(Document("good", "g", "1"))
         leftovers = [".good.dep.0123456789abcdef.tmp", ".good.dep.k2j1abcd.tmp"]
         for name in leftovers:
@@ -2144,7 +2145,7 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         frame._load_workspace_documents_at_startup()
 
         self.assertEqual(self.events, [("title", "good - DotExpress"), ("title", "good - DotExpress")])
-        self.assertEqual(self._listing(), sorted(leftovers + ["good.dep"]))
+        self.assertEqual(self._listing(), ["good.dep"])
         self.assertEqual(frame._document_controller.document_names, ["good"])
 
     def test_startup_with_only_a_kept_invalid_new_package_creates_new_2(self) -> None:
@@ -2205,10 +2206,9 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         )
         self.assertEqual(frame._document_controller.document_names, ["alpha", "beta"])
         self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("a", "1"))
-        self.assertEqual(
-            self._listing(),
-            [".delta.dep.mlw4jang.tmp", ".gamma.dep.mlw4jang.tmp", "alpha.dep", "bad.dep", "beta.dep"],
-        )
+        # Both staged twins duplicate a recovered document and are removed; the invalid
+        # bad.dep is not a temporary file and stays.
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep", "beta.dep"])
 
     # --- save --------------------------------------------------------------
 

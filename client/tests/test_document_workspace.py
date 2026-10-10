@@ -868,7 +868,9 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
     The leftovers are written as the F-8 probe found them: a Save writes
     ``.<name>.dep.<16 hex>.tmp`` and a Rename uses ``.<name>.dep.<8 characters>.tmp`` for the
     staged new package and for the old package moved aside, which keeps its older
-    modification time.
+    modification time. The leftovers recovery does not use are removed afterwards: those
+    that hold no package, and those whose text and braille a package on disk holds (the
+    user's decision of 2026-10-10); a leftover that holds the only copy of its text stays.
     """
 
     def setUp(self) -> None:
@@ -909,31 +911,33 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
         # Rename alpha -> gamma crashed after the move aside, before the install: no .dep.
         aside = self._leftover(".alpha.dep._vw4x6f_.tmp", Document("alpha", "text", "1"), age_s=60)
         before = aside.read_bytes()
-        staged = self._leftover(".gamma.dep.mlw4jang.tmp", Document("gamma", "text", "1"))
-        staged_bytes = staged.read_bytes()
+        # The staged twin holds the same text and braille as the recovered alpha: removed.
+        self._leftover(".gamma.dep.mlw4jang.tmp", Document("gamma", "text", "1"))
 
         recovered = self._recover()
 
         self.assertEqual(recovered, [Document("alpha", "text", "1")])
-        self.assertEqual(self._listing(), [".gamma.dep.mlw4jang.tmp", "alpha.dep"])
+        self.assertEqual(self._listing(), ["alpha.dep"])
         self.assertEqual((self.workspace_dir / "alpha.dep").read_bytes(), before)
-        self.assertEqual(staged.read_bytes(), staged_bytes)
         self.assertEqual(load_document_package(self.workspace_dir / "alpha.dep"), Document("alpha", "text", "1"))
 
     def test_leftover_of_a_completed_rename_is_not_recovered(self) -> None:
-        # The rename installed gamma.dep, then removing the moved-aside alpha failed.
+        # The rename installed gamma.dep, then removing the moved-aside alpha failed. The
+        # aside duplicates gamma: it is removed, and gamma.dep stays as it is.
         gamma = Document("gamma", "text", "1")
         save_document_package(self.workspace_dir / "gamma.dep", gamma)
         self._leftover(".alpha.dep.7gdjw2yi.tmp", Document("alpha", "text", "1"), age_s=60)
-        before = self._snapshot()
+        before = (self.workspace_dir / "gamma.dep").read_bytes()
 
         self.assertEqual(self._recover([gamma]), [])
 
-        self.assertEqual(self._snapshot(), before)
+        self.assertEqual(self._listing(), ["gamma.dep"])
+        self.assertEqual((self.workspace_dir / "gamma.dep").read_bytes(), before)
 
     def test_leftover_save_next_to_its_package_is_not_recovered(self) -> None:
         # The save wrote and synced its temporary file, then crashed before os.replace:
-        # from the user's point of view that save never completed.
+        # from the user's point of view that save never completed. The leftover holds the
+        # only copy of the newer text, so it stays, untouched.
         alpha = Document("alpha", "old text", "1")
         save_document_package(self.workspace_dir / "alpha.dep", alpha)
         self._leftover(".alpha.dep.97dc8315c5cf865f.tmp", Document("alpha", "new text", "1"))
@@ -943,12 +947,33 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
 
         self.assertEqual(self._snapshot(), before)
 
-    def test_invalid_and_empty_temporary_files_are_ignored(self) -> None:
+    def test_invalid_and_empty_temporary_files_are_removed(self) -> None:
+        # No package can be read from them (a write cut short, an empty pre-created file),
+        # so nothing of the user's is in them: they are removed, and nothing else changes.
+        alpha = Document("alpha", "text", "1")
+        save_document_package(self.workspace_dir / "alpha.dep", alpha)
         complete = self._leftover(".delta.dep.0123456789abcdef.tmp", Document("delta", "text", "1"))
         (self.workspace_dir / ".gamma.dep.x2y3z4w5.tmp").write_bytes(complete.read_bytes()[:40])
         complete.unlink()
         (self.workspace_dir / ".alpha.dep.0123456789abcdef.tmp").write_bytes(b"not a zip")
         (self.workspace_dir / ".beta.dep.k2j1abcd.tmp").write_bytes(b"")
+        before = (self.workspace_dir / "alpha.dep").read_bytes()
+
+        self.assertEqual(self._recover([alpha]), [])
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual((self.workspace_dir / "alpha.dep").read_bytes(), before)
+
+    def test_an_archive_with_damaged_contents_is_kept(self) -> None:
+        # Only a file that is no zip archive at all is removed: an archive whose member data
+        # is damaged may still hold text that a repair tool can read.
+        path = self.workspace_dir / ".alpha.dep.k2j1abcd.tmp"
+        with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr("alpha.txt", "text that a repair tool may still read")
+            archive.writestr("alpha.brl", "1")
+        data = bytearray(path.read_bytes())
+        data[data.index(b"text that")] ^= 0xFF
+        path.write_bytes(bytes(data))
         before = self._snapshot()
 
         self.assertEqual(self._recover(), [])
@@ -956,7 +981,8 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
         self.assertEqual(self._snapshot(), before)
 
     def test_name_held_by_an_unlisted_package_is_not_recovered(self) -> None:
-        # An invalid package kept at startup holds the name in another case.
+        # An invalid package kept at startup holds the name in another case. The leftover
+        # is the only copy of its text: it stays until its name is free.
         (self.workspace_dir / "ALPHA.dep").write_bytes(b"not a zip")
         self._leftover(".alpha.dep.k2j1abcd.tmp", Document("alpha", "text", "1"))
         before = self._snapshot()
@@ -970,6 +996,8 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
         too_long = "x" * 33
         for stem in (" alpha", "alpha ", "alpha.", too_long, "CON"):
             self._raw_leftover(f".{stem}.dep.k2j1abcd.tmp", stem)
+        # Not a leftover of a valid name, so not the app's file: kept even if it is no zip.
+        (self.workspace_dir / ". alpha.dep.0123456789abcdef.tmp").write_bytes(b"not a zip")
         before = self._snapshot()
 
         self.assertEqual(self._recover(), [])
@@ -996,7 +1024,7 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
 
         self.assertEqual(self._listing(), before)
 
-    def test_recovery_never_deletes_or_replaces_a_file(self) -> None:
+    def test_recovery_never_replaces_and_removes_only_unused_leftovers(self) -> None:
         self._leftover(".alpha.dep._vw4x6f_.tmp", Document("alpha", "text", "1"), age_s=60)
         self._leftover(".gamma.dep.mlw4jang.tmp", Document("gamma", "text", "1"))
         save_document_package(self.workspace_dir / "beta.dep", Document("beta", "b", "2"))
@@ -1013,18 +1041,25 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
         for recorder in recorders:
             self.addCleanup(recorder.stop)
 
+        newer = (self.workspace_dir / ".beta.dep.97dc8315c5cf865f.tmp").read_bytes()
+
         recovered = self._recover([Document("beta", "b", "2")])
 
         self.assertEqual(recovered, [Document("alpha", "text", "1")])
-        self.assertEqual([mock.call_count for mock in mocks], [0, 0, 0, 0, 0])
+        # os.unlink of the staged twin (a duplicate) and of the empty file only.
+        unlink = mocks[0]
         self.assertEqual(
-            self._listing(),
-            [".beta.dep.97dc8315c5cf865f.tmp", ".delta.dep.k2j1abcd.tmp", ".gamma.dep.mlw4jang.tmp", "alpha.dep", "beta.dep"],
+            sorted(Path(call.args[0]).name for call in unlink.call_args_list),
+            [".delta.dep.k2j1abcd.tmp", ".gamma.dep.mlw4jang.tmp"],
         )
+        self.assertEqual([mock.call_count for mock in mocks[1:]], [0, 0, 0, 0])
+        # The Save leftover with the newer text is the only copy of that text: it stays.
+        self.assertEqual(self._listing(), [".beta.dep.97dc8315c5cf865f.tmp", "alpha.dep", "beta.dep"])
+        self.assertEqual((self.workspace_dir / ".beta.dep.97dc8315c5cf865f.tmp").read_bytes(), newer)
 
     def test_documents_are_recovered_oldest_first(self) -> None:
         # Two interrupted renames: each old package comes back under its own name; their
-        # staged twins hold the same text and stay.
+        # staged twins hold the same text and are removed.
         self._leftover(".beta.dep.aaaaaaaa.tmp", Document("beta", "b", "2"), age_s=120)
         self._leftover(".alpha.dep.bbbbbbbb.tmp", Document("alpha", "a", "1"), age_s=60)
         self._leftover(".zeta.dep.cccccccc.tmp", Document("zeta", "a", "1"), age_s=30)
@@ -1033,10 +1068,102 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
         recovered = self._recover()
 
         self.assertEqual(recovered, [Document("beta", "b", "2"), Document("alpha", "a", "1")])
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
+    def test_a_duplicate_is_removed_only_after_its_twin_is_on_disk(self) -> None:
+        # alpha was saved with newer text, then a Rename of the old alpha to gamma was
+        # interrupted. The aside is skipped first (alpha is taken) and duplicates nothing
+        # yet; gamma is recovered next, and only then is the aside a duplicate.
+        alpha = Document("alpha", "newer alpha", "1")
+        save_document_package(self.workspace_dir / "alpha.dep", alpha)
+        before = (self.workspace_dir / "alpha.dep").read_bytes()
+        self._leftover(".alpha.dep._vw4x6f_.tmp", Document("alpha", "old alpha", "1"), age_s=120)
+        self._leftover(".gamma.dep.mlw4jang.tmp", Document("gamma", "old alpha", "1"), age_s=100)
+
+        self.assertEqual(self._recover([alpha]), [Document("gamma", "old alpha", "1")])
+
+        self.assertEqual(self._listing(), ["alpha.dep", "gamma.dep"])
+        self.assertEqual((self.workspace_dir / "alpha.dep").read_bytes(), before)
+
+    def test_removal_failure_is_logged_and_leaves_the_file(self) -> None:
+        self._leftover(".alpha.dep._vw4x6f_.tmp", Document("alpha", "text", "1"), age_s=60)
+        staged = self._leftover(".gamma.dep.mlw4jang.tmp", Document("gamma", "text", "1"))
+        before = staged.read_bytes()
+
+        def refuse(path, *args, **kwargs):
+            raise PermissionError(errno.EACCES, "injected", str(path))
+
+        with patch("os.unlink", side_effect=refuse), self.assertLogs("dotexpress.gui", "WARNING") as logs:
+            recovered = workspace.recover_interrupted_packages(self.workspace_dir, [])
+
+        self.assertEqual(recovered, [Document("alpha", "text", "1")])
+        self.assertEqual(self._listing(), [".gamma.dep.mlw4jang.tmp", "alpha.dep"])
+        self.assertEqual(staged.read_bytes(), before)
+        # One line, at ERROR: dotexpress.gui writes nothing below ERROR to gui.log.
+        self.assertEqual(len(logs.records), 1)
+        self.assertEqual(logs.records[0].levelname, "ERROR")
         self.assertEqual(
-            self._listing(),
-            [".delta.dep.dddddddd.tmp", ".zeta.dep.cccccccc.tmp", "alpha.dep", "beta.dep"],
+            logs.records[0].getMessage(),
+            f"Cannot remove unused temporary file {staged}: [Errno 13] injected: {str(staged)!r}",
         )
+        self.assertIsNone(logs.records[0].exc_info)
+
+    def test_a_leftover_changed_after_it_was_read_is_kept(self) -> None:
+        # Another program rewrites the staged twin after recovery has read it: what it
+        # holds now was never compared, so it is not removed.
+        self._leftover(".alpha.dep._vw4x6f_.tmp", Document("alpha", "text", "1"), age_s=60)
+        staged = self._leftover(".gamma.dep.mlw4jang.tmp", Document("gamma", "text", "1"))
+        real_rename = os.rename
+
+        def rename_then_rewrite(source, destination):
+            real_rename(source, destination)
+            staged.write_bytes(b"written by another program")
+
+        with patch("os.rename", side_effect=rename_then_rewrite):
+            recovered = self._recover()
+
+        self.assertEqual(recovered, [Document("alpha", "text", "1")])
+        self.assertEqual(self._listing(), [".gamma.dep.mlw4jang.tmp", "alpha.dep"])
+        self.assertEqual(staged.read_bytes(), b"written by another program")
+
+    def test_a_leftover_whose_rename_failed_is_kept(self) -> None:
+        # alpha cannot be renamed; zeta, newer, holds the same text and is recovered. The
+        # alpha leftover now duplicates zeta, but recovery did not decide against it: it
+        # stays and is looked at again at the next start.
+        leftover = self._leftover(".alpha.dep.k2j1abcd.tmp", Document("alpha", "text", "1"), age_s=60)
+        before = leftover.read_bytes()
+        self._leftover(".zeta.dep.mlw4jang.tmp", Document("zeta", "text", "1"))
+        real_rename = os.rename
+
+        def rename(source, destination):
+            if Path(destination).name == "alpha.dep":
+                raise FileExistsError(errno.EEXIST, "injected", str(destination))
+            real_rename(source, destination)
+
+        with patch("os.rename", side_effect=rename), self.assertLogs("dotexpress.gui", "WARNING") as logs:
+            recovered = workspace.recover_interrupted_packages(self.workspace_dir, [])
+
+        self.assertEqual(recovered, [Document("zeta", "text", "1")])
+        self.assertEqual(self._listing(), [".alpha.dep.k2j1abcd.tmp", "zeta.dep"])
+        self.assertEqual(leftover.read_bytes(), before)
+        self.assertEqual([record.levelname for record in logs.records], ["ERROR"])
+
+    def test_symbolic_links_are_never_used_or_removed(self) -> None:
+        # Recovery renames and removes only regular files. Creating a link needs a privilege
+        # on Windows, so two regular files report themselves as links.
+        self._leftover(".alpha.dep.k2j1abcd.tmp", Document("alpha", "text", "1"))
+        (self.workspace_dir / ".beta.dep.0123456789abcdef.tmp").write_bytes(b"not a zip")
+        before = self._snapshot()
+        links = {".alpha.dep.k2j1abcd.tmp", ".beta.dep.0123456789abcdef.tmp"}
+        real_is_symlink = Path.is_symlink
+
+        def is_symlink(path):
+            return path.name in links or real_is_symlink(path)
+
+        with patch("pathlib.Path.is_symlink", autospec=True, side_effect=is_symlink):
+            self.assertEqual(self._recover(), [])
+
+        self.assertEqual(self._snapshot(), before)
 
     @unittest.skipUnless(os.name == "nt", "os.rename never replaces an existing file on Windows")
     def test_recovery_does_not_replace_a_file_created_meanwhile(self) -> None:

@@ -39,12 +39,20 @@ def normalize_dictionary_name(name: str) -> str:
 
 
 def validate_dictionary_csv(path: Path | str) -> None:
+    """Raise ValueError if a header is missing; reading every row raises what reading the
+    dictionary later would (UnicodeDecodeError, csv.Error, OSError).
+
+    The file is read as ``dictionaries.entries.load_dictionary_rows`` reads it (F-6), so a
+    file that Import accepts can also be counted and edited.
+    """
     source_path = Path(path)
     with source_path.open("r", newline="", encoding="utf-8-sig") as fp:
         reader = csv.DictReader(fp)
         fieldnames = reader.fieldnames or []
-    if any(field not in fieldnames for field in DEFAULT_HEADER):
-        raise ValueError("Dictionary CSV must contain text, braille, and type headers.")
+        if any(field not in fieldnames for field in DEFAULT_HEADER):
+            raise ValueError("Dictionary CSV must contain text, braille, and type headers.")
+        for _row in reader:
+            pass
 
 
 def create_dictionary(dictionary_dir: Path, name: str) -> Path:

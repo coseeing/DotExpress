@@ -16,7 +16,9 @@ from dictionaries.manager import (
     list_dictionary_names,
     normalize_dictionary_name,
     rename_dictionary,
+    validate_dictionary_csv,
 )
+from tests.unreadable_dictionary_files import FIELD_LIMIT, LATE_BIG5
 
 
 class DictionaryManagerTest(unittest.TestCase):
@@ -160,6 +162,29 @@ class DictionaryManagerTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             import_dictionary(self.dictionary_dir, source_path, "science")
+
+    def test_validate_reads_every_row(self) -> None:
+        # F-6 (D9): Import accepts only files that Dictionary Management can count and edit.
+        cases = (
+            ("Big5 after 17 KB of ASCII rows", LATE_BIG5, UnicodeDecodeError),
+            ("a field over the CSV limit", FIELD_LIMIT, csv.Error),
+        )
+        for label, data, error_type in cases:
+            with self.subTest(label):
+                source_path = Path(self._tmpdir.name) / "source.csv"
+                source_path.write_bytes(data)
+
+                with self.assertRaises(error_type):
+                    validate_dictionary_csv(source_path)
+
+    def test_import_dictionary_refuses_a_late_big5_file_and_copies_nothing(self) -> None:
+        source_path = Path(self._tmpdir.name) / "late.csv"
+        source_path.write_bytes(LATE_BIG5)
+
+        with self.assertRaises(UnicodeDecodeError):
+            import_dictionary(self.dictionary_dir, source_path, "late")
+
+        self.assertEqual(list(self.dictionary_dir.iterdir()), [])
 
     def test_rename_dictionary_renames_file_and_preserves_contents(self) -> None:
         source_path = create_dictionary(self.dictionary_dir, "math")

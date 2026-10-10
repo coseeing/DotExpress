@@ -28,6 +28,7 @@ from documents.workspace import (
     Document,
     create_default_document,
     normalize_document_name,
+    replace_lone_surrogates,
 )
 from documents.workspace_service import DocumentWorkspaceService
 from ui.action_menu import get_document_menu_enabled_state
@@ -616,10 +617,14 @@ class BrailleFrame(wx.Frame):
 		self._open_document_by_name(target_name)
 		self.input_txt.SetFocus()
 
+	def _editor_text(self, control: wx.TextCtrl) -> str:
+		"""The control's text with each lone surrogate replaced by U+FFFD (F-7, M-7); the control is not changed."""
+		return replace_lone_surrogates(control.GetValue())
+
 	def _save_open_document(self) -> None:
 		self._workspace_service.save_open_document(
-			text=self.input_txt.GetValue(),
-			braille=self.output_txt.GetValue(),
+			text=self._editor_text(self.input_txt),
+			braille=self._editor_text(self.output_txt),
 		)
 
 	def _save_open_document_with_feedback(self) -> bool:
@@ -1032,7 +1037,7 @@ class BrailleFrame(wx.Frame):
 	# --- ConversionView (ui/conversion_presenter.py) ------------------------
 
 	def get_source_text(self) -> str:
-		return self.input_txt.GetValue()
+		return self._editor_text(self.input_txt)
 
 	def set_conversion_busy(self, busy: bool) -> None:
 		menu_bar = self.GetMenuBar()

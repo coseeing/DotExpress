@@ -55,6 +55,9 @@ from dual_view.model import build_dual_view_model
 from dictionaries.read_problems import describe_unreadable_dictionary
 from tests.unreadable_dictionary_files import big5_decode_error
 
+# Half of a surrogate pair, as pasting part of an emoji can leave it in an editor (F-5 review M-7).
+LONE_SURROGATE = chr(0xD83D)
+
 
 def make_paths(root: Path = Path("unused-root"), **folders: Path) -> app_paths.ApplicationPaths:
     """Application paths under ``root``, with the given folders replaced (P2-6)."""
@@ -2198,6 +2201,22 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._package("alpha"), Document("alpha", "x�", "1"))
         self.assertEqual(frame.input_txt.value, "x\ud800")
 
+    def test_save_reads_both_editors_through_the_replacement(self) -> None:
+        # F-7 (M-7): the frame reads the editors through replace_lone_surrogates; F-5's
+        # replacement in the documents layer stays as the second line of defense.
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a" + LONE_SURROGATE)
+        frame.output_txt.SetValue("1" + LONE_SURROGATE)
+        service = frame._workspace_service
+
+        with patch.object(service, "save_open_document", wraps=service.save_open_document) as save:
+            frame._save_open_document()
+
+        save.assert_called_once_with(text="a�", braille="1�")
+        self.assertEqual(frame.input_txt.value, "a" + LONE_SURROGATE)
+        self.assertEqual(frame.output_txt.value, "1" + LONE_SURROGATE)
+        self.assertEqual(self._package("alpha"), Document("alpha", "a�", "1�"))
+
     def test_close_save_failure_that_is_not_an_os_error_is_logged_and_asks(self) -> None:
         # Before F-3 the exception escaped _on_close: no message, and the window neither
         # closed nor said why. F-5 (D6, D9): the traceback is logged at each attempt and
@@ -3380,6 +3399,25 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(frame._document_controller.documents, [Document("alpha", "a", None)])
         self.assertEqual(frame._document_controller.dual_view_results_by_document, {})
 
+    def test_manual_conversion_stores_replaced_text(self) -> None:
+        # F-7 (M-7): the conversion, its dual-view segments and the open document's text get
+        # U+FFFD; the source editor keeps what the user pasted.
+        frame = self._make_frame([Document("alpha", "a", None)], "alpha")
+        frame.input_txt.value = "A" + LONE_SURROGATE + "B"
+        segment = _dual_view_segment("A�B", "⠁")
+        self.outputs["A�B"] = ConversionOutput("⠁", ("result",), (segment,))
+
+        frame.on_convert(None)
+        self.threads[0].run()
+
+        self.assertEqual([request.raw_text for request in self.requests], ["A�B"])
+        self.calls.run_next()
+        controller = frame._document_controller
+        self.assertEqual(controller.documents, [Document("alpha", "A�B", "⠁")])
+        self.assertEqual(controller.dual_view_results_by_document, {"alpha": (segment,)})
+        self.assertEqual(frame.input_txt.value, "A" + LONE_SURROGATE + "B")
+        self.assertEqual([event for event in self.events if event[:2] == ("set", "input")], [])
+
     def test_conversion_failure_messages_by_stage_and_public_text(self) -> None:
         cases = (
             (ConversionStageError("ascii", RuntimeError("bad map")), gui._("ASCII conversion failed: {error}"), "bad map"),
@@ -4004,6 +4042,14 @@ class FrameViewMethodsTest(unittest.TestCase):
         frame.input_txt.GetValue.return_value = "source"
 
         self.assertEqual(frame.get_source_text(), "source")
+
+    def test_source_text_for_conversion_replaces_lone_surrogates_without_touching_the_editor(self) -> None:
+        # F-7 (M-7): no SetValue, so the caret stays where it is and NVDA does not re-read.
+        frame = self._make_frame()
+        frame.input_txt.GetValue.return_value = "A" + LONE_SURROGATE + "B"
+
+        self.assertEqual(frame.get_source_text(), "A�B")
+        self.assertEqual(frame.steps.mock_calls, [call.input_txt.GetValue()])
 
     def test_set_conversion_busy_toggles_file_and_translation_menus_list_and_source(self) -> None:
         menu_bar = Mock()

@@ -568,9 +568,22 @@ class ConfigDataSafetyTest(unittest.TestCase):
         self.store = config.ConfigStore(self.path)
         config._logged_load_failures.clear()
         self.addCleanup(config._logged_load_failures.clear)
+        config._logged_skipped_saves.clear()
+        self.addCleanup(config._logged_skipped_saves.clear)
 
     def _listing(self) -> list[str]:
         return sorted(os.listdir(self.directory))
+
+    def _open_denying_reads(self):
+        """``open`` that refuses to read config.json, as if it were locked or denied."""
+        real_open = open
+
+        def open_denying_reads(file, mode="r", *args, **kwargs):
+            if os.fspath(file) == str(self.path) and "r" in mode:
+                raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(file))
+            return real_open(file, mode, *args, **kwargs)
+
+        return open_denying_reads
 
     def _saved(self) -> dict:
         return json.loads(self.path.read_text(encoding="utf-8"))
@@ -674,15 +687,9 @@ class ConfigDataSafetyTest(unittest.TestCase):
     def test_a_change_after_an_unreadable_load_does_not_write(self) -> None:
         # Locked or denied: the file still holds the user's settings, so it is kept.
         self.path.write_bytes(GOOD_CONFIG)
-        real_open = open
-
-        def open_denying_reads(file, mode="r", *args, **kwargs):
-            if os.fspath(file) == str(self.path) and "r" in mode:
-                raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(file))
-            return real_open(file, mode, *args, **kwargs)
 
         with (
-            patch("builtins.open", open_denying_reads),
+            patch("builtins.open", self._open_denying_reads()),
             self.assertLogs("dotexpress.config", level="WARNING") as captured,
         ):
             self.store.set_output_mode("ascii")
@@ -694,6 +701,26 @@ class ConfigDataSafetyTest(unittest.TestCase):
         self.assertEqual(
             [(record.levelno, record.getMessage()) for record in refusals],
             [(logging.WARNING, f"Config file {self.path} was not saved because it could not be read")],
+        )
+
+    def test_a_good_load_logs_the_next_refused_save_again(self) -> None:
+        # F-8a review M-3: once the file was read successfully, the same read error is
+        # new again, and the next refused save is logged once more.
+        self.path.write_bytes(GOOD_CONFIG)
+
+        with self.assertLogs("dotexpress.config", level="WARNING") as captured:
+            with patch("builtins.open", self._open_denying_reads()):
+                self.store.set_output_mode("ascii")
+            self.assertEqual(self.store.get_conversion_width(), 30)
+            with patch("builtins.open", self._open_denying_reads()):
+                self.store.set_conversion_width(52)
+
+        self.assertEqual(self.path.read_bytes(), GOOD_CONFIG)
+        self.assertEqual(self._listing(), ["config.json"])
+        refusals = [record for record in captured.records if "was not saved" in record.getMessage()]
+        self.assertEqual(
+            [(record.levelno, record.getMessage()) for record in refusals],
+            [(logging.WARNING, f"Config file {self.path} was not saved because it could not be read")] * 2,
         )
 
     def test_a_failed_backup_prevents_the_write(self) -> None:

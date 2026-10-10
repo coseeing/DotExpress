@@ -1091,6 +1091,8 @@ class BrailleFrame(wx.Frame):
 
 	def _finish_close(self, evt: wx.CloseEvent) -> None:
 		self._close_finished = True
+		# A conversion still running delivers nothing to the closed window (F-9 D8).
+		self._conversion_presenter.shutdown()
 		self.close_converting_dialog()
 		if self._dual_view_frame is not None:
 			viewer = self._dual_view_frame

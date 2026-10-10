@@ -9,6 +9,8 @@ result can be delivered.
 One job runs at a time. A job asked for while another one runs or completes waits in a
 queue and starts, oldest first, when that completion returns, so no result is dropped
 and a completion's message box closes before the next job starts (F-9).
+``shutdown`` (the window closes) drops the running and queued jobs: later results are
+ignored, and no view method runs after that (F-9).
 """
 
 from __future__ import annotations
@@ -132,6 +134,7 @@ class ConversionPresenter:
         # Jobs asked for while another one is active or completing, oldest first (F-9 D4).
         self._queue: deque[_Job] = deque()
         self._completing = False
+        self._shut_down = False
 
     def is_running(self) -> bool:
         """Whether a job is active (its result not yet delivered) or queued (F-9 D5)."""
@@ -164,6 +167,8 @@ class ConversionPresenter:
 
         A queued job's request is built now, so the settings at the time of the command apply.
         """
+        if self._shut_down:
+            return
         if self._active is not None or self._completing or self._queue:
             self._queue.append(_Job(self._build_request(raw_text), export))
             return
@@ -180,12 +185,25 @@ class ConversionPresenter:
     def _finish_completion(self) -> None:
         """End a completion, also one that raised: start the oldest queued job (F-9 D4)."""
         self._completing = False
-        if self._queue:
+        if self._queue and not self._shut_down:
             job = self._queue.popleft()
             self._start(lambda: job)
 
+    def shutdown(self) -> None:
+        """Drop the running and queued jobs; the window has closed (F-9 D8, P1 review M-10).
+
+        Stops the dialog timer. A result delivered later finds no active job and is
+        ignored; no view method is called from now on.
+        """
+        if self._timer is not None:
+            self._timer.Stop()
+            self._timer = None
+        self._active = None
+        self._queue.clear()
+        self._shut_down = True
+
     def _show_converting_dialog(self, job_id: int) -> None:
-        if job_id != self._runner.active_job_id:
+        if self._shut_down or job_id != self._runner.active_job_id:
             return
         if not self._runner.is_running():
             return

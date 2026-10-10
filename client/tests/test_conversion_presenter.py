@@ -594,6 +594,27 @@ class ConversionPresenterTest(unittest.TestCase):
         self.assertEqual(seen, [("first", True), ("second", False)])
         self.assertFalse(presenter.is_running())
 
+    def test_shutdown_drops_the_running_and_queued_jobs(self) -> None:
+        # The window has closed (F-9 D8, P1 review M-10): nothing may reach the view any more.
+        self.outputs.update({"source": ConversionOutput("⠎", ()), "doc text": ConversionOutput("⠙", ())})
+        presenter = self._presenter()
+        presenter.convert()
+        presenter.convert_for_export("doc text", **self._export_callbacks())
+        self._take()
+
+        presenter.shutdown()
+
+        self.assertEqual(self._take(), [("timer.Stop", 1)])
+        self.assertFalse(presenter.is_running())
+        self.timers.timers[0].fire()
+        self.threads[0].run()
+        self.calls.run_next()
+        presenter.convert_for_export("late", **self._export_callbacks())
+
+        self.assertEqual(self._take(), [("convert", "source"), ("call_after",)])
+        self.assertEqual(len(self.threads), 1)
+        self.assertFalse(presenter.is_running())
+
     def test_synchronous_call_after_with_a_manually_run_thread_completes(self) -> None:
         self.outputs["source"] = ConversionOutput("⠎", ())
         presenter = self._presenter(call_after=lambda fn, *args: fn(*args))

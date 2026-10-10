@@ -3884,9 +3884,10 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
 
         frame._on_close(_CloseEvent(self.events, can_veto=False))
 
+        # The presenter is shut down first, which stops the dialog timer (F-9 D8).
         self.assertEqual(
             self._take(),
-            [("dialog.Unbind", "EVT_CLOSE"), ("dialog.Destroy",), ("dual_view.Destroy",), ("close.Skip",)],
+            [("timer.Stop", 1), ("dialog.Unbind", "EVT_CLOSE"), ("dialog.Destroy",), ("dual_view.Destroy",), ("close.Skip",)],
         )
         self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "edited", None))
         self.assertIsNone(frame._dual_view_frame)
@@ -3910,6 +3911,32 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
 
         self.assertEqual(self._take(), [("dual_view.Destroy",), ("close.Skip",)])
         self.assertEqual(load_document_package(self.workspace / "alpha.dep"), Document("alpha", "source", "⠎"))
+
+    def test_close_that_cannot_be_vetoed_shuts_the_presenter_down(self) -> None:
+        # P1 review M-10: a result delivered after the window closed reached the destroyed
+        # frame. Now it is ignored (F-9 D8): no view call and no write.
+        frame = self._make_frame([Document("alpha", "alpha text", None), Document("beta", "beta text", "⠃")], "alpha")
+        self.outputs["alpha text"] = ConversionOutput("⠁⠁", ())
+        frame.on_convert(None)
+        frame.on_char_hook(_KeyEvent(self.CTRL_TAB))
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        self._take()
+
+        frame._on_close(_CloseEvent(self.events, can_veto=False))
+
+        self.assertEqual(self._take(), [("timer.Stop", 1), ("dual_view.Destroy",), ("close.Skip",)])
+
+        self.threads[0].run()
+        self.calls.run_next()
+        self.timers.timers[0].fire()
+
+        self.assertEqual(self._take(), [("convert", "alpha text"), ("call_after",)])
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+        self.assertEqual(
+            frame._document_controller.documents,
+            [Document("alpha", "alpha text", None), Document("beta", "beta text", "⠃")],
+        )
+        self.assertFalse(frame._conversion_presenter.is_running())
 
     # --- single export -------------------------------------------------------
 
@@ -4490,6 +4517,7 @@ class FrameConversionDelegationTest(unittest.TestCase):
                 call.presenter.is_running(),
                 call.event.CanVeto(),
                 call.save(),
+                call.presenter.shutdown(),
                 call.close_converting_dialog(),
                 call.event.Skip(),
             ],

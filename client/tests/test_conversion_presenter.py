@@ -15,8 +15,15 @@ from documents.controller import DocumentController
 from documents.workspace import Document
 from i18n import _
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
+from tests.file_log_isolation import isolate_file_logs
 
 PRESENTER_PATH = Path(__file__).resolve().parents[1] / "ui" / "conversion_presenter.py"
+LOGGER = "dotexpress.gui"
+
+
+def setUpModule() -> None:
+    # A discarded result is logged to gui.log (F-9 D3); keep the real file out of it.
+    unittest.addModuleCleanup(isolate_file_logs(LOGGER))
 
 
 class RecordingConversionView:
@@ -25,6 +32,7 @@ class RecordingConversionView:
     def __init__(self, events: list, source_text: str = ""):
         self.events = events
         self.source_text = source_text
+        self.save_result = True
 
     def get_source_text(self) -> str:
         self.events.append(("get_source_text",))
@@ -50,6 +58,13 @@ class RecordingConversionView:
 
     def show_error(self, message: str, caption: str) -> None:
         self.events.append(("show_error", message, caption))
+
+    def save_converted_document(self, document: Document) -> bool:
+        self.events.append(("save_converted_document", document))
+        return self.save_result
+
+    def focus_source_editor(self) -> None:
+        self.events.append(("focus_source_editor",))
 
 
 class ConversionPresenterTest(unittest.TestCase):
@@ -112,12 +127,27 @@ class ConversionPresenterTest(unittest.TestCase):
 
     def _export_callbacks(self) -> dict:
         return {
-            "on_success": lambda braille: self.events.append(("on_success", braille)),
+            "on_success": lambda output: self.events.append(("on_success", output.display_text)),
             "on_error": lambda message: self.events.append(("on_error", message)),
         }
 
     def _end(self, timer_number: int = 1) -> list:
         return [("timer.Stop", timer_number), ("close_converting_dialog",), ("busy", False)]
+
+    def _switch_to(self, name: str) -> None:
+        """Switch documents as the frame does: store the open document's editor text, then open ``name``."""
+        open_document = self.documents.get_document(self.documents.open_document_name)
+        if open_document is not None:
+            self.documents.replace_document(Document(open_document.name, self.view.source_text, open_document.braille))
+        document = self.documents.open_document(name)
+        self.view.source_text = document.text if document is not None else ""
+
+    def _saved_to(self, name: str) -> tuple:
+        return (
+            "show_info",
+            _('Conversion completed. The result was saved to document "{name}".').format(name=name),
+            _("Info"),
+        )
 
     # --- module helpers ------------------------------------------------------
 
@@ -223,6 +253,9 @@ class ConversionPresenterTest(unittest.TestCase):
         presenter.convert()
         self.assertTrue(presenter.is_running())
         self.threads[0].run()
+        # Running until the result is delivered, not until the worker ends (F-9 D5).
+        self.assertTrue(presenter.is_running())
+        self.calls.run_next()
         self.assertFalse(presenter.is_running())
 
     # --- converting dialog timer ----------------------------------------------
@@ -318,6 +351,143 @@ class ConversionPresenterTest(unittest.TestCase):
         self.assertEqual(self.documents.documents, [Document("alpha", "old", None), Document("beta", "b", "⠃")])
         self.assertEqual(self.documents.dual_view_results_by_document, {"ghost": ("segment",)})
 
+    # --- the document that started the conversion (F-9 D1-D3) -------------------
+
+    def test_result_goes_to_the_document_that_started_the_conversion(self) -> None:
+        # Was P1-4 defect 1: the result went to the document open at completion.
+        self.outputs["source"] = ConversionOutput("⠎", ("result",), ("segment",))
+        presenter = self._presenter()
+        presenter.convert()
+        self._switch_to("beta")
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        # After the box the focus goes to beta's source editor: the switch left it in the
+        # read-only Braille Result editor, as the source editor was disabled (F-9 review M-6).
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [("save_converted_document", Document("alpha", "source", "⠎")), self._saved_to("alpha")]
+            + [("focus_source_editor",)],
+        )
+        self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
+        self.assertEqual(self.documents.get_document("beta"), Document("beta", "b", "⠃"))
+        self.assertEqual(self.documents.open_document_name, "beta")
+
+    def test_result_for_the_open_document_follows_todays_path(self) -> None:
+        self.outputs["source"] = ConversionOutput("⠎", ("result",), ("segment",))
+        presenter = self._presenter()
+        presenter.convert()
+        self._switch_to("beta")
+        self._switch_to("alpha")
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [
+                ("show_conversion_output", "⠎"),
+                ("get_source_text",),
+                ("refresh_dual_view",),
+                ("show_info", _("Conversion completed."), _("Info")),
+            ],
+        )
+        self.assertEqual(self.documents.documents, [Document("alpha", "source", "⠎"), Document("beta", "b", "⠃")])
+        self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
+
+    def test_failed_save_of_the_originating_document_shows_no_completion_message(self) -> None:
+        # The view has shown the save error; the next queued job still starts.
+        self.outputs.update({"source": ConversionOutput("⠎", (), ("segment",)), "doc text": ConversionOutput("⠙", ())})
+        self.view.save_result = False
+        presenter = self._presenter()
+        presenter.convert()
+        presenter.convert_for_export("doc text", **self._export_callbacks())
+        self._switch_to("beta")
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [("save_converted_document", Document("alpha", "source", "⠎")), ("focus_source_editor",)]
+            + [("busy", True), ("close_converting_dialog",), ("call_later", CONVERTING_DIALOG_DELAY_MS, (2,))],
+        )
+        self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
+
+    def _assert_discarded(self, presenter: ConversionPresenter, reason: str) -> None:
+        """Deliver the running job's result and check that it was dropped with one log line."""
+        self.threads[-1].run()
+        self._take()
+        documents_before = list(self.documents.documents)
+        with self.assertLogs(LOGGER, level="ERROR") as logs:
+            self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end(len(self.timers.timers)))
+        self.assertEqual([record.getMessage() for record in logs.records], [f"Discarded a conversion result: {reason}"])
+        self.assertEqual(self.documents.documents, documents_before)
+        self.assertEqual(self.documents.dual_view_results_by_document, {})
+        self.assertFalse(presenter.is_running())
+
+    def test_result_for_a_document_that_is_gone_is_discarded_and_logged(self) -> None:
+        # None of these can happen while a job runs today (the list and the File menu are
+        # disabled); the result is not guessed onto another document (F-9 D3, O2).
+        for case, remove in (
+            ("deleted", lambda: self.documents.delete_document("alpha")),
+            ("renamed", lambda: self.documents.rename_document("alpha", "gamma")),
+            ("delete all", lambda: self.documents.delete_all_documents()),
+        ):
+            with self.subTest(case=case):
+                self.setUp()
+                self.outputs["source"] = ConversionOutput("⠎", (), ("segment",))
+                presenter = self._presenter()
+                presenter.convert()
+                self._switch_to("beta")
+                remove()
+
+                self._assert_discarded(presenter, 'document "alpha" no longer exists')
+
+    def test_result_for_a_changed_text_is_discarded_and_logged(self) -> None:
+        self.outputs["source"] = ConversionOutput("⠎", (), ("segment",))
+        presenter = self._presenter()
+        presenter.convert()
+        self._switch_to("beta")
+        self.documents.replace_document(Document("alpha", "another text", None))
+
+        self._assert_discarded(presenter, 'the text of document "alpha" changed')
+
+    def test_result_without_a_starting_document(self) -> None:
+        # No document open at the start: today's output-only path if none is open at the end;
+        # if one was opened meanwhile, the result is discarded rather than given to it.
+        self.documents.open_name = None
+        self.outputs["source"] = ConversionOutput("⠎", (), ("segment",))
+        presenter = self._presenter()
+        presenter.convert()
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [
+                ("show_conversion_output", "⠎"),
+                ("refresh_dual_view",),
+                ("show_info", _("Conversion completed."), _("Info")),
+            ],
+        )
+
+        presenter.convert()
+        self.documents.open_document("beta")
+        self._assert_discarded(presenter, 'document "beta" was opened during a conversion without a document')
+
     def test_manual_failure_shows_error_after_busy_off(self) -> None:
         self.outputs["source"] = ConversionStageError("text_processing", RuntimeError("script boom"))
         presenter = self._presenter()
@@ -367,6 +537,21 @@ class ConversionPresenterTest(unittest.TestCase):
         self.assertEqual(self.documents.documents, [Document("alpha", "old", None), Document("beta", "b", "⠃")])
         self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("manual",)})
 
+    def test_export_success_receives_the_conversion_output(self) -> None:
+        # F-9 D6: the export gets the whole output, so a pending document's HTML export can use
+        # the fresh dual-view segments.
+        output = ConversionOutput("⠙", ("result",), ("export-segment",))
+        self.outputs["doc text"] = output
+        received: list = []
+        presenter = self._presenter()
+        presenter.convert_for_export("doc text", on_success=received.append, on_error=self.fail)
+        self.threads[0].run()
+
+        self.calls.run_next()
+
+        self.assertEqual(len(received), 1)
+        self.assertIs(received[0], output)
+
     def test_export_failure_calls_only_on_error(self) -> None:
         self.outputs["doc text"] = ConversionStageError("ascii", RuntimeError("bad map"))
         presenter = self._presenter()
@@ -404,22 +589,285 @@ class ConversionPresenterTest(unittest.TestCase):
             ],
         )
 
-    def test_superseded_job_delivers_nothing(self) -> None:
+    def _started(self, timer_number: int) -> list:
+        return [("busy", True), ("close_converting_dialog",), ("call_later", CONVERTING_DIALOG_DELAY_MS, (timer_number,))]
+
+    def test_export_requested_while_a_conversion_runs_waits_for_it(self) -> None:
+        # Was the P1-4 KNOWN BUG (defect 2): the export superseded the manual conversion, whose
+        # result was dropped. Now it waits (F-9 D4); its request is built when it is asked for.
         self.outputs.update({"source": ConversionOutput("manual", ()), "doc text": ConversionOutput("export", ())})
         presenter = self._presenter()
         presenter.convert()
-        # KNOWN BUG (P1-4 spec, defect 2): convert_for_export does not check for a running job.
+        self._take()
+
+        presenter.convert_for_export("doc text", **self._export_callbacks())
+
+        self.assertEqual(self._take(), [("build_request", "doc text")])
+        self.assertEqual(len(self.threads), 1)
+
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [
+                ("show_conversion_output", "manual"),
+                ("get_source_text",),
+                ("refresh_dual_view",),
+                ("show_info", _("Conversion completed."), _("Info")),
+            ]
+            + self._started(2),
+        )
+        self.assertTrue(self.timers.timers[0].stopped)
+
+        self.threads[1].run()
+        self.assertEqual(self._take(), [("convert", "doc text"), ("call_after",)])
+        self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end(2) + [("on_success", "export")])
+        self.assertFalse(presenter.is_running())
+
+    def test_queued_jobs_run_in_request_order(self) -> None:
+        texts = ("first", "a", "b", "c")
+        self.outputs.update({text: ConversionOutput(text.upper(), ()) for text in texts})
+        presenter = self._presenter()
+        for text in texts:
+            presenter.convert_for_export(text, **self._export_callbacks())
+
+        for index in range(len(texts)):
+            self.threads[index].run()
+            self.calls.run_next()
+
+        self.assertEqual(
+            [event for event in self.events if event[0] in ("convert", "on_success")],
+            [("convert", "first"), ("on_success", "FIRST"), ("convert", "a"), ("on_success", "A")]
+            + [("convert", "b"), ("on_success", "B"), ("convert", "c"), ("on_success", "C")],
+        )
+        self.assertEqual([timer.stopped for timer in self.timers.timers], [True, True, True, True])
+        self.assertFalse(presenter.is_running())
+
+    def test_queue_drains_after_a_failed_completion(self) -> None:
+        self.outputs.update(
+            {"source": ConversionStageError("translation", RuntimeError("boom")), "doc text": ConversionOutput("export", ())}
+        )
+        presenter = self._presenter()
+        presenter.convert()
         presenter.convert_for_export("doc text", **self._export_callbacks())
         self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [("show_error", _("Translation failed: {error}").format(error="boom"), _("Error"))]
+            + self._started(2),
+        )
+
+    def test_request_during_a_completion_waits_until_it_returns(self) -> None:
+        # An Export All step's CallAfter runs inside the modal box of a completion: it queues,
+        # so a second box never opens on top of the first (F-9 D4).
+        self.outputs.update({"first": ConversionOutput("1", ()), "second": ConversionOutput("2", ())})
+        presenter = self._presenter()
+
+        def first_done(output) -> None:
+            self.events.append(("on_success", output.display_text))
+            presenter.convert_for_export("second", **self._export_callbacks())
+            self.events.append(("callback returns",))
+
+        presenter.convert_for_export("first", on_success=first_done, on_error=self.fail)
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end() + [("on_success", "1"), ("build_request", "second"), ("callback returns",)] + self._started(2),
+        )
+
+    def test_queue_drains_when_a_completion_raises(self) -> None:
+        self.outputs.update({"first": ConversionOutput("1", ()), "second": ConversionOutput("2", ())})
+        presenter = self._presenter()
+
+        def first_done(_output) -> None:
+            raise RuntimeError("callback boom")
+
+        presenter.convert_for_export("first", on_success=first_done, on_error=self.fail)
+        presenter.convert_for_export("second", **self._export_callbacks())
+        self.threads[0].run()
+        self._take()
+
+        with self.assertRaisesRegex(RuntimeError, "callback boom"):
+            self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end() + self._started(2))
+        self.assertTrue(presenter.is_running())
+
+    def test_request_during_a_failed_completion_waits_until_it_returns(self) -> None:
+        # F-9 review M-1: the failure completion queues a request made inside it, as the success
+        # completion does, so its error box closes before the next job starts.
+        self.outputs.update(
+            {"first": ConversionStageError("translation", RuntimeError("boom")), "second": ConversionOutput("2", ())}
+        )
+        presenter = self._presenter()
+
+        def first_failed(message) -> None:
+            self.events.append(("on_error", message))
+            presenter.convert_for_export("second", **self._export_callbacks())
+            self.events.append(("callback returns",))
+
+        presenter.convert_for_export("first", on_success=self.fail, on_error=first_failed)
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [("on_error", _("Translation failed: {error}").format(error="boom"))]
+            + [("build_request", "second"), ("callback returns",)]
+            + self._started(2),
+        )
+
+    def test_queue_drains_when_a_failed_completion_raises(self) -> None:
+        # F-9 review M-2: the failure completion drains in its finally too; otherwise the queued
+        # job would never start and every later close would be vetoed.
+        self.outputs.update(
+            {"first": ConversionStageError("translation", RuntimeError("boom")), "second": ConversionOutput("2", ())}
+        )
+        presenter = self._presenter()
+
+        def first_failed(_message) -> None:
+            raise RuntimeError("callback boom")
+
+        presenter.convert_for_export("first", on_success=self.fail, on_error=first_failed)
+        presenter.convert_for_export("second", **self._export_callbacks())
+        self.threads[0].run()
+        self._take()
+
+        with self.assertRaisesRegex(RuntimeError, "callback boom"):
+            self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end() + self._started(2))
+        self.threads[1].run()
+        self.calls.run_next()
+        self.assertEqual(self._take(), [("convert", "second"), ("call_after",)] + self._end(2) + [("on_success", "2")])
+        self.assertFalse(presenter.is_running())
+
+    def test_queued_manual_job_keeps_its_target(self) -> None:
+        # F-9 review M-3: a manual Convert asked for during a completion (is_running() is False
+        # then) is queued with the document open at that time, and its result goes there.
+        self.outputs.update({"first": ConversionOutput("1", ()), "source": ConversionOutput("⠎", (), ("segment",))})
+        presenter = self._presenter()
+
+        def first_done(output) -> None:
+            self.events.append(("on_success", output.display_text))
+            presenter.convert()
+
+        presenter.convert_for_export("first", on_success=first_done, on_error=self.fail)
+        self.threads[0].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end() + [("on_success", "1"), ("get_source_text",), ("build_request", "source")] + self._started(2),
+        )
+
+        self._switch_to("beta")
+        self.threads[1].run()
+        self._take()
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end(2)
+            + [("save_converted_document", Document("alpha", "source", "⠎")), self._saved_to("alpha")]
+            + [("focus_source_editor",)],
+        )
+        self.assertEqual(self.documents.dual_view_results_by_document, {"alpha": ("segment",)})
+        self.assertEqual(self.documents.get_document("beta"), Document("beta", "b", "⠃"))
+        self.assertFalse(presenter.is_running())
+
+    def test_convert_returns_while_a_job_is_queued_or_in_the_delivery_gap(self) -> None:
+        self.outputs.update(
+            {"source": ConversionOutput("⠎", ()), "first": ConversionOutput("1", ()), "second": ConversionOutput("2", ())}
+        )
+        presenter = self._presenter()
+        presenter.convert()
+        self.threads[0].run()
+        self._take()
+
+        # The worker has ended; its result is not delivered yet.
+        presenter.convert()
+
+        self.assertEqual(self._take(), [])
+        self.assertEqual(len(self.threads), 1)
+        self.calls.run_next()
+        self._take()
+
+        def first_done(output) -> None:
+            self.events.append(("on_success", output.display_text))
+            # "second" is queued.
+            presenter.convert()
+
+        presenter.convert_for_export("first", on_success=first_done, on_error=self.fail)
+        presenter.convert_for_export("second", **self._export_callbacks())
         self.threads[1].run()
         self._take()
 
         self.calls.run_next()
-        self.assertEqual(self._take(), [])
 
+        self.assertEqual(self._take(), self._end(2) + [("on_success", "1")] + self._started(3))
+        self.assertEqual(len(self.threads), 3)
+
+    def test_is_running_covers_the_delivery_gap_and_the_queue(self) -> None:
+        self.outputs.update({"first": ConversionOutput("1", ()), "second": ConversionOutput("2", ())})
+        seen: list = []
+        presenter = self._presenter()
+        for text in ("first", "second"):
+            presenter.convert_for_export(
+                text,
+                on_success=lambda _output, text=text: seen.append((text, presenter.is_running())),
+                on_error=self.fail,
+            )
+
+        self.threads[0].run()
+        self.assertTrue(presenter.is_running())
         self.calls.run_next()
-        self.assertEqual(self._take(), self._end(2) + [("on_success", "export")])
-        self.assertFalse(self.timers.timers[0].stopped)
+        self.threads[1].run()
+        self.assertTrue(presenter.is_running())
+        self.calls.run_next()
+
+        # Queued: running; a completion with an empty queue: not running.
+        self.assertEqual(seen, [("first", True), ("second", False)])
+        self.assertFalse(presenter.is_running())
+
+    def test_shutdown_drops_the_running_and_queued_jobs(self) -> None:
+        # The window has closed (F-9 D8, P1 review M-10): nothing may reach the view any more.
+        self.outputs.update({"source": ConversionOutput("⠎", ()), "doc text": ConversionOutput("⠙", ())})
+        presenter = self._presenter()
+        presenter.convert()
+        presenter.convert_for_export("doc text", **self._export_callbacks())
+        self._take()
+
+        presenter.shutdown()
+
+        self.assertEqual(self._take(), [("timer.Stop", 1)])
+        self.assertFalse(presenter.is_running())
+        self.timers.timers[0].fire()
+        self.threads[0].run()
+        self.calls.run_next()
+        presenter.convert_for_export("late", **self._export_callbacks())
+
+        self.assertEqual(self._take(), [("convert", "source"), ("call_after",)])
+        self.assertEqual(len(self.threads), 1)
+        self.assertFalse(presenter.is_running())
 
     def test_synchronous_call_after_with_a_manually_run_thread_completes(self) -> None:
         self.outputs["source"] = ConversionOutput("⠎", ())

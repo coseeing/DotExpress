@@ -10,6 +10,14 @@ from conversion.jobs import (
 from config import DEFAULT_CHARSET_MAPS
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
 from tests.conversion_harness import FakeThread, make_thread_factory
+from tests.file_log_isolation import isolate_file_logs
+
+LOGGER = "dotexpress.gui"
+
+
+def setUpModule() -> None:
+	# The runner logs an unexpected worker error to gui.log (F-9 D7); keep the real file out of it.
+	unittest.addModuleCleanup(isolate_file_logs(LOGGER))
 
 
 class ConversionJobRunnerTest(unittest.TestCase):
@@ -180,20 +188,33 @@ class ConversionJobRunnerTest(unittest.TestCase):
 		self.assertTrue(runner.is_running())
 		self.assertEqual(runner.active_job_id, 2)
 
-	def test_exception_outside_conversion_stage_error_delivers_nothing(self) -> None:
+	def _assert_unexpected_error_is_delivered(self, error: BaseException) -> None:
 		def converter(_request, *, runtime):
-			raise RuntimeError("unexpected")
+			raise error
 
 		runner, successes, failures, threads = self.make_runner(converter=converter)
 
-		runner.start(self.make_request())
-		# KNOWN BUG (P1-4 spec, defect 6): nothing is delivered, so the UI would stay busy.
-		with self.assertRaisesRegex(RuntimeError, "unexpected"):
+		job_id = runner.start(self.make_request())
+		with self.assertLogs(LOGGER, level="ERROR") as logs:
 			threads[0].run()
 
-		self.assertEqual((successes, failures), ([], []))
+		self.assertEqual(successes, [])
+		self.assertEqual(len(failures), 1)
+		self.assertEqual(failures[0].job_id, job_id)
+		self.assertEqual(failures[0].error.stage, "translation")
+		self.assertIs(failures[0].error.error, error)
 		self.assertFalse(runner.is_running())
-		self.assertEqual(runner.active_job_id, 1)
+		self.assertEqual([record.getMessage() for record in logs.records], ["Unexpected error in a conversion job"])
+		self.assertIs(logs.records[0].exc_info[1], error)
+
+	def test_unexpected_worker_error_is_delivered_as_a_translation_failure(self) -> None:
+		# Was the P1-4 KNOWN BUG (defect 6), fixed by F-9 (D7): the error escaped the thread
+		# and nothing was delivered, so the UI stayed busy.
+		self._assert_unexpected_error_is_delivered(RuntimeError("unexpected"))
+
+	def test_base_exception_in_the_worker_is_delivered_too(self) -> None:
+		# A SystemExit in a worker thread would also leave the UI busy (F-9 D7).
+		self._assert_unexpected_error_is_delivered(SystemExit("x"))
 
 
 	def test_results_carry_only_the_job_id_and_the_outcome(self) -> None:

@@ -1091,6 +1091,8 @@ class BrailleFrame(wx.Frame):
 
 	def _finish_close(self, evt: wx.CloseEvent) -> None:
 		self._close_finished = True
+		# A conversion still running delivers nothing to the closed window (F-9 D8).
+		self._conversion_presenter.shutdown()
 		self.close_converting_dialog()
 		if self._dual_view_frame is not None:
 			viewer = self._dual_view_frame
@@ -1140,6 +1142,20 @@ class BrailleFrame(wx.Frame):
 
 	def show_error(self, message: str, caption: str) -> None:
 		message_box(message, caption, wx.OK | wx.ICON_ERROR, parent=self)
+
+	def save_converted_document(self, document: Document) -> bool:
+		"""Save a conversion result for a document that is not open (F-9 D1); failures as every save."""
+		try:
+			self._workspace_service.save_document(document)
+		except Exception as exc:
+			self._show_document_save_error(exc)
+			return False
+		return True
+
+	def focus_source_editor(self) -> None:
+		"""After a case (b) box (F-9 review M-6); not while another window, such as a file dialog, is active."""
+		if self.IsActive():
+			self.input_txt.SetFocus()
 
 	# --- ExportView (documents/export_coordinator.py) -----------------------
 

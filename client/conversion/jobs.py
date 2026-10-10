@@ -9,6 +9,7 @@ from conversion.service import (
 	ConversionStageError,
 	convert_text_with_alignment,
 )
+from log import get_logger
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,16 @@ class ConversionJobRunner:
 			self._call_after(
 				self._deliver_failure,
 				ConversionJobFailure(job_id=job_id, error=error),
+			)
+			return
+		except BaseException as error:
+			# Anything else is a bug; it is delivered as a translation failure so that the
+			# busy state ends and the next queued job can start (F-9 D7). The logger is bound
+			# here, not at import (as in F-6 review M-6).
+			get_logger("dotexpress.gui", "gui.log").error("Unexpected error in a conversion job", exc_info=error)
+			self._call_after(
+				self._deliver_failure,
+				ConversionJobFailure(job_id=job_id, error=ConversionStageError("translation", error)),
 			)
 			return
 		self._call_after(

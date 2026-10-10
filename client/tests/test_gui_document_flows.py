@@ -1737,6 +1737,8 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.events: list = []
         self.answers: list = []
         self.dialog_answers: list = []
+        # One-shot callbacks, each run by one MessageDialog while it is open (F-7, M-5).
+        self.dialog_hooks: list = []
         self.names: list = []
         self.delete_invalid = False
         self.import_paths: list[str] = []
@@ -1781,6 +1783,9 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
             def ShowModal(self):
                 test.events.append(("MessageDialog", *self.shown))
+                hook = test.dialog_hooks.pop(0) if test.dialog_hooks else None
+                if hook is not None:
+                    hook()
                 return test.dialog_answers.pop(0) if test.dialog_answers else gui.wx.ID_CANCEL
 
         return FakeMessageDialog
@@ -2418,6 +2423,93 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         event.Skip.assert_called_once_with()
         self.assertEqual(self._disk(), before)
         self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
+    # --- a close that arrives while the close dialog is open (F-7, M-5) ------
+
+    def test_close_reentered_while_the_close_dialog_is_open_is_vetoed(self) -> None:
+        # Windows sends WM_QUERYENDSESSION again while the close dialog's modal loop runs, and
+        # wx delivers another close event to the frame. The open dialog decides.
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        before = self._disk()
+        outer = self._vetoable_close()
+        inner = self._vetoable_close()
+        self.dialog_hooks = [lambda: frame._on_close(inner)]
+        self.dialog_answers = [gui.wx.ID_CANCEL]
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")) as replace:
+            frame._on_close(outer)
+
+        self._assert_close_dialogs(frame, "[Errno 13] injected")
+        self.assertEqual(replace.call_count, 1)
+        inner.Veto.assert_called_once_with()
+        inner.Skip.assert_not_called()
+        outer.Veto.assert_called_once_with()
+        outer.Skip.assert_not_called()
+        frame.close_converting_dialog.assert_not_called()
+        self.assertEqual(frame.input_txt.value, "a edited")
+        self.assertEqual(self._disk(), before)
+
+    def test_close_reentered_that_cannot_be_vetoed_closes_once(self) -> None:
+        # Defensive: wx 3.2 ends a session without a close event, and DotExpress never forces a
+        # close. A nested close that cannot be vetoed runs F-5 D8 once, and the outer close
+        # stops when its dialog returns, whatever the answer.
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        viewer = Mock()
+        frame._dual_view_frame = viewer
+        before = self._disk()
+        outer = self._vetoable_close()
+        inner = Mock()
+        inner.CanVeto.return_value = False
+        self.dialog_hooks = [lambda: frame._on_close(inner)]
+        self.dialog_answers = [gui.wx.ID_YES]
+
+        with (
+            patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")) as replace,
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
+            frame._on_close(outer)
+
+        self._assert_close_dialogs(frame, "[Errno 13] injected")
+        self.assertEqual(replace.call_count, 2)
+        self.assertEqual([record.getMessage() for record in logs.records], ["Failed to save the open document while closing"])
+        frame.close_converting_dialog.assert_called_once_with()
+        viewer.Destroy.assert_called_once_with()
+        inner.Veto.assert_not_called()
+        inner.Skip.assert_called_once_with()
+        outer.Veto.assert_not_called()
+        outer.Skip.assert_not_called()
+        self.assertEqual(self._disk(), before)
+
+    def test_close_works_again_after_a_vetoed_close(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        frame.input_txt.SetValue("a edited")
+        first = self._vetoable_close()
+        second = self._vetoable_close()
+        self.dialog_answers = [gui.wx.ID_CANCEL]
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "injected")):
+            frame._on_close(first)
+        frame._on_close(second)
+
+        first.Veto.assert_called_once_with()
+        second.Veto.assert_not_called()
+        second.Skip.assert_called_once_with()
+        self.assertEqual(self._package("alpha"), Document("alpha", "a edited", "1"))
+
+    def test_close_flag_is_reset_when_the_close_raises(self) -> None:
+        frame = self._start_with_alpha_and_beta()
+        event = self._vetoable_close()
+
+        with (
+            patch.object(frame, "_save_open_document_before_close", side_effect=RuntimeError("injected")),
+            self.assertRaisesRegex(RuntimeError, "injected"),
+        ):
+            frame._on_close(event)
+
+        # The wx stub answers every missing attribute, so read the frame's own attributes.
+        self.assertIs(vars(frame).get("_closing"), False)
 
     def test_close_that_cannot_be_vetoed_logs_a_failed_save_and_closes(self) -> None:
         # D8: Windows is ending the session; nobody could answer a dialog.

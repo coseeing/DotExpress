@@ -114,6 +114,10 @@ class NamedControlAccessible(wx.Accessible):
 
 
 class BrailleFrame(wx.Frame):
+	# Class attributes, so that frames built without __init__ (tests) have them too (F-7, M-5).
+	_closing = False
+	_close_finished = False
+
 	def __init__(
 		self,
 		*args,
@@ -652,6 +656,9 @@ class BrailleFrame(wx.Frame):
 					return True
 				self._log_unexpected_save_error(error)
 				answer = self._ask_after_close_save_failure(error)
+				if self._close_finished:
+					# A nested close that could not be vetoed closed the frame meanwhile (F-7, M-5).
+					return True
 				if answer == wx.ID_YES:
 					continue
 				return answer == wx.ID_NO
@@ -1021,12 +1028,43 @@ class BrailleFrame(wx.Frame):
 		self._conversion_presenter.convert()
 
 	def _on_close(self, evt: wx.CloseEvent):
+		if self._closing:
+			self._on_close_reentered(evt)
+			return
+		self._closing = True
+		try:
+			self._close(evt)
+		finally:
+			self._closing = False
+
+	def _close(self, evt: wx.CloseEvent) -> None:
 		if self._conversion_presenter.is_running() and evt.CanVeto():
 			evt.Veto()
 			return
-		if not self._save_open_document_before_close(evt.CanVeto()):
+		may_close = self._save_open_document_before_close(evt.CanVeto())
+		if self._close_finished:
+			# A nested close that could not be vetoed already closed the frame (M-5).
+			return
+		if not may_close:
 			evt.Veto()
 			return
+		self._finish_close(evt)
+
+	def _on_close_reentered(self, evt: wx.CloseEvent) -> None:
+		"""A close event while another close is still asking (F-7, M-5).
+
+		Windows sends WM_QUERYENDSESSION again while the close dialog's modal loop runs.
+		A close that can be vetoed is vetoed: the open dialog decides. One that cannot
+		follows F-5 D8: one save attempt, a logged failure, and the frame closes.
+		"""
+		if evt.CanVeto():
+			evt.Veto()
+			return
+		self._save_open_document_before_close(False)
+		self._finish_close(evt)
+
+	def _finish_close(self, evt: wx.CloseEvent) -> None:
+		self._close_finished = True
 		self.close_converting_dialog()
 		if self._dual_view_frame is not None:
 			viewer = self._dual_view_frame

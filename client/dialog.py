@@ -44,7 +44,11 @@ def localize_standard_buttons(
 	flags: int,
 	button_sizer: wx.StdDialogButtonSizer | None = None,
 ) -> None:
-	"""Apply application translations to wxPython's standard dialog buttons."""
+	"""Apply application translations to wxPython's standard dialog buttons.
+
+	Only the dialog's own children are searched (F-W9): a search of every top-level
+	window could find another dialog's button with the same id and relabel that one.
+	"""
 	button_labels = (
 		(wx.OK, wx.ID_OK, _("OK"), "GetAffirmativeButton"),
 		(wx.CANCEL, wx.ID_CANCEL, _("Cancel"), "GetCancelButton"),
@@ -53,7 +57,7 @@ def localize_standard_buttons(
 	)
 	for flag, button_id, label, sizer_button_getter in button_labels:
 		if flags & flag:
-			button = dialog.FindWindowById(button_id)
+			button = dialog.FindWindow(button_id)
 			if button is None and button_sizer is not None:
 				getter = getattr(button_sizer, sizer_button_getter, None)
 				if getter is not None:
@@ -292,6 +296,7 @@ class FileIssuesDialog(ContextManagedDialog, wx.Dialog):
 		main_sizer.Add(self.list_box, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 		button_sizer = self.CreateButtonSizer(wx.OK)
 		if button_sizer:
+			localize_standard_buttons(self, wx.OK, button_sizer)
 			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 		finalize_dialog_layout(self, main_sizer)
 		self.SetMinSize((520, 320))
@@ -390,7 +395,7 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 		if button_bar:
 			localize_standard_buttons(self, wx.OK | wx.CANCEL, button_bar)
 			main_sizer.Add(button_bar, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
-			ok_button = self.FindWindowById(wx.ID_OK)
+			ok_button = self.FindWindow(wx.ID_OK)
 			if ok_button:
 				ok_button.Bind(wx.EVT_BUTTON, self._on_ok)
 

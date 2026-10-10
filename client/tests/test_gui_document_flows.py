@@ -1661,6 +1661,13 @@ class _FailingReplacePackageFiles(PackageFiles):
         super().replace(source, destination)
 
 
+class _FailingWritePackageFiles(PackageFiles):
+    """The real file operations, except that writing the staged package raises ``ValueError`` (a bug)."""
+
+    def write(self, path: Path, document: Document) -> None:
+        raise ValueError("injected")
+
+
 class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
     """Pins today's document flows: disk effects, dialogs, state; must pass unchanged through P1-3.
 
@@ -2071,21 +2078,38 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         frame.close_converting_dialog.assert_not_called()
 
     def test_save_failure_that_is_not_an_os_error_shows_the_message_and_keeps_the_package(self) -> None:
-        # F-3 (D9): a lone surrogate cannot be encoded. The message appears instead of an
-        # escaping exception; the package keeps its bytes and memory keeps the edit.
+        # F-3 (D9): a bug in the writer (simulated: writestr raises ValueError). The message
+        # appears instead of an escaping exception; the package keeps its bytes and memory
+        # keeps the edit.
         alpha = Document("alpha", "a", "1")
         self._write_packages(alpha)
         alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
         frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
-        frame.input_txt.SetValue("x\ud800")
+        frame.input_txt.SetValue("x edited")
 
-        self.assertFalse(frame._save_open_document_with_feedback())
+        with patch.object(zipfile.ZipFile, "writestr", side_effect=ValueError("injected")):
+            self.assertFalse(frame._save_open_document_with_feedback())
 
         self.assertEqual(len(self.events), 1)
-        self._assert_error_box(self.events[0], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "injected", frame)
         self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
         self.assertEqual(self._listing(), ["alpha.dep"])
-        self.assertEqual(frame._document_controller.documents, [Document("alpha", "x\ud800", "1")])
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "x edited", "1")])
+
+    def test_pasted_lone_surrogate_is_saved_as_replacement_character(self) -> None:
+        # F-5 (D4, D5): the save succeeds without a message; memory and the package hold
+        # U+FFFD, and the editor keeps what the user pasted until the document is reopened.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame.input_txt.SetValue("x\ud800")
+
+        self.assertTrue(frame._save_open_document_with_feedback())
+
+        self.assertEqual(self.events, [])
+        self.assertEqual(frame._document_controller.documents, [Document("alpha", "x�", "1")])
+        self.assertEqual(self._package("alpha"), Document("alpha", "x�", "1"))
+        self.assertEqual(frame.input_txt.value, "x\ud800")
 
     def test_close_vetoes_and_keeps_the_package_when_save_raises_a_non_os_error(self) -> None:
         # Before F-3 the exception escaped _on_close: no message, and the window neither
@@ -2094,17 +2118,18 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self._write_packages(alpha)
         alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
         frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
-        frame.input_txt.SetValue("\ud800")
+        frame.input_txt.SetValue("edited")
         event = Mock()
         event.CanVeto.return_value = True
 
-        frame._on_close(event)
+        with patch.object(zipfile.ZipFile, "writestr", side_effect=ValueError("injected")):
+            frame._on_close(event)
 
         event.Veto.assert_called_once_with()
         event.Skip.assert_not_called()
         frame.close_converting_dialog.assert_not_called()
         self.assertEqual(len(self.events), 1)
-        self._assert_error_box(self.events[0], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "injected", frame)
         self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
 
     # --- rename ------------------------------------------------------------
@@ -2218,20 +2243,31 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(beta_path.read_bytes(), beta_bytes)
         self.assertEqual(self._state(frame), before)
 
-    def test_rename_failure_that_is_not_an_os_error_shows_the_message_and_keeps_state(self) -> None:
-        # F-3 (D9): renaming the non-open beta, whose text in memory cannot be encoded.
+    def _rename_frame_whose_staged_write_fails(self) -> gui.BrailleFrame:
+        """alpha open, beta selected; writing the staged package of a rename raises ``ValueError``."""
         alpha = Document("alpha", "a", "1")
-        self._write_packages(alpha, Document("beta", "b", "2"))
-        beta_bytes = (self.workspace / "beta.dep").read_bytes()
-        frame = self._make_workspace_frame([alpha, Document("beta", "\ud800", "2")], open_name="alpha", selected_name="beta")
-        before = self._state(frame)
+        beta = Document("beta", "b", "2")
+        self._write_packages(alpha, beta)
+        frame = self._make_workspace_frame([alpha, beta], open_name="alpha", selected_name="beta")
+        frame._workspace_service = DocumentWorkspaceService(
+            frame._document_controller,
+            self.workspace,
+            package_files=_FailingWritePackageFiles(),
+        )
         self.names = ["gamma"]
+        return frame
+
+    def test_rename_failure_that_is_not_an_os_error_shows_the_message_and_keeps_state(self) -> None:
+        # F-3 (D9): renaming the non-open beta while the staged write raises (a bug).
+        frame = self._rename_frame_whose_staged_write_fails()
+        beta_bytes = (self.workspace / "beta.dep").read_bytes()
+        before = self._state(frame)
 
         frame.on_rename_document(None)
 
         self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
         self.assertEqual(len(self.events), 2)
-        self._assert_error_box(self.events[1], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "injected", frame)
         self.assertEqual((self.workspace / "beta.dep").read_bytes(), beta_bytes)
         self.assertEqual(self._state(frame), before)
 
@@ -2250,14 +2286,17 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         alpha = Document("alpha", "a", "1")
         self._write_packages(alpha)
         frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
-        frame.input_txt.SetValue("x\ud800")
+        frame.input_txt.SetValue("x edited")
 
-        with self.assertLogs(gui.logger, level="ERROR") as logs:
+        with (
+            patch.object(zipfile.ZipFile, "writestr", side_effect=ValueError("injected")),
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
             self.assertFalse(frame._save_open_document_with_feedback())
 
-        self._assert_logged_with_traceback(logs, UnicodeEncodeError)
+        self._assert_logged_with_traceback(logs, ValueError)
         self.assertEqual(len(self.events), 1)
-        self._assert_error_box(self.events[0], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self._assert_error_box(self.events[0], "Failed to save document: {error}", "injected", frame)
 
     def test_add_failure_that_is_not_an_os_error_is_logged_with_its_traceback(self) -> None:
         alpha = Document("alpha", "a", "1")
@@ -2276,17 +2315,14 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self._assert_error_box(self.events[1], "Failed to save document: {error}", "boom", frame)
 
     def test_rename_failure_that_is_not_an_os_error_is_logged_with_its_traceback(self) -> None:
-        alpha = Document("alpha", "a", "1")
-        self._write_packages(alpha, Document("beta", "b", "2"))
-        frame = self._make_workspace_frame([alpha, Document("beta", "\ud800", "2")], open_name="alpha", selected_name="beta")
-        self.names = ["gamma"]
+        frame = self._rename_frame_whose_staged_write_fails()
 
         with self.assertLogs(gui.logger, level="ERROR") as logs:
             frame.on_rename_document(None)
 
-        self._assert_logged_with_traceback(logs, UnicodeEncodeError)
+        self._assert_logged_with_traceback(logs, ValueError)
         self.assertEqual(len(self.events), 2)
-        self._assert_error_box(self.events[1], "Failed to save document: {error}", "surrogates not allowed", frame)
+        self._assert_error_box(self.events[1], "Failed to save document: {error}", "injected", frame)
 
     def test_save_failure_from_an_os_error_is_not_logged(self) -> None:
         # Locked, read-only or full disks are expected; the message box already

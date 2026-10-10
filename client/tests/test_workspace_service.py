@@ -210,13 +210,25 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
         service = self._service([Document("alpha", "a", "1")], open_name="alpha")
 
-        with self.assertRaises(UnicodeEncodeError):
-            service.save_open_document(text="\ud800", braille="1")
+        with patch.object(zipfile.ZipFile, "writestr", side_effect=ValueError("injected")):
+            with self.assertRaises(ValueError):
+                service.save_open_document(text="edited", braille="1")
 
-        self.assertEqual(self.controller.documents, [Document("alpha", "\ud800", "1")])
+        self.assertEqual(self.controller.documents, [Document("alpha", "edited", "1")])
         self.assertEqual(self._listing(), ["alpha.dep"])
         self.assertEqual(self._package("alpha"), Document("alpha", "a", "1"))
         self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+
+    def test_save_open_document_replaces_lone_surrogates_in_memory_and_on_disk(self) -> None:
+        # F-5 (D4): a pasted lone surrogate used to make every save fail; memory and the
+        # package now hold U+FFFD instead.
+        service = self._service([Document("alpha", "a", "1")], open_name="alpha")
+
+        saved = service.save_open_document(text="x\ud800", braille="\udc00⠁")
+
+        self.assertEqual(saved, Document("alpha", "x�", "�⠁"))
+        self.assertEqual(self.controller.documents, [saved])
+        self.assertEqual(self._package("alpha"), saved)
 
     # --- create ------------------------------------------------------------
 

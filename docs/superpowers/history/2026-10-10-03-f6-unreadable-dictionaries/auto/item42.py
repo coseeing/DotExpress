@@ -5,7 +5,9 @@ Usage: python item42.py <exe> <work folder>
     the rows, no reason row, gui.log, big5.csv unchanged.
 43: select big5 (the reason row appears), then default (it is gone).
 45: Tab order: big5 selected, from the list Tab (the reason field) and Shift+Tab (the
-    list); default selected, from the list Tab (新增).
+    list); default selected, from the list Tab (新增). Then (review M-1, 45 sel): big5
+    selected, Tab into the reason field, Right (the selection collapses), Shift+Tab and
+    Tab: the whole reason is selected again.
 44: big5 selected, 編輯: the error box, the dialog stays open, a second log line. Then
     big5.csv is rewritten as UTF-8 and 編輯 opens the editor with the row; 取消; reopened,
     the count is 1.
@@ -46,6 +48,13 @@ print("45 big5, Shift+Tab:", G.focus_after(mgr, "+{TAB}"))
 X.mgr_select(mgr, "default")
 G.focus_list(mgr)
 print("45 default, Tab:", G.focus_after(mgr, "{TAB}"))
+
+X.mgr_select(mgr, "big5")
+G.focus_list(mgr)
+print("45 sel, Tab:", G.focus_after(mgr, "{TAB}"), G.reason(mgr)["sel"])
+print("45 sel, Right:", G.focus_after(mgr, "{RIGHT}"), G.reason(mgr)["sel"])
+print("45 sel, Shift+Tab:", G.focus_after(mgr, "+{TAB}"), G.reason(mgr)["sel"])
+print("45 sel, Tab again:", G.focus_after(mgr, "{TAB}"), G.reason(mgr)["sel"])
 
 X.mgr_select(mgr, "big5")
 G.click(mgr, "編輯")

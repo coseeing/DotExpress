@@ -15,7 +15,7 @@
 
 ## 42–51. F-6 新項目（N-f6）
 
-每個 log 都以 `first start, close: exited` 和 `dictionary:` 那一行開始，以 `close: exited` 結束。`<NOT_UTF8>` 指 `檔案不是以 UTF-8 儲存。請重新存成「CSV UTF-8 (逗號分隔)」格式，例如在 Excel 中使用「另存新檔」。`（61 字），`<CANNOT_OPEN>` 指 `無法開啟檔案。檔案可能正被其他程式使用，或您沒有讀取權限。請關閉其他程式後再試一次。`（42 字），`<decode error>` 指 `'utf-8' codec can't decode byte 0xbb in position 19: invalid start byte`。
+每個 log 都以 `first start, close: exited` 和 `dictionary:` 那一行開始，以 `close: exited` 結束。`<NOT_UTF8>` 指 `檔案不是以 UTF-8 儲存。請重新存成「CSV UTF-8 (逗號分隔)」格式，例如在 Excel 中使用「另存新檔」。`（61 字），`<CANNOT_OPEN>` 指 `無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。`（42 字；N-f6 顯示的是審查前的「或您沒有」，審查 M-7 之後的 N-f6b 為「或你沒有」，見「審查後補充」），`<decode error>` 指 `'utf-8' codec can't decode byte 0xbb in position 19: invalid start byte`。
 
 | # | 結果 |
 | --- | --- |
@@ -36,6 +36,18 @@
 | --- | --- |
 | 42（N-f5b）✔ 重現 F-W12 | `D:\dxtest\auto42-f5b-f6`，`D:\dxtest\N-f5b\DotExpress.exe`（main `0708f44`）：相同的 `big5.csv`；`42: Dictionary Management did not open; windows: [] boxes: []`，`42: gui.log: []`，`close: exited`。沒有視窗、沒有訊息、沒有 log |
 
+## 審查後補充（N-f6b；審查 M-1、M-7）
+
+審查（`review_task.md`）的 M-1（原因欄位重新取得焦點時再全選）與 M-7（`CANNOT_OPEN` 改用「你」）改了 `dialog.py` 與 catalog（M-6 改了 `read_problems.py`，只影響 log handler 何時建立），所以重建為 N-f6b，重跑 item 42–45（`item42.py` 新增四行 `45 sel`：在原因欄位按 → 之後 Shift+Tab 再 Tab）與 item 47。每個情境都在新的 `D:\dxtest\auto*-f6b` 資料夾執行；沒有動 `N-f6`（只複製它的 exe 做改前對照）與既有的 `auto*-f6` 資料夾。只結束 exe 位於這些資料夾的程序（`dx.kill_under`），`lockx.py` 以 `taskkill /T` 結束；結束後沒有殘留的 DotExpress 或 `lockx.py` 程序。每個項目只執行一次。
+
+| 項目 | 結果 |
+| --- | --- |
+| Build | 主 checkout `aec3c64`，`client\.venv\Scripts` 放在 `PATH` 最前面；PyInstaller 6.21.0（Python 3.13.15），`scripts\build-dotexpress.bat` 約 57 秒，`Build complete!`；`PYZ-00.toc` 的 `dialog`、`dictionaries.read_problems`、`dictionaries.presenter`、`dictionaries.manager` 與 `Analysis-00.toc` 的 `gui` 都來自 `D:\workspace\DotExpress\client\`。`D:\dxtest\N-f6b\DotExpress.exe`，48,749,506 bytes，sha256 `E1ED0B7712801B01950C08439EAE367D79423D4D1BE7A17A9CFB6514C4283BDA`。`git status` 只有既有的 untracked 資料夾 |
+| 42、43、44、45 ✔ | `auto42-f6b.log`：去掉新增的 `45 sel` 四行之後，與 `auto42-f6.log` 逐行相同（列、原因列 `(0, 61)`、Tab 順序、編輯錯誤框、修好後開啟編輯器、`gui.log` 兩行） |
+| 45 sel ✔（M-1） | N-f6b：Tab → `('Edit', '無法讀取的原因：') (0, 61)`；→ → `(61, 61)`；Shift+Tab → `('ListItem', 'big5') (61, 61)`；**Tab → `('Edit', '無法讀取的原因：') (0, 61)`（重新全選）** |
+| 45 sel 改前（N-f6） | `auto42n6-f6b.log`（同一腳本、`N-f6\DotExpress.exe`）：前三步相同，最後 Tab 回來仍是 `(61, 61)`（審查 M-1 描述的行為）；其餘各行與 `auto42-f6.log` 相同 |
+| 47 ✔（M-7） | `auto47-f6b.log`：原因列 `'uia value': '無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。', 'sel': (0, 42), 'length': 42, 'lines': 2`；把「你」換回「您」、資料夾名換回 `auto47-f6` 之後，與 `auto47-f6.log` 逐行相同（解鎖後編輯器開啟、`alpha.csv unchanged: True`、`gui.log` 一行 `PermissionError`） |
+
 ## 結論
 
 - 所有自動化項目（42、43、44、45、46、47、48、49、50、51）的結果都與 plan Task 6 Step 3 的預期表一致，沒有產品缺陷，沒有重跑；N-f5b 的 42 重現了 F-W12。
@@ -47,4 +59,4 @@
 
 ## 仍需人工（使用者）
 
-- 52（NVDA）：請在 NVDA 執行中檢查字典管理的「無法讀取的原因」欄位。把 `D:\dxtest\N-f6\DotExpress.exe` 複製到新資料夾 `D:\dxtest\manual52-f6\` 執行一次後關閉；把 `D:\dxtest\auto48-f6\data\big5.csv`（以 Big5 儲存的字典，和繁體中文 Excel「CSV（逗號分隔）」存出的格式相同）複製到 `D:\dxtest\manual52-f6\dictionary\`，再執行 DotExpress，開啟「字典管理」。請記錄 NVDA 依序讀出的內容，並確認：用方向鍵移到 `big5` 時讀出「無法讀取」；按 Tab 時讀出標籤「無法讀取的原因」、欄位的角色（編輯區、多行、唯讀）以及**完整的**原因文字（兩行都讀到，不是只讀第一行）；按 Shift+Tab 回到清單；按「編輯」時錯誤對話框被當作對話框讀出（標題、「無法讀取字典「big5」。」與原因）。如果 NVDA 只讀出第一行，請告訴我們（D3 的全選做法可能需要調整）。
+- 52（NVDA）：請在 NVDA 執行中檢查字典管理的「無法讀取的原因」欄位。把 `D:\dxtest\N-f6b\DotExpress.exe`（審查修正後的 build）複製到新資料夾 `D:\dxtest\manual52-f6b\` 執行一次後關閉；把 `D:\dxtest\auto48-f6\data\big5.csv`（以 Big5 儲存的字典，和繁體中文 Excel「CSV（逗號分隔）」存出的格式相同）複製到 `D:\dxtest\manual52-f6b\dictionary\`，再執行 DotExpress，開啟「字典管理」。請記錄 NVDA 依序讀出的內容，並確認：用方向鍵移到 `big5` 時讀出「無法讀取」；按 Tab 時讀出標籤「無法讀取的原因」、欄位的角色（編輯區、多行、唯讀）以及**完整的**原因文字（兩行都讀到，不是只讀第一行）；在欄位內按一下方向鍵 → 之後，按 Shift+Tab 回到清單，再按 Tab 回到欄位時，NVDA 仍讀出完整的原因（不是只讀游標所在的那一行）；按「編輯」時錯誤對話框被當作對話框讀出（標題、「無法讀取字典「big5」。」與原因）。如果 NVDA 只讀出第一行，請告訴我們（D3 的全選做法可能需要調整）。

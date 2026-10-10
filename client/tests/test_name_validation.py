@@ -59,6 +59,17 @@ class NormalizeBaseNameTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assert_rejected(name, INVALID)
 
+    def test_rejects_surrogate_code_points(self) -> None:
+        # F-5 review M-1: a surrogate code point (lone, or a pair left as two code points)
+        # cannot be encoded as UTF-8, so a document package with that name, or the settings
+        # file naming such a dictionary, could not be written; it is an invalid name. A real
+        # astral character is a single code point.
+        for name in ("a\ud800b", "\udc00", "x\udcff", "\ud83d\ude00", " \ud800"):
+            with self.subTest(name=ascii(name)):
+                error = self.assert_rejected(name, INVALID)
+                self.assertEqual(error.code, "invalid")
+        self.assertEqual(normalize_base_name("a\U0001f600"), "a\U0001f600")
+
     def test_rejects_reserved_names_case_insensitively_with_the_stripped_name(self) -> None:
         cases = (
             ("default", {"default"}, "Name 'default' is reserved."),

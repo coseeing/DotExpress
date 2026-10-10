@@ -41,6 +41,12 @@ class NameValidationError(ValueError):
         self.code = code
 
 
+def _is_surrogate(char: str) -> bool:
+    # A surrogate code point (a lone one, or half of a pair left as two code points)
+    # cannot be encoded as UTF-8, so a package or file holding the name cannot be written.
+    return 0xD800 <= ord(char) <= 0xDFFF
+
+
 def _is_windows_reserved_device_name(name: str) -> bool:
     root_name = name.split(".", 1)[0]
     return root_name.casefold() in WINDOWS_RESERVED_DEVICE_NAMES_CASEFOLDED
@@ -63,7 +69,7 @@ def _is_windows_legal_name(name: str) -> bool:
 def normalize_base_name(name: str, *, reserved_names: set[str] | None = None) -> str:
     if not name or not name.strip():
         raise NameValidationError("empty", "Name cannot be empty.")
-    if any(ord(char) < 32 for char in name):
+    if any(ord(char) < 32 or _is_surrogate(char) for char in name):
         raise NameValidationError("invalid", "Name contains invalid characters.")
     if name.endswith((" ", ".")):
         raise NameValidationError("invalid", "Name cannot end with a period or space.")

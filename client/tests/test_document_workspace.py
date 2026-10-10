@@ -81,7 +81,7 @@ class DocumentWorkspaceTest(unittest.TestCase):
         self.assertEqual(normalize_document_name("a" * 32), "a" * 32)
 
     def test_normalize_document_name_raises_typed_errors(self) -> None:
-        cases = (("", "empty"), ("a?b", "invalid"), ("name ", "invalid"), ("a" * 33, "too_long"))
+        cases = (("", "empty"), ("a?b", "invalid"), ("name ", "invalid"), ("a" * 33, "too_long"), ("a\ud800", "invalid"))
         for value, code in cases:
             with self.subTest(value=value):
                 with self.assertRaises(name_validation.NameValidationError) as caught:

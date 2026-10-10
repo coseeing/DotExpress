@@ -13,6 +13,7 @@ import documents.workspace_service as workspace_service
 from documents.controller import DocumentController
 from documents.workspace import BatchIssue, Document, PackageFiles, load_document_package, save_document_package
 from documents.workspace_service import DeleteAllResult, DocumentWorkspaceService, ImportResult
+from shared import name_validation
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
 from tests.windows_file_handles import SHARE_DELETE, SHARE_MODES, hold_open, make_read_only
 
@@ -250,6 +251,23 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
             service.create_document(Document("alpha", "", ""))
 
         self.assertEqual(self.controller.documents, [])
+
+    def test_create_or_rename_with_a_lone_surrogate_in_the_name_is_an_invalid_name(self) -> None:
+        # F-5 review M-1: the name is rejected before anything is written; it used to fail
+        # with UnicodeEncodeError while writing the member names into the package.
+        self._write(Document("alpha", "a", "1"))
+        service = self._service([Document("alpha", "a", "1")], open_name="alpha", selected_name="alpha")
+        before = self._state()
+
+        with self.assertRaises(name_validation.NameValidationError) as created:
+            service.create_document(Document("b\ud800", "", ""))
+        with self.assertRaises(name_validation.NameValidationError) as renamed:
+            service.rename_document("alpha", "b\udc00")
+
+        self.assertEqual((created.exception.code, renamed.exception.code), ("invalid", "invalid"))
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(self._package("alpha"), Document("alpha", "a", "1"))
+        self.assertEqual(self._state(), before)
 
     # --- import ------------------------------------------------------------
 

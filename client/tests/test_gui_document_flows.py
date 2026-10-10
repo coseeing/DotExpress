@@ -18,6 +18,7 @@ from tests import wx_stub
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
 from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
 from tests.file_log_isolation import isolate_file_logs
+from tests.full_disk import full_disk
 from tests.menu_recording import DOCUMENT_MENU_BUILD_LOG, MenuRecorder, enable_log, fake_translate
 from tests.windows_file_handles import make_read_only
 
@@ -269,6 +270,9 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         )
         frame._workspace_service = Mock()
         frame._workspace_service.workspace_dir = self.workspace
+        # F-8 (D1, D2): a bare Mock would answer "taken" and loop the name prompt.
+        frame._workspace_service.package_name_taken.return_value = False
+        frame._workspace_service.free_document_name.side_effect = lambda base: base
         frame.input_txt = Mock()
         frame.output_txt = Mock()
         frame._show_file_error = Mock()
@@ -1704,13 +1708,15 @@ class _FakeDocumentList:
 
 
 class _FailingReplacePackageFiles(PackageFiles):
-    """The real file operations, except that moving the file named ``source_name`` raises."""
+    """The real file operations, except that moving the file named ``source_name``, or onto
+    the file named ``destination_name``, raises."""
 
-    def __init__(self, *, source_name: str) -> None:
+    def __init__(self, *, source_name: str | None = None, destination_name: str | None = None) -> None:
         self.source_name = source_name
+        self.destination_name = destination_name
 
     def replace(self, source: Path, destination: Path) -> None:
-        if Path(source).name == self.source_name:
+        if Path(source).name == self.source_name or Path(destination).name == self.destination_name:
             raise PermissionError(errno.EACCES, "injected", str(source), None, str(destination))
         super().replace(source, destination)
 
@@ -2003,18 +2009,30 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
 
     def test_add_write_failure_shows_error_and_keeps_state(self) -> None:
+        # F-8 (D1): a folder at beta.dep would now make the name taken, so the write of
+        # beta fails on a full disk instead.
         alpha = Document("alpha", "a", "1")
         self._write_packages(alpha)
-        self._block("beta")
         frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
         before = self._state(frame)
         self.names = ["beta"]
 
-        frame.on_add_document(None)
+        with full_disk(self.workspace, pattern=r"^\.beta\.dep\."):
+            frame.on_add_document(None)
 
         self.assertEqual(len(self.events), 2)
-        self._assert_error_box(self.events[1], "Failed to save document: {error}", "beta.dep", frame)
+        self.assertEqual(
+            self.events[1],
+            (
+                "MessageBox",
+                gui._("Failed to save document: {error}").format(error=f"[Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}"),
+                gui._("Error"),
+                gui.wx.OK | gui.wx.ICON_ERROR,
+                frame,
+            ),
+        )
         self.assertEqual(self._state(frame), before)
+        self.assertEqual(self._listing(), ["alpha.dep"])
         self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("a", "1"))
 
     def test_add_failure_that_is_not_an_os_error_shows_the_message(self) -> None:
@@ -2124,6 +2142,29 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self.events, [("title", "good - DotExpress"), ("title", "good - DotExpress")])
         self.assertEqual(self._listing(), sorted(leftovers + ["good.dep"]))
         self.assertEqual(frame._document_controller.document_names, ["good"])
+
+    def test_startup_with_only_a_kept_invalid_new_package_creates_new_2(self) -> None:
+        # F-8 (D2): the default document takes a free name; the kept new.dep stays as it is.
+        self.workspace.mkdir()
+        (self.workspace / "new.dep").write_bytes(b"not a zip")
+        frame = self._make_workspace_frame()
+
+        frame._load_workspace_documents_at_startup()
+
+        self.assertEqual(
+            self.events,
+            [
+                ("InvalidWorkspaceFilesDialog", [self.workspace / "new.dep"]),
+                ("title", "new (2) - DotExpress"),
+                ("focus", "input"),
+                ("title", "new (2) - DotExpress"),
+            ],
+        )
+        self.assertEqual(self._listing(), ["new (2).dep", "new.dep"])
+        self.assertEqual((self.workspace / "new.dep").read_bytes(), b"not a zip")
+        self.assertEqual(self._package("new (2)"), Document("new (2)", "", None))
+        self.assertEqual(frame._document_controller.document_names, ["new (2)"])
+        self.assertEqual(frame._document_controller.open_name, "new (2)")
 
     # --- save --------------------------------------------------------------
 
@@ -2594,10 +2635,16 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(frame._document_controller.selected_name, "gamma")
 
     def test_rename_write_failure_keeps_old_package_and_state(self) -> None:
+        # F-8 (D1): a folder at gamma.dep would now make the name taken, so installing
+        # gamma.dep fails instead.
         alpha = Document("alpha", "a", "1")
         self._write_packages(alpha)
-        self._block("gamma")
         frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        frame._workspace_service = DocumentWorkspaceService(
+            frame._document_controller,
+            self.workspace,
+            package_files=_FailingReplacePackageFiles(destination_name="gamma.dep"),
+        )
         before = self._state(frame)
         self.names = ["gamma"]
 
@@ -2605,6 +2652,7 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
         self.assertEqual(len(self.events), 2)
         self._assert_error_box(self.events[1], "Failed to save document: {error}", "gamma.dep", frame)
+        self.assertEqual(self._listing(), ["alpha.dep"])
         self.assertEqual(self._package("alpha"), alpha)
         self.assertEqual(self._state(frame), before)
 
@@ -2846,6 +2894,41 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._package("beta"), beta)
         self.assertEqual(self._state(frame), before)
 
+    def _frame_with_a_kept_invalid_bad_package(self):
+        """alpha listed and open, bad.dep invalid and kept at startup (F-8, M-1)."""
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        (self.workspace / "bad.dep").write_bytes(b"not a zip")
+        return self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+
+    def test_add_of_a_name_whose_package_is_on_disk_asks_again(self) -> None:
+        frame = self._frame_with_a_kept_invalid_bad_package()
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        before = self._state(frame)
+        self.names = ["bad", None]
+
+        frame.on_add_document(None)
+
+        self.assertEqual(self.events, self._duplicate_name_events("Add Document", "", "bad", frame))
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+        self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+        self.assertEqual(self._state(frame), before)
+
+    def test_rename_to_a_name_whose_package_is_on_disk_asks_again(self) -> None:
+        frame = self._frame_with_a_kept_invalid_bad_package()
+        alpha_bytes = (self.workspace / "alpha.dep").read_bytes()
+        before = self._state(frame)
+        self.names = ["bad", None]
+
+        frame.on_rename_document(None)
+
+        self.assertEqual(self.events, self._duplicate_name_events("Rename Document", "alpha", "bad", frame))
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+        self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
+        self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
+        self.assertEqual(self._state(frame), before)
+
     # --- delete ------------------------------------------------------------
 
     def test_delete_open_middle_document_opens_previous_neighbour(self) -> None:
@@ -3056,22 +3139,28 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self.events[1:], [("title", "beta - DotExpress")])
 
     def test_import_reports_load_issues_before_save_issues(self) -> None:
+        # F-8 (D1): a folder at delta.dep would now make the name taken (a load issue),
+        # so the save of delta fails on a full disk instead.
         alpha = Document("alpha", "a", "1")
         self._write_packages(alpha)
-        self._block("delta")
         frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
         self.import_paths = self._write_sources(Alpha="dup", beta="b", delta="d")
 
-        frame.on_import_document(None)
+        with full_disk(self.workspace, pattern=r"^\.delta\.dep\."):
+            frame.on_import_document(None)
 
         self.assertEqual(frame._document_controller.document_names, ["alpha", "beta"])
         self.assertEqual(frame._document_controller.open_name, "beta")
         kind, title, message, lines = self.events[-1]
         self.assertEqual((kind, title, message), ("FileIssuesDialog", gui._("Import Issues"), gui._("Some files were skipped during import.")))
-        self.assertEqual(len(lines), 2)
-        self.assertEqual(lines[0], 'Alpha.txt: Document "Alpha" already exists.')
-        self.assertTrue(lines[1].startswith("delta.dep: "), lines[1])
-        self.assertIn("delta.dep", lines[1][len("delta.dep: "):])
+        self.assertEqual(
+            lines,
+            [
+                'Alpha.txt: Document "Alpha" already exists.',
+                f"delta.dep: [Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}",
+            ],
+        )
+        self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
 
     # --- selection ---------------------------------------------------------
 

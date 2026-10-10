@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass
+import errno
 import json
 import os
 from pathlib import Path
@@ -169,6 +170,10 @@ def move_document_package(
 
     An old package the user may not write (a read-only file) raises ``PermissionError``
     before anything is created or moved, as saving it does (F-3).
+
+    A file already at ``new_path`` (a package that is not listed) raises
+    ``FileExistsError``; the old package is put back (F-8). The check runs after the old
+    package is moved aside, so a case-only rename does not find the old package itself.
     """
     old_path = Path(old_path)
     new_path = Path(new_path)
@@ -193,6 +198,8 @@ def move_document_package(
                 files.remove(aside_path)
         raise
     try:
+        if files.exists(new_path):
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(new_path))
         if aside_path is not None:
             files.copy_permissions(aside_path, staged_path)
         files.replace(staged_path, new_path)

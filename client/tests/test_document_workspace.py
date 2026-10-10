@@ -23,6 +23,7 @@ from documents.workspace import (
     save_document_package,
 )
 from shared import name_validation
+from tests.case_insensitive_package_files import CaseInsensitivePackageFiles
 from tests.windows_file_handles import SHARE_MODES, hold_open, is_hidden, make_hidden, make_read_only
 
 
@@ -643,6 +644,34 @@ class MoveDocumentPackageTest(unittest.TestCase):
 
         self.assertEqual(self._listing(), ["gamma.dep"])
         self.assertEqual(load_document_package(self._path("gamma")), Document("gamma", "a", "1"))
+
+    def test_move_onto_an_existing_third_file_puts_the_old_package_back(self) -> None:
+        # F-8 (D1): a package that is not listed (kept invalid at startup) or one created
+        # after the name was checked is never replaced; the old package stays.
+        save_document_package(self._path("alpha"), Document("alpha", "a", "1"))
+        before = self._path("alpha").read_bytes()
+        self._path("bad").write_bytes(b"not a zip")
+
+        with self.assertRaises(FileExistsError) as raised:
+            self._move("alpha", Document("bad", "a", "1"))
+
+        self.assertEqual(
+            str(raised.exception),
+            f"[Errno {errno.EEXIST}] {os.strerror(errno.EEXIST)}: {str(self._path('bad'))!r}",
+        )
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+        self.assertEqual(self._path("alpha").read_bytes(), before)
+        self.assertEqual(self._path("bad").read_bytes(), b"not a zip")
+
+    def test_case_only_move_on_the_case_insensitive_model_is_not_refused(self) -> None:
+        # The check for a third file runs after the old package is moved aside: before
+        # that, the new spelling names the old package itself on such a file system.
+        self._write_alpha()
+
+        self._move("Alpha", Document("alpha", "a", "1"), CaseInsensitivePackageFiles())
+
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a", "1"))
 
     def test_missing_old_package_and_directory_writes_the_new_package(self) -> None:
         self._move("Alpha", Document("alpha", "a", "1"))

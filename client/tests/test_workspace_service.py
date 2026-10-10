@@ -1285,6 +1285,30 @@ class ReplacedNulCharactersTest(unittest.TestCase):
         )
         self.assertEqual(self._counts("alpha", "beta", "zoo"), [0, 2, 1])
 
+    def test_delete_all_failure_after_a_deletion_drops_the_deleted_count(self) -> None:
+        # F-8b review M-3: alpha is deleted and beta is refused; alpha's count goes with
+        # its package, so a later Import of a clean alpha shows no notice.
+        self._write(Document("alpha", "a\x00", "1"), Document("beta", "b\x00\x00", "2"), Document("zoo", "z\x00", "3"))
+        self.service.load_documents()
+        real_unlink = Path.unlink
+
+        def unlink(path, *args, **kwargs):
+            if path.name == "beta.dep":
+                raise PermissionError(errno.EACCES, "injected", str(path))
+            return real_unlink(path, *args, **kwargs)
+
+        errors: list[OSError] = []
+        with patch("pathlib.Path.unlink", autospec=True, side_effect=unlink):
+            result = self.service.delete_all_documents(on_error=errors.append)
+
+        self.assertFalse(result.completed)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(
+            self.controller.documents,
+            [Document("beta", "b\ufffd\ufffd", "2"), Document("zoo", "z\ufffd", "3")],
+        )
+        self.assertEqual(self._counts("alpha", "beta", "zoo"), [0, 2, 1])
+
     def test_text_without_nul_is_unchanged(self) -> None:
         self._write(Document("alpha", "a", "1"), Document("beta", "b", None))
         loaded: list[Document] = []

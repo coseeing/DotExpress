@@ -56,6 +56,20 @@ F-8a 的 plan（`docs/superpowers/plans/2026-10-10-f8a-data-safety-cleanup.md`�
 12. **Windows 項目。** 字型大小以「Ctrl＋在原文編輯框上滾動滑輪一格」改變。項目 80 檢查含 BOM 的檔案中的寬度 30 被保留，不在「設定」中改寬度。項目 81 以**只允許寫入**的共用模式（其他程式可寫不可讀）佔用 `config.json`，而不是「不共用」：不共用時，啟動時既有的可寫入檢查（`prepare_application_directories` 以附加模式開啟 `config.json`）會失敗，兩個版本都顯示既有的「啟動錯誤」，那不是 D11 的情況。F-8 之前的項目 79：沒有主視窗，程序約 3 秒後以結束碼 1 結束，沒有任何記錄。項目 77、78 以 `lockshare.py`（共用讀寫）佔用目標檔。項目 82 比較兩個版本做同樣步驟後的位元組。
 13. **驗收條件 7。** `shared/atomic_write.py` 之外，正式程式碼中剩下的直接寫入是：`app_paths.py` 對 `config.json` 的附加模式檢查（不寫入任何內容）、`PackageFiles.write` 與 `PackageFiles.temporary_path`（F-3 重新命名時私有的暫存套件檔，同步到磁碟後以 `os.replace` 安裝），以及 `dual_view/files.py`（規格已排除）。
 
+## 規劃後的修正（F-8b，2026-10-10）
+
+F-8b 的 plan（`docs/superpowers/plans/2026-10-10-f8b-recovery-and-nul.md`，在 `main` `1b19290` 的 scratch clone 上 dry run：Task 0–3 完全重現，每個步驟也以 plan 自己的區塊腳本套用、翻譯檔指令照 plan 執行，GUI 項目 70–75 對同一份程式碼的 packaged build 與 `N-f8a2` 都執行過）依 F-8a 之後的程式碼重新檢查了 D3–D5 與 D12–D15，沒有發現這些決策或其行為對照列的錯誤。plan 細化本規格之處，以本節為準。
+
+1. **數量。** 步驟 5 之後 `Ran 1419`（新增 16 個測試），步驟 6 之後 `Ran 1434`（新增 15 個）；基準 1403（F-8a 的 1400 加上其審查補的 3 個）；全程 `FAILED (errors=1, skipped=7)`，只有 F-W6；msgid 364 -> 366 -> 368。測試計畫 D 有 15 個：`test_document_workspace` 的 D1–D9 再加兩個（不是包殘留的檔案被忽略；兩個中斷的重新命名依舊到新復原），D8 也記錄 `os.replace`（`test_recovery_never_deletes_or_replaces_a_file`）；`test_workspace_service` 的 D11、D12 與「沒有殘留時不復原任何東西」；D13。測試計畫 E 有 14 個：E1–E13（E13 是 `test_editors_receive_the_full_text`）再加 `test_import_of_two_files_with_nul_shows_each_notice_when_it_is_opened`（項目 75 的流程）。驗收條件 2 的測試組從 `Ran 537` 變為 `Ran 568`，`OK (skipped=7)`。
+2. **F1 拆成兩個，** 每個步驟一個，讓每次重新產生翻譯檔之前都先紅燈：`test_recovery_strings_are_translated`（步驟 5）與 `test_replaced_character_strings_are_translated`（步驟 6）。
+3. **log 隔離。** `test_document_workspace` 與 `test_workspace_service` 在 `setUpModule` 隔離 `dotexpress.gui`。復原的測試斷言沒有任何記錄，D9 除外：在 Windows 上 `os.rename` 會拒絕已被占用的名稱，所以少了名稱規則時只會在 log 中出現。
+4. **D9** 以 patch 過的 `os.rename`（先建出目標檔再改名）模擬競態。記錄為 `ERROR` 層級的一行 `Cannot recover interrupted document package <path>: [WinError 183] ...`，不附 traceback。
+5. **D3 的細節。** 樣式為 `^\.(?P<stem>.+)\.(?i:dep)\.[A-Za-z0-9_]+\.tmp$`，只看一般檔案。主檔名不是合法文件名稱的檔案，光靠 `_read_package(package_path, package_name)` 就會略過（成員名稱經正規化後必須等於主檔名）；規則 1 的明確檢查保留，由 D6 釘住行為。logger 在呼叫時才取得。復原的文件依載入清單的順序（先 `casefold`，再比名稱）併入；訊息框依復原順序（最舊的先）列出名稱。
+6. **D12 的輔助函式。** `documents/workspace_service.py` 新增 `_displayable_documents(documents) -> (documents, counts)`，載入與全部刪除後的重新載入都用它；`take_replaced_character_count` 取出並移除數量。
+7. **翻譯檔。** 步驟 5 中 `msgmerge` 把 `Documents Recovered` 模糊配對到 `Documents`（`文件`）；plan 去掉這個旗標。步驟 6 沒有模糊配對。兩次重新產生也一併更新 F-8a 留下的過時 `#:` 參照行。
+8. **Windows 項目。** 「改前」是 `N-f8a2`。wx 把每個訊息框顯示成 task dialog：第一段是主要說明，其餘是內容；UIA 讀不到圖示（由單元測試釘住）。啟動時的訊息框出現在主視窗之前。項目 74、75 匯入 `zero.txt`：`nul` 是 Windows 的保留名稱，`nul.txt` 會成為匯入問題。F-8b 之前，項目 73–75 也顯示磁碟上的遺失：文件開啟後關閉程式（或開啟另一份文件），包裡只剩第一個 U+0000 之前的文字。項目 70 多一次啟動：改 alpha 的文字、關閉後再啟動（見 9）。
+9. **新的風險（已實測）：被略過的殘留檔，之後的某次啟動可能被復原。** 規則 1–4 每次啟動都重新判斷，被略過的檔案留在磁碟上。重新命名 alpha 為 gamma 時中斷：alpha 被復原，staged 的 `.gamma.dep.<8>.tmp` 留著；使用者一旦修改 alpha，下次啟動就把那份 staged 檔以舊文字復原成新文件 `gamma`，並顯示列出 `gamma` 的「已復原文件」（F-8b build 上項目 70 的第三次啟動）。同理，已完成的重新命名留下的舊包，在改名後的文件被修改後會以舊名稱回來；中斷的存檔留下的暫存檔，在其文件被改名或刪除後會回來。不會遺失資料；只是多出一份文件，可能在當機很久之後才出現，訊息框會列出它。要避免這種情況，需要本規格沒有做的決定（例如記住處理過的殘留檔，或把它們改名移出樣式，那會動到使用者的檔案）。這是給使用者的待決問題，不阻擋實作；F-8b 照上面的 D3 實作。
+
 ## 現況（2026-10-10 於 `main` `861d110`、Windows 11 26200、NTFS 驗證）
 
 `$PY` 是 `D:\workspace\DotExpress\client\.venv\Scripts\python.exe`（Python 3.13.15，wxPython 4.2.5 msw）。`$SP` 是 session 的 scratchpad。探針在 `$SP\f8\probes\`，不 commit。它們在 `$SP\f8\copy\client` 上執行（`861d110` 的 `git archive`，加上從主 checkout 複製的 git-ignored liblouis 與 MathCAT runtime），只寫入 `$SP\f8\` 底下：
@@ -597,6 +611,7 @@ F-8b：
 - **匯出資料夾中的暫存檔**（低）。匯出時會在目標旁短暫建立 `.<名稱>.<16 hex>.tmp`（USB 隨身碟、網路磁碟也一樣）。監看資料夾的程式可能看得到它；通常匯出結束前它就被移除或改名。F-8a 審查後的修正（2026-10-10，M-4）：若掃描程式（例如防毒軟體）在 `os.replace` 當下開著暫存檔，匯出會失敗（`[WinError 32]`），舊檔保持完整，但暫存檔會留下，因為移除它也會失敗（`shared/atomic_write.py` 忽略這個錯誤，套件自 F-3 起就是如此）；使用者可以手動刪除。重試移除留作後續項目。
 - **可以覆寫檔案、但不能建立檔案的資料夾**（很低；F 審查）。原子寫入需要在那裡建立暫存檔。
 - **復原把使用者刻意改過名的文件放回舊名稱**（低）。只發生在重新命名被當機打斷時：文件以舊名稱回來，和失敗的重新命名一樣（F-3）。staged 的那份留在磁碟上。
+- **被略過的殘留檔在之後的某次啟動被復原**（低；F-8b 規劃後新增，見「規劃後的修正（F-8b）」第 9 點）。重新命名中斷時的 staged 檔，在復原的文件被修改後會成為另一份文件回來；已完成的重新命名或中斷的存檔留下的殘留檔，在名稱空出來或內容變得獨一無二時會回來。不會遺失資料；訊息框會列出多出來的文件。
 - **兩份內容相同的不同文件**（很低）。若中斷的文件與清單中另一份文件的文字和點字完全相同，就不復原（規則 4）；沒有遺失文字，只少了名稱。
 - **不提供中斷存檔的較新文字**（低，D3）。等同當機時遺失的編輯；`.tmp` 留在磁碟上，可手動救回。
 - **只匯出、從未開啟的文件以 U+FFFD 匯出，沒有提示**（低，D13）。
@@ -618,6 +633,8 @@ Decided by orchestrator with the recommended default; user may override before m
 - **O5.** U+0000 的提示是警告訊息框，在每次執行中每份受影響的文件第一次開啟時顯示，不是啟動時的總表（D13）。
 - **O6.** 匯出改為原子寫入，因此覆寫被其他程式開著的目標時會失敗，和 F-3 Q1 對包的處理相同（D8、風險）。
 - **O7.** 不在 `_encodable`／`prepare_document_for_save` 中取代 U+0000（D12）。
+
+F-8b 的 plan 提出（不阻擋）：被復原略過的殘留檔，之後的某次啟動可不可以被復原（「規劃後的修正（F-8b）」第 9 點）。F-8b 維持上面的 D3。
 
 ## 不在範圍內／後續項目
 

@@ -10,7 +10,6 @@ from dictionaries.entries import (
 	ENTRY_TYPE_LABELS,
 	ENTRY_TYPE_OPTIONS,
 	DictionaryEntry,
-	load_dictionary_entries,
 	validate_dictionary_entry,
 )
 from dictionaries.entry_list_model import DictionaryEntryListModel, DuplicateEntryError, EntryListUpdate
@@ -19,6 +18,12 @@ from dictionaries.manager import (
 	normalize_dictionary_name,
 )
 from dictionaries.presenter import DictionaryManagementActions
+from dictionaries.read_problems import (
+	DictionaryCount,
+	describe_dictionary_read_error,
+	describe_unreadable_dictionary,
+	read_dictionary_count,
+)
 from documents.workspace import normalize_document_name
 from i18n import N_, _
 from ui.dialog_base import ContextManagedDialog, NameDialogBase, NameDialogMessages
@@ -515,6 +520,8 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 		self._dictionary_names = list(actions.dictionary_names)
 		self._selected_name = selected_name
 		self._dictionary_counts: dict[str, int] = {}
+		# F-6: the dictionaries that could not be read, with the error (their count is not known).
+		self._dictionary_read_errors: dict[str, Exception] = {}
 		self.edit_dictionary_name: str | None = None
 		self._build_ui()
 		self.refresh_dictionaries(self._dictionary_names, selected_name)
@@ -532,6 +539,23 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_DESELECTED, self._on_selection_changed)
 		self.list_ctrl.Bind(wx.EVT_SIZE, self._on_list_size)
 		main_sizer.Add(self.list_ctrl, 1, wx.EXPAND | wx.ALL, 12)
+
+		# F-6 (D3): why the selected dictionary cannot be read. Created right after the list, so
+		# it is the next Tab stop and the label is the field's accessible name. Multi-line,
+		# because wxMSW leaves a read-only single-line field out of the Tab order. Hidden
+		# before the layout is fitted, so the dialog keeps its size; shown only while a
+		# dictionary that cannot be read is selected.
+		self.read_problem_label = wx.StaticText(self, label=_("Why this dictionary cannot be read:"))
+		self.read_problem_ctrl = wx.TextCtrl(
+			self,
+			style=wx.TE_MULTILINE | wx.TE_READONLY,
+			size=(-1, self.GetCharHeight() * 4),
+		)
+		main_sizer.Add(self.read_problem_label, 0, wx.LEFT | wx.RIGHT, 12)
+		main_sizer.Add(self.read_problem_ctrl, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+		self.read_problem_label.Hide()
+		self.read_problem_ctrl.Hide()
+		self.read_problem_ctrl.Bind(wx.EVT_SET_FOCUS, self._on_read_problem_focus)
 
 		button_sizer = wx.BoxSizer(wx.HORIZONTAL)
 		self.add_button = wx.Button(self, label=_("Add"))
@@ -572,14 +596,25 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 		if column == 0:
 			return name
 		if column == 1:
+			if name in self._dictionary_read_errors:
+				return _("Unreadable")
 			return str(self._dictionary_counts.get(name, 0))
 		raise ValueError(f"Unknown column: {column}")
 
 	def _load_dictionary_counts(self) -> None:
-		self._dictionary_counts = {
-			name: len(load_dictionary_entries(self._actions.dictionary_path(name)))
-			for name in self._dictionary_names
-		}
+		"""Read every dictionary on its own; one that cannot be read is kept with its error (F-6)."""
+		self._dictionary_counts = {}
+		self._dictionary_read_errors = {}
+		for name in self._dictionary_names:
+			self._store_count(name, read_dictionary_count(self._actions.dictionary_path(name)))
+
+	def _store_count(self, name: str, count: DictionaryCount) -> None:
+		if count.error is None:
+			self._dictionary_counts[name] = count.entries
+			self._dictionary_read_errors.pop(name, None)
+		else:
+			self._dictionary_counts.pop(name, None)
+			self._dictionary_read_errors[name] = count.error
 
 	def refresh_dictionaries(
 		self,
@@ -598,12 +633,34 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 			self.list_ctrl.Focus(index)
 		self._resize_columns()
 		self._update_button_states()
+		self._update_read_problem()
+
+	def _update_read_problem(self) -> None:
+		"""Show why the selected dictionary cannot be read, or hide the reason row (F-6 D3).
+
+		The text is selected, so a screen reader reads all of it when the field gets focus,
+		not only its first line.
+		"""
+		error = self._dictionary_read_errors.get(self._get_selected_name())
+		if error is None:
+			self.read_problem_ctrl.ChangeValue("")
+		else:
+			self.read_problem_ctrl.ChangeValue(describe_dictionary_read_error(error))
+			self.read_problem_ctrl.SelectAll()
+		self.read_problem_label.Show(error is not None)
+		self.read_problem_ctrl.Show(error is not None)
+		self.Layout()
+
+	def _on_read_problem_focus(self, event: wx.FocusEvent) -> None:
+		# Select all again, so the reason is read in full after an arrow key moved the caret.
+		self.read_problem_ctrl.SelectAll()
+		event.Skip()
 
 	def _resize_columns(self) -> None:
 		available_width = max(0, self.list_ctrl.GetClientSize().width)
 		if available_width == 0:
 			return
-		count_text_width = self.list_ctrl.GetTextExtent(_("Entries"))[0]
+		count_text_width = max(self.list_ctrl.GetTextExtent(label)[0] for label in (_("Entries"), _("Unreadable")))
 		count_width = min(available_width, max(96, count_text_width + 32))
 		name_width = max(0, available_width - count_width)
 		self.list_ctrl.SetColumnWidth(0, name_width)
@@ -636,6 +693,7 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 		if selected_name is not None:
 			self._selected_name = selected_name
 		self._update_button_states()
+		self._update_read_problem()
 		event.Skip()
 
 	def _on_add_clicked(self, _event: wx.CommandEvent) -> None:
@@ -670,6 +728,15 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 	def _on_edit(self, _event: wx.Event) -> None:
 		selected = self._get_selected_name()
 		if selected is None:
+			return
+		# F-6 (D5): read the file again. A file fixed meanwhile opens; one that cannot be read
+		# is explained here, and the dialog stays open.
+		count = read_dictionary_count(self._actions.dictionary_path(selected))
+		self._store_count(selected, count)
+		self.list_ctrl.Refresh()
+		self._update_read_problem()
+		if count.error is not None:
+			self.show_error(describe_unreadable_dictionary(selected, count.error))
 			return
 		self.edit_dictionary_name = selected
 		self.EndModal(wx.ID_EDIT)

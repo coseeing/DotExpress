@@ -1,4 +1,5 @@
 import ast
+import csv
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,8 +7,11 @@ from typing import Protocol
 from unittest.mock import Mock, patch
 
 import dictionaries.presenter as presenter_module
+from dictionaries.entries import load_dictionary_entries
 from dictionaries.presenter import DictionaryManagementPresenter
+from dictionaries.read_problems import describe_dictionary_read_error
 from i18n import _
+from tests.unreadable_dictionary_files import BIG5, FIELD_LIMIT, LATE_BIG5
 
 
 PRESENTER_PATH = Path(presenter_module.__file__)
@@ -462,6 +466,20 @@ class PresenterImportTest(PresenterTestCase):
 		path.write_text(content, encoding="utf-8")
 		return path
 
+	def write_source_bytes(self, name, data):
+		source_dir = self.root / "source"
+		source_dir.mkdir(exist_ok=True)
+		path = source_dir / f"{name}.csv"
+		path.write_bytes(data)
+		return path
+
+	def read_error_call(self, source):
+		"""The error box for a source that cannot be read as a dictionary (F-6 D9)."""
+		with self.assertRaises((UnicodeDecodeError, csv.Error)) as caught:
+			load_dictionary_entries(source)
+		reason = describe_dictionary_read_error(caught.exception)
+		return ("error", _("Failed to import dictionary: {error}").format(error=reason))
+
 	def choose_call(self):
 		return ("choose_import", _("Import Dictionary"))
 
@@ -577,6 +595,42 @@ class PresenterImportTest(PresenterTestCase):
 				("error", _("Failed to import dictionary: {error}").format(error=missing.exception)),
 			],
 		)
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_big5_shows_the_not_utf8_reason(self):
+		# Before F-6 this showed the header message, which named the wrong problem.
+		source = self.write_source_bytes("big5", BIG5)
+		presenter = self.make_presenter()
+		view = FakeView(names=["big5"], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.choose_call(), self.prompt_call("big5"), self.read_error_call(source)])
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_late_big5_is_refused(self):
+		# Before F-6 the header check passed and the file was copied; Dictionary Management
+		# then could not count it.
+		source = self.write_source_bytes("late", LATE_BIG5)
+		presenter = self.make_presenter()
+		view = FakeView(names=["late"], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.choose_call(), self.prompt_call("late"), self.read_error_call(source)])
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_invalid_csv_shows_the_reason(self):
+		source = self.write_source_bytes("long", FIELD_LIMIT)
+		presenter = self.make_presenter()
+		view = FakeView(names=["long"], import_path=source)
+
+		result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(view.calls, [self.choose_call(), self.prompt_call("long"), self.read_error_call(source)])
 		self.assertEqual(self.files(), ["default"])
 
 	def test_import_cancelled_name_prompt_imports_nothing(self):

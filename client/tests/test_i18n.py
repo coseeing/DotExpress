@@ -48,6 +48,27 @@ class TranslationTest(unittest.TestCase):
         self.assertEqual(i18n._("General"), "一般")
         self.assertEqual(i18n._("Startup Error"), "啟動錯誤")
 
+    def test_unreadable_dictionary_strings_are_translated(self) -> None:
+        # F-6: the count column, the label of the reason field, the headline and the four reasons.
+        expected = {
+            "Unreadable": "無法讀取",
+            "Why this dictionary cannot be read:": "無法讀取的原因：",
+            'Dictionary "{name}" cannot be read.': "無法讀取字典「{name}」。",
+            'The file is not saved as UTF-8. Save it again in the "CSV UTF-8 (Comma delimited)" format, '
+            "for example with Save As in Excel.": "檔案不是以 UTF-8 儲存。請重新存成「CSV UTF-8 (逗號分隔)」格式，"
+            "例如在 Excel 中使用「另存新檔」。",
+            "The file cannot be opened. It may be in use by another program, or you may not have "
+            "permission to read it. Close the other program and try again.": "無法開啟檔案。檔案可能正被其他程式使用，"
+            "或你沒有讀取權限。請關閉其他程式後再試一次。",
+            "The file is not a valid CSV file. Check for a quotation mark that is not closed. Details: {error}": (
+                "檔案不是有效的 CSV 檔案。請檢查是否有未成對的引號。詳細資訊：{error}"
+            ),
+            "The file cannot be read: {error}": "無法讀取檔案：{error}",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

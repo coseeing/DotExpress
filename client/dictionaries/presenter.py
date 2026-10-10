@@ -8,6 +8,7 @@ and builds every user-facing string with ``_`` at call time.
 
 from __future__ import annotations
 
+import csv
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
@@ -23,6 +24,7 @@ from dictionaries.manager import (
 	list_dictionary_names,
 )
 from dictionaries.name_prompt import prompt_dictionary_name_until_success, rename_dictionary_after_name_prompt
+from dictionaries.read_problems import describe_dictionary_read_error
 from i18n import _
 from translation.dictionary_state import (
 	plan_dictionary_state_after_add,
@@ -173,6 +175,10 @@ class DictionaryManagementPresenter:
 				source_path.stem,
 				lambda dictionary_name: import_dictionary(self._dictionary_dir, source_path, dictionary_name),
 			)
+		except (UnicodeDecodeError, csv.Error) as exc:
+			# F-6 (D9): before ValueError, which UnicodeDecodeError also is. Nothing was copied.
+			view.show_error(_("Failed to import dictionary: {error}").format(error=describe_dictionary_read_error(exc)))
+			return None
 		except ValueError:
 			view.show_error(_("Imported file must contain text, braille, and type headers."))
 			return None

@@ -20,6 +20,20 @@
 
 非目標：讀取或轉換 Big5（U2）、依原因區分的轉譯錯誤訊息、「開啟字典資料夾」命令、即時更新筆數、`wx.MessageBox` 按鈕的語言（F-W9，任務 F-7）、沒有表頭或空白的 CSV 檔（仍算 0 筆），以及 HANDOFF 第 6 節的其他項目。
 
+## 規劃後的修正（2026-10-10）
+
+plan（`docs/superpowers/plans/2026-10-10-f6-unreadable-dictionaries.md`，在 scratch clone 上 dry run：Task 0–5 完全重現）沒有發現決策 D1–D11 或行為對照表的錯誤，總數也成立（`Ran 1335`）。plan 細化本規格之處，以本節為準。
+
+1. **共用的測試資料。** 新模組 `client/tests/unreadable_dictionary_files.py`（4 個空白，ASCII）提供 `BIG5`、`LATE_BIG5`、`UTF16`、`FIELD_LIMIT`、`READABLE`、`UTF8_FIXED` 與 `big5_decode_error()`，給需要它們的四個測試模組使用。這比驗收標準 6 列出的檔案多一個。
+2. **Big5 的那一列是 `臺北,ㄊㄞˊㄅㄟˇ,Bopomofo`**，測試與 GUI 項目（Windows 驗證的 `big5.csv`）都用它。點字字元（U+2800–28FF）不在 cp950 中，所以 `臺北,⠞⠺,Braille` 無法寫成 Big5；注音序列可以，而且能解析，所以同一列另存成 UTF-8 之後就是 1 筆條目（項目 44：編輯器顯示 `臺北`、`ㄊㄞˊㄅㄟˇ`、Bopomofo，筆數為 `1`）。後段才出現 Big5 的檔案有 1,000 列 ASCII（Big5 那一列之前共 17,019 bytes）。
+3. **每個遷移步驟的數量：`Ran 1321`、`1329`、`1334`、`1335`**（新增 8 + 6、8、5、1 個測試），全程 `FAILED (errors=1, skipped=7)`，只有 F-W6。只在 Windows 執行的測試有兩個（R7 與 M12），不是三個。每個新測試在它的步驟之前都是紅的；步驟 1 的新模組 `test_dictionary_read_problems` 以 import error 失敗。
+4. **測試的細化。** M12 在步驟 1 名為 `test_dictionary_held_open_without_sharing_is_unreadable`，步驟 2 再加上原因列的斷言。`_make_dialog` **不**設定 `show_error = Mock()`（那會蓋掉 `DictionaryManagementViewTest` 要測的真正 view 方法）；「編輯」的測試自己設定，`_make_dialog` 另設 `edit_dictionary_name = None`。M11 讓假的 `GetTextExtent` 對 `_("Unreadable")` 回傳 200、其他回傳 40，所以翻譯步驟前後都成立。R1 另外把一般的 `ValueError` 分類為 `OTHER`；R5 另外驗證注入的 `OSError(22)` 只寫一行 log。presenter 的測試以 `load_dictionary_entries` 讀同一個檔案時拋出的錯誤計算預期的原因文字。對話框的測試只用真的檔案：speech-dialog 的 stub scope 會移除載入 `dialog.py` 時才第一次 import 的 `dictionaries.*` 模組，所以 patch `read_problems` 可能改到另一個模組物件。
+5. **D5、D6 的細節。** 「編輯」重新讀檔之後會更新虛擬清單（`list_ctrl.Refresh()`）。主視窗只保護編輯器的建構子，並保留 `with editor as entries_dialog: entries_dialog.ShowModal()`，所以既有的主視窗測試不變。
+6. **原因欄位是 `size=(-1, self.GetCharHeight() * 4)`**（D3 所說「約三行文字」；欄位的格式矩形約 3.6 行）。在 scratch clone 以真正的 wx 量測（未宣告 DPI 感知的程序的像素）：對話框大小與現在相同（538 x 287）；清單高 154 px，顯示原因列時為 66 px；zh-TW 的 `NOT_UTF8` 原因（61 個字元）整段被選取。
+7. **Log（D8）。** CSV 錯誤的型別名稱是 `Error`（`_csv.Error.__name__`）：`Cannot read dictionary "x.csv": Error: field larger than field limit (131072)`。
+8. **翻譯檔（D11）。** `msgmerge` 把兩個新條目標成 fuzzy：`Why this dictionary cannot be read:` 拿到 `The default dictionary cannot be deleted.` 的 msgstr，`Dictionary "{name}" cannot be read.` 拿到 `Dictionary "{name}" already exists.` 的；其他五個留空。`The file cannot be read: {error}` 沒有被誤配。plan 補上七個 msgstr，並移除兩個 fuzzy 標記。
+9. **Windows 驗證。** 項目 46 改為對可讀的 UTF-8 檔 `acl.csv`（而不是 `big5.csv`）設定拒絕存取，讓原因只可能來自 ACL。項目 47 的 `alpha.csv` 由腳本寫入，不是透過「新增」建立。項目 42–45 在同一個腳本（`item42.py`）執行，48 與 49 在 `item48.py`，50 與 51 在 `item50.py`；history 資料夾是 `docs/superpowers/history/2026-10-10-03-f6-unreadable-dictionaries/`。「編輯」的錯誤框是 task dialog，標題句是主要指示、原因是內容（訊息中的空行把兩者分開）。在原因欄位按 Shift+Tab 會回到清單中選取的項目。plan 的 dry run 以同一份程式碼的 build 執行了 GUI 腳本：項目 42–51 的結果與下表相同，在 N-f5b 上執行項目 42 則重現了 F-W12（什麼都沒開，也沒有 `gui.log`）。
+
 ## 現況（2026-10-10 於 `fix/f6-unreadable-dictionaries` 驗證，HEAD `e46ff26`，Windows 11 26200，NTFS）
 
 `$PY` 是 `D:\workspace\DotExpress\client\.venv\Scripts\python.exe`（Python 3.13，wxPython 4.2.5 msw）。`$SP` 是本 session 的 scratchpad。本規格依據的原型在 `$SP\f6\`（`probe.py`、`today.py`、`proto.py`、`drive2.py`、`sizes.py`；不 commit），只對 `%TEMP%` 中的 scratch 複本執行。

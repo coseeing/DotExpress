@@ -1066,5 +1066,38 @@ class RecoverInterruptedPackagesTest(unittest.TestCase):
         self.assertIsNone(logs.records[0].exc_info)
 
 
+class ReplaceNulCharactersTest(unittest.TestCase):
+    """U+0000 becomes U+FFFD where documents enter the app (F-8 D12)."""
+
+    def test_replace_nul_characters(self) -> None:
+        clean = "clean text\r\n"
+        self.assertIs(workspace.replace_nul_characters(clean)[0], clean)
+        cases = {
+            "clean": (clean, (clean, 0)),
+            "empty": ("", ("", 0)),
+            "inside": ("a\x00b", ("a\ufffdb", 1)),
+            "leading and trailing": ("\x00ab\x00", ("\ufffdab\ufffd", 2)),
+            "consecutive": ("a\x00\x00\x00b", ("a\ufffd\ufffd\ufffdb", 3)),
+            "next to CRLF": ("line\r\n\x00\r\nend", ("line\r\n\ufffd\r\nend", 1)),
+        }
+        for label, (text, expected) in cases.items():
+            with self.subTest(label):
+                self.assertEqual(workspace.replace_nul_characters(text), expected)
+
+    def test_displayable_counts_text_and_braille_and_keeps_pending_braille(self) -> None:
+        cases = (
+            ("text and braille", Document("alpha", "a\x00b", "⠁\x00"), Document("alpha", "a\ufffdb", "⠁\ufffd"), 2),
+            ("braille only", Document("alpha", "ab", "\x00⠁\x00"), Document("alpha", "ab", "\ufffd⠁\ufffd"), 2),
+            ("pending braille", Document("alpha", "\x00", None), Document("alpha", "\ufffd", None), 1),
+        )
+        for label, document, expected, count in cases:
+            with self.subTest(label):
+                self.assertEqual(workspace._displayable(document), (expected, count))
+        clean = Document("alpha", "ab", "⠁")
+        displayable, count = workspace._displayable(clean)
+        self.assertIs(displayable, clean)
+        self.assertEqual(count, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

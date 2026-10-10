@@ -275,6 +275,8 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         frame._workspace_service.free_document_name.side_effect = lambda base: base
         # F-8 (D4): a bare Mock would be a truthy list of recovered names.
         frame._workspace_service.take_recovered_document_names.return_value = []
+        # F-8 (D13): a bare Mock would be a truthy count of replaced characters.
+        frame._workspace_service.take_replaced_character_count.return_value = 0
         frame.input_txt = Mock()
         frame.output_txt = Mock()
         frame._show_file_error = Mock()
@@ -3203,6 +3205,126 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
             ],
         )
         self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
+    # --- U+0000 (F-8 D12, D13) ---------------------------------------------
+
+    NUL_NOTICE = (
+        'Some characters in document "{name}" cannot be shown ({count} in all). Each one has been '
+        "replaced with the replacement character {mark}, so the text after it is kept.\n\n"
+        "Delete or change these {mark} characters before converting. Otherwise each one "
+        "appears in the braille as an escape code."
+    )
+
+    def _nul_notice(self, name: str, count: int, frame) -> tuple:
+        message = gui._(self.NUL_NOTICE).format(name=name, count=count, mark="\ufffd")
+        return ("MessageBox", message, gui._("Characters Replaced"), gui.wx.OK | gui.wx.ICON_WARNING, frame)
+
+    def test_opening_a_document_with_nul_shows_the_notice_once(self) -> None:
+        self._write_packages(Document("alpha", "a\x00b tail", "1\x00"), Document("beta", "b", "2"))
+        frame = self._make_workspace_frame()
+        frame._workspace_service.load_documents()
+        editors_at_the_notice = []
+
+        def message_box(message, caption, style, parent=None):
+            editors_at_the_notice.append((frame.input_txt.value, frame.output_txt.value))
+            return self._message_box(message, caption, style, parent)
+
+        with patch.object(gui, "message_box", message_box):
+            for name in ("alpha", "beta", "alpha"):
+                frame._open_document_by_name(name)
+
+        self.assertEqual(
+            self.events,
+            [
+                ("title", "alpha - DotExpress"),
+                self._nul_notice("alpha", 2, frame),
+                ("title", "beta - DotExpress"),
+                ("title", "alpha - DotExpress"),
+            ],
+        )
+        self.assertEqual(editors_at_the_notice, [("a\ufffdb tail", "1\ufffd")])
+
+    def test_editors_receive_the_full_text(self) -> None:
+        self._write_packages(Document("alpha", "first\nsecond\x00 after\nthird", "1\x002"))
+        frame = self._make_workspace_frame()
+        frame._workspace_service.load_documents()
+
+        frame._open_document_by_name("alpha")
+
+        self.assertEqual(
+            (frame.input_txt.value, frame.output_txt.value),
+            ("first\nsecond\ufffd after\nthird", "1\ufffd2"),
+        )
+
+    def test_startup_opens_the_first_document_and_shows_its_notice(self) -> None:
+        self._write_packages(Document("alpha", "\x00", ""), Document("beta", "b\x00", "2"))
+        frame = self._make_workspace_frame()
+
+        frame._load_workspace_documents_at_startup()
+
+        self.assertEqual(
+            self.events,
+            [
+                ("title", "alpha - DotExpress"),
+                self._nul_notice("alpha", 1, frame),
+                ("title", "alpha - DotExpress"),
+            ],
+        )
+        self.assertEqual(frame._workspace_service.take_replaced_character_count("beta"), 1)
+
+    def test_single_import_with_nul_shows_the_notice_before_the_issues(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        source_dir = self.root / "sources"
+        source_dir.mkdir()
+        (source_dir / "beta.txt").write_bytes(b"b\x00\x00\x00 tail")
+        (source_dir / "Alpha.txt").write_bytes(b"dup")
+        self.import_paths = [str(source_dir / "Alpha.txt"), str(source_dir / "beta.txt")]
+
+        frame.on_import_document(None)
+
+        self.assertEqual(
+            self.events,
+            [
+                ("FileDialog", gui._("Import Document"), gui.wx.FD_OPEN | gui.wx.FD_MULTIPLE),
+                ("title", "beta - DotExpress"),
+                self._nul_notice("beta", 3, frame),
+                (
+                    "FileIssuesDialog",
+                    gui._("Import Issues"),
+                    gui._("Some files were skipped during import."),
+                    ['Alpha.txt: Document "Alpha" already exists.'],
+                ),
+            ],
+        )
+        self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("b\ufffd\ufffd\ufffd tail", ""))
+
+    def test_import_of_two_files_with_nul_shows_each_notice_when_it_is_opened(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        source_dir = self.root / "sources"
+        source_dir.mkdir()
+        (source_dir / "beta.txt").write_bytes(b"b\x00")
+        (source_dir / "gamma.txt").write_bytes(b"g\x00\x00")
+        self.import_paths = [str(source_dir / "beta.txt"), str(source_dir / "gamma.txt")]
+
+        frame.on_import_document(None)
+        for name in ("gamma", "beta", "gamma"):
+            frame._open_document_by_name(name)
+
+        self.assertEqual(
+            self.events,
+            [
+                ("FileDialog", gui._("Import Document"), gui.wx.FD_OPEN | gui.wx.FD_MULTIPLE),
+                ("title", "gamma - DotExpress"),
+                self._nul_notice("gamma", 2, frame),
+                ("title", "beta - DotExpress"),
+                self._nul_notice("beta", 1, frame),
+                ("title", "gamma - DotExpress"),
+            ],
+        )
 
     # --- selection ---------------------------------------------------------
 

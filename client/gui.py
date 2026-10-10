@@ -611,6 +611,18 @@ class BrailleFrame(wx.Frame):
 		self._refresh_document_list(self._document_controller.selected_document_name)
 		self._update_window_title()
 		self._refresh_dual_view()
+		# U+0000 replaced when the document was loaded or imported: said once per document (F-8).
+		replaced = self._workspace_service.take_replaced_character_count(document.name)
+		if replaced:
+			self.show_warning(
+				_(
+					'Some characters in document "{name}" cannot be shown ({count} in all). Each one has been '
+					"replaced with the replacement character {mark}, so the text after it is kept.\n\n"
+					"Delete or change these {mark} characters before converting. Otherwise each one "
+					"appears in the braille as an escape code."
+				).format(name=document.name, count=replaced, mark="\ufffd"),
+				_("Characters Replaced"),
+			)
 
 	def _open_adjacent_document(self, step: int) -> None:
 		target_name = self._document_controller.adjacent_document_name(step)

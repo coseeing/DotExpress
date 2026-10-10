@@ -67,6 +67,30 @@ def replace_lone_surrogates(text: str) -> str:
     return text.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
 
 
+def replace_nul_characters(text: str) -> tuple[str, int]:
+    """Replace each U+0000 with U+FFFD; return the text and how many were replaced (F-8).
+
+    The Windows Edit control ends its text at U+0000, so a document shown with one
+    would be saved without everything after it. Text without U+0000 is returned as is.
+    """
+    count = text.count("\x00")
+    if not count:
+        return text, 0
+    return text.replace("\x00", "\ufffd"), count
+
+
+def _displayable(document: Document) -> tuple[Document, int]:
+    """``document`` with U+0000 replaced in its text and braille, and how many were replaced (F-8).
+
+    Pending braille stays ``None``; a document without U+0000 is returned as is.
+    """
+    text, count = replace_nul_characters(document.text)
+    braille, braille_count = (None, 0) if document.braille is None else replace_nul_characters(document.braille)
+    if not count and not braille_count:
+        return document, 0
+    return Document(name=document.name, text=text, braille=braille), count + braille_count
+
+
 def _encodable(document: Document) -> Document:
     """``document`` with lone surrogates replaced in its text and braille (F-5); pending braille stays ``None``."""
     braille = None if document.braille is None else replace_lone_surrogates(document.braille)

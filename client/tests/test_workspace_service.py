@@ -1136,5 +1136,152 @@ class SaveOnlyWhenChangedTest(unittest.TestCase):
             self.assertEqual(self._disk(), before)
 
 
+class ReplacedNulCharactersTest(unittest.TestCase):
+    """U+0000 in a package or an import reaches the controller as U+FFFD, counted once (F-8 D12)."""
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.root = Path(temp_dir.name)
+        self.workspace = self.root / "workspace"
+        self.controller = DocumentController()
+        self.service = DocumentWorkspaceService(self.controller, self.workspace)
+
+    def _path(self, name: str) -> Path:
+        return self.workspace / f"{name}.dep"
+
+    def _write(self, *documents: Document) -> None:
+        for document in documents:
+            save_document_package(self._path(document.name), document)
+
+    def _save(self, text: str, braille: str) -> int:
+        """Save the open document from these editor values; return how many packages were written."""
+        with patch.object(workspace_service, "save_document_package", wraps=workspace_service.save_document_package) as save:
+            self.service.save_open_document(text=text, braille=braille)
+        return save.call_count
+
+    def _counts(self, *names: str) -> list[int]:
+        return [self.service.take_replaced_character_count(name) for name in names]
+
+    def test_load_replaces_nul_for_the_controller_and_keeps_the_package(self) -> None:
+        self._write(Document("alpha", "a\x00b", "⠁\x00"))
+        before = self._path("alpha").read_bytes()
+
+        self.assertEqual(self.service.load_documents(), [])
+
+        self.assertEqual(self.controller.documents, [Document("alpha", "a\ufffdb", "⠁\ufffd")])
+        self.assertEqual(self._path("alpha").read_bytes(), before)
+        self.assertEqual(self._counts("alpha", "alpha"), [2, 0])
+
+    def test_first_save_after_load_writes_the_replaced_text(self) -> None:
+        # The record keeps the package as read (with U+0000), so the editors' text differs
+        # from it and the first save writes; from then on the package holds U+FFFD.
+        self._write(Document("alpha", "a\x00b", "⠁\x00"))
+        self.service.load_documents()
+        self.controller.open_document("alpha")
+
+        self.assertEqual(self._save("a\ufffdb", "⠁\ufffd"), 1)
+        self.assertEqual(self._save("a\ufffdb", "⠁\ufffd"), 0)
+
+        self.assertEqual(load_document_package(self._path("alpha")), Document("alpha", "a\ufffdb", "⠁\ufffd"))
+        self.service.load_documents()
+        self.assertEqual(self._counts("alpha"), [0])
+
+    def test_unopened_document_keeps_its_package_and_count(self) -> None:
+        self._write(Document("alpha", "a\x00b", "⠁"), Document("beta", "b", "⠃"))
+        self.service.load_documents()
+        before = self._path("alpha").read_bytes()
+        self.controller.open_document("beta")
+
+        self.assertEqual(self._save("b edited", "⠃"), 1)
+
+        self.assertEqual(self._path("alpha").read_bytes(), before)
+        self.assertEqual(self._counts("alpha", "beta"), [1, 0])
+        # Replaced again at the next load; nothing is written without the user.
+        self.service.load_documents()
+        self.assertEqual(self._counts("alpha"), [1])
+        self.assertEqual(self._path("alpha").read_bytes(), before)
+
+    def test_import_saves_the_replaced_text_and_counts_it(self) -> None:
+        sources = self.root / "sources"
+        sources.mkdir()
+        (sources / "gamma.txt").write_bytes(b"A\x00B\nline2\x00\x00end\n")
+        save_document_package(sources / "delta.dep", Document("delta", "d\x00", "\x00⠙"))
+        (sources / "zeta.txt").write_bytes(b"clean")
+        self.service.load_documents()
+
+        result = self.service.import_files(sorted(sources.iterdir()), format_key="all")
+
+        expected = [
+            Document("delta", "d\ufffd", "\ufffd⠙"),
+            Document("gamma", "A\ufffdB\nline2\ufffd\ufffdend\n", None),
+            Document("zeta", "clean", None),
+        ]
+        self.assertEqual(result, ImportResult(saved=expected, issues=[]))
+        self.assertEqual(self.controller.documents, expected)
+        self.assertEqual([load_document_package(self._path(document.name)) for document in expected], expected)
+        self.assertEqual(self._counts("delta", "gamma", "zeta"), [2, 3, 0])
+        # The record holds what was written: the unchanged text is not written again.
+        self.controller.open_document("gamma")
+        self.assertEqual(self._save("A\ufffdB\nline2\ufffd\ufffdend\n", ""), 0)
+
+    def test_pending_count_follows_rename_and_is_dropped_by_delete(self) -> None:
+        self._write(Document("alpha", "a\x00", "1"), Document("beta", "b\x00\x00", "2"), Document("zoo", "z\x00", "3"))
+        self.service.load_documents()
+
+        self.service.rename_document("alpha", "gamma")
+        self.service.delete_document("beta")
+
+        self.assertEqual(self._counts("alpha", "beta", "gamma"), [0, 0, 1])
+        self.assertTrue(self.service.delete_all_documents(on_error=lambda _error: None).completed)
+        self.assertEqual(self._counts("zoo"), [0])
+
+    def test_delete_all_failure_reload_keeps_only_pending_counts(self) -> None:
+        self._write(Document("alpha", "a\x00", "1"), Document("beta", "b\x00\x00", "2"), Document("zoo", "z\x00", "3"))
+        self.service.load_documents()
+        self.assertEqual(self._counts("alpha"), [1])
+        real_unlink = Path.unlink
+
+        def unlink(path, *args, **kwargs):
+            if path.name == "alpha.dep":
+                raise PermissionError(errno.EACCES, "injected", str(path))
+            return real_unlink(path, *args, **kwargs)
+
+        errors: list[OSError] = []
+        with patch("pathlib.Path.unlink", autospec=True, side_effect=unlink):
+            result = self.service.delete_all_documents(on_error=errors.append)
+
+        self.assertFalse(result.completed)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(
+            self.controller.documents,
+            [
+                Document("alpha", "a\ufffd", "1"),
+                Document("beta", "b\ufffd\ufffd", "2"),
+                Document("zoo", "z\ufffd", "3"),
+            ],
+        )
+        self.assertEqual(self._counts("alpha", "beta", "zoo"), [0, 2, 1])
+
+    def test_text_without_nul_is_unchanged(self) -> None:
+        self._write(Document("alpha", "a", "1"), Document("beta", "b", None))
+        loaded: list[Document] = []
+        real_load = workspace_service.load_workspace_documents
+
+        def load(directory):
+            result = real_load(directory)
+            loaded.extend(result[0])
+            return result
+
+        with patch.object(workspace_service, "load_workspace_documents", side_effect=load):
+            self.service.load_documents()
+
+        self.assertEqual(len(loaded), 2)
+        self.assertTrue(all(shown is read for shown, read in zip(self.controller.documents, loaded)))
+        self.assertEqual(self._counts("alpha", "beta"), [0, 0])
+        self.controller.open_document("alpha")
+        self.assertEqual(self._save("a", "1"), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

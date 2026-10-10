@@ -87,6 +87,28 @@ class TranslationTest(unittest.TestCase):
             "DotExpress 上次在儲存或重新命名文件時中斷，已復原以下文件：\n\nalpha\nbeta\n\n請確認內容是否正確。",
         )
 
+    def test_replaced_character_strings_are_translated(self) -> None:
+        # F-8 (D13): the box shown when a document whose U+0000 was replaced is first opened.
+        message = (
+            'Some characters in document "{name}" cannot be shown ({count} in all). Each one has been '
+            "replaced with the replacement character {mark}, so the text after it is kept.\n\n"
+            "Delete or change these {mark} characters before converting. Otherwise each one "
+            "appears in the braille as an escape code."
+        )
+        expected = {
+            "Characters Replaced": "已取代字元",
+            message: "文件「{name}」中有 {count} 個無法顯示的字元，已全部以替代字元 {mark} 標示，後面的文字都保留下來了。"
+            "\n\n轉譯前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+        self.assertEqual(
+            translation.gettext(message).format(name="alpha", count=3, mark="\ufffd"),
+            "文件「alpha」中有 3 個無法顯示的字元，已全部以替代字元 \ufffd 標示，後面的文字都保留下來了。"
+            "\n\n轉譯前請刪除或修改這些 \ufffd，否則每一個都會在點字中變成一段跳脫碼。",
+        )
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

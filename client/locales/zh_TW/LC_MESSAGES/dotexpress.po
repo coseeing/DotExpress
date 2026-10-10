@@ -1031,7 +1031,7 @@ msgstr "來源文字「{identifier}」已存在。"
 
 #: dialog.py:497 dialog.py:506 dialog.py:764 documents/export_coordinator.py:89
 #: documents/export_coordinator.py:98 documents/export_coordinator.py:119
-#: gui.py:454 gui.py:717 gui.py:1033 ui/conversion_presenter.py:196
+#: gui.py:454 gui.py:729 gui.py:1045 ui/conversion_presenter.py:196
 msgid "Error"
 msgstr "錯誤"
 
@@ -1260,11 +1260,11 @@ msgstr "可按快顯鍵開啟選單。"
 msgid "Braille Result"
 msgstr "點字結果"
 
-#: gui.py:249 gui.py:1097
+#: gui.py:249 gui.py:1109
 msgid "File"
 msgstr "檔案"
 
-#: gui.py:262 gui.py:1097 settings/dialogs.py:357
+#: gui.py:262 gui.py:1109 settings/dialogs.py:357
 msgid "Translation"
 msgstr "轉譯"
 
@@ -1335,17 +1335,36 @@ msgstr "無法開啟文字處理程式：{error}"
 msgid "Text Processing"
 msgstr "文字處理"
 
-#: gui.py:676
+#: gui.py:619
+#, python-brace-format
+msgid ""
+"Some characters in document \"{name}\" cannot be shown ({count} in all). "
+"Each one has been replaced with the replacement character {mark}, so the "
+"text after it is kept.\n"
+"\n"
+"Delete or change these {mark} characters before converting. Otherwise each "
+"one appears in the braille as an escape code."
+msgstr ""
+"文件「{name}」中有 {count} 個無法顯示的字元，已全部以替代字元 {mark} 標示，後"
+"面的文字都保留下來了。\n"
+"\n"
+"轉譯前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。"
+
+#: gui.py:624
+msgid "Characters Replaced"
+msgstr "已取代字元"
+
+#: gui.py:688
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr "刪除無效工作區文件失敗：{error}"
 
-#: gui.py:716
+#: gui.py:728
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr "文件「{name}」已存在。"
 
-#: gui.py:751
+#: gui.py:763
 #, python-brace-format
 msgid ""
 "DotExpress was interrupted while saving or renaming a document. These "
@@ -1361,71 +1380,71 @@ msgstr ""
 "\n"
 "請確認內容是否正確。"
 
-#: gui.py:754
+#: gui.py:766
 msgid "Documents Recovered"
 msgstr "已復原文件"
 
-#: gui.py:812
+#: gui.py:824
 msgid "Add Document"
 msgstr "新增文件"
 
-#: gui.py:828
+#: gui.py:840
 msgid "Rename Document"
 msgstr "重新命名文件"
 
-#: gui.py:852
+#: gui.py:864
 #, python-brace-format
 msgid "Do you want to delete document \"{name}\"?"
 msgstr "要刪除文件「{name}」嗎？"
 
-#: gui.py:853
+#: gui.py:865
 msgid "Confirm Delete Document"
 msgstr "確認刪除文件"
 
-#: gui.py:862 gui.py:889
+#: gui.py:874 gui.py:901
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr "刪除文件失敗：{error}"
 
-#: gui.py:881
+#: gui.py:893
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr "刪除全部會移除所有文件。要繼續嗎？"
 
-#: gui.py:882
+#: gui.py:894
 msgid "Confirm Delete All"
 msgstr "確認刪除全部"
 
-#: gui.py:911
+#: gui.py:923
 msgid "Import Document"
 msgstr "匯入文件"
 
-#: gui.py:931
+#: gui.py:943
 msgid "Import Issues"
 msgstr "匯入問題"
 
-#: gui.py:932
+#: gui.py:944
 msgid "Some files were skipped during import."
 msgstr "匯入時有部分檔案被略過。"
 
-#: gui.py:1141
+#: gui.py:1153
 msgid "Export Document"
 msgstr "匯出文件"
 
-#: gui.py:1151
+#: gui.py:1163
 msgid "Export All Documents"
 msgstr "匯出全部文件"
 
-#: gui.py:1160
+#: gui.py:1172
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr "目的資料夾中已有一個或多個檔案會被覆蓋。要全部覆蓋嗎？"
 
-#: gui.py:1163
+#: gui.py:1175
 msgid "Confirm Overwrite"
 msgstr "確認覆蓋"
 
-#: gui.py:1169
+#: gui.py:1181
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1442,7 +1461,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: gui.py:1172
+#: gui.py:1184
 msgid "Startup Error"
 msgstr "啟動錯誤"
 

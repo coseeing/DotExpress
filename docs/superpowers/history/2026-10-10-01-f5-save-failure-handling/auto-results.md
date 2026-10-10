@@ -65,6 +65,17 @@ plan（Spec Corrections 7）在 dry run 中觀察到 `dx.dismiss` 的 win32 點�
 - 有修改而存檔失敗時，其他動作仍擋住（38 的 Ctrl+Tab，決定 C）；關閉時出現本地化的「無法儲存文件」對話框：重試（預設，焦點）、不儲存就關閉、取消，三者行為都符合 spec（38、39）。
 - F-3 review M-4 已修正：貼上的孤立 surrogate 以 U+FFFD 存檔，不再出現訊息，之後未修改的切換不再重寫（40）。
 
+## 審查後補充：關閉盒（X）＝取消（review M-8；N-f5b）
+
+審查 M-8 指出 spec D7 的「Esc and the close box cancel」只量了 Esc。因為 review M-1 改了 production code（`shared/name_validation.py`），先依 plan Task 5 Step 1 重建，以下稱 N-f5b；再在新的 `D:\dxtest\auto*-f5m` 資料夾執行，只結束 exe 位於這些資料夾的程序（`dx.kill_under`）。
+
+- **N-f5b**：主 checkout `6cfdaf4`（`a06a647` M-1 + `6cfdaf4` M-4 測試），PyInstaller 6.21.0，log 有 `Build complete!`；`documents\workspace.py`、`documents\workspace_service.py`、`shared\name_validation.py` 都來自 `DotExpress\client\`，`gui.py` 也是。`D:\dxtest\N-f5b\DotExpress.exe`，48,742,658 bytes，sha256 `ABEEFAF58973FDA2B8C28E50A94E9DF3C3C01FAAC464FE3F78669238C6EC62C4`。`git status` 只有本次修改的 `auto/f5gui.py`、`auto/item38.py` 與未追蹤的 `review_task.md`。
+- **腳本**：`auto/f5gui.py` 新增 `CLOSE_BOX`（`answer` 以滑鼠 `click_input()` 點對話框標題列的關閉鈕「關閉」）與 `alt-f4` 鍵；`auto/item38.py` 新增 `x` 模式。
+- **smoke test**（`smoke_f5gui.py`，scratchpad 的 client 副本，按鍵 `esc close-box alt-f4 enter`）：第一次執行時另一個程式（瀏覽器）在前景，`describe` 讀到的焦點是該程式的元素，`close-box` 的 `click_input` 在 pywinauto 的 `SetCursorPos` 拋出例外（工具錯誤，不是產品結果）；留下的兩個 demo 程序（`close_dialog_demo.py`）以 PID 結束。第二次執行：`esc -> ID_CANCEL`、`close-box -> ID_CANCEL`、`alt-f4 -> ID_CANCEL`、`enter -> ID_YES`，都是 `presses: 1`，`SetYesNoCancelLabels` 都回傳 `True`；標題、`main`、`content`、三個按鈕與 0.2 相同，`focus` 這次同樣讀到前景瀏覽器的元素（`describe` 在 `set_focus` 後 0.5 秒讀全域焦點，`answer` 之後才把對話框拉到前景；下面 38x 在 DotExpress 主視窗前景時讀到 `重試(R)`）。
+- **38x ✔**（`item38.py … x`，`D:\dxtest\auto38x-f5m`）：Ctrl+Tab 與 38 相同（`[WinError 5]` 錯誤框，仍在 `alpha`，輸入框 `'alpha edited'`）。關閉 → 對話框（標題、`main`、`content`、按鈕與 38 相同，`focus: 重試(R)`）→ 以滑鼠點標題列的 X：`close, close-box: running`，`input after close-box: 'alpha edited' title: alpha - DotExpress`。再關閉 → Alt+F4：`close, alt-f4: running`，輸入框仍是 `'alpha edited'`。解鎖後關閉 → Enter：`exited`。磁碟：`alpha members changed: True text: 'alpha edited'`，檔案 `['alpha.dep', 'beta.dep', 'new.dep']`，`tmp: []`；重新啟動後 `['alpha', 'beta', 'new']`，輸入框 `'alpha edited'`，關閉 `exited`。每次都是 `presses: 1`。結論：關閉盒（X）與 Alt+F4 都等於「取消」（DotExpress 保持開啟、修改仍在），與 Esc 相同。
+- **40 ✔、36 ✔（N-f5b smoke）**：`auto40-f5m.log`、`auto36-f5m.log`（`readonly`）把資料夾名稱換掉後與 `auto40-f5.log`、`auto36-f5.log` 逐行相同。
+- 執行結束後沒有殘留的 DotExpress、`lock.py` 或 demo 程序。
+
 ## 仍需人工（使用者）
 
-- 41（NVDA）：請在 NVDA 執行中檢查關閉時的「無法儲存文件」對話框。把 `D:\dxtest\N-f5\DotExpress.exe` 複製到新資料夾 `D:\dxtest\manual41-f5\` 再執行；新增文件 `alpha` 並輸入一些文字，關閉後重新開啟，再修改 `alpha` 的內文；在命令提示字元執行 `attrib +r D:\dxtest\manual41-f5\workspace\alpha.dep`；然後關閉 DotExpress。請記錄 NVDA 依序讀出的內容（標題、錯誤那一行、說明句子、目前焦點的按鈕），並確認：Tab 與 Shift+Tab 在「重試」「不儲存就關閉」「取消」三個按鈕間移動，且每個按鈕都被讀出；Esc 取消（DotExpress 保持開啟，修改仍在）；再關閉一次，Alt+R 重試（對話框再次出現）；最後執行 `attrib -r D:\dxtest\manual41-f5\workspace\alpha.dep` 再按 Alt+R（存檔後結束），或改按 Alt+W（不儲存就關閉）。
+- 41（NVDA）：請在 NVDA 執行中檢查關閉時的「無法儲存文件」對話框。把 `D:\dxtest\N-f5b\DotExpress.exe`（審查修正後的 build；`N-f5` 亦可）複製到新資料夾 `D:\dxtest\manual41-f5\` 再執行；新增文件 `alpha` 並輸入一些文字，關閉後重新開啟，再修改 `alpha` 的內文；在命令提示字元執行 `attrib +r D:\dxtest\manual41-f5\workspace\alpha.dep`；然後關閉 DotExpress。請記錄 NVDA 依序讀出的內容（標題、錯誤那一行、說明句子、目前焦點的按鈕），並確認：Tab 與 Shift+Tab 在「重試」「不儲存就關閉」「取消」三個按鈕間移動，且每個按鈕都被讀出；Esc 取消（DotExpress 保持開啟，修改仍在）；再關閉一次，按對話框標題列的關閉鈕（X），確認它也是取消（DotExpress 保持開啟，修改仍在）；再關閉一次，Alt+R 重試（對話框再次出現）；最後執行 `attrib -r D:\dxtest\manual41-f5\workspace\alpha.dep` 再按 Alt+R（存檔後結束），或改按 Alt+W（不儲存就關閉）。

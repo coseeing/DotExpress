@@ -4,7 +4,8 @@ Reuses dx.py, docs.py and lock.py of the 2026-10-09-03 Windows verification unch
 wx shows its message boxes as Windows task dialogs. dx.dismiss reads their text, but
 its win32 click does not reach the button, so the box stays open (seen in the F-5 dry
 run; an open box keeps the process alive after Close). ``dismiss`` presses OK through
-UIA instead, and the F-5 close dialog is read and answered through UIA too.
+UIA instead, and the F-5 close dialog is read and answered through UIA too. (The lost
+click was not reproduced in the recorded runs; see auto-results.md, "20 補充".)
 """
 import ctypes
 import os
@@ -22,7 +23,9 @@ import docs as D  # noqa: E402
 
 LOCK = os.path.join(AUTO03, "lock.py")
 CLOSE_DIALOG_TITLE = "無法儲存文件"
-KEYS = {"enter": "{ENTER}", "esc": "{ESC}", "alt-r": "%r", "alt-w": "%w"}
+KEYS = {"enter": "{ENTER}", "esc": "{ESC}", "alt-r": "%r", "alt-w": "%w", "alt-f4": "%{F4}"}
+# Not a key: answer() clicks the close box (X) of the dialog's title bar with the mouse.
+CLOSE_BOX = "close-box"
 
 
 def workspace(d):
@@ -196,8 +199,19 @@ def describe(dialog):
 	}
 
 
+def click_close_box(dialog):
+	"""Click the close box (X) of the dialog's title bar with the mouse (F-5 review M-8)."""
+	buttons = [
+		button
+		for button in dialog.descendants(control_type="Button")
+		if button.element_info.parent.control_type == "TitleBar"
+	]
+	named = [button for button in buttons if button.window_text() == "關閉"]
+	(named or buttons)[-1].click_input()
+
+
 def answer(dialog, key):
-	"""Bring the dialog to the foreground and press ``key`` (a key of KEYS).
+	"""Bring the dialog to the foreground and press ``key`` (a key of KEYS, or CLOSE_BOX).
 
 	A key pressed while the window takes the focus is sometimes lost: if the same dialog
 	is still open 5 s later, the key is pressed again (at most three times). Returns how
@@ -214,7 +228,10 @@ def answer(dialog, key):
 			dialog.set_focus()
 			time.sleep(0.5)
 		time.sleep(0.5)
-		send_keys(KEYS[key])
+		if key == CLOSE_BOX:
+			click_close_box(dialog)
+		else:
+			send_keys(KEYS[key])
 		end = time.time() + 5
 		while time.time() < end:
 			if not win32gui.IsWindow(handle):
@@ -234,7 +251,7 @@ def wait_exit(app, timeout=15):
 
 
 def close_and_answer(app, w, answers, between=None):
-	"""Post WM_CLOSE and answer each close dialog in turn with a key of KEYS.
+	"""Post WM_CLOSE and answer each close dialog in turn with a key of KEYS (or CLOSE_BOX).
 
 	``between`` maps an answer's index to a function called before that answer (for
 	example releasing a lock). Returns (dialogs, outcome): the description of each dialog

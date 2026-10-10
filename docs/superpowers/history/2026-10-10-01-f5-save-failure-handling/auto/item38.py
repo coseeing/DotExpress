@@ -1,6 +1,6 @@
 """Items 38 and 39 (F-5): Close after a failed save of a changed document.
 
-Usage: python item38.py <exe> <work folder> <38|39>
+Usage: python item38.py <exe> <work folder> <38|39|x>
 alpha is open; "alpha edited" is typed; lock.py holds alpha.dep (share read); Ctrl+Tab;
 then Close.
 38: Esc: the app stays open with the edit. Close again, Enter (Retry) while the lock is
@@ -8,6 +8,9 @@ then Close.
     alpha holds the edit.
 39: Alt+W (Close without saving): the app exits, the members of alpha.dep are unchanged
     since before the edit, no .tmp; after a restart alpha holds the old text.
+x:  (F-5 review M-8) the close box (X) of the dialog, clicked with the mouse, then
+    Alt+F4: each cancels like Esc (the app stays open with the edit). The lock is
+    released, Close, Enter: the app exits; after a restart alpha holds the edit.
 Before F-5 (N-f4): Close shows the error box (確定 only) and is vetoed.
 """
 import os
@@ -45,6 +48,17 @@ if item == "38":
 	print("input after esc:", repr(D.get_input(w)), "title:", w.window_text())
 	dialogs, outcome = close_and_answer(app, w, ["enter", "enter"], between={1: lambda: unlock(holder)})
 	print("close, enter while locked, unlock, enter:", outcome)
+	for dialog in dialogs:
+		print("  dialog:", dialog)
+elif item == "x":
+	for key in ("close-box", "alt-f4"):
+		dialogs, outcome = close_and_answer(app, w, [key])
+		print(f"close, {key}:", outcome)
+		for dialog in dialogs:
+			print("  dialog:", dialog)
+		print(f"input after {key}:", repr(D.get_input(w)), "title:", w.window_text())
+	dialogs, outcome = close_and_answer(app, w, ["enter"], between={0: lambda: unlock(holder)})
+	print("close, unlock, enter:", outcome)
 	for dialog in dialogs:
 		print("  dialog:", dialog)
 else:

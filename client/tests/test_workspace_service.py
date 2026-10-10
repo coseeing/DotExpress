@@ -1174,6 +1174,27 @@ class ReplacedNulCharactersTest(unittest.TestCase):
         self.assertEqual(self._path("alpha").read_bytes(), before)
         self.assertEqual(self._counts("alpha", "alpha"), [2, 0])
 
+    def test_recovered_package_with_nul_is_replaced_and_counted(self) -> None:
+        # F-8b review M-1: a package that recovery puts back reaches the controller as a
+        # loaded one does, with U+FFFD and counted, and is recorded as read.
+        self.workspace.mkdir()
+        files = PackageFiles()
+        aside = self.workspace / ".alpha.dep._vw4x6f_.tmp"
+        files.write(aside, Document("alpha", "a\x00b", "1\x00"))
+        older = aside.stat().st_mtime_ns - 60_000_000_000
+        os.utime(aside, ns=(older, older))
+        before = aside.read_bytes()
+
+        self.assertEqual(self.service.load_documents(), [])
+
+        self.assertEqual(self.service.take_recovered_document_names(), ["alpha"])
+        self.assertEqual(self.controller.documents, [Document("alpha", "a\ufffdb", "1\ufffd")])
+        self.assertEqual(self._path("alpha").read_bytes(), before)
+        self.assertEqual(self._counts("alpha", "alpha"), [2, 0])
+        self.controller.open_document("alpha")
+        self.assertEqual(self._save("a\ufffdb", "1\ufffd"), 1)
+        self.assertEqual(self._save("a\ufffdb", "1\ufffd"), 0)
+
     def test_first_save_after_load_writes_the_replaced_text(self) -> None:
         # The record keeps the package as read (with U+0000), so the editors' text differs
         # from it and the first save writes; from then on the package holds U+FFFD.

@@ -7,6 +7,8 @@ write leaves the target as it was (or absent) and no temporary file.
 from __future__ import annotations
 
 import csv
+import errno
+import os
 from pathlib import Path
 import shutil
 from typing import BinaryIO, TextIO
@@ -111,6 +113,12 @@ def rename_dictionary(dictionary_dir: Path, source_name: str, new_name: str) -> 
 def export_dictionary(dictionary_dir: Path, name: str, destination_path: Path | str) -> Path:
     source_path = dictionary_path_for_name(name.strip(), dictionary_dir)
     destination = Path(destination_path)
+    if destination.is_dir():
+        # The error copying onto a folder gave, as documents.workspace.write_export_text
+        # gives for a BRL or HTML export, not a failed replace naming the temporary file.
+        if os.name == "nt":
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(destination))
+        raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(destination))
     # An existing file there is replaced only once the copy is complete and synced.
     write_bytes_atomically(destination, lambda stream: _copy_file_into(source_path, stream))
     return destination

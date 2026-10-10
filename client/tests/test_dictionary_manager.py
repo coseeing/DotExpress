@@ -264,6 +264,22 @@ class DictionaryManagerTest(unittest.TestCase):
                 self.assertEqual((export_dir / "math.csv").read_bytes(), content)
                 self.assertEqual(self._temporary_files(export_dir), [])
 
+    def test_export_onto_a_folder_fails_as_an_in_place_write_did(self) -> None:
+        # F-8a review M-5: like a BRL or HTML export (write_export_text), a folder at the
+        # destination gives the error copying onto it gave, not a failed replace that
+        # names the temporary file.
+        export_dir = self._export_folder_with_old_file()
+        destination = export_dir / "folder.csv"
+        (destination / "keep").mkdir(parents=True)
+
+        with self.assertRaises(OSError) as raised:
+            export_dictionary(self.dictionary_dir, "math", destination)
+
+        code = errno.EACCES if os.name == "nt" else errno.EISDIR
+        self.assertEqual(str(raised.exception), f"[Errno {code}] {os.strerror(code)}: {str(destination)!r}")
+        self.assertEqual(sorted(path.name for path in export_dir.iterdir()), ["folder.csv", "math.csv"])
+        self.assertEqual(os.listdir(destination), ["keep"])
+
     @unittest.skipUnless(os.name == "nt", "Windows sharing modes")
     def test_export_onto_a_destination_held_open_keeps_it(self) -> None:
         # Replacing a file needs its holder to share delete access; an editor that shares

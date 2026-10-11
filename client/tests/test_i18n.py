@@ -118,6 +118,56 @@ class TranslationTest(unittest.TestCase):
         self.assertEqual(translation.gettext(message), "轉換完成。結果已儲存到文件「{name}」。")
         self.assertEqual(translation.gettext(message).format(name="alpha"), "轉換完成。結果已儲存到文件「alpha」。")
 
+    def test_dictionary_editor_failure_string_is_translated(self) -> None:
+        # F-11 (D12): building the dictionary editor failed for a reason other than its file.
+        message = "Failed to open the dictionary editor: {error}"
+        translation = i18n.load_translation()
+
+        self.assertEqual(translation.gettext(message), "無法開啟字典編輯器：{error}")
+
+    def test_hidden_rows_box_strings_are_translated(self) -> None:
+        # F-11 (D1): the box that lists the rows the editor cannot show before removing them.
+        message = (
+            'Some rows of dictionary "{name}" cannot be shown in the editor. Saving removes them from the file:'
+            "\n\n{rows}\n\nDo you want to remove these rows and save the dictionary?"
+        )
+        expected = {
+            "Remove Rows That Cannot Be Shown": "移除無法顯示的列",
+            message: "字典「{name}」中有些列無法在編輯器中顯示，儲存時會從檔案中移除：\n\n{rows}\n\n要移除這些列並儲存字典嗎？",
+            "Row {line}: no source text": "第 {line} 列：沒有來源文字",
+            'Row {line}: "{text}", Bopomofo "{bopomofo}" is not valid': "第 {line} 列：「{text}」的注音「{bopomofo}」格式不正確",
+            "Other rows not listed: {count}": "另有 {count} 列未列出",
+            "Remove and &Save": "移除並儲存(&S)",
+            "&Back to Editing": "返回編輯(&B)",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
+    def test_discard_changes_box_strings_are_translated(self) -> None:
+        # F-11 (D7): Cancel, Esc or the close box after a change in the dictionary editor.
+        expected = {
+            "Unsaved Changes": "尚未儲存的變更",
+            'Do you want to discard the changes you made to dictionary "{name}"?': "要放棄對字典「{name}」所做的變更嗎？",
+            "&Discard Changes": "放棄變更(&D)",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
+    def test_unrecognized_dictionary_header_string_is_translated(self) -> None:
+        # F-11 review M-1: OK in the dictionary editor on a file whose header names no text column.
+        message = (
+            'Dictionary "{name}" cannot be saved: its header is not recognized. '
+            "The first line of the file must contain the text, braille, and type headers."
+        )
+        translation = i18n.load_translation()
+
+        self.assertEqual(
+            translation.gettext(message),
+            "無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。",
+        )
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

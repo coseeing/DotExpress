@@ -8,19 +8,32 @@ messages.
 
 Rows that are not a ``DictionaryEntry`` (``PreservedDictionaryRow``: a blank
 source text, or a Bopomofo sequence that does not parse) are never shown,
-filtered, edited or removed: they keep their place in the file and ``save``
-writes them back unchanged (F-4). ``entries`` and the visible list hold the
-entries only.
+filtered, edited or removed, and their source texts are not duplicates (F-11
+D2). ``hidden_rows`` lists them for the dialog, which asks before saving;
+``save`` writes the entries only, so it removes them from the file (F-11 D1;
+F-4 wrote them back). ``entries`` and the visible list hold the entries only.
+``save`` writes with the layout of the loaded file (its BOM and header); a
+replaced entry takes over the fields of the row it replaces, so its extra
+columns are kept (F-11 D5). Under a header that names no ``text`` column every
+row is hidden; ``header_recognized`` is then False and ``save`` refuses, so such
+rows are never removed (F-11 review M-1).
 
-Comparison rules, kept from the pre-P2-2 dialog (a file may hold identical rows):
+``has_changes`` compares the entries, in order and by value, with those loaded
+or last saved; hidden rows and the filter do not count, and an add undone by a
+delete is no change (F-11 D3). The dialog writes and asks only after a change.
 
-* the selection is restored by equality: the first visible entry equal to the
-  previous one wins;
-* ``replace`` swaps the full-list item that *is* the visible entry (identity);
-* ``remove`` removes the first full-list entry *equal* to the visible one;
+Comparison rules (a file may hold identical rows):
+
+* ``replace`` and ``remove`` act on the full-list item that *is* the visible
+  entry (identity; ``remove`` took the first *equal* one before F-11, P2-2 Q4);
+* after ``add`` and ``replace`` the new entry is selected by identity; after
+  ``remove`` and a filter change the selection is restored by equality, the
+  first visible entry equal to the previous one winning (as the golden trace
+  records);
 * the duplicate check compares ``text`` exactly (case-sensitive) over every
-  row, entries hidden by the filter and preserved rows included, and excludes
-  the edited entry by identity.
+  entry, entries hidden by the filter included, preserved rows not (F-11 D2),
+  and excludes the edited entry by identity; an edit that keeps the edited
+  entry's own text is never a duplicate (F-11 D9).
 """
 
 from __future__ import annotations
@@ -32,8 +45,10 @@ from pathlib import Path
 from dictionaries.entries import (
 	ENTRY_TYPE_LABELS,
 	DictionaryEntry,
+	DictionaryLayout,
 	DictionaryRow,
-	load_dictionary_rows,
+	PreservedDictionaryRow,
+	load_dictionary_file,
 	save_dictionary_entries,
 )
 
@@ -57,19 +72,58 @@ class EntryListUpdate:
 class DictionaryEntryListModel:
 	"""Full list, filter and visible list of one dictionary CSV."""
 
-	def __init__(self, rows: Iterable[DictionaryRow] = ()) -> None:
+	def __init__(
+		self,
+		rows: Iterable[DictionaryRow] = (),
+		layout: DictionaryLayout = DictionaryLayout(),
+		*,
+		header_recognized: bool = True,
+	) -> None:
 		self._rows: list[DictionaryRow] = list(rows)
+		self._layout = layout
+		self._header_recognized = header_recognized
 		self._filter_text = ""
 		self._visible: list[DictionaryEntry] = list(self._entries)
+		self._loaded_entries = self._copy_of_entries()
 
 	@classmethod
 	def load(cls, path: Path) -> DictionaryEntryListModel:
-		"""Read every row of ``path`` with ``load_dictionary_rows``; errors propagate."""
-		return cls(load_dictionary_rows(path))
+		"""Read every row of ``path`` and its layout with ``load_dictionary_file``; errors propagate."""
+		loaded = load_dictionary_file(path)
+		return cls(loaded.rows, loaded.layout, header_recognized=loaded.header_recognized)
 
 	def save(self, path: Path) -> None:
-		"""Write every row (preserved rows unchanged, in place); errors propagate."""
-		save_dictionary_entries(path, self._rows)
+		"""Write the entries with the layout of the loaded file; errors propagate.
+
+		The hidden rows are not written (F-11 D1); after a successful write the model
+		holds the entries only. After an error the hidden rows are still there. Raises
+		``ValueError`` without writing when the header is not recognized (F-11 review M-1).
+		"""
+		if not self._header_recognized:
+			raise ValueError("the header of the dictionary names no text column")
+		entries = self._entries
+		save_dictionary_entries(path, entries, self._layout)
+		self._rows = list(entries)
+		self._loaded_entries = self._copy_of_entries()
+
+	def has_changes(self) -> bool:
+		"""Whether the entries, in order, differ by value from those loaded or last saved (F-11 D3)."""
+		return self._entries != self._loaded_entries
+
+	def _copy_of_entries(self) -> list[DictionaryEntry]:
+		# Copies, so that an entry changed in place later cannot hide a change.
+		return [DictionaryEntry(entry.text, entry.braille, entry.entry_type) for entry in self._entries]
+
+	@property
+	def header_recognized(self) -> bool:
+		"""Whether the loaded file's header names a ``text`` column, or no row is hidden
+		(``LoadedDictionary.header_recognized``); True for a model built from rows."""
+		return self._header_recognized
+
+	@property
+	def hidden_rows(self) -> tuple[PreservedDictionaryRow, ...]:
+		"""The rows the editor does not show, in file order (F-11 D1)."""
+		return tuple(row for row in self._rows if isinstance(row, PreservedDictionaryRow))
 
 	@property
 	def _entries(self) -> list[DictionaryEntry]:
@@ -117,14 +171,21 @@ class DictionaryEntryListModel:
 		return normalized_filter in entry.text.casefold() or normalized_filter in entry.braille.casefold()
 
 	def source_text_exists(self, text: str, exclude_entry: DictionaryEntry | None = None) -> bool:
-		"""Whether a row other than ``exclude_entry`` has exactly this source text.
+		"""Whether an entry other than ``exclude_entry`` has exactly this source text.
 
-		Preserved rows compare their raw, unstripped text (the source R3 uses), so a
-		hidden ``"x "`` does not block ``"x"``. Callers pass a validated entry: an
-		empty ``text`` would match a preserved blank-text row, but the entry dialog
-		strips and requires a source text, so no UI path reaches that case.
+		Preserved rows do not count: OK lists them before removing them (F-11 D1, D2).
 		"""
-		return any(row.text == text and row is not exclude_entry for row in self._rows)
+		return any(entry.text == text and entry is not exclude_entry for entry in self._entries)
+
+	def is_duplicate(self, text: str, editing: DictionaryEntry | None = None) -> bool:
+		"""Whether adding (``editing`` None) or editing ``editing`` to ``text`` duplicates a row.
+
+		An edit that keeps the entry's own text adds no duplicate, even when an identical
+		row exists (F-11 D9).
+		"""
+		if editing is not None and text == editing.text:
+			return False
+		return self.source_text_exists(text, exclude_entry=editing)
 
 	def apply_filter(self, filter_text: str, selected_index: int | None = None) -> EntryListUpdate:
 		preferred_entry = self.visible_entry(selected_index)
@@ -140,22 +201,27 @@ class DictionaryEntryListModel:
 		if filter_cleared:
 			self._filter_text = ""
 		self._refilter()
-		return EntryListUpdate(self._selection_after(entry, 0), filter_cleared=filter_cleared)
+		return EntryListUpdate(self._selection_after(entry, 0, by_identity=True), filter_cleared=filter_cleared)
 
 	def replace(self, visible_index: int, entry: DictionaryEntry) -> EntryListUpdate:
 		current_entry = self._visible_at(visible_index)
-		if self.source_text_exists(entry.text, exclude_entry=current_entry):
+		if self.is_duplicate(entry.text, editing=current_entry):
 			raise DuplicateEntryError(entry.text)
-		full_index = next(index for index, candidate in enumerate(self._rows) if candidate is current_entry)
+		full_index = self._full_index(current_entry)
+		entry.fields = current_entry.fields
 		self._rows[full_index] = entry
 		self._refilter()
-		return EntryListUpdate(self._selection_after(entry, visible_index))
+		return EntryListUpdate(self._selection_after(entry, visible_index, by_identity=True))
 
 	def remove(self, visible_index: int) -> EntryListUpdate:
 		current_entry = self._visible_at(visible_index)
-		self._rows.remove(current_entry)
+		del self._rows[self._full_index(current_entry)]
 		self._refilter()
 		return EntryListUpdate(self._selection_after(current_entry, visible_index))
+
+	def _full_index(self, entry: DictionaryEntry) -> int:
+		"""The full-list position of the row that *is* ``entry`` (F-11 D9)."""
+		return next(index for index, candidate in enumerate(self._rows) if candidate is entry)
 
 	def _visible_at(self, index: int) -> DictionaryEntry:
 		if index < 0 or index >= len(self._visible):
@@ -168,13 +234,22 @@ class DictionaryEntryListModel:
 		else:
 			self._visible = list(self._entries)
 
-	def _selection_after(self, preferred_entry: DictionaryEntry | None, fallback_index: int) -> int | None:
+	def _selection_after(
+		self,
+		preferred_entry: DictionaryEntry | None,
+		fallback_index: int,
+		*,
+		by_identity: bool = False,
+	) -> int | None:
 		if not self._visible:
 			return None
 		index = min(fallback_index, len(self._visible) - 1)
 		if preferred_entry is not None:
-			try:
-				index = self._visible.index(preferred_entry)
-			except ValueError:
-				pass
+			if by_identity:
+				index = next((position for position, entry in enumerate(self._visible) if entry is preferred_entry), index)
+			else:
+				try:
+					index = self._visible.index(preferred_entry)
+				except ValueError:
+					pass
 		return index

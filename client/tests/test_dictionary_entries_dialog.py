@@ -133,6 +133,42 @@ def _duplicate_message(identifier: str) -> str:
     return "\u4f86\u6e90\u6587\u5b57\u300c" + identifier + "\u300d\u5df2\u5b58\u5728\u3002"
 
 
+# zh_TW texts of the box that lists the hidden rows on OK (F-11 D1).
+REMOVE_ROWS_TITLE = "\u79fb\u9664\u7121\u6cd5\u986f\u793a\u7684\u5217"  # Remove Rows That Cannot Be Shown
+REMOVE_AND_SAVE = "\u79fb\u9664\u4e26\u5132\u5b58(&S)"  # Remove and &Save
+BACK_TO_EDITING = "\u8fd4\u56de\u7de8\u8f2f(&B)"  # &Back to Editing
+
+
+def _hidden_rows_message(name: str, *lines: str) -> str:
+    return (
+        "\u5b57\u5178\u300c" + name + "\u300d\u4e2d\u6709\u4e9b\u5217\u7121\u6cd5\u5728\u7de8\u8f2f\u5668\u4e2d\u986f\u793a\uff0c\u5132\u5b58\u6642\u6703\u5f9e\u6a94\u6848\u4e2d\u79fb\u9664\uff1a\n\n"
+        + "\n".join(lines)
+        + "\n\n\u8981\u79fb\u9664\u9019\u4e9b\u5217\u4e26\u5132\u5b58\u5b57\u5178\u55ce\uff1f"
+    )
+
+
+def _no_source_text(line: int) -> str:
+    return f"\u7b2c {line} \u5217\uff1a\u6c92\u6709\u4f86\u6e90\u6587\u5b57"
+
+
+def _invalid_bopomofo(line: int, text: str, bopomofo: str) -> str:
+    return f"\u7b2c {line} \u5217\uff1a\u300c{text}\u300d\u7684\u6ce8\u97f3\u300c{bopomofo}\u300d\u683c\u5f0f\u4e0d\u6b63\u78ba"
+
+
+def _hidden_rows_box(name: str, *lines: str) -> list:
+    return ["ConfirmBox", _hidden_rows_message(name, *lines), REMOVE_ROWS_TITLE, REMOVE_AND_SAVE, BACK_TO_EDITING]
+
+
+def _discard_box(name: str) -> list:
+    """The box Cancel, Esc and the close box show after a change (F-11 D7)."""
+    return ["ConfirmBox", "\u8981\u653e\u68c4\u5c0d\u5b57\u5178\u300c" + name + "\u300d\u6240\u505a\u7684\u8b8a\u66f4\u55ce\uff1f", "\u5c1a\u672a\u5132\u5b58\u7684\u8b8a\u66f4", "\u653e\u68c4\u8b8a\u66f4(&D)", BACK_TO_EDITING]
+
+
+def _unrecognized_header_box(name: str) -> list:
+    """The error OK shows for a file whose header names no text column (F-11 review M-1)."""
+    return ["MessageBox", "\u7121\u6cd5\u5132\u5b58\u5b57\u5178\u300c" + name + "\u300d\uff1a\u7121\u6cd5\u8fa8\u8b58\u6a94\u6848\u7684\u8868\u982d\u3002\u6a94\u6848\u7684\u7b2c\u4e00\u5217\u5fc5\u9808\u5305\u542b text\u3001braille \u8207 type \u8868\u982d\u3002", ERROR_TITLE, ERROR_FLAGS]
+
+
 def _entry_fields(entry: DictionaryEntry | None) -> list[str] | None:
     if entry is None:
         return None
@@ -160,6 +196,10 @@ class _FakeControl:
     def Bind(self, event: str, handler) -> None:
         self._harness.record("Bind", self.name, event)
         self.bindings.append((event, handler))
+
+    def SetFocus(self) -> None:
+        self._harness.record("SetFocus", self.name)
+        self._harness.focus = self
 
     def fire(self, event_type: str) -> bool:
         """Call every handler bound to ``event_type``; return whether one called ``Skip``."""
@@ -251,9 +291,18 @@ class _FakeSizer:
 
 
 class _ScriptedEntryDialog:
-    def __init__(self, result: int, entry: DictionaryEntry | None) -> None:
-        self._result = result
-        self._entry = entry
+    """The entry dialog: each OK takes the next scripted answer.
+
+    Like ``AddSymbolDialog._on_ok`` (F-11 D8), an answer whose source text the editor's
+    ``is_duplicate`` reports shows the duplicate message with the entry dialog as parent
+    and keeps the dialog open: the next scripted answer follows (the user fixes the text,
+    or cancels); with none left, the user cancels.
+    """
+
+    def __init__(self, harness: '_EditorHarness', is_duplicate) -> None:
+        self._harness = harness
+        self._is_duplicate = is_duplicate
+        self._entry = None
 
     def __enter__(self) -> '_ScriptedEntryDialog':
         return self
@@ -262,10 +311,24 @@ class _ScriptedEntryDialog:
         return None
 
     def ShowModal(self) -> int:
-        return self._result
+        harness = self._harness
+        while harness.script:
+            result, entry = harness.script.pop(0)
+            if result != ID_OK or self._is_duplicate is None or not self._is_duplicate(entry.text):
+                self._entry = entry
+                return result
+            harness.record("MessageBox", _duplicate_message(entry.text), ERROR_TITLE, ERROR_FLAGS)
+            harness.message_box_parents.append(self)
+        return ID_CANCEL
 
     def get_entry(self) -> DictionaryEntry | None:
         return self._entry
+
+
+# What wx.Window.FindFocus returns after a box: a box takes the keyboard focus while it is
+# shown and Windows does not always give it back, so the editor reads the focus before the
+# box (F-11 D7; review M-2 c).
+_BOX_BUTTON = object()
 
 
 def _skip_fsync(_descriptor: int) -> None:
@@ -275,10 +338,11 @@ def _skip_fsync(_descriptor: int) -> None:
 class _EditorHarness:
     """Build the real editor against fake widgets and drive it like a user."""
 
-    def __init__(self, path: Path, on_base_init=None) -> None:
+    def __init__(self, path: Path, on_base_init=None, model=None) -> None:
         self.path = path
         self.parent = object()
         self.on_base_init = on_base_init
+        self.model = model
         self.base_parent = None
         self.log: list[list] = []
         self.buttons: dict[str, _FakeButton] = {}
@@ -290,6 +354,12 @@ class _EditorHarness:
         self.other_dialog_buttons: dict[int, _FakeButton] = {}
         self.script: list[tuple[int, DictionaryEntry | None]] = []
         self.entry_dialog_parents: list[object] = []
+        self.entry_dialogs: list[_ScriptedEntryDialog] = []
+        # The answers of the confirmation boxes (True: the OK button), and their parents (F-11).
+        self.confirm_answers: list[bool] = []
+        self.confirm_parents: list[object] = []
+        # What wx.Window.FindFocus returns; a fake control's SetFocus sets it.
+        self.focus = None
         self.message_box_parents: list[object] = []
         self.dialog = None
         self._stack = ExitStack()
@@ -301,6 +371,7 @@ class _EditorHarness:
             ID_APPLY=5102,
             ID_CLOSE=5103,
             NOT_FOUND=-1,
+            Window=types.SimpleNamespace(FindFocus=lambda: self.focus),
             BoxSizer=lambda _orientation: _FakeSizer(),
             StaticText=self._static_text,
             TextCtrl=self._text_ctrl,
@@ -323,6 +394,7 @@ class _EditorHarness:
             stack.enter_context(patch.object(dialog, "CallbackVirtualListCtrl", self._list_ctrl))
             stack.enter_context(patch.object(dialog, "AddSymbolDialog", self._entry_dialog))
             stack.enter_context(patch.object(dialog, "message_box", self._message_box))
+            stack.enter_context(patch.object(dialog, "confirm_box", self._confirm_box, create=True))
             # Editor tests check the dialog and the saved bytes, not durability: every OK
             # would otherwise wait for a real fsync (40 in the trace replay alone).
             # tests.test_atomic_write keeps the real fsync.
@@ -335,9 +407,13 @@ class _EditorHarness:
             editor.GetParent = lambda: self.parent
             editor.CentreOnParent = lambda: self.record("CentreOnParent")
             editor.Centre = lambda: self.record("Centre")
+            editor.IsDescendant = self._is_descendant
             editor.Destroy = lambda: self.record("Destroy")
             self.dialog = editor
-            editor.__init__(self.parent, dictionary_path=self.path)
+            if self.model is None:
+                editor.__init__(self.parent, dictionary_path=self.path)
+            else:
+                editor.__init__(self.parent, dictionary_path=self.path, model=self.model)
         except BaseException:
             stack.close()
             raise
@@ -392,15 +468,29 @@ class _EditorHarness:
     def _message_box(self, message: str, caption: str, style: int, parent=None) -> int:
         self.record("MessageBox", message, caption, style)
         self.message_box_parents.append(parent)
+        self.focus = _BOX_BUTTON
         return FLAGS.OK
 
-    def _entry_dialog(self, parent, entry: DictionaryEntry | None = None) -> _ScriptedEntryDialog:
+    def _confirm_box(self, message: str, caption: str, ok_label: str, cancel_label: str, parent=None) -> bool:
+        self.record("ConfirmBox", message, caption, ok_label, cancel_label)
+        self.confirm_parents.append(parent)
+        self.focus = _BOX_BUTTON
+        if not self.confirm_answers:
+            raise AssertionError("a confirmation box opened without a scripted answer")
+        return self.confirm_answers.pop(0)
+
+    def _is_descendant(self, window) -> bool:
+        """``wxWindow::IsDescendant``: the editor's own widgets."""
+        return window in (self.ok_button, self.cancel_button, self.filter, self.list, *self.buttons.values())
+
+    def _entry_dialog(self, parent, entry: DictionaryEntry | None = None, *, is_duplicate=None) -> _ScriptedEntryDialog:
         self.record("AddSymbolDialog", _entry_fields(entry))
         self.entry_dialog_parents.append(parent)
         if not self.script:
             raise AssertionError("the entry dialog opened without a scripted result")
-        result, scripted = self.script.pop(0)
-        return _ScriptedEntryDialog(result, scripted)
+        entry_dialog = _ScriptedEntryDialog(self, is_duplicate)
+        self.entry_dialogs.append(entry_dialog)
+        return entry_dialog
 
     # recording
 
@@ -419,6 +509,10 @@ class _EditorHarness:
 
     def script_cancel(self) -> None:
         self.script.append((ID_CANCEL, None))
+
+    def script_confirm(self, answer: bool) -> None:
+        """The next confirmation box returns ``answer`` (True: its OK button)."""
+        self.confirm_answers.append(answer)
 
     def type_filter(self, text: str) -> bool:
         self.filter.value = text
@@ -441,6 +535,10 @@ class _EditorHarness:
 
     def press_ok(self) -> bool:
         return self.ok_button.fire("EVT_BUTTON")
+
+    def press_cancel(self) -> bool:
+        """Cancel; wx turns Esc and the close box into this click as well."""
+        return self.cancel_button.fire("EVT_BUTTON")
 
     # observations
 
@@ -488,11 +586,11 @@ class _EditorTestCase(unittest.TestCase):
         self.addCleanup(temp_dir.cleanup)
         return Path(temp_dir.name) / name
 
-    def open_editor(self, rows=(), *, path=None, data=None, on_base_init=None, keep_log=False) -> _EditorHarness:
+    def open_editor(self, rows=(), *, path=None, data=None, on_base_init=None, keep_log=False, model=None) -> _EditorHarness:
         """Write ``rows`` (or the raw ``data``) to a new CSV and open the editor on it.
 
         ``rows=None`` leaves the file missing. The construction log is dropped
-        unless ``keep_log`` is set.
+        unless ``keep_log`` is set. ``model`` is passed to the editor (F-11 D12).
         """
         if path is None:
             path = self.make_path()
@@ -500,7 +598,7 @@ class _EditorTestCase(unittest.TestCase):
                 path.write_bytes(data)
             elif rows is not None:
                 _write_rows(path, rows)
-        harness = _EditorHarness(path, on_base_init=on_base_init)
+        harness = _EditorHarness(path, on_base_init=on_base_init, model=model)
         harness.open()
         self.addCleanup(harness.close)
         if not keep_log:
@@ -792,6 +890,7 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
                 ["SetLabel", "ok", "\u78ba\u5b9a"],
                 ["SetLabel", "cancel", "\u53d6\u6d88"],
                 ["Bind", "ok", "EVT_BUTTON"],
+                ["Bind", "cancel", "EVT_BUTTON"],
                 ["SetSizerAndFit"],
                 ["CentreOnParent"],
                 ["SetItemCount", 2],
@@ -806,12 +905,46 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
         )
         self.assertIs(harness.base_parent, harness.parent)
 
-    def test_native_dialog_exists_before_the_dictionary_is_read(self) -> None:
+    def test_the_dictionary_is_read_before_the_native_dialog_exists(self) -> None:
+        # F-11 (D12, F-6 review M-5): the native dialog was created first. The rows written
+        # while it is created are not read now; the file was read before.
         path = self.make_path()
 
         harness = self.open_editor(path=path, on_base_init=lambda: _write_rows(path, [ALPHA]))
 
-        self.assertEqual(harness.rows(), [ALPHA_CELLS])
+        self.assertEqual(harness.rows(), [])
+
+    def test_a_given_model_is_shown_without_reading_the_file(self) -> None:
+        # The frame reads the file itself and passes the model (F-11 D12).
+        path = self.make_path()
+        path.write_bytes(b"text,braille,type\r\n\xff\xfe,x,General\r\n")
+        model = DictionaryEntryListModel([DictionaryEntry(*ALPHA), DictionaryEntry(*BETA)])
+
+        harness = self.open_editor(path=path, model=model)
+
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS])
+        self.assertIs(harness.dialog._model, model)
+
+    def test_a_failure_while_building_destroys_the_dialog_and_propagates(self) -> None:
+        # F-6 review M-5: a half-built dialog stayed behind as a hidden child of the frame.
+        path = self.make_path()
+        _write_rows(path, [ALPHA])
+        harness = _EditorHarness(path)
+        error = RuntimeError("injected")
+
+        def failing_list_ctrl(*_args, **_kwargs):
+            raise error
+
+        harness._list_ctrl = failing_list_ctrl
+
+        with self.assertRaises(RuntimeError) as raised:
+            harness.open()
+
+        log = harness.take_log()
+        self.assertIs(raised.exception, error)
+        self.assertEqual(log[0], ["Dialog.__init__", TITLE, DIALOG_STYLE])
+        self.assertEqual([event for event in log if event == ["Destroy"]], [["Destroy"]])
+        self.assertEqual(log[-1], ["Destroy"])
 
     def test_empty_dictionary_shows_no_rows_and_disables_edit_and_delete(self) -> None:
         harness = self.open_editor([], keep_log=True)
@@ -837,9 +970,9 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
         self.assertEqual(harness.rows(), [])
         self.assertFalse(harness.path.exists())
 
-    def test_invalid_utf8_raises_from_the_constructor_after_the_native_dialog(self) -> None:
-        # KNOWN BUG (P2-2 spec, Q8), pinned as it is today, NOT desired: the load error
-        # escapes the constructor after the native dialog was created; nothing destroys it.
+    def test_invalid_utf8_raises_from_the_constructor_before_the_native_dialog(self) -> None:
+        # Was the P2-2 Q8 KNOWN BUG: the load error escaped the constructor after the native
+        # dialog was created, and nothing destroyed it. Fixed by F-11 (D12).
         path = self.make_path()
         path.write_bytes(b"text,braille,type\r\n\xff\xfe,x,General\r\n")
         harness = _EditorHarness(path)
@@ -847,25 +980,43 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
         with self.assertRaises(UnicodeDecodeError):
             harness.open()
 
-        self.assertEqual(harness.take_log(), [["Dialog.__init__", TITLE, DIALOG_STYLE]])
+        self.assertEqual(harness.take_log(), [])
 
-    def test_bom_dictionary_opens_with_its_rows_and_ok_saves_them_without_the_bom(self) -> None:
+    def test_bom_dictionary_opens_with_its_rows_and_ok_after_a_change_keeps_the_bom(self) -> None:
         # Was the P2-2 Q1 KNOWN BUG (data loss), fixed by F-2: the BOM made the header
-        # "\ufefftext", the editor showed no rows and OK wrote the header only.
+        # "\ufefftext", the editor showed no rows and OK wrote the header only. Since F-11
+        # (D5) the BOM is kept (F-2 to F-9 wrote the file without it).
         harness = self.open_editor(data=b"\xef\xbb\xbftext,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\n")
+        harness.script_entry(*BETA)
+        harness.click("Add")
 
-        self.assertEqual(harness.rows(), [ALPHA_CELLS])
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS])
         self.assertTrue(harness.press_ok())
-        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\n")
-        self.assertFalse(harness.path.read_bytes().startswith(b"\xef\xbb\xbf"))
+        self.assertEqual(harness.saved_csv(), "\ufeff" + HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
 
-    def test_only_ok_gets_a_handler_and_both_standard_buttons_are_localized(self) -> None:
+    def test_ok_after_a_change_keeps_the_header_and_the_extra_columns(self) -> None:
+        # F-11 (D5): "note" was dropped. The edited row keeps its note (O5), the new one has none.
+        data = "text,note,braille,type\r\nAlpha,first,\u2801,General\r\nBeta,second,\u2803,General\r\n".encode("utf-8")
+        harness = self.open_editor(data=data)
+        harness.select(1)
+        harness.script_entry("Beta", "\u2803\u2803")
+        harness.click("Edit")
+        harness.script_entry("Gamma", "\u281b", "Braille")
+        harness.click("Add")
+
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(
+            harness.saved_csv(),
+            "text,note,braille,type\r\nAlpha,first,\u2801,General\r\nBeta,second,\u2803\u2803,General\r\nGamma,,\u281b,Braille\r\n",
+        )
+
+    def test_ok_and_cancel_get_handlers_and_both_standard_buttons_are_localized(self) -> None:
+        # Was the P2-2 Q5 KNOWN BUG: Cancel had no handler of its own, so it discarded every
+        # edit without asking. F-11 (D7) asks after a change.
         harness = self.open_editor([ALPHA])
 
         self.assertEqual([event for event, _handler in harness.ok_button.bindings], ["EVT_BUTTON"])
-        # KNOWN BUG (P2-2 spec, Q5), pinned as it is today, NOT desired: Cancel has no
-        # handler of its own, so it discards every edit without asking.
-        self.assertEqual(harness.cancel_button.bindings, [])
+        self.assertEqual([event for event, _handler in harness.cancel_button.bindings], ["EVT_BUTTON"])
         self.assertEqual(harness.ok_button.label, "\u78ba\u5b9a")
         self.assertEqual(harness.cancel_button.label, "\u53d6\u6d88")
 
@@ -1028,12 +1179,15 @@ class DictionaryEntriesDialogAddTest(_EditorTestCase):
         self.assertEqual(harness.state(), before)
         self.assertEqual(harness.entry_dialog_parents, [harness.dialog])
 
-    def test_duplicate_of_a_hidden_entry_is_rejected_with_the_exact_message(self) -> None:
+    def test_duplicate_of_a_hidden_entry_is_reported_in_the_entry_dialog_which_stays_open(self) -> None:
+        # Was the P2-2 Q6 KNOWN BUG: the entry dialog closed, then the editor showed the
+        # message and the typed entry was lost. Fixed by F-11 (D8): the entry dialog shows
+        # it and stays open with the input, so the user can change the text.
         harness = self.open_editor([ALPHA, BETA])
         harness.type_filter("bet")
-        before = harness.state()
         harness.take_log()
         harness.script_entry("Alpha", "\u281b", "Braille")
+        harness.script_entry("Gamma", "\u281b", "Braille")
 
         harness.click("Add")
 
@@ -1042,13 +1196,35 @@ class DictionaryEntriesDialogAddTest(_EditorTestCase):
             [
                 ["AddSymbolDialog", None],
                 ["MessageBox", _duplicate_message("Alpha"), ERROR_TITLE, ERROR_FLAGS],
+                ["ChangeValue", ""],
+                ["SetItemCount", 3],
+                ["Refresh"],
+                ["Select", 0, False],
+                ["Select", 2, True],
+                ["Focus", 2],
+                ["Enable", EDIT, True],
+                ["Enable", DELETE, True],
             ],
         )
-        self.assertEqual(harness.message_box_parents, [harness.dialog])
-        # KNOWN BUG (P2-2 spec, Q6), pinned as it is today, NOT desired: the typed entry
-        # is discarded; the entry dialog is not opened again.
-        self.assertEqual(harness.state(), before)
+        self.assertEqual(harness.message_box_parents, harness.entry_dialogs)
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS, ["Gamma", "\u281b", UNICODE_BRAILLE]])
         self.assertEqual(harness.script, [])
+
+    def test_duplicate_then_cancel_in_the_entry_dialog_changes_nothing(self) -> None:
+        harness = self.open_editor([ALPHA, BETA])
+        harness.type_filter("bet")
+        before = harness.state()
+        harness.take_log()
+        harness.script_entry("Alpha", "\u281b", "Braille")
+        harness.script_cancel()
+
+        harness.click("Add")
+
+        self.assertEqual(
+            harness.take_log(),
+            [["AddSymbolDialog", None], ["MessageBox", _duplicate_message("Alpha"), ERROR_TITLE, ERROR_FLAGS]],
+        )
+        self.assertEqual(harness.state(), before)
 
     def test_case_different_source_text_is_accepted(self) -> None:
         harness = self.open_editor([ALPHA])
@@ -1119,6 +1295,19 @@ class DictionaryEntriesDialogAddTest(_EditorTestCase):
 
 
 class DictionaryEntriesDialogEditTest(_EditorTestCase):
+    def test_the_entry_dialog_gets_the_duplicate_check_of_the_model(self) -> None:
+        # F-11 (D8, D9): an Add checks every entry; an Edit excludes the edited one.
+        harness = self.open_editor([ALPHA, BETA])
+        harness.select(1)
+        harness.script_cancel()
+        harness.click("Edit")
+        harness.script_cancel()
+        harness.click("Add")
+
+        edit_check, add_check = (entry_dialog._is_duplicate for entry_dialog in harness.entry_dialogs)
+        self.assertEqual([edit_check(text) for text in ("Alpha", "Beta", "Gamma")], [True, False, False])
+        self.assertEqual([add_check(text) for text in ("Alpha", "Beta", "Gamma")], [True, True, False])
+
     def test_edit_button_opens_the_selected_entry(self) -> None:
         harness = self.open_editor([ALPHA, BETA])
         harness.select(1)
@@ -1183,46 +1372,44 @@ class DictionaryEntriesDialogEditTest(_EditorTestCase):
         self.assertEqual(harness.rows(), [["Alpha", "\u2801\u2801", UNICODE_BRAILLE], BETA_CELLS])
         self.assertEqual(harness.list.selected, 0)
 
-    def test_duplicate_is_rejected_with_the_exact_message_and_nothing_changes(self) -> None:
+    def test_duplicate_is_reported_in_the_entry_dialog_and_a_changed_text_is_accepted(self) -> None:
+        # Was the P2-2 Q6 KNOWN BUG (the typed entry was discarded); fixed by F-11 (D8).
         harness = self.open_editor([ALPHA, BETA])
         harness.select(1)
-        before = harness.state()
         harness.take_log()
         harness.script_entry("Alpha", "\u2803")
+        harness.script_entry("Bravo", "\u2803")
 
         harness.click("Edit")
 
         self.assertEqual(
-            harness.take_log(),
+            harness.take_log()[:2],
             [
                 ["AddSymbolDialog", BETA],
                 ["MessageBox", _duplicate_message("Alpha"), ERROR_TITLE, ERROR_FLAGS],
             ],
         )
-        self.assertEqual(harness.message_box_parents, [harness.dialog])
-        # KNOWN BUG (P2-2 spec, Q6), pinned as it is today, NOT desired: the typed entry is discarded.
-        self.assertEqual(harness.state(), before)
+        self.assertEqual(harness.message_box_parents, harness.entry_dialogs)
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, ["Bravo", "\u2803", GENERAL]])
+        self.assertEqual(harness.list.selected, 1)
 
-    def test_identical_rows_edit_replaces_the_selected_row_but_cannot_keep_its_text(self) -> None:
+    def test_identical_rows_edit_of_the_selected_row_can_keep_its_text(self) -> None:
+        # Was the P2-2 Q4 KNOWN BUG (first half): the other identical row made its own text
+        # a duplicate. Fixed by F-11 (D9, O6).
         harness = self.open_editor([["a", "\u2801", "General"], BETA, ["a", "\u2801", "General"]])
         harness.select(2)
+        harness.take_log()
         harness.script_entry("a", "\u2803")
 
         harness.click("Edit")
 
-        # KNOWN BUG (P2-2 spec, Q4), pinned as it is today, NOT desired: the other
-        # identical row makes its own text a duplicate.
-        self.assertEqual(harness.take_log()[-1], ["MessageBox", _duplicate_message("a"), ERROR_TITLE, ERROR_FLAGS])
-        harness.script_entry("c", "\u2809")
-
-        harness.click("Edit")
-
-        self.assertEqual(harness.rows(), [["a", "\u2801", GENERAL], BETA_CELLS, ["c", "\u2809", GENERAL]])
+        self.assertNotIn("MessageBox", [event[0] for event in harness.take_log()])
+        self.assertEqual(harness.rows(), [["a", "\u2801", GENERAL], BETA_CELLS, ["a", "\u2803", GENERAL]])
         self.assertEqual(harness.list.selected, 2)
         self.assertTrue(harness.press_ok())
         self.assertEqual(
             harness.saved_csv(),
-            HEADER + "a,\u2801,General\r\nBeta,\u2803,General\r\nc,\u2809,General\r\n",
+            HEADER + "a,\u2801,General\r\nBeta,\u2803,General\r\na,\u2803,General\r\n",
         )
 
     def test_filter_is_kept_and_a_hidden_result_selects_the_same_index_clamped(self) -> None:
@@ -1258,7 +1445,7 @@ class DictionaryEntriesDialogDeleteTest(_EditorTestCase):
 
         harness.click("Delete")
 
-        # KNOWN BUG (P2-2 spec, Q5), pinned as it is today, NOT desired: no confirmation.
+        # No confirmation: a wrong delete is undone with Cancel and Discard Changes (F-11, U3.2).
         self.assertEqual(
             harness.take_log(),
             [
@@ -1301,24 +1488,121 @@ class DictionaryEntriesDialogDeleteTest(_EditorTestCase):
         self.assertEqual(harness.take_log(), [])
         self.assertEqual(harness.rows(), [ALPHA_CELLS])
 
-    def test_identical_rows_delete_removes_the_first_equal_row(self) -> None:
-        harness = self.open_editor([["a", "\u2801", "General"], BETA, ["a", "\u2801", "Braille"], ["a", "\u2801", "General"]])
+    def test_identical_rows_delete_removes_the_selected_row(self) -> None:
+        # Was the P2-2 Q4 KNOWN BUG (second half): the first equal row went, not the selected
+        # one. Fixed by F-11 (D9); the remaining equal row gets the selection, as before.
+        data = (HEADER + "a,\u2801,General,first\r\nBeta,\u2803,General,\r\na,\u2801,Braille,\r\na,\u2801,General,fourth\r\n")
+        harness = self.open_editor(data=data.replace(HEADER, "text,braille,type,note\r\n").encode("utf-8"))
         harness.select(3)
 
         harness.click("Delete")
 
-        # KNOWN BUG (P2-2 spec, Q4), pinned as it is today, NOT desired: the first equal
-        # row goes, not the selected one; the remaining equal row gets the selection.
         self.assertEqual(
             harness.rows(),
-            [BETA_CELLS, ["a", "\u2801", UNICODE_BRAILLE], ["a", "\u2801", GENERAL]],
+            [["a", "\u2801", GENERAL], BETA_CELLS, ["a", "\u2801", UNICODE_BRAILLE]],
         )
-        self.assertEqual(harness.list.selected, 2)
+        self.assertEqual(harness.list.selected, 0)
         self.assertTrue(harness.press_ok())
         self.assertEqual(
             harness.saved_csv(),
-            HEADER + "Beta,\u2803,General\r\na,\u2801,Braille\r\na,\u2801,General\r\n",
+            "text,braille,type,note\r\na,\u2801,General,first\r\nBeta,\u2803,General,\r\na,\u2801,Braille,\r\n",
         )
+
+
+class DictionaryEntriesDialogChangesTest(_EditorTestCase):
+    """OK writes only after a change; Cancel, Esc and the close box ask only after one
+    (F-11 D3, D4, D7; P2-2 Q2, Q5)."""
+
+    def test_ok_without_a_change_writes_nothing(self) -> None:
+        # Was the P2-2 Q2 KNOWN BUG: OK always rewrote the file (no BOM, extra columns lost).
+        data = b"\xef\xbb\xbftext,note,braille,type\r\n Alpha ,first,\xe2\xa0\x81,Custom\r\n"
+        harness = self.open_editor(data=data)
+        before = os.stat(harness.path).st_mtime_ns
+        harness.type_filter("alp")
+        harness.take_log()
+
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [["Skip"]])
+        self.assertEqual(harness.path.read_bytes(), data)
+        self.assertEqual(os.stat(harness.path).st_mtime_ns, before)
+
+    def test_ok_without_a_change_does_not_create_a_missing_file(self) -> None:
+        # O11: OK used to create a dictionary deleted after Dictionary Management listed it.
+        harness = self.open_editor(None)
+
+        self.assertTrue(harness.press_ok())
+
+        self.assertFalse(harness.path.exists())
+
+    def test_an_add_undone_by_a_delete_is_no_change(self) -> None:
+        harness = self.open_editor([ALPHA])
+        original = harness.path.read_bytes()
+        harness.script_entry(*BETA)
+        harness.click("Add")
+        harness.click("Delete")
+        harness.take_log()
+
+        self.assertTrue(harness.press_cancel())
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [["Skip"], ["Skip"]])
+        self.assertEqual(harness.path.read_bytes(), original)
+
+    def test_cancel_without_a_change_closes_without_asking(self) -> None:
+        # Hidden rows are not unsaved changes (U3.1).
+        for name, data in (("plain", "text,braille,type\r\nAlpha,\u2801,General\r\n".encode("utf-8")), ("hidden rows", DICT_BADBOPO)):
+            with self.subTest(name):
+                harness = self.open_editor(data=data)
+                harness.type_filter("x")
+                harness.take_log()
+
+                self.assertTrue(harness.press_cancel())
+
+                self.assertEqual(harness.take_log(), [["Skip"]])
+                self.assertEqual(harness.path.read_bytes(), data)
+
+    def test_cancel_after_a_change_asks_and_discard_closes_without_writing(self) -> None:
+        harness = self.open_editor([ALPHA])
+        original = harness.path.read_bytes()
+        harness.script_entry(*BETA)
+        harness.click("Add")
+        harness.take_log()
+        harness.script_confirm(True)
+
+        self.assertTrue(harness.press_cancel())
+
+        self.assertEqual(harness.take_log(), [_discard_box("dictionary"), ["Skip"]])
+        self.assertEqual(harness.confirm_parents, [harness.dialog])
+        self.assertEqual(harness.path.read_bytes(), original)
+
+    def test_back_to_editing_keeps_the_editor_and_the_change_and_puts_the_focus_back(self) -> None:
+        harness = self.open_editor([ALPHA])
+        harness.select(0)
+        harness.click("Delete")
+        harness.focus = harness.list
+        harness.take_log()
+        harness.script_confirm(False)
+
+        self.assertFalse(harness.press_cancel())
+
+        self.assertEqual(harness.take_log(), [_discard_box("dictionary"), ["SetFocus", "ListCtrl"]])
+        self.assertEqual(harness.rows(), [])
+        harness.script_confirm(True)
+        self.assertTrue(harness.press_cancel())
+
+    def test_ok_after_back_to_editing_writes_the_change(self) -> None:
+        harness = self.open_editor([ALPHA])
+        harness.script_entry(*BETA)
+        harness.click("Add")
+        harness.script_confirm(False)
+        harness.press_cancel()
+        harness.take_log()
+
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [["Skip"]])
+        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
 
 
 class DictionaryEntriesDialogOkTest(_EditorTestCase):
@@ -1345,11 +1629,11 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
             HEADER + "Beta,\u2803,General\r\nAlpha,\u2801,General\r\nGamma,\u281b,Braille\r\n",
         )
 
-    def test_unchanged_dictionary_keeps_hidden_rows_and_is_rewritten_in_normalized_form(self) -> None:
-        # KNOWN BUG (P2-2 spec, Q2), pinned as it is today, NOT desired: OK always
-        # rewrites the file, stripping the shown rows and writing an unknown type as
-        # General. Since F-4 the rows the editor does not show (blank source text,
-        # invalid Bopomofo) are written back unchanged at their place.
+    def test_unchanged_dictionary_with_hidden_rows_asks_and_is_rewritten_without_them(self) -> None:
+        # Was the P2-2 Q2 KNOWN BUG for this file: OK always rewrote it, keeping the hidden
+        # rows since F-4. F-11 (D1, U2.1): with hidden rows the box appears even without a
+        # change; Remove and Save writes the shown entries, stripped and with an unknown
+        # type written as General (U2.2).
         data = (
             "text,braille,type\n"
             " Alpha ,  \u2801 ,General\n"
@@ -1358,13 +1642,18 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
             "Beta,\u2803,Custom\n"
         ).encode("utf-8")
         harness = self.open_editor(data=data)
+        harness.script_confirm(True)
 
         self.assertTrue(harness.press_ok())
 
         self.assertEqual(
-            harness.saved_csv(),
-            HEADER + "Alpha,\u2801,General\r\n,\u2803,General\r\nZhuyin,invalid,Bopomofo\r\nBeta,\u2803,General\r\n",
+            harness.take_log(),
+            [
+                _hidden_rows_box("dictionary", _no_source_text(3), _invalid_bopomofo(4, "Zhuyin", "invalid")),
+                ["Skip"],
+            ],
         )
+        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
 
     def test_missing_parent_directory_is_created(self) -> None:
         path = self.make_path("nested") / "deeper" / "dictionary.csv"
@@ -1422,6 +1711,22 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
         self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS])
         self.assertTrue(harness.press_ok())
         self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
+
+    def test_a_failed_save_puts_the_focus_back_where_it_was_before_the_message(self) -> None:
+        # Without hidden rows too: the focus is read before any box (F-11 D7; review M-2 c).
+        harness = self.open_editor([ALPHA])
+        harness.script_entry("Beta", "\u2803")
+        harness.click("Add")
+        harness.focus = harness.ok_button
+        harness.take_log()
+
+        with patch("os.replace", side_effect=PermissionError(13, "denied")):
+            self.assertFalse(harness.press_ok())
+
+        self.assertEqual(
+            harness.take_log(),
+            [["MessageBox", "\u5132\u5b58\u5931\u6557\uff1a[Errno 13] denied", ERROR_TITLE, ERROR_FLAGS], ["SetFocus", "ok"]],
+        )
 
     def test_dictionary_without_write_access_shows_the_message_and_keeps_the_file(self) -> None:
         # A read-only dictionary failed in the old in-place open("w"); the atomic save
@@ -1484,41 +1789,233 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
 
 
 class DictionaryEntriesDialogHiddenRowsTest(_EditorTestCase):
-    """Rows the editor cannot show are kept, hidden, through OK (F-4, F-W11)."""
+    """Rows the editor cannot show stay hidden; OK lists them and removes them only when the
+    user agrees (F-11 D1). F-4 kept them through OK (F-W11); before F-4, OK dropped them
+    without a word."""
 
-    def test_invalid_bopomofo_rows_are_hidden_and_ok_keeps_the_file_byte_identical(self) -> None:
-        # F-W11: OK used to delete the two Bopomofo rows the editor cannot show (4 lines -> 2).
+    BADBOPO_BOX = _hidden_rows_box(
+        "dictionary",
+        _invalid_bopomofo(3, "\u809a\u5b50", "\u3109\u3128\u02cb|\u3117\u02d9"),
+        _invalid_bopomofo(4, "\u6578\u5b78", "\u3115\u3128\u02cb \u3112\u3129\u311d\u02ca"),
+    )
+
+    def test_ok_lists_the_hidden_rows_and_remove_and_save_writes_the_shown_entries(self) -> None:
         harness = self.open_editor(data=DICT_BADBOPO)
-
         self.assertEqual(harness.rows(), [TAIPEI_CELLS])
+        harness.take_log()
+        harness.script_confirm(True)
+
         self.assertTrue(harness.press_ok())
 
-        self.assertEqual(harness.path.read_bytes(), DICT_BADBOPO)
+        self.assertEqual(harness.take_log(), [self.BADBOPO_BOX, ["Skip"]])
+        self.assertEqual(harness.confirm_parents, [harness.dialog])
+        self.assertEqual(harness.saved_csv(), HEADER + "\u81fa\u5317,\u281e\u283a,Braille\r\n")
         self.assertEqual(_listing(harness.path.parent), ["dictionary.csv"])
 
-    def test_deleting_every_shown_row_keeps_the_hidden_rows(self) -> None:
+    def test_back_to_editing_writes_nothing_and_puts_the_focus_back(self) -> None:
+        harness = self.open_editor(data=DICT_BADBOPO)
+        harness.focus = harness.ok_button
+        harness.take_log()
+        harness.script_confirm(False)
+
+        self.assertFalse(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [self.BADBOPO_BOX, ["SetFocus", "ok"]])
+        self.assertEqual(harness.path.read_bytes(), DICT_BADBOPO)
+        self.assertEqual(harness.rows(), [TAIPEI_CELLS])
+
+    def test_focus_outside_the_editor_is_left_alone(self) -> None:
+        harness = self.open_editor(data=DICT_BADBOPO)
+        harness.focus = object()
+        harness.take_log()
+        harness.script_confirm(False)
+
+        self.assertFalse(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [self.BADBOPO_BOX])
+
+    def test_deleting_every_shown_row_and_removing_the_hidden_ones_leaves_the_header(self) -> None:
         harness = self.open_editor(data=DICT_BADBOPO)
         harness.select(0)
         harness.click("Delete")
+        harness.script_confirm(True)
 
         self.assertEqual(harness.rows(), [])
         self.assertTrue(harness.press_ok())
 
-        self.assertEqual(harness.saved_csv(), HEADER + BADBOPO_HIDDEN_ROWS)
+        self.assertEqual(harness.saved_csv(), HEADER)
 
-    def test_adding_the_source_text_of_a_hidden_row_shows_the_duplicate_message(self) -> None:
+    def test_rows_without_a_source_text_are_listed_by_the_line_their_record_starts_on(self) -> None:
+        # The header is line 1, a blank line counts; whitespace-only text is no source text.
+        data = (HEADER + "Alpha,\u2801,General\r\n\r\n,\u2803,General\r\n\u3000 ,\u2803,General\r\n").encode("utf-8")
+        harness = self.open_editor(data=data)
+        harness.take_log()
+        harness.script_confirm(False)
+
+        harness.press_ok()
+
+        self.assertEqual(harness.take_log(), [_hidden_rows_box("dictionary", _no_source_text(4), _no_source_text(5))])
+
+    def test_a_row_line_shows_the_stripped_source_text_and_sequence(self) -> None:
+        # D1: spaces around the fields are not shown (review M-2 a; the S6 probe's row).
+        data = (HEADER + " \u809a\u5b50 , \u3109\u3128\u02cb|\u3117\u02d9 ,Bopomofo\r\n").encode("utf-8")
+        harness = self.open_editor(data=data)
+        harness.take_log()
+        harness.script_confirm(False)
+
+        harness.press_ok()
+
+        self.assertEqual(
+            harness.take_log(),
+            [_hidden_rows_box("dictionary", _invalid_bopomofo(2, "\u809a\u5b50", "\u3109\u3128\u02cb|\u3117\u02d9"))],
+        )
+
+    def test_at_most_ten_hidden_rows_are_listed(self) -> None:
+        for count, listed, other in ((10, 10, None), (11, 10, "\u53e6\u6709 1 \u5217\u672a\u5217\u51fa"), (13, 10, "\u53e6\u6709 3 \u5217\u672a\u5217\u51fa")):
+            with self.subTest(count=count):
+                data = (HEADER + "Alpha,\u2801,General\r\n" + ",\u2803,General\r\n" * count).encode("utf-8")
+                harness = self.open_editor(data=data)
+                harness.take_log()
+                harness.script_confirm(False)
+
+                harness.press_ok()
+
+                lines = [_no_source_text(line) for line in range(3, 3 + listed)] + ([other] if other else [])
+                self.assertEqual(harness.take_log(), [_hidden_rows_box("dictionary", *lines)])
+
+    def test_a_failed_save_after_remove_and_save_keeps_the_editor_open_and_the_next_ok_asks_again(self) -> None:
+        # O4: the hidden rows are still in the model, so they are listed again.
+        harness = self.open_editor(data=DICT_BADBOPO)
+        harness.focus = harness.ok_button
+        harness.take_log()
+        harness.script_confirm(True)
+
+        with patch("os.replace", side_effect=PermissionError(13, "denied")):
+            skipped = harness.press_ok()
+
+        self.assertFalse(skipped)
+        self.assertEqual(
+            harness.take_log(),
+            [
+                self.BADBOPO_BOX,
+                ["MessageBox", "\u5132\u5b58\u5931\u6557\uff1a[Errno 13] denied", ERROR_TITLE, ERROR_FLAGS],
+                ["SetFocus", "ok"],
+            ],
+        )
+        self.assertEqual(harness.path.read_bytes(), DICT_BADBOPO)
+        harness.script_confirm(True)
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(harness.take_log(), [self.BADBOPO_BOX, ["Skip"]])
+        self.assertEqual(harness.saved_csv(), HEADER + "\u81fa\u5317,\u281e\u283a,Braille\r\n")
+
+    def test_an_entry_added_with_the_text_of_a_hidden_row_replaces_it_on_ok(self) -> None:
+        # GUI item 103: the box names the hidden row the new entry replaces (D1, D2).
+        harness = self.open_editor(data=DICT_BADBOPO)
+        harness.script_entry("\u809a\u5b50", "\u3109\u3128\u02cb\u3117\u02d9", "Bopomofo")
+        harness.click("Add")
+        harness.take_log()
+        harness.script_confirm(True)
+
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [self.BADBOPO_BOX, ["Skip"]])
+        self.assertEqual(harness.saved_csv(), HEADER + "\u81fa\u5317,\u281e\u283a,Braille\r\n\u809a\u5b50,\u3109\u3128\u02cb\u3117\u02d9,Bopomofo\r\n")
+
+    def test_the_source_text_of_a_hidden_row_can_be_added(self) -> None:
+        # F-4 (D5) refused it with the duplicate message; F-11 (D2) checks the shown entries only.
         harness = self.open_editor(data=DICT_BADBOPO)
         harness.script_entry("\u809a\u5b50", "\u3109\u3128\u02cb\u3117\u02d9", "Bopomofo")
 
         harness.click("Add")
 
-        self.assertEqual(
-            harness.take_log(),
-            [["AddSymbolDialog", None], ["MessageBox", _duplicate_message("\u809a\u5b50"), ERROR_TITLE, ERROR_FLAGS]],
-        )
-        self.assertEqual(harness.rows(), [TAIPEI_CELLS])
+        self.assertNotIn("MessageBox", [event[0] for event in harness.take_log()])
+        self.assertEqual(harness.rows(), [TAIPEI_CELLS, ["\u809a\u5b50", "\u3109\u3128\u02cb\u3117\u02d9", BOPOMOFO]])
+
+
+class DictionaryEntriesDialogUnrecognizedHeaderTest(_EditorTestCase):
+    """A file whose header names no text column reads as rows without a source text. OK
+    never offers to remove them: it says that the header is not recognized and writes
+    nothing (F-11 review M-1)."""
+
+    FILES = (
+        ("capitalized header", "Text,Braille,Type\r\nAlpha,\u2801,General\r\nBeta,\u2803,General\r\n".encode("utf-8")),
+        ("blank first line", "\r\ntext,braille,type\r\nAlpha,\u2801,General\r\n".encode("utf-8")),
+        ("no text column", "source,braille,type\r\nAlpha,\u2801,General\r\n".encode("utf-8")),
+    )
+
+    def test_ok_shows_that_the_header_is_not_recognized_and_writes_nothing(self) -> None:
+        for name, data in self.FILES:
+            with self.subTest(name):
+                harness = self.open_editor(data=data)
+                before = os.stat(harness.path).st_mtime_ns
+                self.assertEqual(harness.rows(), [])
+                harness.focus = harness.ok_button
+
+                self.assertFalse(harness.press_ok())
+
+                self.assertEqual(harness.take_log(), [_unrecognized_header_box("dictionary"), ["SetFocus", "ok"]])
+                self.assertEqual(harness.message_box_parents, [harness.dialog])
+                self.assertEqual(harness.path.read_bytes(), data)
+                self.assertEqual(os.stat(harness.path).st_mtime_ns, before)
+
+    def test_an_added_entry_is_not_saved_and_cancel_can_discard_it(self) -> None:
+        data = self.FILES[0][1]
+        harness = self.open_editor(data=data)
+        harness.script_entry(*BETA)
+        harness.click("Add")
+        harness.take_log()
+
+        self.assertFalse(harness.press_ok())
+        self.assertEqual(harness.take_log(), [_unrecognized_header_box("dictionary")])
+        self.assertEqual(harness.path.read_bytes(), data)
+        harness.script_confirm(True)
+        self.assertTrue(harness.press_cancel())
+
+        self.assertEqual(harness.take_log(), [_discard_box("dictionary"), ["Skip"]])
+        self.assertEqual(harness.path.read_bytes(), data)
+
+    def test_a_header_without_rows_loses_nothing_and_is_completed_on_save(self) -> None:
+        # No row to lose: the header gets the required columns, the new row empty Text, Braille, Type (D5).
+        harness = self.open_editor(data=b"Text,Braille,Type\r\n")
+        harness.script_entry(*ALPHA)
+        harness.click("Add")
+        harness.take_log()
+
         self.assertTrue(harness.press_ok())
-        self.assertEqual(harness.path.read_bytes(), DICT_BADBOPO)
+
+        self.assertEqual(harness.take_log(), [["Skip"]])
+        self.assertEqual(harness.saved_csv(), "Text,Braille,Type,text,braille,type\r\n,,,Alpha,\u2801,General\r\n")
+
+
+class DictionaryEntriesDialogFirstToneTest(_EditorTestCase):
+    """Bopomofo rows whose last syllable is first tone are shown and saved with their tone
+    space (F-11 D14; before, the editor stripped the space and hid them). A row without
+    the space is hidden like any invalid sequence (decided by the user 2026-10-11)."""
+
+    def test_a_row_without_its_tone_space_is_hidden_and_listed_on_ok(self) -> None:
+        data = "text,braille,type\r\n\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n\u62b9,\u3107\u311a,Bopomofo\r\n".encode("utf-8")
+        harness = self.open_editor(data=data)
+
+        self.assertEqual(harness.rows(), [["\u4e2d\u5fc3", "\u3113\u3128\u3125 \u3112\u3127\u3123 ", BOPOMOFO]])
+        harness.take_log()
+        harness.script_confirm(False)
+        self.assertFalse(harness.press_ok())
+        self.assertEqual(harness.take_log()[0], _hidden_rows_box("dictionary", _invalid_bopomofo(3, "\u62b9", "\u3107\u311a")))
+        self.assertEqual(harness.path.read_bytes(), data)
+
+        harness.script_confirm(True)
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(harness.saved_csv(), HEADER + "\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n")
+
+    def test_a_first_tone_row_is_shown_and_an_added_one_is_saved_with_its_space(self) -> None:
+        harness = self.open_editor(data="text,braille,type\r\n\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n".encode("utf-8"))
+
+        self.assertEqual(harness.rows(), [["\u4e2d\u5fc3", "\u3113\u3128\u3125 \u3112\u3127\u3123 ", BOPOMOFO]])
+        harness.script_entry("\u5abd", "\u3107\u311a ", "Bopomofo")
+        harness.click("Add")
+
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(harness.saved_csv(), HEADER + "\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n\u5abd,\u3107\u311a ,Bopomofo\r\n")
 
 
 class DictionaryEntriesDialogModelTest(_EditorTestCase):
@@ -1556,8 +2053,9 @@ _TRACE_TYPES = ("General", "Bopomofo", "Braille")
 _TRACE_FILTERS = ("", "", "a", "A", "b", "ab", "ss", "STRASSE", "\u00df", " ", "\u2801", "x", "General")
 _TRACE_KINDS = ("filter", "filter", "select", "select", "deselect", "add", "add", "edit", "activate", "delete")
 # The two TRACE_CSV rows the editor does not show (blank source text, invalid Bopomofo).
-# The fixture was recorded before F-4, when OK dropped them; since F-4 OK writes them
-# back unchanged, so the replay checks them and removes them before comparing.
+# The fixture was recorded before F-4, when OK dropped them. F-4 wrote them back; since
+# F-11 (D1) OK lists them and Remove and Save drops them again, so the replay answers
+# that box and checks that neither row is written.
 _TRACE_KEPT_ROWS = (",\u2803,General", "zz,ab,Bopomofo")
 
 
@@ -1600,11 +2098,12 @@ def _perform_trace_action(harness: _EditorHarness, action: list) -> None:
         harness.script.clear()
 
 
-def _run_trace_sequence(path: Path, next_action) -> list[dict]:
+def _run_trace_sequence(path: Path, next_action, before_ok=None) -> list[dict]:
     """Open the editor on ``TRACE_CSV``, run 25 actions and OK; return every step's observations.
 
     A step's ``state`` has no ``rows`` when the visible rows did not change
-    since the previous step (keeps the fixture small).
+    since the previous step (keeps the fixture small). ``before_ok(harness)`` runs
+    just before OK (the replay scripts the answer of a box there).
     """
     path.write_bytes(TRACE_CSV.encode("utf-8"))
     with _EditorHarness(path) as harness:
@@ -1613,6 +2112,8 @@ def _run_trace_sequence(path: Path, next_action) -> list[dict]:
             action = next_action(harness, index)
             _perform_trace_action(harness, action)
             steps.append({"action": action, "log": harness.take_log(), "state": harness.state()})
+        if before_ok is not None:
+            before_ok(harness)
         harness.press_ok()
         steps.append({
             "action": ["ok"],
@@ -1669,12 +2170,24 @@ class DictionaryEntriesTraceTest(unittest.TestCase):
                     actual = _run_trace_sequence(
                         Path(temp_dir) / f"trace{seed}.csv",
                         lambda _harness, index, expected=expected: expected[index + 1]["action"],
+                        before_ok=lambda harness: harness.script_confirm(True),
                     )
+                    # F-11 (D1): OK lists the two hidden rows; the box is answered with Remove
+                    # and Save and its record taken out of the OK step before comparing.
+                    ok_log = actual[-1]["log"]
+                    self.assertEqual(
+                        ok_log[0],
+                        _hidden_rows_box(f"trace{seed}", _no_source_text(5), _invalid_bopomofo(8, "zz", "ab")),
+                    )
+                    actual[-1]["log"] = ok_log[1:]
+                    # F-11 (D7): the editor binds its Cancel button as well (the whole
+                    # construction log is pinned by test_construction_log_is_exact).
+                    if ["Bind", "cancel", "EVT_BUTTON"] in actual[0]["log"]:
+                        actual[0]["log"].remove(["Bind", "cancel", "EVT_BUTTON"])
                     # Line by line, not by substring: an entry row such as "ab,\u2803,General"
-                    # ends with the first kept row.
+                    # ends with the first hidden row.
                     lines = actual[-1]["csv"].split("\r\n")
-                    self.assertEqual([line for line in lines if line in _TRACE_KEPT_ROWS], list(_TRACE_KEPT_ROWS))
-                    actual[-1]["csv"] = "\r\n".join(line for line in lines if line not in _TRACE_KEPT_ROWS)
+                    self.assertEqual([line for line in lines if line in _TRACE_KEPT_ROWS], [])
                     for index, (got, want) in enumerate(zip(actual, expected)):
                         self.assertEqual(got, want, f"seed {seed}, step {index}: {want['action']}")
 

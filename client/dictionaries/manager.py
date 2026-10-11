@@ -21,6 +21,20 @@ DEFAULT_HEADER = ["text", "braille", "type"]
 MAX_DICTIONARY_NAME_LENGTH = MAX_NAME_LENGTH
 
 
+class DictionaryImportSourceError(Exception):
+    """The Import source cannot be opened or read: another program holds it, or reading it
+    is not permitted (F-11 D11, F-6 review M-4).
+
+    ``error`` (also ``__cause__``) is the ``PermissionError``. Not an ``OSError``, so a
+    caller can give it F-6's reason while an ``OSError`` writing the copy into the
+    dictionary folder keeps its own message.
+    """
+
+    def __init__(self, error: PermissionError) -> None:
+        super().__init__(str(error))
+        self.error = error
+
+
 def dictionary_path_for_name(name: str, dictionary_dir: Path) -> Path:
     return Path(dictionary_dir) / f"{name}.csv"
 
@@ -92,8 +106,14 @@ def import_dictionary(dictionary_dir: Path, source_path: Path | str, name: str) 
     if destination_path.exists():
         raise FileExistsError(f"Dictionary '{normalized}' already exists.")
     source = Path(source_path)
-    validate_dictionary_csv(source)
-    write_bytes_atomically(destination_path, lambda stream: _copy_file_into(source, stream))
+    try:
+        validate_dictionary_csv(source)
+        # Read before the copy is written, so that an error reading the source is told
+        # apart from an error writing the copy.
+        data = source.read_bytes()
+    except PermissionError as error:
+        raise DictionaryImportSourceError(error) from error
+    write_bytes_atomically(destination_path, lambda stream: stream.write(data))
     return destination_path
 
 
@@ -104,10 +124,22 @@ def rename_dictionary(dictionary_dir: Path, source_name: str, new_name: str) -> 
     destination_normalized = normalize_dictionary_name(new_name)
     source_path = dictionary_path_for_name(source_normalized, dictionary_dir)
     destination_path = dictionary_path_for_name(destination_normalized, dictionary_dir)
-    if destination_path.exists():
+    if destination_path.exists() and not _is_same_file(source_path, destination_path):
         raise FileExistsError(f"Dictionary '{destination_normalized}' already exists.")
     source_path.rename(destination_path)
     return destination_path
+
+
+def _is_same_file(source: Path, destination: Path) -> bool:
+    """Whether ``destination`` names ``source`` itself: a case-only rename on a
+    case-insensitive file system, such as ``alpha`` to ``Alpha`` on Windows (F-W6, F-11 D10).
+
+    Another file that only differs in case (a case-sensitive file system) is not the same file.
+    """
+    try:
+        return os.path.samefile(source, destination)
+    except OSError:
+        return False
 
 
 def export_dictionary(dictionary_dir: Path, name: str, destination_path: Path | str) -> Path:

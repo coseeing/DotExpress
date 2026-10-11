@@ -12,9 +12,8 @@ BOPOMOFO = "\u6ce8\u97f3"
 DUZI = "\u809a\u5b50"
 INVALID_DUZI = "\u3109\u3128\u02cb|\u3117\u02d9"  # "|" is not a Bopomofo symbol
 VALID_DUZI = "\u3109\u3128\u02cb\u3117\u02d9"
-# MIXED_CSV of test_dictionary_entries (F-4): two entries around every kind of row the
-# editor does not show, and what saving it writes (the row with a missing field gets
-# its empty third field).
+# MIXED_CSV of test_dictionary_entries (F-4): entries around every kind of row the
+# editor does not show.
 MIXED_CSV = (
 	"text,braille,type\r\n"
 	"Alpha,\u2801,General\r\n"
@@ -26,7 +25,6 @@ MIXED_CSV = (
 	'"q,""x""","a\r\nb",Bopomofo\r\n'
 	"Beta,\u2803,General\r\n"
 ).encode("utf-8")
-MIXED_CSV_SAVED = MIXED_CSV.replace(",\u2803\r\n".encode("utf-8"), ",\u2803,\r\n".encode("utf-8"))
 
 
 def _entry(text: str, braille: str = "\u2801", entry_type: str = "General") -> DictionaryEntry:
@@ -161,6 +159,21 @@ class SourceTextExistsTest(unittest.TestCase):
 		self.assertFalse(model.source_text_exists("Alpha", exclude_entry=alpha))
 		self.assertTrue(model.source_text_exists("Alpha", exclude_entry=twin))
 		self.assertTrue(model.source_text_exists("Beta", exclude_entry=alpha))
+		self.assertTrue(model.is_duplicate("Alpha"))
+
+	def test_is_duplicate_excludes_the_edited_entry_and_lets_it_keep_its_text(self) -> None:
+		# F-11 (D9, O6): with two identical rows, either one can be edited without changing
+		# its source text; the edit adds no new duplicate.
+		first, beta, second = _entry("a"), _entry("b", "\u2803"), _entry("a")
+		model = DictionaryEntryListModel([first, beta, second])
+
+		self.assertTrue(model.is_duplicate("a"))
+		self.assertFalse(model.is_duplicate("c"))
+		self.assertFalse(model.is_duplicate("a", editing=second))
+		self.assertFalse(model.is_duplicate("c", editing=second))
+		self.assertTrue(model.is_duplicate("b", editing=second))
+		self.assertTrue(model.is_duplicate("a", editing=beta))
+		self.assertFalse(model.is_duplicate("A", editing=beta))
 
 
 class ApplyFilterTest(_ModelTestCase):
@@ -273,6 +286,18 @@ class ReplaceTest(_ModelTestCase):
 		self.assertEqual(update, EntryListUpdate(2))
 		self.assertSameObjects(self.model.entries, [self.alpha, self.alpine, bravo])
 
+	def test_replacement_gets_the_fields_of_the_replaced_row_and_a_new_entry_has_none(self) -> None:
+		# F-11 (D5, O5): an edited row keeps its extra columns; the entry dialog gives none.
+		self.alpine.fields = ("Alpine", "note", "\u2801\u2807", "General")
+		bravo, gamma = _entry("Bravo", "\u2803\u2817"), _entry("Gamma", "\u281b")
+
+		self.model.replace(1, bravo)
+		self.model.add(gamma)
+
+		self.assertEqual(self.model.entries[1].fields, ("Alpine", "note", "\u2801\u2807", "General"))
+		self.assertIs(self.model.entries[1], bravo)
+		self.assertEqual(gamma.fields, ())
+
 	def test_same_text_is_accepted(self) -> None:
 		changed = _entry("Alpha", "\u2801\u2801", "Braille")
 
@@ -306,18 +331,38 @@ class ReplaceTest(_ModelTestCase):
 		self.assertEqual(caught.exception.identifier, "Alpha")
 		self.assertUnchanged(self.model, [self.alpha, self.alpine, self.beta], [self.beta], "bet")
 
-	def test_identical_rows_replace_the_visible_object_but_cannot_keep_their_text(self) -> None:
+	def test_identical_rows_replace_the_visible_object_and_can_keep_their_text(self) -> None:
+		# Was the P2-2 Q4 KNOWN BUG (first half): the other identical row made the text a
+		# duplicate. Fixed by F-11 (D9, O6).
 		first, second = _entry("a"), _entry("a")
 		model = DictionaryEntryListModel([first, _entry("b"), second])
+		changed = _entry("a", "\u2803")
 
-		with self.assertRaises(DuplicateEntryError):
-			model.replace(2, _entry("a", "\u2803"))
-		c = _entry("c")
-		update = model.replace(2, c)
+		update = model.replace(2, changed)
 
 		self.assertEqual(update, EntryListUpdate(2))
 		self.assertIs(model.entries[0], first)
-		self.assertIs(model.entries[2], c)
+		self.assertIs(model.entries[2], changed)
+
+	def test_replacement_is_selected_by_identity_even_when_it_equals_another_row(self) -> None:
+		# F-11 (D9): equality would select the first of two identical rows.
+		first, braille = _entry("a"), _entry("a", "\u2801", "Braille")
+		model = DictionaryEntryListModel([first, _entry("b"), braille])
+		twin = _entry("a")
+
+		update = model.replace(2, twin)
+
+		self.assertEqual(update, EntryListUpdate(2))
+		self.assertIs(model.entries[2], twin)
+
+	def test_another_row_cannot_take_the_text_of_an_identical_pair(self) -> None:
+		first, beta, second = _entry("a"), _entry("b"), _entry("a")
+		model = DictionaryEntryListModel([first, beta, second])
+
+		with self.assertRaises(DuplicateEntryError):
+			model.replace(1, _entry("a", "\u2803"))
+
+		self.assertSameObjects(model.entries, [first, beta, second])
 
 	def test_out_of_range_index_raises_index_error_and_changes_nothing(self) -> None:
 		self.model.apply_filter("alp")
@@ -351,15 +396,29 @@ class RemoveTest(_ModelTestCase):
 		self.assertEqual(self.model.remove(0), EntryListUpdate(None))
 		self.assertUnchanged(self.model, [self.alpha, self.beta], [], "gam")
 
-	def test_identical_rows_remove_the_first_equal_and_select_the_remaining_twin(self) -> None:
+	def test_identical_rows_remove_the_selected_one_and_select_the_remaining_twin(self) -> None:
+		# Was the P2-2 Q4 KNOWN BUG (second half): the first equal row was removed. Fixed by
+		# F-11 (D9); the selection still goes to an equal row (by equality, as the golden
+		# trace records).
 		first, braille, second = _entry("a"), _entry("a", "\u2801", "Braille"), _entry("a")
 		beta = _entry("Beta", "\u2803")
 		model = DictionaryEntryListModel([first, beta, braille, second])
 
 		update = model.remove(3)
 
-		self.assertEqual(update, EntryListUpdate(2))
-		self.assertSameObjects(model.entries, [beta, braille, second])
+		self.assertEqual(update, EntryListUpdate(0))
+		self.assertSameObjects(model.entries, [first, beta, braille])
+
+	def test_removing_the_second_of_two_identical_rows_keeps_the_fields_of_the_first(self) -> None:
+		# F-11 (D9, B2): the saved order is a, b, with the first a's record.
+		first, beta, second = _entry("a"), _entry("b", "\u2803"), _entry("a")
+		first.fields, second.fields = ("a", "\u2801", "General", "first"), ("a", "\u2801", "General", "third")
+		model = DictionaryEntryListModel([first, beta, second])
+
+		model.remove(2)
+
+		self.assertEqual([entry.fields for entry in model.entries], [("a", "\u2801", "General", "first"), ()])
+		self.assertIs(model.entries[0], first)
 
 	def test_out_of_range_index_raises_index_error_and_changes_nothing(self) -> None:
 		for index in (-1, 3):
@@ -373,7 +432,8 @@ class RemoveTest(_ModelTestCase):
 
 
 class PreservedRowsTest(_ModelTestCase):
-	"""Rows the editor does not show stay hidden, keep their place and count as duplicates (F-4)."""
+	"""Rows the editor does not show stay hidden and keep their place (F-4); since F-11 (D2)
+	their source texts are not duplicates."""
 
 	def setUp(self) -> None:
 		self.alpha = _entry("Alpha", "\u2801")
@@ -381,6 +441,23 @@ class PreservedRowsTest(_ModelTestCase):
 		self.beta = _entry("Beta", "\u2803")
 		self.blank = PreservedDictionaryRow("", "\u2803", "General")
 		self.model = DictionaryEntryListModel([self.alpha, self.kept, self.beta, self.blank])
+
+	def test_hidden_rows_are_the_preserved_rows_in_file_order(self) -> None:
+		self.assertSameObjects(self.model.hidden_rows, [self.kept, self.blank])
+		self.model.remove(0)
+
+		self.assertSameObjects(self.model.hidden_rows, [self.kept, self.blank])
+
+	def test_a_failed_save_keeps_the_hidden_rows(self) -> None:
+		# O4: OK asks again after a failed Remove and Save.
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "dictionary.csv"
+			path.mkdir()
+
+			with self.assertRaises(OSError):
+				self.model.save(path)
+
+		self.assertSameObjects(self.model.hidden_rows, [self.kept, self.blank])
 
 	def test_preserved_rows_are_not_entries_and_never_visible(self) -> None:
 		self.assertUnchanged(self.model, [self.alpha, self.beta], [self.alpha, self.beta], "")
@@ -407,16 +484,17 @@ class PreservedRowsTest(_ModelTestCase):
 
 		self.assertSameObjects(self.model.rows, [self.alpha, self.kept, delta, self.blank])
 
-	def test_add_or_replace_with_the_source_text_of_a_preserved_row_is_a_duplicate(self) -> None:
+	def test_the_source_text_of_a_preserved_row_is_not_a_duplicate(self) -> None:
+		# F-4 D5 refused it; F-11 (D2) accepts it: OK lists the hidden row, so the user sees
+		# which row the new entry replaces (D1).
+		self.assertFalse(self.model.source_text_exists(DUZI))
+		self.assertFalse(self.model.is_duplicate(DUZI))
+		self.assertFalse(self.model.is_duplicate("", editing=self.alpha))
 		valid = _entry(DUZI, VALID_DUZI, "Bopomofo")
-		changes = (("add", lambda: self.model.add(valid)), ("replace", lambda: self.model.replace(1, valid)))
-		for name, change in changes:
-			with self.subTest(change=name):
-				with self.assertRaises(DuplicateEntryError) as caught:
-					change()
 
-				self.assertEqual(caught.exception.identifier, DUZI)
-				self.assertSameObjects(self.model.rows, [self.alpha, self.kept, self.beta, self.blank])
+		self.assertEqual(self.model.add(valid), EntryListUpdate(2))
+
+		self.assertSameObjects(self.model.rows, [self.alpha, self.kept, self.beta, self.blank, valid])
 
 	def test_remove_of_an_entry_leaves_a_preserved_row_with_the_same_source_text(self) -> None:
 		# Only a file can hold both rows (D5); remove must not match the hidden row by its text.
@@ -427,14 +505,56 @@ class PreservedRowsTest(_ModelTestCase):
 
 		self.assertSameObjects(model.rows, [self.alpha, self.kept])
 
-	def test_a_preserved_row_blocks_only_its_raw_unstripped_source_text(self) -> None:
-		spaced = PreservedDictionaryRow(DUZI + " ", INVALID_DUZI, "Bopomofo")
-		valid = _entry(DUZI, VALID_DUZI, "Bopomofo")
-		model = DictionaryEntryListModel([self.alpha, spaced])
 
-		self.assertEqual(model.add(valid), EntryListUpdate(1))
 
-		self.assertSameObjects(model.rows, [self.alpha, spaced, valid])
+class HasChangesTest(_ModelTestCase):
+	"""Whether the entries, in order, differ by value from the loaded ones (F-11 D3)."""
+
+	def setUp(self) -> None:
+		self.alpha = _entry("Alpha", "\u2801")
+		self.beta = _entry("Beta", "\u2803")
+		self.model = DictionaryEntryListModel([self.alpha, PreservedDictionaryRow("", "\u2803", "General"), self.beta])
+
+	def test_no_change_after_load_a_filter_an_add_undone_or_an_edit_to_the_same_values(self) -> None:
+		self.assertFalse(self.model.has_changes())
+		self.model.apply_filter("alp")
+		self.assertFalse(self.model.has_changes())
+		self.model.apply_filter("")
+		self.model.add(_entry("Gamma", "\u281b"))
+		self.model.remove(2)
+		self.assertFalse(self.model.has_changes())
+		self.model.replace(0, _entry("Alpha", "\u2801"))
+
+		self.assertFalse(self.model.has_changes())
+
+	def test_a_changed_value_a_removal_and_a_new_order_are_changes(self) -> None:
+		changes = {
+			"text": lambda model: model.replace(0, _entry("alpha", "\u2801")),
+			"braille": lambda model: model.replace(0, _entry("Alpha", "\u2801\u2801")),
+			"type": lambda model: model.replace(0, _entry("Alpha", "\u2801", "Braille")),
+			"removal": lambda model: model.remove(1),
+			"order": lambda model: (model.remove(0), model.add(_entry("Alpha", "\u2801"))),
+		}
+		for name, change in changes.items():
+			with self.subTest(name):
+				model = DictionaryEntryListModel([_entry("Alpha", "\u2801"), _entry("Beta", "\u2803")])
+
+				change(model)
+
+				self.assertTrue(model.has_changes())
+
+	def test_the_loaded_values_are_copies(self) -> None:
+		# A later in-place change of an entry object cannot hide a change.
+		self.alpha.text = "Changed"
+
+		self.assertTrue(self.model.has_changes())
+
+	def test_a_saved_model_has_no_changes(self) -> None:
+		self.model.add(_entry("Gamma", "\u281b"))
+		with tempfile.TemporaryDirectory() as temp_dir:
+			self.model.save(Path(temp_dir) / "dictionary.csv")
+
+		self.assertFalse(self.model.has_changes())
 
 
 class LoadSaveTest(unittest.TestCase):
@@ -469,14 +589,80 @@ class LoadSaveTest(unittest.TestCase):
 		with self.assertRaises(UnicodeDecodeError):
 			DictionaryEntryListModel.load(path)
 
-	def test_save_of_an_unchanged_model_writes_preserved_rows_back_in_place(self) -> None:
+	def test_save_writes_the_entries_only_and_then_holds_no_hidden_rows(self) -> None:
+		# F-4 wrote the preserved rows back in place; since F-11 (D1) the editor removes them
+		# once the user agrees, so save writes the entries only.
 		source = self.directory / "source.csv"
 		source.write_bytes(MIXED_CSV)
 		target = self.directory / "target.csv"
+		model = DictionaryEntryListModel.load(source)
 
-		DictionaryEntryListModel.load(source).save(target)
+		model.save(target)
 
-		self.assertEqual(target.read_bytes(), MIXED_CSV_SAVED)
+		self.assertEqual(
+			target.read_bytes(),
+			"text,braille,type\r\nAlpha,\u2801,General\r\n\u5abd,\u3107\u311a ,Bopomofo\r\nBeta,\u2803,General\r\n".encode("utf-8"),
+		)
+		self.assertEqual(model.hidden_rows, ())
+		self.assertEqual(model.rows, model.entries)
+
+	def test_save_keeps_the_bom_header_and_extra_columns_of_the_loaded_file(self) -> None:
+		# F-11 (D5): the layout comes from the load; a new entry gets empty extra fields.
+		path = self.directory / "excel.csv"
+		path.write_bytes(b"\xef\xbb\xbf" + "text,note,braille,type\r\nAlpha,first,\u2801,General\r\n".encode("utf-8"))
+		model = DictionaryEntryListModel.load(path)
+		model.add(_entry("Beta", "\u2803"))
+
+		model.save(path)
+
+		self.assertEqual(
+			path.read_bytes(),
+			b"\xef\xbb\xbf" + "text,note,braille,type\r\nAlpha,first,\u2801,General\r\nBeta,,\u2803,General\r\n".encode("utf-8"),
+		)
+
+
+class HeaderRecognizedTest(unittest.TestCase):
+	"""A file whose header names no text column reads as rows without a source text; the
+	model never removes them (F-11 review M-1)."""
+
+	def setUp(self) -> None:
+		temp_dir = tempfile.TemporaryDirectory()
+		self.addCleanup(temp_dir.cleanup)
+		self.directory = Path(temp_dir.name)
+
+	def load(self, data: bytes | None) -> DictionaryEntryListModel:
+		path = self.directory / "sample.csv"
+		if data is not None:
+			path.write_bytes(data)
+		return DictionaryEntryListModel.load(path)
+
+	def test_the_header_is_recognized_when_it_names_a_text_column_or_no_row_is_hidden(self) -> None:
+		cases = (
+			("text column, hidden rows", b"text,braille,type\r\nAlpha,x,General\r\n,x,General\r\n", True),
+			("capitalized header", b"Text,Braille,Type\r\nAlpha,x,General\r\n", False),
+			("blank first line", b"\r\ntext,braille,type\r\nAlpha,x,General\r\n", False),
+			("no text column", b"source,braille,type\r\nAlpha,x,General\r\n", False),
+			("capitalized header, no rows", b"Text,Braille,Type\r\n", True),
+			("empty file", b"", True),
+			("missing file", None, True),
+		)
+		for name, data, recognized in cases:
+			with self.subTest(name):
+				self.assertIs(self.load(data).header_recognized, recognized)
+
+	def test_a_model_built_from_rows_has_a_recognized_header(self) -> None:
+		self.assertTrue(DictionaryEntryListModel([PreservedDictionaryRow("", "\u2803", "General")]).header_recognized)
+
+	def test_save_refuses_a_file_whose_header_is_not_recognized(self) -> None:
+		data = b"Text,Braille,Type\r\nAlpha,x,General\r\n"
+		model = self.load(data)
+		model.add(_entry("Beta", "\u2803"))
+
+		with self.assertRaises(ValueError):
+			model.save(self.directory / "sample.csv")
+
+		self.assertEqual((self.directory / "sample.csv").read_bytes(), data)
+		self.assertEqual(len(model.hidden_rows), 1)
 
 
 class ImportGuardTest(unittest.TestCase):

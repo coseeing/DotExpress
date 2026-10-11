@@ -10,6 +10,7 @@ from dictionaries.entries import (
 	ENTRY_TYPE_LABELS,
 	ENTRY_TYPE_OPTIONS,
 	DictionaryEntry,
+	PreservedDictionaryRow,
 	validate_dictionary_entry,
 )
 from dictionaries.entry_list_model import DictionaryEntryListModel, DuplicateEntryError, EntryListUpdate
@@ -27,9 +28,11 @@ from dictionaries.read_problems import (
 from documents.workspace import normalize_document_name
 from i18n import N_, _
 from ui.dialog_base import ContextManagedDialog, NameDialogBase, NameDialogMessages
-from ui.message_box import message_box
+from ui.message_box import confirm_box, message_box
 
 CSV_WILDCARD = N_("CSV files (*.csv)|*.csv")
+# The hidden rows the box on OK lists by line; a count stands for the rest (F-11 D1).
+HIDDEN_ROWS_LISTED = 10
 
 
 def finalize_dialog_layout(dialog: wx.Dialog, sizer: wx.Sizer) -> None:
@@ -67,12 +70,33 @@ def localize_standard_buttons(
 				button.SetLabel(label)
 
 
-class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
-	"""Dialog to create or edit a dictionary entry."""
+def show_duplicate_source_text(identifier: str, parent: wx.Window | None) -> None:
+	"""Tell the user that another entry already has the source text ``identifier``."""
+	message_box(
+		_('Source text "{identifier}" already exists.').format(identifier=identifier),
+		_("Error"),
+		wx.OK | wx.ICON_ERROR,
+		parent=parent,
+	)
 
-	def __init__(self, parent: wx.Window | None, entry: DictionaryEntry | None = None):
+
+class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
+	"""Dialog to create or edit a dictionary entry.
+
+	``is_duplicate(text)`` (optional) runs in OK after the format checks: a duplicate
+	source text is reported here and the dialog stays open with the input (F-11 D8).
+	"""
+
+	def __init__(
+		self,
+		parent: wx.Window | None,
+		entry: DictionaryEntry | None = None,
+		*,
+		is_duplicate: Callable[[str], bool] | None = None,
+	):
 		title = _("Edit Dictionary Entry") if entry else _("Add Dictionary Entry")
 		super().__init__(parent, title=title)
+		self._is_duplicate = is_duplicate
 
 		main_sizer = wx.BoxSizer(wx.VERTICAL)
 		grid = wx.FlexGridSizer(0, 2, 8, 8)
@@ -111,7 +135,11 @@ class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
 		return self.identifier_ctrl.GetValue().strip()
 
 	def get_braille(self) -> str:
-		return self.braille_ctrl.GetValue().strip()
+		value = self.braille_ctrl.GetValue()
+		if self.get_entry_type() == "Bopomofo":
+			# A final first-tone syllable ends with its tone space; keep it as typed (F-11 D14).
+			return value.lstrip()
+		return value.strip()
 
 	def get_entry_type(self) -> str:
 		selection = self.type_choice.GetSelection()
@@ -157,6 +185,15 @@ class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
 					self.identifier_ctrl.SetFocus()
 				else:
 					self.braille_ctrl.SetFocus()
+			except RuntimeError:
+				pass
+			return
+
+		if self._is_duplicate is not None and self._is_duplicate(entry.text):
+			show_duplicate_source_text(entry.text, self)
+			try:
+				self.identifier_ctrl.SetFocus()
+				self.identifier_ctrl.SelectAll()
 			except RuntimeError:
 				pass
 			return
@@ -343,16 +380,32 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 
 	Supervising controller: the widgets and the selected row live here, the
 	entries and the filter in ``DictionaryEntryListModel``.
+
+	The file is read before the native dialog exists (``model`` when the caller read
+	it, as the frame does), so a read error leaves no dialog behind; an error while
+	building the dialog destroys it before it propagates (F-11 D12).
 	"""
 
-	def __init__(self, parent: wx.Window | None, dictionary_path: Path):
+	def __init__(
+		self,
+		parent: wx.Window | None,
+		dictionary_path: Path,
+		model: DictionaryEntryListModel | None = None,
+	):
+		dictionary_path = Path(dictionary_path)
+		if model is None:
+			model = DictionaryEntryListModel.load(dictionary_path)
 		super().__init__(parent, title=_("Custom Dictionary Manager"), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
 
-		self.dictionary_path = Path(dictionary_path)
-		self._model = DictionaryEntryListModel.load(self.dictionary_path)
-		self._build_ui()
-		self._render(self._model.apply_filter(self.filter_ctrl.GetValue(), self._get_selected_index()))
-		self._update_button_states()
+		self.dictionary_path = dictionary_path
+		self._model = model
+		try:
+			self._build_ui()
+			self._render(self._model.apply_filter(self.filter_ctrl.GetValue(), self._get_selected_index()))
+			self._update_button_states()
+		except BaseException:
+			self.Destroy()
+			raise
 
 	def _build_ui(self) -> None:
 		main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -399,6 +452,10 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 			ok_button = self.FindWindow(wx.ID_OK)
 			if ok_button:
 				ok_button.Bind(wx.EVT_BUTTON, self._on_ok)
+			cancel_button = self.FindWindow(wx.ID_CANCEL)
+			if cancel_button:
+				# wx turns Esc and the close box into a click on this button (F-11 D7).
+				cancel_button.Bind(wx.EVT_BUTTON, self._on_cancel)
 
 		finalize_dialog_layout(self, main_sizer)
 
@@ -486,26 +543,101 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 		self._render(self._model.remove(visible_index))
 
 	def _open_entry_dialog(self, entry: DictionaryEntry | None = None) -> DictionaryEntry | None:
-		with AddSymbolDialog(self, entry) as dialog:
+		# The entry dialog checks for a duplicate itself and stays open on one (F-11 D8);
+		# the model's DuplicateEntryError stays as a backstop.
+		with AddSymbolDialog(self, entry, is_duplicate=lambda text: self._model.is_duplicate(text, editing=entry)) as dialog:
 			if dialog.ShowModal() != wx.ID_OK:
 				return None
 			return dialog.get_entry()
 
 	def _show_duplicate_error(self, identifier: str) -> None:
-		message_box(
-			_('Source text "{identifier}" already exists.').format(identifier=identifier),
-			_("Error"),
-			wx.OK | wx.ICON_ERROR,
-			parent=self,
-		)
+		show_duplicate_source_text(identifier, self)
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
+		focused = wx.Window.FindFocus()
+		if not self._model.header_recognized:
+			# Every row reads as having no source text because the header names no text
+			# column; removing them would empty the file, so nothing is saved (F-11 review M-1).
+			message_box(
+				_(
+					'Dictionary "{name}" cannot be saved: its header is not recognized. '
+					"The first line of the file must contain the text, braille, and type headers."
+				).format(name=self.dictionary_path.stem),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
+			self._restore_focus(focused)
+			return
+		if self._model.hidden_rows:
+			# Rows the editor cannot show are listed, and removed only once the user agrees,
+			# even without another change (F-11 D1).
+			if not self._confirm_hidden_rows():
+				self._restore_focus(focused)
+				return
+		elif not self._model.has_changes():
+			# Nothing to write: the file keeps its bytes (F-11 D4).
+			event.Skip()
+			return
+		if not self._save():
+			self._restore_focus(focused)
+			return
+		event.Skip()
+
+	def _on_cancel(self, event: wx.CommandEvent) -> None:
+		focused = wx.Window.FindFocus()
+		# Ask only after a change; hidden rows are not one (F-11 D7).
+		if self._model.has_changes() and not confirm_box(
+			_('Do you want to discard the changes you made to dictionary "{name}"?').format(name=self.dictionary_path.stem),
+			_("Unsaved Changes"),
+			_("&Discard Changes"),
+			_("&Back to Editing"),
+			parent=self,
+		):
+			self._restore_focus(focused)
+			return
+		event.Skip()
+
+	def _save(self) -> bool:
 		try:
 			self._model.save(self.dictionary_path)
 		except Exception as exc:
 			message_box(_("Failed to save: {error}").format(error=exc), _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
-			return
-		event.Skip()
+			return False
+		return True
+
+	def _confirm_hidden_rows(self) -> bool:
+		hidden_rows = self._model.hidden_rows
+		lines = [self._hidden_row_line(row) for row in hidden_rows[:HIDDEN_ROWS_LISTED]]
+		if len(hidden_rows) > HIDDEN_ROWS_LISTED:
+			lines.append(_("Other rows not listed: {count}").format(count=len(hidden_rows) - HIDDEN_ROWS_LISTED))
+		message = _(
+			'Some rows of dictionary "{name}" cannot be shown in the editor. Saving removes them from the file:'
+			"\n\n{rows}\n\nDo you want to remove these rows and save the dictionary?"
+		).format(name=self.dictionary_path.stem, rows="\n".join(lines))
+		return confirm_box(
+			message,
+			_("Remove Rows That Cannot Be Shown"),
+			_("Remove and &Save"),
+			_("&Back to Editing"),
+			parent=self,
+		)
+
+	@staticmethod
+	def _hidden_row_line(row: PreservedDictionaryRow) -> str:
+		if row.reason == "no_source_text":
+			return _("Row {line}: no source text").format(line=row.line)
+		return _('Row {line}: "{text}", Bopomofo "{bopomofo}" is not valid').format(
+			line=row.line,
+			text=row.text.strip(),
+			bopomofo=row.braille.strip(),
+		)
+
+	def _restore_focus(self, window: wx.Window | None) -> None:
+		"""Put the focus back where it was before a box, if that is still one of the editor's
+		controls; Windows usually does it alone, but not always (F-9 review M-6, F-11 D7)."""
+		if window is not None and self.IsDescendant(window):
+			window.SetFocus()
 
 
 class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):

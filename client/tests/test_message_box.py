@@ -18,12 +18,14 @@ def _fake_wx() -> types.ModuleType:
     wx = types.ModuleType("wx")
     wx.Window = type("Window", (), {})
     wx.MessageDialog = type("MessageDialog", (), {})
+    wx.GenericMessageDialog = type("GenericMessageDialog", (), {})
     wx.YES = 0x2
     wx.OK = 0x4
     wx.NO = 0x8
     wx.YES_NO = wx.YES | wx.NO
     wx.CANCEL = 0x10
     wx.NO_DEFAULT = 0x80
+    wx.CANCEL_DEFAULT = 0x80000000
     wx.ICON_WARNING = 0x100
     wx.ICON_ERROR = 0x200
     wx.ICON_INFORMATION = 0x800
@@ -43,6 +45,7 @@ tearDownModule = _SCOPE.deactivate
 
 message_box = message_box_module.message_box
 wx = message_box_module.wx
+CONFIRM_STYLE = 0x4 | 0x10 | 0x80000000 | 0x100  # OK | CANCEL | CANCEL_DEFAULT | ICON_WARNING
 
 
 class MessageBoxTest(unittest.TestCase):
@@ -54,12 +57,12 @@ class MessageBoxTest(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def _dialog_class(self):
+    def _dialog_class(self, name="MessageDialog"):
         test = self
 
         class RecordingMessageDialog:
             def __init__(self, *args):
-                test.calls.append(("MessageDialog", *args))
+                test.calls.append((name, *args))
 
             def __enter__(self):
                 test.calls.append(("enter",))
@@ -151,6 +154,37 @@ class MessageBoxTest(unittest.TestCase):
                 ("MessageDialog", frame, "second", "caption", wx.OK | wx.ICON_ERROR),
             ],
         )
+
+    def test_confirm_box_is_a_generic_warning_whose_cancel_button_is_the_default(self) -> None:
+        # F-11 (D1, D7): Esc, Alt+F4, the close button and Enter all answer Cancel, which
+        # keeps the user's work. wx's generic dialog, not the native task dialog: shown from
+        # a modal dialog, a task dialog with its own labels answers Alt+F4 with its first
+        # button (measured while planning F-11), here the one that changes the user's work.
+        parent = object()
+        self.answers = [wx.ID_OK, wx.ID_CANCEL]
+
+        with patch.object(wx, "GenericMessageDialog", self._dialog_class("GenericMessageDialog")):
+            first = message_box_module.confirm_box("message", "caption", "&Discard", "&Back", parent=parent)
+            second = message_box_module.confirm_box("message", "caption", "&Discard", "&Back")
+
+        self.assertEqual((first, second), (True, False))
+        self.assertEqual(
+            self.calls[:5],
+            [
+                ("GenericMessageDialog", parent, "message", "caption", CONFIRM_STYLE),
+                ("enter",),
+                ("SetOKCancelLabels", "&Discard", "&Back"),
+                ("ShowModal",),
+                ("exit",),
+            ],
+        )
+        self.assertEqual(self.calls[5], ("GenericMessageDialog", None, "message", "caption", CONFIRM_STYLE))
+
+    def test_confirm_box_closed_any_other_way_is_cancel(self) -> None:
+        self.answers = [wx.ID_YES]
+
+        with patch.object(wx, "GenericMessageDialog", self._dialog_class("GenericMessageDialog")):
+            self.assertIs(message_box_module.confirm_box("message", "caption", "&Discard", "&Back"), False)
 
     def test_a_label_the_platform_refuses_still_shows_the_box(self) -> None:
         self.label_result = False

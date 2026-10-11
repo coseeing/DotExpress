@@ -199,6 +199,57 @@ class DictionaryManagerTest(unittest.TestCase):
 
         self.assertEqual(list(self.dictionary_dir.iterdir()), [])
 
+    # --- an Import source that cannot be opened (F-11, D11) --------------------
+
+    def test_import_source_that_cannot_be_opened_raises_the_import_source_error(self) -> None:
+        # F-6 review M-4: a source held by another program gave the raw PermissionError, as a
+        # failure writing the copy does. It is told apart now; nothing is copied.
+        from dictionaries.manager import DictionaryImportSourceError
+
+        source_path = Path(self._tmpdir.name) / "locked.csv"
+        source_path.write_bytes(EXCEL_DICTIONARY)
+        denied = PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(source_path))
+        real_open = Path.open
+
+        def open_except_the_source(path, *args, **kwargs):
+            if path == source_path:
+                raise denied
+            return real_open(path, *args, **kwargs)
+
+        with patch.object(Path, "open", open_except_the_source), self.assertRaises(DictionaryImportSourceError) as raised:
+            import_dictionary(self.dictionary_dir, source_path, "locked")
+
+        self.assertIs(raised.exception.error, denied)
+        self.assertIs(raised.exception.__cause__, denied)
+        self.assertNotIsInstance(raised.exception, OSError)
+        self.assertEqual(list(self.dictionary_dir.iterdir()), [])
+
+    def test_import_source_that_cannot_be_read_after_the_check_raises_the_import_source_error(self) -> None:
+        # The copy reads the source again; a lock taken after the check is the source's problem too.
+        from dictionaries.manager import DictionaryImportSourceError
+
+        source_path = Path(self._tmpdir.name) / "locked.csv"
+        source_path.write_bytes(EXCEL_DICTIONARY)
+        denied = PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(source_path))
+
+        with patch.object(Path, "read_bytes", side_effect=denied), self.assertRaises(DictionaryImportSourceError) as raised:
+            import_dictionary(self.dictionary_dir, source_path, "locked")
+
+        self.assertIs(raised.exception.error, denied)
+        self.assertEqual(list(self.dictionary_dir.iterdir()), [])
+
+    def test_import_copy_that_cannot_be_installed_keeps_its_permission_error(self) -> None:
+        # Installing the copy in the dictionary folder is not the source's problem (O7).
+        source_path = Path(self._tmpdir.name) / "excel.csv"
+        source_path.write_bytes(EXCEL_DICTIONARY)
+        denied = PermissionError(errno.EACCES, os.strerror(errno.EACCES))
+
+        with patch("os.replace", side_effect=denied), self.assertRaises(PermissionError) as raised:
+            import_dictionary(self.dictionary_dir, source_path, "science")
+
+        self.assertIs(raised.exception, denied)
+        self.assertEqual(list(self.dictionary_dir.iterdir()), [])
+
     # --- atomic writes (F-8, D7) -------------------------------------------
 
     def _temporary_files(self, folder: Path) -> list[str]:

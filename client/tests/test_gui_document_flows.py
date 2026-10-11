@@ -1087,11 +1087,14 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         frame._dictionary_presenter = Mock()
         return frame
 
-    def _open_management(self, frame, result, edit_name, editor_error=None):
+    def _open_management(self, frame, result, edit_name, editor_error=None, load_error=None):
+        # The frame reads the dictionary before it builds the editor (F-11 D12).
         with (
             patch.object(gui, "DictionaryManagementDialog") as dialog_class,
             patch.object(gui, "DictionaryEntriesDialog", side_effect=editor_error) as editor_class,
+            patch.object(gui, "DictionaryEntryListModel") as self.model_class,
         ):
+            self.model_class.load.side_effect = load_error
             dialog = dialog_class.return_value.__enter__.return_value
             dialog.ShowModal.return_value = result
             dialog.edit_dictionary_name = edit_name
@@ -1118,11 +1121,15 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         _dialog_class, editor_class = self._open_management(frame, gui.wx.ID_EDIT, "alpha")
 
         presenter.dictionary_path.assert_called_once_with("alpha")
-        editor_class.assert_called_once_with(frame, dictionary_path=Path("dictionary/alpha.csv"))
+        self.model_class.load.assert_called_once_with(Path("dictionary/alpha.csv"))
+        editor_class.assert_called_once_with(
+            frame, dictionary_path=Path("dictionary/alpha.csv"), model=self.model_class.load.return_value
+        )
         editor_class.return_value.__enter__.return_value.ShowModal.assert_called_once_with()
 
     def test_editor_that_cannot_read_its_dictionary_shows_the_reason(self) -> None:
         # F-6 (D6): the file went bad between the check in Dictionary Management and the editor.
+        # Since F-11 (D12) it is read first, and no editor is built.
         frame = self._make_frame()
         frame._dictionary_presenter.dictionary_path.return_value = Path("dictionary/alpha.csv")
         error = big5_decode_error()
@@ -1131,9 +1138,10 @@ class DictionaryManagementFrameTest(unittest.TestCase):
             patch.object(gui, "message_box") as message_box,
             self.assertLogs("dotexpress.gui", level="ERROR") as logs,
         ):
-            _dialog_class, editor_class = self._open_management(frame, gui.wx.ID_EDIT, "alpha", editor_error=error)
+            _dialog_class, editor_class = self._open_management(frame, gui.wx.ID_EDIT, "alpha", load_error=error)
 
-        editor_class.assert_called_once_with(frame, dictionary_path=Path("dictionary/alpha.csv"))
+        self.model_class.load.assert_called_once_with(Path("dictionary/alpha.csv"))
+        editor_class.assert_not_called()
         message_box.assert_called_once_with(
             describe_unreadable_dictionary("alpha", error),
             gui._("Error"),
@@ -1146,7 +1154,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         )
         self.assertIsNone(logs.records[0].exc_info)
 
-    def test_editor_failure_that_is_unexpected_is_logged_with_its_traceback(self) -> None:
+    def test_unexpected_error_reading_the_dictionary_is_logged_with_its_traceback(self) -> None:
         frame = self._make_frame()
         frame._dictionary_presenter.dictionary_path.return_value = Path("dictionary/alpha.csv")
         error = RuntimeError("injected")
@@ -1155,8 +1163,9 @@ class DictionaryManagementFrameTest(unittest.TestCase):
             patch.object(gui, "message_box") as message_box,
             self.assertLogs("dotexpress.gui", level="ERROR") as logs,
         ):
-            self._open_management(frame, gui.wx.ID_EDIT, "alpha", editor_error=error)
+            _dialog_class, editor_class = self._open_management(frame, gui.wx.ID_EDIT, "alpha", load_error=error)
 
+        editor_class.assert_not_called()
         message_box.assert_called_once_with(
             describe_unreadable_dictionary("alpha", error),
             gui._("Error"),
@@ -1166,6 +1175,34 @@ class DictionaryManagementFrameTest(unittest.TestCase):
         self.assertEqual(
             [record.getMessage() for record in logs.records],
             ['Unexpected error while reading dictionary "alpha.csv"'],
+        )
+        self.assertIs(logs.records[0].exc_info[1], error)
+
+    def test_editor_that_cannot_be_built_shows_the_general_failure_and_logs_its_traceback(self) -> None:
+        # F-11 (D12, F-6 review M-5): an error building the editor was described as a file
+        # that cannot be read.
+        frame = self._make_frame()
+        frame._dictionary_presenter.dictionary_path.return_value = Path("dictionary/alpha.csv")
+        error = RuntimeError("injected")
+
+        with (
+            patch.object(gui, "message_box") as message_box,
+            self.assertLogs("dotexpress.gui", level="ERROR") as logs,
+        ):
+            _dialog_class, editor_class = self._open_management(frame, gui.wx.ID_EDIT, "alpha", editor_error=error)
+
+        editor_class.assert_called_once_with(
+            frame, dictionary_path=Path("dictionary/alpha.csv"), model=self.model_class.load.return_value
+        )
+        message_box.assert_called_once_with(
+            gui._("Failed to open the dictionary editor: {error}").format(error=error),
+            gui._("Error"),
+            gui.wx.OK | gui.wx.ICON_ERROR,
+            parent=frame,
+        )
+        self.assertEqual(
+            [record.getMessage() for record in logs.records],
+            ["Unexpected error while opening the dictionary editor"],
         )
         self.assertIs(logs.records[0].exc_info[1], error)
 

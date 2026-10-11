@@ -399,9 +399,9 @@ class PresenterRenameTest(PresenterTestCase):
 		self.set_active_name.assert_not_called()
 
 	def test_rename_case_only_change_renames_file(self):
+		# Was skipped on a case-insensitive file system, where the rename was reported as a
+		# duplicate (F-W6); F-11 (D10) renames it there too.
 		presenter = self.make_presenter("alpha")
-		if (self.dictionary_dir / "ALPHA.csv").exists():
-			self.skipTest("case-insensitive file system: a case-only rename is reported as a duplicate")
 		view = FakeView(names=["Alpha"])
 
 		result = presenter.rename(view, "alpha")
@@ -409,6 +409,21 @@ class PresenterRenameTest(PresenterTestCase):
 		self.assertEqual(result, "Alpha")
 		self.assertEqual(view.calls, [self.prompt_call("alpha")])
 		self.assertEqual(self.files(), ["Alpha", "default"])
+		self.assertEqual(presenter.dictionary_names, ["Alpha", "default"])
+		self.set_active_name.assert_not_called()
+
+	def test_rename_case_only_change_of_the_active_dictionary_activates_the_new_name(self):
+		# F-11 (D10): config.json follows through set_active_name, as for any other rename.
+		presenter = self.make_presenter("alpha", active="alpha")
+		view = FakeView(names=["Alpha"])
+
+		result = presenter.rename(view, "alpha")
+
+		self.assertEqual(result, "Alpha")
+		self.assertEqual(view.calls, [self.prompt_call("alpha")])
+		self.assertEqual(self.files(), ["Alpha", "default"])
+		self.set_active_name.assert_called_once_with("Alpha")
+		self.assertEqual(self.active, ["Alpha"])
 
 	def test_rename_duplicate_shows_error_and_prompts_again_with_typed_name(self):
 		presenter = self.make_presenter("alpha", "beta")
@@ -631,6 +646,56 @@ class PresenterImportTest(PresenterTestCase):
 
 		self.assertIsNone(result)
 		self.assertEqual(view.calls, [self.choose_call(), self.prompt_call("long"), self.read_error_call(source)])
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_source_that_cannot_be_opened_shows_the_cannot_open_reason(self):
+		# F-11 (D11, F-6 review M-4): the raw "[Errno 13] Permission denied: ..." was shown.
+		source = self.write_source("locked")
+		presenter = self.make_presenter()
+		view = FakeView(names=["locked"], import_path=source)
+		denied = PermissionError(13, "Permission denied", str(source))
+		real_open = Path.open
+
+		def open_except_the_source(path, *args, **kwargs):
+			if path == source:
+				raise denied
+			return real_open(path, *args, **kwargs)
+
+		with patch.object(Path, "open", open_except_the_source):
+			result = presenter.import_from_file(view)
+
+		reason = describe_dictionary_read_error(denied)
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[
+				self.choose_call(),
+				self.prompt_call("locked"),
+				("error", _("Failed to import dictionary: {error}").format(error=reason)),
+			],
+		)
+		self.assertTrue(reason.startswith("\u7121\u6cd5\u958b\u555f\u6a94\u6848\u3002"), reason)
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_copy_that_cannot_be_installed_shows_the_error(self):
+		# The copy into the dictionary folder keeps today's message with the raw error (O7).
+		source = self.write_source("words")
+		presenter = self.make_presenter()
+		view = FakeView(names=["words"], import_path=source)
+		denied = PermissionError(13, "Permission denied")
+
+		with patch("os.replace", side_effect=denied):
+			result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[
+				self.choose_call(),
+				self.prompt_call("words"),
+				("error", _("Failed to import dictionary: {error}").format(error=denied)),
+			],
+		)
 		self.assertEqual(self.files(), ["default"])
 
 	def test_import_cancelled_name_prompt_imports_nothing(self):

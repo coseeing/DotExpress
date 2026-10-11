@@ -119,6 +119,10 @@ class WxCallSitesTest(unittest.TestCase):
             ["gui.py:BrailleFrame._ask_after_close_save_failure", "ui/message_box.py:message_box"],
         )
 
+    def test_the_only_generic_message_dialog_is_the_confirmation_box(self) -> None:
+        # F-11: ui.message_box.confirm_box uses wx's generic dialog and sets both labels.
+        self.assertEqual(find_in_production(is_attribute("GenericMessageDialog")), ["ui/message_box.py:confirm_box"])
+
     def test_no_production_module_imports_wx_names_around_the_scans(self) -> None:
         # from wx import MessageBox, or import wx as _wx, would let a use slip past the
         # scans above (F-7 review M-1).

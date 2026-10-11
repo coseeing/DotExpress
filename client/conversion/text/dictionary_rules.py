@@ -144,7 +144,11 @@ class LoadedDictionaryRules:
         """Read the dictionary and Bopomofo rule files.
 
         A missing dictionary gives empty rules without opening the Bopomofo file.
-        A leading UTF-8 BOM is ignored.
+        A leading UTF-8 BOM is ignored. A row the dictionary editor hides is not a rule:
+        a source text that is empty once stripped, or a Bopomofo sequence that does not
+        parse as it is once its leading whitespace is gone (F-11 D13, D14). A Bopomofo
+        row converts from that sequence, which is what the editor shows; every other row
+        converts as before, from its raw values.
         """
         dictionary_path = Path(dictionary_path)
         if not dictionary_path.exists():
@@ -178,15 +182,17 @@ class LoadedDictionaryRules:
             for row in reader:
                 source = (row.get("text") or "")
                 target = (row.get("braille") or "")
-                if not source:
+                if not source.strip():
                     continue
 
                 type_ = (row.get("type") or "")
                 if type_ == "Bopomofo":
+                    # The editor's rule (dictionaries.entries.canonical_bopomofo); this module
+                    # imports nothing from dictionaries.
                     try:
-                        target = processing(target)
+                        target = processing(target.lstrip())
                     except Exception:
-                        pass
+                        continue
                     if isinstance(target, str):
                         target_parts = [target]
                     else:

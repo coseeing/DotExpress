@@ -15,6 +15,7 @@ from typing import Protocol
 
 from dictionaries.actions import is_default_dictionary
 from dictionaries.manager import (
+	DictionaryImportSourceError,
 	create_dictionary,
 	delete_dictionary,
 	dictionary_path_for_name,
@@ -178,6 +179,10 @@ class DictionaryManagementPresenter:
 		except (UnicodeDecodeError, csv.Error) as exc:
 			# F-6 (D9): before ValueError, which UnicodeDecodeError also is. Nothing was copied.
 			view.show_error(_("Failed to import dictionary: {error}").format(error=describe_dictionary_read_error(exc)))
+			return None
+		except DictionaryImportSourceError as exc:
+			# F-11 (D11): the source is held by another program or cannot be read; F-6's reason.
+			view.show_error(_("Failed to import dictionary: {error}").format(error=describe_dictionary_read_error(exc.error)))
 			return None
 		except ValueError:
 			view.show_error(_("Imported file must contain text, braille, and type headers."))

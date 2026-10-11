@@ -45,7 +45,7 @@ F-11 是 `task.md` 排序中的第 4 項「F-11 字典編輯器 UX」。本任�
 - 匯入被鎖住的來源檔，顯示 F-6 的「無法開啟檔案」說明。
 - 編輯器在對話框建立之前讀檔。
 
-新增使用者可見字串：**11 個**（見「使用者可見字串」）。msgid 從 369 個變成 380 個。使用者已於 2026-10-11 決定 O1：選 (b)（D14），見「待決問題」。
+新增使用者可見字串：**11 個**（見「使用者可見字串」）。msgid 從 369 個變成 380 個。審查修正再新增字串 12（380 -> 381；「審查後的修正（F-11）」1）。使用者已於 2026-10-11 決定 O1：選 (b)（D14），見「待決問題」。
 
 非目標：
 
@@ -72,6 +72,16 @@ F-11 是 `task.md` 排序中的第 4 項「F-11 字典編輯器 UX」。本任�
 11. **spec 沒有列出的測試：** `test_wx_call_sites`（唯一的 `GenericMessageDialog` 是 `confirm_box`）、`test_message_box`（`confirm_box`，兩個測試）、`test_dialog_validation`（D8 三個；D14 兩個）、轉換的 golden 案例（翻轉一個，新增三個）、`test_dictionary_entries` 的往返測試（隱藏列不再是規則）、presenter 的只改大小寫改名（取消跳過）。D14 的驗證測試收集錯誤訊息，而不是讓解析器的錯誤往外拋：`text.zhuyin.ParseError` 是 frozen dataclass，unittest 無法替它附加 traceback（測試會在沒有 `Ran` 行的情況下中止）。
 12. **Windows 項目：** 95～106 沿用 spec 的編號，手動 NVDA 項目為 107；「改前」是 `D:\dxtest\N-f9b`（F-9 審查修正後，程式碼等於 `1ce6ce5`）；新 build 放在 `D:\dxtest\N-f11`。修正：項目 98 原本預期「`bom_lf.csv` 仍沒有 BOM」，但 `bom_lf.csv` 有 BOM（且是 LF 換行）：編輯後保留 BOM、改為 CRLF。項目 106 改用與 liblouis 預設讀音不同的注音，讓輸出能看出兩條規則都有用到：`tone1.csv` 中的 `中心,ㄓㄨㄥˋㄒㄧㄣ ,Bopomofo`，以及新增 `抹`／`ㄇㄚ`（一聲讀音，輸入時沒有空白）。項目 105 在「匯入」的檔案對話框關閉後才以不共用方式鎖住檔案：Windows 的檔案對話框不接受沒有人能共用的檔案，實際使用時則是其他程式在輸入名稱時取得檔案。項目 23～29 改用新腳本 `rerun23.py`（23、24）與 `rerun25.py`（25～29），先編輯一列讓「確定」會寫檔；項目 35 使用新的 `item35.py`；項目 44 與 47 執行 F-6 的 `item42.py` 與 `item47.py`，不修改（兩個 build 的記錄除了項目 47 的 `gui.log` 那行中的資料夾名稱之外完全相同）。
 13. **採用 D14（O1 選 (b)，使用者於 2026-10-11 決定）。** 由 Task 6 實作；GUI 項目 106 列入範圍。
+
+## 審查後的修正（F-11，2026-10-11）
+
+審查（`docs/superpowers/history/2026-10-11-01-f11-dictionary-editor-ux/review_task.md`）發現以下各點；本 spec 描述它們的段落已配合更新。
+
+1. **表頭無法辨識的字典絕不會被清空（審查 M-1）。** 表頭沒有 `text` 欄（Excel 可能寫成 `Text,Braille,Type`，或 `source,braille,type`），或第一行是空行時，每一列都會被讀成沒有來源文字，所以 D1 確認框把它們全部列為隱藏列，「移除並儲存」只寫出表頭、沒有任何資料列。現在當表頭沒有 `text` 欄且至少有一列被隱藏時，`LoadedDictionary.header_recognized` 為 False；模型從讀檔結果取得這個值，為 False 時 `save` 不寫入並拋出 `ValueError`。「確定」先檢查它：顯示字串 12 `無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。`（標題「錯誤」，`wx.OK | wx.ICON_ERROR`；用語沿用匯入的「匯入的檔案必須包含 text、braille 與 type 表頭。」），不寫入，編輯器保持開啟並還原焦點，不論有沒有修改；不顯示 D1 確認框。「取消」照舊（有修改時顯示 D7 確認框）。開啟編輯器不變（清單是空的）。沒有 `text` 欄、也沒有資料列的表頭不會遺失任何東西，所以「確定」照舊儲存（補上必要欄位）。這是最簡單又安全的做法：「確定」中一個檢查、模型中一個防護，不改讀檔的分類（它與 `DictReader` 和轉換一致），也不改開啟編輯器的流程。不採用：拒絕開啟編輯器（要在 frame 與字典管理新增路徑，而轉換本來就拒絕這種檔案），以及在 D1 確認框加一行表頭說明（仍會提議移除每一列）。msgid 380 -> 381。Decided by orchestrator with the recommended default; user may override before merge.
+2. **補上的必要欄位不再覆蓋超出表頭的欄位（審查 M-5）。** 表頭缺少 `text`、`braille`、`type` 其中之一時，寫檔把補上的欄位放在表頭的欄位之後、超出表頭的欄位之前，超出的欄位往右移：`text,braille`／`a,⠁,Bopomofo,extra` 寫成 `text,braille,type`／`a,⠁,General,Bopomofo,extra`（以前是 `a,⠁,General,extra`）。沒有表頭（預設 layout）時，記錄的前幾個欄位仍是 `text`、`braille`、`type`。Decided by orchestrator with the recommended default; user may override before merge.
+3. **D1、D7、「各檔案的設計」、「無障礙」與「風險」也改為描述 `wx.GenericMessageDialog`（審查 M-3）**，與「規劃後的修正（F-11）」3 一致；這些段落原本描述的是 `wx.MessageDialog` 與 task dialog。
+4. **審查修正新增的測試（審查 M-2 與各項修正）：** 隱藏列說明代入去空白後的值、全空欄位的記錄（`,,`）是有行號的隱藏列、焦點在對話框出現前讀取（測試替身的對話框現在會像真的對話框一樣拿走焦點）、寫檔補上的欄位（M-5）、讀檔、模型與編輯器的表頭檢查，以及字串 12（M-1）。`Ran 1553` -> `1564`，`OK (skipped=6)`。
+5. **審查 I-1**（一聲結尾卻沒有聲調空白的列，在一次無關的存檔之前轉換時沒有一聲的點）等待使用者決定；在那之前 O13 不變。
 
 ## 現況（2026-10-11 在 `main` `1ce6ce5`、worktree `D:\workspace\DotExpress-f11`、`HEAD:client` `a64da653` 上確認）
 
@@ -124,19 +134,20 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 **D1. 隱藏列：按「確定」時確認，然後移除（U1）。**
 
 - 模型照現在的方式保留隱藏列（`PreservedDictionaryRow`），讓編輯器可以列出它們。每一列另外記錄它的記錄從檔案第幾行開始，表頭算第 1 行（探針 5）。這就是記事本顯示的行號。除非有欄位跨行，Excel 顯示的列號也相同。
-- 按「確定」時，只要模型中有隱藏列，編輯器就顯示確認框（`wx.MessageDialog`，`wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`）：
+- 按「確定」時，只要模型中有隱藏列，編輯器就顯示確認框（`wx.GenericMessageDialog`，`wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`，按鈕文字以 `SetOKCancelLabels` 設定；「規劃後的修正（F-11）」3）：
   - 標題 `Remove Rows That Cannot Be Shown`；
   - 訊息：依檔案順序，每個隱藏列一行，前面有一句引言，最後是一個問句（字串 1～5）；
   - 每一列是以下其中一種：
     - 去空白後文字為空：`Row {line}: no source text`；
     - 其他情況：`Row {line}: "{text}", Bopomofo "{bopomofo}" is not valid`。代入的是去空白後的文字和注音。
   - 最多列出 **10** 列。超過時，接一行 `Other rows not listed: {count}`（O3）。
-  - OK 按鈕文字是 `Remove and &Save`，Cancel 是 `&Back to Editing`。Cancel 是預設按鈕；Esc、Alt+F4 和關閉鈕也等於「返回編輯」（探針 2）。
+  - OK 按鈕文字是 `Remove and &Save`，Cancel 是 `&Back to Editing`。Cancel 是預設按鈕，焦點也在它上面；Esc、Enter、Alt+F4 和關閉鈕也等於「返回編輯」（一般對話框對這四者都傳回 `wx.ID_CANCEL`；使用自訂按鈕文字的 task dialog 從編輯器顯示時，會把 Alt+F4 當成 OK）。
 - **移除並儲存：** 只寫入看得到的詞條（D5）；成功後以 `wx.ID_OK` 關閉。**返回編輯：** 不寫入，編輯器保持開啟，焦點回到原處（D7）。
 - 有隱藏列時，即使沒有其他修改也會出現確認框（U2.1）。沒有隱藏列時，「確定」依 D4 處理。
 - 「移除並儲存」後寫檔失敗，會出現既有的 `Failed to save: {error}`，編輯器保持開啟。隱藏列仍在模型中，所以下次按「確定」會再問一次（O4）。
+- 表頭沒有 `text` 欄且有隱藏列時，這些列是因為表頭才被隱藏，不是因為它們是空的：「確定」改為顯示字串 12，不顯示確認框，也不寫入（「審查後的修正（F-11）」1）。
 - 字典管理的筆數仍只算看得到的詞條（U1「字典管理的筆數不變」）。匯入、匯出、改名、刪除仍保留每一列，因為它們只是複製、搬移或刪除位元組。
-- 為什麼用訊息框而不是清單對話框：task dialog 一出現，NVDA 就會讀出全文。它的鍵盤行為（預設按鈕、Esc）也和程式中其他確認框一致。列數上限讓表頭寫錯、每一列都被隱藏的檔案，確認框仍能放進螢幕。
+- 為什麼用訊息框而不是清單對話框：訊息框一出現就顯示全文（一般對話框把訊息的每一行做成一段文字；NVDA 是否全部讀出由手動項目 107 確認）。它也有確認框應有的鍵盤行為（預設按鈕、Esc）。列數上限讓隱藏列很多時，確認框仍能放進螢幕。
 
 **D2. 重複檢查只看看得到的詞條（U1、U4）。**
 
@@ -157,6 +168,7 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 
 `_on_ok` 依序：
 
+0. 表頭無法辨識：顯示字串 12，不寫入，編輯器保持開啟（「審查後的修正（F-11）」1）。
 1. 有隱藏列：依 D1，由使用者的回答決定。
 2. 否則，若 `has_changes()`：寫檔（D5）。發生錯誤時顯示既有訊息並保持開啟；成功則 `event.Skip()`。
 3. 否則：不寫檔，直接 `event.Skip()`。檔案的位元組與修改時間都不變。
@@ -168,7 +180,7 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 `save_dictionary_entries(path, entries, layout)` 只寫詞條；D1 之後，隱藏列永遠不會寫出。layout 來自讀檔（D6）。
 
 - **BOM：** 讀進來的檔案開頭有 `EF BB BF` 才寫 BOM，否則不寫。DotExpress 自己建立的檔案（`create_dictionary`、`ensure_default_dictionary`）仍然沒有 BOM。
-- **表頭：** 照讀到的表頭記錄與順序。`text`、`braille`、`type` 中缺少的，依這個順序補在最後。沒有表頭記錄的空檔案，寫成 `text,braille,type`。
+- **表頭：** 照讀到的表頭記錄與順序。`text`、`braille`、`type` 中缺少的，依這個順序補在最後。每一列中，補上的欄位放在表頭的欄位之後、超出表頭的欄位之前，超出的欄位往右移（「審查後的修正（F-11）」2）。沒有表頭記錄的空檔案，寫成 `text,braille,type`。
 - **每一列：** 以該記錄讀到的欄位為起點：
   - 沒修改或編輯過的列，保留每一個欄位，包括多出的欄位、超出表頭的欄位、重複名稱的欄位；
   - 新增的列從空的開始；
@@ -194,15 +206,15 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 
 - 編輯器為 `wx.ID_CANCEL` 綁定 `wx.EVT_BUTTON`。wx 會把 Esc 和關閉鈕轉成點擊這個按鈕（`wxDialogBase::OnCloseWindow` 與 Esc 的 char hook 都模擬 Cancel 點擊），所以一個 handler 就涵蓋三者。由 GUI 項目確認。
 - 沒有修改：`event.Skip()`，照現在的方式關閉。
-- 有修改：顯示 `wx.MessageDialog`（`wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`）：
+- 有修改：顯示 `wx.GenericMessageDialog`（`wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`，按鈕文字以 `SetOKCancelLabels` 設定；「規劃後的修正（F-11）」3）：
   - 標題 `Unsaved Changes`；
   - 訊息 `Do you want to discard the changes you made to dictionary "{name}"?`，`{name}` 是檔名（不含副檔名）；
   - OK 為 `&Discard Changes`，Cancel 為 `&Back to Editing`。
 - 放棄變更：`event.Skip()`，對話框關閉，不寫任何東西。返回編輯（也包括 Esc、Alt+F4、關閉鈕、Enter）：編輯器保持開啟。
-- 使用自訂文字的 OK／Cancel，而不是 是／否，因為 是／否 的 task dialog 會忽略 Esc 與 Alt+F4（探針 2）。NVDA 使用者在問句上按 Esc，應該回到編輯器，而不是停在一個沒有反應的對話框。
+- 使用自訂文字的 OK／Cancel，而不是 是／否，因為 是／否 的 task dialog 會忽略 Esc 與 Alt+F4（探針 2）。NVDA 使用者在問句上按 Esc，應該回到編輯器，而不是停在一個沒有反應的對話框。使用一般對話框而不是 task dialog，因為使用自訂按鈕文字的 task dialog 從編輯器顯示時，會把 Alt+F4 當成 OK，也就是放棄變更（「規劃後的修正（F-11）」3）。
 - **回到編輯器時的焦點**（本對話框、D1 的對話框、存檔錯誤）：顯示對話框前，編輯器記下 `wx.Window.FindFocus()`。之後若那個控制項仍是編輯器的子視窗，就把焦點放回去（通常是「確定」或「取消」按鈕；在清單上按 Esc 時則是清單）。Windows 通常會自己還原；明確設定是為了涵蓋 F-9 M-6 遇到的沒有還原的情況。
 - 刪除不詢問（U3.2）。
-- 在 `ui/message_box.py` 新增 `confirm_box(message, caption, ok_label, cancel_label, parent) -> bool`，兩個確認框都用它建立。`message_box` 不變。
+- 在 `ui/message_box.py` 新增 `confirm_box(message, caption, ok_label, cancel_label, parent) -> bool`，兩個確認框都用它以 `wx.GenericMessageDialog` 建立。`message_box`（task dialog）不變。
 
 **D8. 重複檢查在詞條對話框的「確定」中執行（U4）。**
 
@@ -309,11 +321,12 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 - `load_dictionary_file(path)`（D6）。`load_dictionary_rows` 回傳 `load_dictionary_file(path).rows`。`load_dictionary_entries` 不變。
 - `save_dictionary_entries(path, entries, layout=DictionaryLayout())`（D5）。使用預設 layout 時，詞條寫出的位元組與現在完全相同，所以沒傳 layout 的呼叫端輸出不變。
 - D14：`canonical_bopomofo(braille) -> str | None`，供 `_is_editable`、讀檔與 `validate_dictionary_entry` 使用。
+- `LoadedDictionary.header_recognized`；寫檔把補上的欄位放在超出表頭的欄位之前（「審查後的修正（F-11）」1、2）。
 
 ### `client/dictionaries/entry_list_model.py`（tab）
 
 - 記錄 `_layout` 與 `_loaded_entries`（複本）。
-- 新增 `has_changes()`、`hidden_rows`（依檔案順序的 `PreservedDictionaryRow` tuple）與 `is_duplicate(text, editing=None)`。
+- 新增 `has_changes()`、`hidden_rows`（依檔案順序的 `PreservedDictionaryRow` tuple）與 `is_duplicate(text, editing=None)`；審查後再新增 `header_recognized`（來自讀檔；由列建立的模型為 True），它為 False 時 `save` 拒絕寫入。
 - `source_text_exists` 跳過保留列（D2）。`remove` 改用 identity。`replace` 複製 `fields`。`add` 與 `replace` 以 identity 選取（D9）。`save(path)` 以 layout 寫出詞條，**不含**保留列（D1）。
 - 存檔成功後，快照更新為存下的詞條，隱藏列從模型中移除。編輯器隨即關閉；這是為了讓模型在測試中保持一致。
 - import 清單維持 `{__future__, collections.abc, dataclasses, pathlib, dictionaries.entries}`（`test_model_imports_no_ui_or_translation_module`）。
@@ -326,14 +339,14 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
   - `model` 參數，以及在 `super().__init__` 之前讀檔（D12）；
   - 建立介面失敗時 `Destroy`；
   - 取消的 handler（D7）；
-  - `_on_ok`（D4、D1）；
+  - `_on_ok`（D4、D1），先檢查 `header_recognized`（「審查後的修正（F-11）」1）；
   - `_confirm_hidden_rows()` 組出 D1 的文字：由 `hidden_rows` 產生每一列、列數上限與「另有…」那一行；
   - 對話框之後還原焦點；
   - `_open_entry_dialog` 傳入 `is_duplicate`。編輯器自己的重複訊息只留作最後防線。
 
 ### `client/ui/message_box.py`（4 個空白）
 
-- `confirm_box(message, caption, ok_label, cancel_label, parent=None) -> bool`：`wx.MessageDialog(parent, message, caption, wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING)`、`SetOKCancelLabels(ok_label, cancel_label)`，回傳 `ShowModal() == wx.ID_OK`。
+- `confirm_box(message, caption, ok_label, cancel_label, parent=None) -> bool`：`wx.GenericMessageDialog(parent, message, caption, wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING)`、`SetOKCancelLabels(ok_label, cancel_label)`，回傳 `ShowModal() == wx.ID_OK`（「規劃後的修正（F-11）」3）。
 
 ### `client/gui.py`（tab）
 
@@ -392,8 +405,9 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 | 9 | `Do you want to discard the changes you made to dictionary "{name}"?` | `要放棄對字典「{name}」所做的變更嗎？` | D7 訊息 |
 | 10 | `&Discard Changes` | `放棄變更(&D)` | D7 OK 按鈕 |
 | 11 | `Failed to open the dictionary editor: {error}` | `無法開啟字典編輯器：{error}` | D12 |
+| 12 | `Dictionary "{name}" cannot be saved: its header is not recognized. The first line of the file must contain the text, braille, and type headers.` | `無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。` | 「確定」，表頭無法辨識（審查修正新增，「審查後的修正（F-11）」1） |
 
-msgid：369 + 11 = **380**。引號沿用 `Dictionary "{name}" already exists.`／`字典「{name}」已存在。`；快速鍵的寫法沿用 F-5 的 `重試(&R)`。
+msgid：369 + 11 = **380**；加上審查修正的字串 12 是 **381**。引號沿用 `Dictionary "{name}" already exists.`／`字典「{name}」已存在。`；快速鍵的寫法沿用 F-5 的 `重試(&R)`。
 
 新出現在其他路徑的既有訊息：
 
@@ -410,8 +424,9 @@ msgid：369 + 11 = **380**。引號沿用 `Dictionary "{name}" already exists.`�
 | 存檔錯誤（既有） | 錯誤 | 確定 | 關閉訊息 | 原本有焦點的控制項 |
 | D11 匯入 | 錯誤（既有） | 確定 | 關閉 | 不變（字典管理） |
 | D12 失敗 | 錯誤 | 確定 | 關閉 | 主視窗 |
+| 表頭無法辨識（審查修正） | 錯誤 | 確定 | 關閉訊息 | 原本有焦點的控制項 |
 
-- task dialog 出現時，NVDA 會讀出全文（F-5、F-9 的量測）。每一列的說明都很短，並以列號開頭，NVDA 讀起來是一份可用的清單。
+- D1 與 D7 的確認框是一般對話框（「規劃後的修正（F-11）」3）：標題是視窗標題，訊息的每一行是一段文字，接著是兩個按鈕；對話框出現時 NVDA 是否讀出全文由手動項目 107 確認。其他訊息框是 task dialog，出現時 NVDA 會讀出全文（F-5、F-9 的量測）。每一列的說明都很短，並以列號開頭，NVDA 讀起來是一份可用的清單。
 - 預設按鈕一律是不會遺失任何東西的那個。
 - 每個按鈕都有快速鍵：S、B、D。
 
@@ -612,7 +627,8 @@ F-6 的項目 42～51 不變；因為編輯器改為先讀檔，重跑 44 與 47
 - **trace 重播是調整過的，不是重新錄製**（低）。重播會拿掉並回答 D1 確認框的記錄。這個調整若有錯，可能掩蓋 OK 步驟的退化。測試 C3 另外單獨檢查 OK 步驟。
 - **選取規則分成兩種**（低）。新增／取代後用 identity，刪除／篩選後用相等。只有完全相同的列時才有差別。保留相等是因為 golden trace 固定了它（探針 1）。
 - **`csv.reader` 的一致性**（低）。與 `DictReader` 不一致會改變哪些列被隱藏。測試 A3 對每份語料比對兩者。
-- **task dialog 的文字長度**（低）。10 行加上很長的來源文字，對話框可能很高。列數上限限制了它的高度。
+- **確認框的文字長度**（低）。10 行加上很長的來源文字，一般對話框可能很高。列數上限限制了它的高度。
+- **一般對話框與 NVDA**（低）。兩個確認框是傳統對話框，不是 task dialog；如果 NVDA 只讀出標題和有焦點的按鈕，使用者聽到的清單會比較少。由手動項目 107 確認。
 - **wx 的 Esc 處理改變**（低）。若 wx 不再把關閉鈕轉成點擊取消，就不會詢問。項目 99、100 在 packaged build 上檢查 Esc、取消與 Alt+F4。
 
 ## 待決問題
@@ -653,6 +669,8 @@ F-6 的項目 42～51 不變；因為編輯器改為先讀檔，重跑 44 與 47
 8. **編輯器的一般失敗訊息** `無法開啟字典編輯器：{error}`（D12）。
 9. **接受編輯分身**（O6），以及**新增／取代後以 identity 選取**（D9）。
 10. **「移除並儲存」失敗後再問一次**（O4）。
+11. **表頭無法辨識的字典，「確定」不儲存：** 顯示字串 12，編輯器保持開啟（「審查後的修正（F-11）」1）。
+12. **寫檔補上必要欄位時，超出表頭的欄位往右移**（「審查後的修正（F-11）」2）。
 
 ## 範圍外／後續項目
 

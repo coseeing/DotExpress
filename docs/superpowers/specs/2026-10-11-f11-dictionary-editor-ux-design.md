@@ -45,7 +45,7 @@ After this task:
 - A locked Import source gets F-6's "cannot be opened" reason.
 - The editor's file is read before the dialog exists.
 
-New user-visible strings: **11** (see "User-Visible Strings"). The msgid count goes from 369 to 380. The user decided O1 on 2026-10-11: (b) (D14); see "Open Questions".
+New user-visible strings: **11** (see "User-Visible Strings"). The msgid count goes from 369 to 380. The review fix adds string 12 (380 -> 381; "Corrected after review (F-11)" 1). The user decided O1 on 2026-10-11: (b) (D14); see "Open Questions".
 
 Non-goals:
 
@@ -72,6 +72,16 @@ Re-checked against the code of `main` `1ce6ce5` while writing the plan (`docs/su
 11. **Tests the spec did not list:** `test_wx_call_sites` (the only `GenericMessageDialog` is `confirm_box`), `test_message_box` (`confirm_box`, two tests), `test_dialog_validation` (D8: three tests; D14: two), the conversion golden cases (one flipped, three added), `test_dictionary_entries`' round trip (the hidden rows are no longer rules), the presenter's case-only rename (unskipped). The validation test of D14 collects the error messages instead of letting the parser's error escape: `text.zhuyin.ParseError` is a frozen dataclass, and unittest cannot attach a traceback to it (the run stops without a `Ran` line).
 12. **Windows items:** 95-106 as the spec numbers them, the manual NVDA item is 107; "Before" is `D:\dxtest\N-f9b` (F-9 after its review, the code of `1ce6ce5`); the new build goes to `D:\dxtest\N-f11`. Corrections: item 98 expected "bom_lf.csv stays without BOM", but `bom_lf.csv` has a BOM (and LF line ends): after the edit it keeps its BOM and gets CRLF. Item 106 uses readings that differ from liblouis's own, so that the output shows that both rules are used: `中心,ㄓㄨㄥˋㄒㄧㄣ ,Bopomofo` in `tone1.csv` and the Add `抹`/`ㄇㄚ` (a first-tone reading typed without its space). Item 105 takes the share-none lock after the Import file dialog has closed: the Windows file dialog does not accept a file that no one may share, and in use another program takes the file while the name is typed. Items 23-29 run in the new scripts `rerun23.py` (23, 24) and `rerun25.py` (25-29), which edit a row first so that OK writes; item 35 runs in a new `item35.py`; items 44 and 47 run F-6's `item42.py` and `item47.py` unchanged (their logs are equal on both builds apart from the folder name in item 47's `gui.log` line).
 13. **D14 is adopted (O1 (b), decided by the user on 2026-10-11).** Task 6 implements it; GUI item 106 is in scope.
+
+## Corrected after review (F-11, 2026-10-11)
+
+The review (`docs/superpowers/history/2026-10-11-01-f11-dictionary-editor-ux/review_task.md`) found the points below; the sections of this spec that describe them are updated to match.
+
+1. **A dictionary whose header is not recognized is never emptied (review M-1).** Under a header that names no `text` column (`Text,Braille,Type` as Excel may write it, `source,braille,type`) or after a blank first line, every row reads as having no source text, so the D1 box listed all of them as hidden and Remove and Save wrote the header and no data row. Now `LoadedDictionary.header_recognized` is False when the header has no `text` column and at least one row is hidden; the model takes the value from the load, and its `save` raises `ValueError` without writing while it is False. OK checks it first: it shows string 12, `Dictionary "{name}" cannot be saved: its header is not recognized. The first line of the file must contain the text, braille, and type headers.` (caption `Error`, `wx.OK | wx.ICON_ERROR`; the wording follows Import's `Imported file must contain text, braille, and type headers.`), writes nothing, keeps the editor open and puts the focus back, with or without a change; the D1 box does not appear. Cancel behaves as before (after a change, the D7 box). Opening the editor is unchanged (its list is empty). A header without a `text` column and without data rows loses nothing, so OK saves it as before (the required columns appended). This is the simplest safe design: one check in OK and one guard in the model, with no change to the loader's classification (which equals `DictReader` and conversion) or to opening the editor. Rejected: refusing to open the editor (new paths in the frame and in Dictionary Management for a file that conversion already rejects), and a line about the header in the D1 box (it would still offer to remove every row). msgids 380 -> 381. Decided by orchestrator with the recommended default; user may override before merge.
+2. **An appended required column no longer overwrites an overflow field (review M-5).** When the header lacks one of `text`, `braille`, `type`, the writer puts the appended columns between the header's fields and the fields beyond the header, which move right: `text,braille` / `a,⠁,Bopomofo,extra` is written as `text,braille,type` / `a,⠁,General,Bopomofo,extra` (before: `a,⠁,General,extra`). Without a header (the default layout), a record's first fields are still `text`, `braille`, `type`. Decided by orchestrator with the recommended default; user may override before merge.
+3. **The two confirmation boxes are `wx.GenericMessageDialog` in D1, D7, "Design per File", "Accessibility" and "Risks" too (review M-3)**, as correction 3 of "Corrected after planning (F-11)" says; those sections described `wx.MessageDialog` and task dialogs.
+4. **Tests added by the review fix (review M-2 and the fixes):** the stripped values in a hidden-row line, a record of empty fields (`,,`) as a hidden row with its line, the focus read before a box (the test harness's boxes now take the focus, as a real box does), the writer's appended column (M-5), the header check in the loader, the model and the editor, and string 12 (M-1). `Ran 1553` -> `1564`, `OK (skipped=6)`.
+5. **Review I-1** (a first-tone row stored without its tone space converts without the first-tone cell until an unrelated save) waits for the user's decision; until then O13 stands.
 
 ## Current State (verified 2026-10-11 on `main` `1ce6ce5`, worktree `D:\workspace\DotExpress-f11`, `HEAD:client` `a64da653`)
 
@@ -124,19 +134,20 @@ F-4's D5 is pinned in `tests/test_dictionary_entry_list_model.py` (`test_add_or_
 **D1. Hidden rows: confirm on OK, then remove (U1).**
 
 - The model keeps the hidden rows (`PreservedDictionaryRow`) as it does now, so the editor can list them. Each one also records the file line on which its record starts, counting the header as line 1 (probe 5). This is the number Notepad shows. Excel shows the same number unless a field spans lines.
-- On OK, if the model holds at least one hidden row, the editor shows a confirmation box (`wx.MessageDialog`, `wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`):
+- On OK, if the model holds at least one hidden row, the editor shows a confirmation box (`wx.GenericMessageDialog`, `wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`, labels set with `SetOKCancelLabels`; "Corrected after planning (F-11)" 3):
   - caption `Remove Rows That Cannot Be Shown`;
   - message: one line per hidden row in file order, framed by a lead-in sentence and a question (strings 1 to 5);
   - each row line is one of:
     - `Row {line}: no source text`, when the stripped text is empty;
     - `Row {line}: "{text}", Bopomofo "{bopomofo}" is not valid`, otherwise. The values are the stripped text and the stripped sequence.
   - At most **10** rows are listed. If there are more, the line `Other rows not listed: {count}` follows (O3).
-  - OK is labelled `Remove and &Save`, Cancel `&Back to Editing`. Cancel is the default; Esc, Alt+F4 and the close button also mean Back to Editing (probe 2).
+  - OK is labelled `Remove and &Save`, Cancel `&Back to Editing`. Cancel is the default and has the focus; Esc, Enter, Alt+F4 and the close button also mean Back to Editing (the generic dialog answers all four with `wx.ID_CANCEL`; a task dialog with custom labels answered Alt+F4 with OK when shown from the editor).
 - **Remove and Save:** write the visible entries only (D5); on success close with `wx.ID_OK`. **Back to Editing:** nothing is written, the editor stays open, and the focus goes back to where it was (D7).
 - With hidden rows, the box appears even when nothing else changed (U2.1). Without hidden rows, OK behaves as in D4.
 - If the write fails after Remove and Save, the existing `Failed to save: {error}` box appears and the editor stays open. The hidden rows are still in the model, so the next OK asks again (O4).
+- If the header names no `text` column and rows are hidden, the rows are hidden because of the header, not because they are empty: OK shows string 12 instead of the box and writes nothing ("Corrected after review (F-11)" 1).
 - Dictionary Management still counts the visible entries only (U1, "字典管理的筆數不變"). Import, Export, Rename and Delete still keep every row; they copy, move or unlink bytes.
-- Why one message box and not a list dialog: a task dialog's text is read in full by NVDA when it opens. It also gives the same keyboard behaviour (default button, Esc) as every other confirmation in the app. The cap keeps the box on the screen for a file whose header is wrong, where every row is hidden.
+- Why one message box and not a list dialog: the box shows its whole text when it opens (the generic dialog makes each line of the message its own text element; whether NVDA reads all of it is manual item 107). It also gives the keyboard behaviour of a confirmation (default button, Esc). The cap keeps the box on the screen when many rows are hidden.
 
 **D2. Duplicate check over the visible entries only (U1, U4).**
 
@@ -157,6 +168,7 @@ F-4's D5 is pinned in `tests/test_dictionary_entry_list_model.py` (`test_add_or_
 
 `_on_ok`, in this order:
 
+0. If the header is not recognized: string 12, nothing written, the editor stays open ("Corrected after review (F-11)" 1).
 1. If there are hidden rows: D1. Its answer decides.
 2. Else, if `has_changes()`: write (D5). On an error, show the existing message and stay open; otherwise `event.Skip()`.
 3. Else: `event.Skip()` without writing. The file, its bytes and its modification time stay unchanged.
@@ -168,7 +180,7 @@ A missing file (deleted after Dictionary Management listed it) loads as empty. W
 `save_dictionary_entries(path, entries, layout)` writes the entries only; after D1, hidden rows are never written. The layout comes from the load (D6).
 
 - **BOM:** written when the loaded file started with one (`EF BB BF`), and not otherwise. A file DotExpress creates (`create_dictionary`, `ensure_default_dictionary`) still has none.
-- **Header:** the header record as read, in its order. Any of `text`, `braille`, `type` that is missing is appended in that order. A file with no header record (empty) gets `text,braille,type`.
+- **Header:** the header record as read, in its order. Any of `text`, `braille`, `type` that is missing is appended in that order. In each row the appended columns come after the header's fields and before the overflow fields, which move right ("Corrected after review (F-11)" 2). A file with no header record (empty) gets `text,braille,type`.
 - **Rows:** for each entry, start from the record's fields as read:
   - an unchanged or edited row keeps every field, including extra columns, overflow fields beyond the header, and duplicated column names;
   - a new row starts empty;
@@ -194,15 +206,15 @@ With `TRACE_CSV` (no BOM, header `text,braille,type`, no extra column), the byte
 
 - The editor binds `wx.EVT_BUTTON` for `wx.ID_CANCEL`. wx turns Esc and the close box into a click on that button (`wxDialogBase::OnCloseWindow` and the Esc char hook emulate the Cancel click), so one handler covers all three. The GUI items check this.
 - No change: `event.Skip()`, and the dialog closes as today.
-- With a change: a `wx.MessageDialog` (`wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`):
+- With a change: a `wx.GenericMessageDialog` (`wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`, labels set with `SetOKCancelLabels`; "Corrected after planning (F-11)" 3):
   - caption `Unsaved Changes`;
   - message `Do you want to discard the changes you made to dictionary "{name}"?`, where `{name}` is the file stem;
   - OK `&Discard Changes`, Cancel `&Back to Editing`.
 - Discard Changes: `event.Skip()` and the dialog closes, writing nothing. Back to Editing (also Esc, Alt+F4, the close button, Enter): the editor stays.
-- OK/Cancel with custom labels rather than Yes/No, because a Yes/No task dialog ignores Esc and Alt+F4 (probe 2). An NVDA user who presses Esc on the question must land back in the editor, not in a box that does nothing.
+- OK/Cancel with custom labels rather than Yes/No, because a Yes/No task dialog ignores Esc and Alt+F4 (probe 2). An NVDA user who presses Esc on the question must land back in the editor, not in a box that does nothing. The generic dialog, not a task dialog, because a task dialog with custom labels shown from the editor answers Alt+F4 with OK, which would discard the changes ("Corrected after planning (F-11)" 3).
 - **Focus after a box that returns to the editor** (this one, D1's, and the save error): the editor remembers `wx.Window.FindFocus()` before showing the box. Afterwards it puts the focus back on that control if it is still a child of the editor (usually the OK or Cancel button, or the list when Esc was pressed there). Windows normally restores it alone; the explicit call covers the cases F-9 M-6 found where it did not.
 - Delete does not ask (U3.2).
-- A new helper in `ui/message_box.py`, `confirm_box(message, caption, ok_label, cancel_label, parent) -> bool`, builds both boxes. `message_box` is unchanged.
+- A new helper in `ui/message_box.py`, `confirm_box(message, caption, ok_label, cancel_label, parent) -> bool`, builds both boxes with `wx.GenericMessageDialog`. `message_box` (task dialogs) is unchanged.
 
 **D8. The duplicate check runs in the entry dialog's OK (U4).**
 
@@ -309,11 +321,12 @@ Remove and Save leaves `text,braille,type\r\n臺北,⠞⠺,Braille\r\n`. Convert
 - `load_dictionary_file(path)` (D6). `load_dictionary_rows` returns `load_dictionary_file(path).rows`. `load_dictionary_entries` is unchanged.
 - `save_dictionary_entries(path, entries, layout=DictionaryLayout())` (D5). With the default layout it writes exactly today's bytes for entries, so callers that pass no layout keep their output.
 - D14: `canonical_bopomofo(braille) -> str | None`, used by `_is_editable`, the loader and `validate_dictionary_entry`.
+- `LoadedDictionary.header_recognized`; the writer puts appended columns before the overflow fields ("Corrected after review (F-11)" 1, 2).
 
 ### `client/dictionaries/entry_list_model.py` (tabs)
 
 - It stores `_layout` and `_loaded_entries` (copies).
-- New: `has_changes()`, `hidden_rows` (a tuple of `PreservedDictionaryRow` in file order) and `is_duplicate(text, editing=None)`.
+- New: `has_changes()`, `hidden_rows` (a tuple of `PreservedDictionaryRow` in file order) and `is_duplicate(text, editing=None)`; after the review, `header_recognized` (from the load; True for a model built from rows), and `save` refuses while it is False.
 - `source_text_exists` skips preserved rows (D2). `remove` works by identity. `replace` copies `fields`. `add` and `replace` select by identity (D9). `save(path)` writes the entries with the layout and **no** preserved rows (D1).
 - After a successful save, the snapshot is the saved entries and the hidden rows are dropped from the model. The editor closes then anyway; this keeps the model consistent for tests.
 - The import list stays `{__future__, collections.abc, dataclasses, pathlib, dictionaries.entries}` (`test_model_imports_no_ui_or_translation_module`).
@@ -326,14 +339,14 @@ Remove and Save leaves `text,braille,type\r\n臺北,⠞⠺,Braille\r\n`. Convert
   - the `model` keyword and loading before `super().__init__` (D12);
   - `Destroy` on a build failure;
   - the Cancel handler (D7);
-  - `_on_ok` (D4, D1);
+  - `_on_ok` (D4, D1), which checks `header_recognized` first ("Corrected after review (F-11)" 1);
   - `_confirm_hidden_rows()` builds the D1 text, with the row lines from `hidden_rows`, the cap and the overflow line;
   - focus restore after a box;
   - `_open_entry_dialog` passes `is_duplicate`. The editor's own duplicate box stays only as the backstop.
 
 ### `client/ui/message_box.py` (4 spaces)
 
-- `confirm_box(message, caption, ok_label, cancel_label, parent=None) -> bool`: `wx.MessageDialog(parent, message, caption, wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING)`, `SetOKCancelLabels(ok_label, cancel_label)`. It returns `ShowModal() == wx.ID_OK`.
+- `confirm_box(message, caption, ok_label, cancel_label, parent=None) -> bool`: `wx.GenericMessageDialog(parent, message, caption, wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING)`, `SetOKCancelLabels(ok_label, cancel_label)`. It returns `ShowModal() == wx.ID_OK` ("Corrected after planning (F-11)" 3).
 
 ### `client/gui.py` (tabs)
 
@@ -392,8 +405,9 @@ Remove and Save leaves `text,braille,type\r\n臺北,⠞⠺,Braille\r\n`. Convert
 | 9 | `Do you want to discard the changes you made to dictionary "{name}"?` | `要放棄對字典「{name}」所做的變更嗎？` | D7 message |
 | 10 | `&Discard Changes` | `放棄變更(&D)` | D7 OK button |
 | 11 | `Failed to open the dictionary editor: {error}` | `無法開啟字典編輯器：{error}` | D12 |
+| 12 | `Dictionary "{name}" cannot be saved: its header is not recognized. The first line of the file must contain the text, braille, and type headers.` | `無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。` | OK, header not recognized (added by the review fix, "Corrected after review (F-11)" 1) |
 
-msgids: 369 + 11 = **380**. The quoting follows `Dictionary "{name}" already exists.` / `字典「{name}」已存在。`. The access-key style follows F-5's `重試(&R)`.
+msgids: 369 + 11 = **380**; with string 12 of the review fix, **381**. The quoting follows `Dictionary "{name}" already exists.` / `字典「{name}」已存在。`. The access-key style follows F-5's `重試(&R)`.
 
 Existing messages newly reachable:
 
@@ -410,8 +424,9 @@ Existing messages newly reachable:
 | Save error (existing) | 錯誤 | 確定 | closes the box | the control focused before |
 | D11 import | 錯誤 (existing) | 確定 | closes | unchanged (Dictionary Management) |
 | D12 failure | 錯誤 | 確定 | closes | the main window |
+| Header not recognized (review fix) | 錯誤 | 確定 | closes the box | the control focused before |
 
-- Task dialogs present their full text to NVDA when they open (F-5, F-9 measurements). The row lines are short and start with the row number, so NVDA reads a usable list.
+- The D1 and D7 boxes are generic dialogs ("Corrected after planning (F-11)" 3): the caption is the window title, each line of the message is its own text element, then the two buttons; whether NVDA reads the whole text when the box opens is manual item 107. The other boxes are task dialogs, which present their full text to NVDA when they open (F-5, F-9 measurements). The row lines are short and start with the row number, so NVDA reads a usable list.
 - The default button is always the one that loses nothing.
 - Every button has an access key: S, B, D.
 
@@ -612,7 +627,8 @@ The F-6 items 42 to 51 are unchanged; 44 and 47 are re-run because the editor no
 - **The trace replay is adapted, not re-recorded** (low). The replay strips the D1 box record and answers it. A bug in that adaptation could hide a regression of the OK step. Test C3 checks the OK step on its own.
 - **Selection rule split** (low). Identity after Add/Replace and equality after Delete/filter. It only differs with identical rows. It is kept because the golden trace pins equality (probe 1).
 - **`csv.reader` parity** (low). A divergence from `DictReader` would change which rows are hidden. Test A3 compares both on every corpus.
-- **Task dialog text length** (low). With 10 row lines and long source texts, the box can be tall. The cap bounds it.
+- **Confirmation box text length** (low). With 10 row lines and long source texts, the generic dialog can be tall. The cap bounds it.
+- **The generic dialog and NVDA** (low). The two confirmation boxes are classic dialogs, not task dialogs; if NVDA reads only the caption and the focused button, the user hears less of the list. Manual item 107 checks it.
 - **Changing wx Esc handling** (low). If wx stops turning the close box into a Cancel click, the box would not ask. Items 99 and 100 check Esc, Cancel and Alt+F4 on the packaged build.
 
 ## Open Questions
@@ -653,6 +669,8 @@ These were not in U1 to U6. Each one is a one-line change if the user prefers ot
 8. **The generic editor failure text** `無法開啟字典編輯器：{error}` (D12).
 9. **Twin Edit accepted** (O6), and **identity selection after Add/Replace** (D9).
 10. **Re-asking after a failed Remove and Save** (O4).
+11. **A dictionary whose header is not recognized is not saved by OK:** string 12, the editor stays open ("Corrected after review (F-11)" 1).
+12. **The overflow fields move right when the writer appends a required column** ("Corrected after review (F-11)" 2).
 
 ## Out of Scope / Follow-ups
 

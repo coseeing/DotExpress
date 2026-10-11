@@ -114,7 +114,7 @@ Written to `$T/tools/` in Task 0 by the block script: `brief.py`, `msgid_scan.py
 
 ### Task 0: Baseline (no commit)
 
-- [ ] **Step 1: Check the starting point.**
+- [x] **Step 1: Check the starting point.**
 
 ```bash
 git -C $REPO status --short -- client docs scripts
@@ -134,7 +134,7 @@ e0337df75dcff90e8a0134e0d2d7847f322075c1
 5e130210420bf7a3828936094ac0af5868c32801
 ```
 
-- [ ] **Step 2: The git-ignored runtime the tests load.** A worktree is made without the generated liblouis DLL and tables, `louis_helper.py`, MathCAT, the submodule's `configure.ac` and the NVDA helper source that Task 9's test reads (`include/nvda/source/louisHelper.py`); the guarded copies below bring them from the main checkout, as F-3's Task 0 did (in a worktree that has them already they do nothing). Never stage these files.
+- [x] **Step 2: The git-ignored runtime the tests load.** A worktree is made without the generated liblouis DLL and tables, `louis_helper.py`, MathCAT, the submodule's `configure.ac` and the NVDA helper source that Task 9's test reads (`include/nvda/source/louisHelper.py`); the guarded copies below bring them from the main checkout, as F-3's Task 0 did (in a worktree that has them already they do nothing). Never stage these files.
 
 ```bash
 test -e $REPO/client/braille/liblouis.dll || cp $MAIN/client/braille/liblouis.dll $REPO/client/braille/
@@ -164,7 +164,7 @@ present: include/nvda/source/louisHelper.py
 louis_helper.py is the vendored file
 ```
 
-- [ ] **Step 3: Create the throwaway tools** in `$T/tools/` (outside the repo, never committed). `brief.py`, `msgid_scan.py`, `shuffle_harness.py` and `pin_pot_date.py` are F-9's, unchanged; `mo_check.py` lists the F-12 msgids; `apply_blocks.py` is F-11's with its docstring naming this plan.
+- [x] **Step 3: Create the throwaway tools** in `$T/tools/` (outside the repo, never committed). `brief.py`, `msgid_scan.py`, `shuffle_harness.py` and `pin_pot_date.py` are F-9's, unchanged; `mo_check.py` lists the F-12 msgids; `apply_blocks.py` is F-11's with its docstring naming this plan.
 
 File: `$T/tools/brief.py`
 
@@ -819,7 +819,7 @@ wrote $T/tools/apply_blocks.py
 
 From then on apply every step's blocks with `apply_blocks.py`, for example `$PY $T/tools/apply_blocks.py ../docs/superpowers/plans/2026-10-11-f12-localization-cleanup.md $REPO $T "Task 1" "Step 1"`; it prints `N blocks applied` (Task 0 Step 3: 8; Task 1 Step 1: 17, Step 2: 2, Step 5: 1; Task 2 Step 1: 13, Step 2: 17, Step 5: 1; Task 3 Step 1: 12, Step 2: 5, Step 5: 1; Task 4 Step 1: 8, Step 2: 7, Step 5: 2; Task 5 Step 1: 18, Step 2: 18, Step 5: 2; Task 6 Step 1: 4, Step 2: 3, Step 5: 1; Task 7 Step 1: 16, Step 2: 9, Step 5: 3; Task 8 Step 1: 3, Step 2: 1; Task 9 Step 2: 1).
 
-- [ ] **Step 4: Baseline: full suite, focused modules, fixtures, msgids, catalogs, tree, application data.**
+- [x] **Step 4: Baseline: full suite, focused modules, fixtures, msgids, catalogs, tree, application data.**
 
 ```bash
 $PY -B -X utf8 -m unittest discover -s tests 2>&1 | $PY $T/tools/brief.py
@@ -892,7 +892,7 @@ worktree application data checked
 
 ### Task 1: Translate the Export All summary and the conversion fallback texts (D1, D2)
 
-- [ ] **Step 1: Red: Test Plan B, C1, A (strings 1-5).** `test_export_coordinator.py` (4 spaces): the two `KNOWN BUG (P1-4 spec, defect 4)` pins and every other Export All summary of the module expect the zh_TW texts (`ALL_EXPORTED`, `EXPORTED_WITH_ERRORS`, `成功匯出的文件：N` / `匯出失敗的文件：N`). `test_gui_document_flows.py` (4 spaces): the same for the frame's summaries (two pins), and the frame twin of the fallback-text test expects `發生不明的錯誤。` and `選取的轉譯表無法轉譯這段文字。` (a pin). `test_conversion_presenter.py` (4 spaces): `test_format_conversion_error_public_texts` likewise (a pin). `test_i18n.py` (4 spaces): strings 1-5, and a guard that the four constants of `export_results.py` are `N_` calls and that `get_public_error_message` returns `N_` calls (AST, Test Plan A3). The expected summaries are zh_TW literals: what the user sees**
+- [x] **Step 1: Red: Test Plan B, C1, A (strings 1-5).** `test_export_coordinator.py` (4 spaces): the two `KNOWN BUG (P1-4 spec, defect 4)` pins and every other Export All summary of the module expect the zh_TW texts (`ALL_EXPORTED`, `EXPORTED_WITH_ERRORS`, `成功匯出的文件：N` / `匯出失敗的文件：N`). `test_gui_document_flows.py` (4 spaces): the same for the frame's summaries (two pins), and the frame twin of the fallback-text test expects `發生不明的錯誤。` and `選取的轉譯表無法轉譯這段文字。` (a pin). `test_conversion_presenter.py` (4 spaces): `test_format_conversion_error_public_texts` likewise (a pin). `test_i18n.py` (4 spaces): strings 1-5, and a guard that the four constants of `export_results.py` are `N_` calls and that `get_public_error_message` returns `N_` calls (AST, Test Plan A3). The expected summaries are zh_TW literals: what the user sees**
 
 Edit: `client/tests/test_export_coordinator.py`
 
@@ -1445,7 +1445,7 @@ Ran 306 tests
 FAILED (failures=20)
 ```
 
-- [ ] **Step 2: Green: mark the texts with `N_`** (`client/documents/export_results.py`, `client/conversion/plain_text.py`, 4 spaces). `_show_batch_result` and `format_conversion_error` already translate them where they are shown.**
+- [x] **Step 2: Green: mark the texts with `N_`** (`client/documents/export_results.py`, `client/conversion/plain_text.py`, 4 spaces). `_show_batch_result` and `format_conversion_error` already translate them where they are shown.**
 
 Edit: `client/documents/export_results.py`
 
@@ -1508,7 +1508,7 @@ def get_public_error_message(error: Exception) -> str:
     return message
 ```
 
-- [ ] **Step 3: Green apart from the catalog.**
+- [x] **Step 3: Green apart from the catalog.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_export_coordinator tests.test_gui_document_flows tests.test_conversion_presenter tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -1557,7 +1557,7 @@ Ran 306 tests
 FAILED (failures=19)
 ```
 
-- [ ] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
+- [x] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -1590,7 +1590,7 @@ msgstr ""
 28
 ```
 
-- [ ] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
+- [x] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
 
 Edit: `client/locales/zh_TW/LC_MESSAGES/dotexpress.po`
 
@@ -1681,7 +1681,7 @@ locales/zh_TW/LC_MESSAGES/dotexpress.po:1
 source msgids: 386 sha256 9f43d41592a51bd8527ee96c41e6274b8c5909803aa145847d651e5c80bc9d87
 ```
 
-- [ ] **Step 6: Green: the new tests, the modules, the full suite.**
+- [x] **Step 6: Green: the new tests, the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_export_coordinator tests.test_gui_document_flows tests.test_conversion_presenter tests.test_i18n -v 2>&1 | grep -E "^(test_export_summary_and_conversion_fallback_strings_are_translated|test_export_summary_and_conversion_fallback_texts_are_marked_where_defined) " | sed 's/ (.*) \.\.\. / /'
@@ -1700,7 +1700,7 @@ Ran 1569 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_export_coordinator.py client/tests/test_gui_document_flows.py client/tests/test_conversion_presenter.py client/tests/test_i18n.py client/documents/export_results.py client/conversion/plain_text.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -1728,7 +1728,7 @@ b6d32d26860d0a9cdee68f3bd81634ec529d0efd
 
 ### Task 2: Explain why an imported file was skipped (D3)
 
-- [ ] **Step 1: Red: Test Plan E, A (strings 10-15).** `test_import_problems.py` (new, 4 spaces): each row of the D3 table through `describe_import_problem` with the errors the loaders raise (a Big5 `.txt`, a `PermissionError`, the four name codes, the extension refusals of `load_text_document`, `import_pdf`, `import_epub`, the three package refusals, an encrypted PDF written with pypdf's `encrypt`, an EPUB without spine and one with a missing spine item, a package that is not a zip, one with metadata that is not JSON, one whose text is not UTF-8, a `KeyError`, and errors shown with their own text), `str()` of an `ImportProblem` English, no wx or `dictionaries` import. `test_document_workspace.py` (4 spaces): the batch's reasons in zh_TW, every reason of probe 1 that a Windows file system can hold, a package the loader refuses still counted invalid at startup (E5). `test_workspace_service.py` (4 spaces): a listed duplicate gives `文件「X」已存在。`, a failed package write `儲存文件失敗：...`. `test_gui_document_flows.py` (4 spaces): the Import Issues lines of the frame in zh_TW. `test_i18n.py`: strings 10-15**
+- [x] **Step 1: Red: Test Plan E, A (strings 10-15).** `test_import_problems.py` (new, 4 spaces): each row of the D3 table through `describe_import_problem` with the errors the loaders raise (a Big5 `.txt`, a `PermissionError`, the four name codes, the extension refusals of `load_text_document`, `import_pdf`, `import_epub`, the three package refusals, an encrypted PDF written with pypdf's `encrypt`, an EPUB without spine and one with a missing spine item, a package that is not a zip, one with metadata that is not JSON, one whose text is not UTF-8, a `KeyError`, and errors shown with their own text), `str()` of an `ImportProblem` English, no wx or `dictionaries` import. `test_document_workspace.py` (4 spaces): the batch's reasons in zh_TW, every reason of probe 1 that a Windows file system can hold, a package the loader refuses still counted invalid at startup (E5). `test_workspace_service.py` (4 spaces): a listed duplicate gives `文件「X」已存在。`, a failed package write `儲存文件失敗：...`. `test_gui_document_flows.py` (4 spaces): the Import Issues lines of the frame in zh_TW. `test_i18n.py`: strings 10-15**
 
 File: `client/tests/test_import_problems.py`
 
@@ -2324,7 +2324,7 @@ Ran 401 tests
 FAILED (failures=12, errors=1, skipped=2)
 ```
 
-- [ ] **Step 2: Green: `ImportProblem` and `describe_import_problem`** (`client/documents/import_problems.py`, new; `client/documents/workspace.py`, `client/documents/importers/base.py`, `epub_importer.py`, `pdf_importer.py`, `client/documents/workspace_service.py`; 4 spaces). `ImportProblem` lives in `import_problems.py`, not in `importers/base.py`, which imports it (Spec Corrections 4).**
+- [x] **Step 2: Green: `ImportProblem` and `describe_import_problem`** (`client/documents/import_problems.py`, new; `client/documents/workspace.py`, `client/documents/importers/base.py`, `epub_importer.py`, `pdf_importer.py`, `client/documents/workspace_service.py`; 4 spaces). `ImportProblem` lives in `import_problems.py`, not in `importers/base.py`, which imports it (Spec Corrections 4).**
 
 File: `client/documents/import_problems.py`
 
@@ -2787,7 +2787,7 @@ Edit: `client/documents/workspace_service.py`
             saved.append(document)
 ```
 
-- [ ] **Step 3: Green apart from the catalog.**
+- [x] **Step 3: Green apart from the catalog.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_import_problems tests.test_document_workspace tests.test_workspace_service tests.test_gui_document_flows tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -2822,7 +2822,7 @@ Ran 410 tests
 FAILED (failures=18, skipped=2)
 ```
 
-- [ ] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
+- [x] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -2870,7 +2870,7 @@ msgstr ""
 27
 ```
 
-- [ ] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
+- [x] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
 
 Edit: `client/locales/zh_TW/LC_MESSAGES/dotexpress.po`
 
@@ -2995,7 +2995,7 @@ locales/zh_TW/LC_MESSAGES/dotexpress.po:1
 source msgids: 392 sha256 9e6f0c97805b4e7b78958f923af558ffac62e93b00c6a5fb20dab8726105d26e
 ```
 
-- [ ] **Step 6: Green: the new tests, the modules, the full suite.**
+- [x] **Step 6: Green: the new tests, the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_import_problems tests.test_document_workspace tests.test_workspace_service tests.test_gui_document_flows tests.test_i18n -v 2>&1 | grep -E "^(test_a_file_name_that_is_not_a_document_name|test_a_file_that_cannot_be_opened|test_a_text_file_that_is_not_utf8|test_an_encrypted_pdf|test_an_epub_without_readable_content|test_any_other_error_reading_a_package|test_any_other_error_shows_its_own_text|test_batch_import_documents_explains_each_skipped_file|test_import_issues_explain_each_skipped_file|test_import_problem_is_a_value_error_that_keeps_its_english_text|test_import_problem_strings_are_translated|test_load_workspace_documents_counts_a_package_the_loader_refuses_as_invalid|test_module_imports_neither_wx_nor_dictionaries|test_the_problems_of_the_loaders_show_their_reason) " | sed 's/ (.*) \.\.\. / /'
@@ -3026,7 +3026,7 @@ Ran 1583 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_import_problems.py client/tests/test_document_workspace.py client/tests/test_workspace_service.py client/tests/test_gui_document_flows.py client/tests/test_i18n.py client/documents/import_problems.py client/documents/workspace.py client/documents/importers/base.py client/documents/importers/epub_importer.py client/documents/importers/pdf_importer.py client/documents/workspace_service.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -3059,7 +3059,7 @@ Expected:
 
 ### Task 3: Explain a conversion that cannot read the selected dictionary (D4)
 
-- [ ] **Step 1: Red: Test Plan D, C2, C3, A (strings 16, 17).** `test_conversion_text_dictionary_rules.py` (4 spaces): the error-case table expects `DictionaryRulesReadError` (with the same text) for the five dictionary rows, the loader's retry likewise; `DictionaryRulesReadErrorTest`: a Big5 file, a field over `csv.field_size_limit()`, the header `Text,Braille,Type` and an empty file raise it with the path, the cause and `header_not_recognized`; a `PermissionError` opening the dictionary (patched `Path.open`) is its cause; the Bopomofo file's error is not wrapped; a `processing` that returns a value that is not iterable fails after the read and is not wrapped (Spec Corrections 7). `test_conversion_service.py` (4 spaces): the headerless dictionary of the real pipeline gives it. `test_conversion_presenter.py` (4 spaces): `format_conversion_error` gives `轉譯失敗：無法讀取字典「d」。<reason>` for NOT_UTF8, CANNOT_OPEN, INVALID_CSV, OTHER and the header, one line; a manual failure and an export failure show it. `test_i18n.py`: strings 16, 17. The tests look the new class up when they run, so only they fail**
+- [x] **Step 1: Red: Test Plan D, C2, C3, A (strings 16, 17).** `test_conversion_text_dictionary_rules.py` (4 spaces): the error-case table expects `DictionaryRulesReadError` (with the same text) for the five dictionary rows, the loader's retry likewise; `DictionaryRulesReadErrorTest`: a Big5 file, a field over `csv.field_size_limit()`, the header `Text,Braille,Type` and an empty file raise it with the path, the cause and `header_not_recognized`; a `PermissionError` opening the dictionary (patched `Path.open`) is its cause; the Bopomofo file's error is not wrapped; a `processing` that returns a value that is not iterable fails after the read and is not wrapped (Spec Corrections 7). `test_conversion_service.py` (4 spaces): the headerless dictionary of the real pipeline gives it. `test_conversion_presenter.py` (4 spaces): `format_conversion_error` gives `轉譯失敗：無法讀取字典「d」。<reason>` for NOT_UTF8, CANNOT_OPEN, INVALID_CSV, OTHER and the header, one line; a manual failure and an export failure show it. `test_i18n.py`: strings 16, 17. The tests look the new class up when they run, so only they fail**
 
 Edit: `client/tests/test_conversion_text_dictionary_rules.py`
 
@@ -3519,7 +3519,7 @@ Ran 123 tests
 FAILED (failures=1, errors=12)
 ```
 
-- [ ] **Step 2: Green: `DictionaryRulesReadError` and its message** (`client/conversion/text/dictionary_rules.py`, `client/ui/conversion_presenter.py`, 4 spaces). The dictionary is read by `_read_dictionary_rows`, all rows before any is processed.**
+- [x] **Step 2: Green: `DictionaryRulesReadError` and its message** (`client/conversion/text/dictionary_rules.py`, `client/ui/conversion_presenter.py`, 4 spaces). The dictionary is read by `_read_dictionary_rows`, all rows before any is processed.**
 
 Edit: `client/conversion/text/dictionary_rules.py`
 
@@ -3754,7 +3754,7 @@ def format_conversion_error(error: ConversionStageError) -> str:
 
 ```
 
-- [ ] **Step 3: Green apart from the catalog.**
+- [x] **Step 3: Green apart from the catalog.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_conversion_text_dictionary_rules tests.test_conversion_service tests.test_conversion_presenter tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -3779,7 +3779,7 @@ Ran 123 tests
 FAILED (failures=8)
 ```
 
-- [ ] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
+- [x] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -3814,7 +3814,7 @@ msgstr "無法讀取字典「{name}」。"
 27
 ```
 
-- [ ] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
+- [x] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
 
 Edit: `client/locales/zh_TW/LC_MESSAGES/dotexpress.po`
 
@@ -3916,7 +3916,7 @@ locales/zh_TW/LC_MESSAGES/dotexpress.po:1
 source msgids: 394 sha256 4528a3b543937ea86b70120013e5d5a1014f37406e53baa836e6216f61c2113e
 ```
 
-- [ ] **Step 6: Green: the new tests, the modules, the full suite.**
+- [x] **Step 6: Green: the new tests, the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_conversion_text_dictionary_rules tests.test_conversion_service tests.test_conversion_presenter tests.test_i18n -v 2>&1 | grep -E "^(test_a_dictionary_that_cannot_be_opened_raises_the_read_error|test_a_dictionary_that_cannot_be_read_raises_the_read_error|test_an_error_while_processing_the_rows_is_not_wrapped|test_export_failure_names_a_dictionary_that_cannot_be_read|test_format_conversion_error_names_a_dictionary_that_cannot_be_read|test_manual_failure_names_a_dictionary_that_cannot_be_read|test_the_bundled_bopomofo_file_is_not_wrapped|test_unreadable_dictionary_conversion_strings_are_translated) " | sed 's/ (.*) \.\.\. / /'
@@ -3941,7 +3941,7 @@ Ran 1591 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_conversion_text_dictionary_rules.py client/tests/test_conversion_service.py client/tests/test_conversion_presenter.py client/tests/test_i18n.py client/conversion/text/dictionary_rules.py client/ui/conversion_presenter.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -3969,7 +3969,7 @@ Expected:
 
 ### Task 4: Explain a document name held by a file that is not listed (D5)
 
-- [ ] **Step 1: Red: Test Plan F, E2 (unlisted part), A (strings 18, 19).** `test_workspace_service.py` (4 spaces): Import of a name that `Bad.dep` holds gives string 18 naming `Bad.dep`; `unlisted_package_entry` gives the on-disk spelling (`bad.dep` for `BAD` on NTFS), `folder.dep` for a folder, `None` for a free name and for a Rename's own package, and `bad.dep` when the folder cannot be listed. `test_document_workspace.py` (4 spaces): `batch_import_documents` with `unlisted_entries` gives string 18 and keeps the listed duplicate first. `test_gui_document_flows.py` (4 spaces): F-8's two tests of Add and Rename to `bad` expect the new box (string 18, a blank line, string 19 with the workspace folder) and the dialog again; Add `BAD` names `bad.dep` (skipped on a case-sensitive file system); a folder; a listed duplicate keeps its message and the entry is not asked for; the frame's Import names the file; the delegation test's stand-in service answers `None`. `test_i18n.py`: strings 18, 19**
+- [x] **Step 1: Red: Test Plan F, E2 (unlisted part), A (strings 18, 19).** `test_workspace_service.py` (4 spaces): Import of a name that `Bad.dep` holds gives string 18 naming `Bad.dep`; `unlisted_package_entry` gives the on-disk spelling (`bad.dep` for `BAD` on NTFS), `folder.dep` for a folder, `None` for a free name and for a Rename's own package, and `bad.dep` when the folder cannot be listed. `test_document_workspace.py` (4 spaces): `batch_import_documents` with `unlisted_entries` gives string 18 and keeps the listed duplicate first. `test_gui_document_flows.py` (4 spaces): F-8's two tests of Add and Rename to `bad` expect the new box (string 18, a blank line, string 19 with the workspace folder) and the dialog again; Add `BAD` names `bad.dep` (skipped on a case-sensitive file system); a folder; a listed duplicate keeps its message and the entry is not asked for; the frame's Import names the file; the delegation test's stand-in service answers `None`. `test_i18n.py`: strings 18, 19**
 
 Edit: `client/tests/test_workspace_service.py`
 
@@ -4325,7 +4325,7 @@ Ran 409 tests
 FAILED (failures=7, errors=7, skipped=2)
 ```
 
-- [ ] **Step 2: Green: `unlisted_package_entry`, the unlisted entries of Import, the box** (`client/documents/workspace.py`, `client/documents/workspace_service.py`, 4 spaces; `client/gui.py`, tabs). The frame asks the service for the entry instead of `package_name_taken` (Spec Corrections 8).**
+- [x] **Step 2: Green: `unlisted_package_entry`, the unlisted entries of Import, the box** (`client/documents/workspace.py`, `client/documents/workspace_service.py`, 4 spaces; `client/gui.py`, tabs). The frame asks the service for the entry instead of `package_name_taken` (Spec Corrections 8).**
 
 Edit: `client/documents/workspace.py`
 
@@ -4573,7 +4573,7 @@ Edit: `client/gui.py`
 		default_document = create_default_document()
 ```
 
-- [ ] **Step 3: Green apart from the catalog.**
+- [x] **Step 3: Green apart from the catalog.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_workspace_service tests.test_document_workspace tests.test_gui_document_flows tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -4602,7 +4602,7 @@ Ran 409 tests
 FAILED (failures=8, skipped=2)
 ```
 
-- [ ] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
+- [x] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -4637,7 +4637,7 @@ msgstr ""
 27
 ```
 
-- [ ] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
+- [x] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
 
 Edit: `client/locales/zh_TW/LC_MESSAGES/dotexpress.po`
 
@@ -4740,7 +4740,7 @@ locales/zh_TW/LC_MESSAGES/dotexpress.po:1
 source msgids: 396 sha256 cccf45a7373f89174c881d08d24504408b59af3f8456e9c4d849d88232e508aa
 ```
 
-- [ ] **Step 6: Green: the new tests, the modules, the full suite.**
+- [x] **Step 6: Green: the new tests, the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_workspace_service tests.test_document_workspace tests.test_gui_document_flows tests.test_i18n -v 2>&1 | grep -E "^(test_a_listed_duplicate_keeps_its_message_before_any_entry_on_disk|test_add_of_a_name_held_by_a_folder_names_the_folder|test_add_of_another_case_of_an_unlisted_name_names_the_entry_on_disk|test_batch_import_documents_names_the_file_that_holds_a_name_on_disk|test_import_of_a_name_held_by_an_unlisted_package_names_the_file|test_unlisted_entry_strings_are_translated|test_unlisted_package_entry_falls_back_to_the_package_name|test_unlisted_package_entry_names_what_holds_a_name_on_disk) " | sed 's/ (.*) \.\.\. / /'
@@ -4765,7 +4765,7 @@ Ran 1599 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_workspace_service.py client/tests/test_document_workspace.py client/tests/test_gui_document_flows.py client/tests/test_i18n.py client/documents/workspace.py client/documents/workspace_service.py client/gui.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -4794,7 +4794,7 @@ ebbf013b774aaeae21b6ce9dc98532f08d016023
 
 ### Task 5: Tell the user when settings cannot be saved (D6)
 
-- [ ] **Step 1: Red: Test Plan G, A (strings 20-22).** `test_config.py` (4 spaces): `ConfigSaveProblemTest`: every setter returns `None` after a save; each returns `UNREADABLE` for a folder at `config.json`; a damaged file with a folder at `config.json.bak` gives `BACKUP_FAILED` (the backup path, the F-8 log line, the file kept); a failing `os.replace` gives `WRITE_FAILED`; the client id and `set_lang(persist=True)` behave as before. `test_translation_settings.py`, `test_translation_tables.py`, `test_view_settings.py` (4 spaces): the helpers return the first problem and call every setter. `test_gui_document_flows.py` (4 spaces): `SettingsSaveProblemFrameTest` (a real `ConfigStore` in a temporary folder, `config.log` isolated): one box after Apply, none after the second; the font size and the dictionary report through the same flag in either order; no box after good saves; the text of each kind; the box's parent is the active window. The frame tests whose stand-in saves are Mocks get `return_value=None` (Spec Corrections 9). `test_i18n.py`: strings 20-22**
+- [x] **Step 1: Red: Test Plan G, A (strings 20-22).** `test_config.py` (4 spaces): `ConfigSaveProblemTest`: every setter returns `None` after a save; each returns `UNREADABLE` for a folder at `config.json`; a damaged file with a folder at `config.json.bak` gives `BACKUP_FAILED` (the backup path, the F-8 log line, the file kept); a failing `os.replace` gives `WRITE_FAILED`; the client id and `set_lang(persist=True)` behave as before. `test_translation_settings.py`, `test_translation_tables.py`, `test_view_settings.py` (4 spaces): the helpers return the first problem and call every setter. `test_gui_document_flows.py` (4 spaces): `SettingsSaveProblemFrameTest` (a real `ConfigStore` in a temporary folder, `config.log` isolated): one box after Apply, none after the second; the font size and the dictionary report through the same flag in either order; no box after good saves; the text of each kind; the box's parent is the active window. The frame tests whose stand-in saves are Mocks get `return_value=None` (Spec Corrections 9). `test_i18n.py`: strings 20-22**
 
 Edit: `client/tests/test_config.py`
 
@@ -5486,7 +5486,7 @@ Ran 321 tests
 FAILED (failures=8, errors=10)
 ```
 
-- [ ] **Step 2: Green: `ConfigSaveProblem` and the box** (`client/config.py`, `client/settings/translation.py`, `translation_tables.py`, `view.py`, 4 spaces; `client/gui.py`, tabs).**
+- [x] **Step 2: Green: `ConfigSaveProblem` and the box** (`client/config.py`, `client/settings/translation.py`, `translation_tables.py`, `view.py`, 4 spaces; `client/gui.py`, tabs).**
 
 Edit: `client/config.py`
 
@@ -6030,7 +6030,7 @@ Edit: `client/gui.py`
 			settings_dialog.sync_font_size(self.view_settings.font_size)
 ```
 
-- [ ] **Step 3: Green apart from the catalog.**
+- [x] **Step 3: Green apart from the catalog.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_config tests.test_translation_settings tests.test_translation_tables tests.test_view_settings tests.test_gui_document_flows tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -6055,7 +6055,7 @@ Ran 321 tests
 FAILED (failures=8)
 ```
 
-- [ ] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
+- [x] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -6097,7 +6097,7 @@ msgstr ""
 27
 ```
 
-- [ ] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
+- [x] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
 
 Edit: `client/locales/zh_TW/LC_MESSAGES/dotexpress.po`
 
@@ -6210,7 +6210,7 @@ locales/zh_TW/LC_MESSAGES/dotexpress.po:1
 source msgids: 399 sha256 85d26d612469d44fc2e8d60567a7a1eb8dfbb6787cec25cb1ad7f39b2fc6cc99
 ```
 
-- [ ] **Step 6: Green: the new tests, the modules, the full suite.**
+- [x] **Step 6: Green: the new tests, the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_config tests.test_translation_settings tests.test_translation_tables tests.test_view_settings tests.test_gui_document_flows tests.test_i18n -v 2>&1 | grep -E "^(test_a_damaged_file_whose_backup_fails_is_backup_failed|test_a_file_that_cannot_be_read_is_unreadable|test_a_settings_change_that_cannot_be_saved_shows_one_box_and_still_applies|test_a_write_that_fails_is_write_failed|test_each_kind_of_problem_gives_its_reason|test_every_setter_returns_none_when_the_save_works|test_font_size_and_dictionary_changes_report_through_the_same_flag|test_no_box_when_the_settings_are_saved|test_save_calls_every_setter_and_returns_the_first_problem|test_save_returns_none_when_every_setter_saves|test_save_returns_what_the_store_returns|test_settings_not_saved_strings_are_translated|test_the_box_belongs_to_the_active_window|test_the_client_id_and_the_language_ignore_a_failed_save) " | sed 's/ (.*) \.\.\. / /'
@@ -6242,7 +6242,7 @@ Ran 1614 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_config.py client/tests/test_translation_settings.py client/tests/test_translation_tables.py client/tests/test_view_settings.py client/tests/test_gui_document_flows.py client/tests/test_i18n.py client/config.py client/settings/translation.py client/settings/translation_tables.py client/settings/view.py client/gui.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -6275,7 +6275,7 @@ cd5b9c3959ca123d34771634df05d9a028806c40
 
 ### Task 6: Name the document of a failed conversion that is not open (D7)
 
-- [ ] **Step 1: Red: Test Plan C4, C5, A (string 23).** `test_conversion_presenter.py` (4 spaces): a manual failure after switching to beta names alpha; after switching away and back, without a switch, and without a starting document it is not named. `test_export_coordinator.py` (4 spaces): a single export of beta names it when alpha is open at delivery, also after a switch away during the conversion, not when beta was opened during it; the existing pending-error test opens beta first (Spec Corrections 10). `test_i18n.py`: string 23**
+- [x] **Step 1: Red: Test Plan C4, C5, A (string 23).** `test_conversion_presenter.py` (4 spaces): a manual failure after switching to beta names alpha; after switching away and back, without a switch, and without a starting document it is not named. `test_export_coordinator.py` (4 spaces): a single export of beta names it when alpha is open at delivery, also after a switch away during the conversion, not when beta was opened during it; the existing pending-error test opens beta first (Spec Corrections 10). `test_i18n.py`: string 23**
 
 Edit: `client/tests/test_conversion_presenter.py`
 
@@ -6449,7 +6449,7 @@ Ran 106 tests
 FAILED (failures=4)
 ```
 
-- [ ] **Step 2: Green: name the document when another one is open at delivery** (`client/ui/conversion_presenter.py`, `client/documents/export_coordinator.py`, 4 spaces).**
+- [x] **Step 2: Green: name the document when another one is open at delivery** (`client/ui/conversion_presenter.py`, `client/documents/export_coordinator.py`, 4 spaces).**
 
 Edit: `client/ui/conversion_presenter.py`
 
@@ -6544,7 +6544,7 @@ Edit: `client/documents/export_coordinator.py`
         """Log the traceback of a failed export if it is not an ``OSError`` (F-7).
 ```
 
-- [ ] **Step 3: Green apart from the catalog.**
+- [x] **Step 3: Green apart from the catalog.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_conversion_presenter tests.test_export_coordinator tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -6563,7 +6563,7 @@ Ran 106 tests
 FAILED (failures=4)
 ```
 
-- [ ] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
+- [x] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -6592,7 +6592,7 @@ msgstr "無法讀取字典「{name}」。{reason}"
 27
 ```
 
-- [ ] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
+- [x] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
 
 Edit: `client/locales/zh_TW/LC_MESSAGES/dotexpress.po`
 
@@ -6687,7 +6687,7 @@ locales/zh_TW/LC_MESSAGES/dotexpress.po:1
 source msgids: 400 sha256 d9e0453c698906cee395641e43763b0686fce14c840a9b1bf9c4d60aeb4d1616
 ```
 
-- [ ] **Step 6: Green: the new tests, the modules, the full suite.**
+- [x] **Step 6: Green: the new tests, the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_conversion_presenter tests.test_export_coordinator tests.test_i18n -v 2>&1 | grep -E "^(test_a_failed_export_of_a_document_that_is_not_open_names_it|test_a_failure_after_switching_away_and_back_is_not_named|test_a_failure_after_switching_names_the_document|test_a_failure_of_the_open_document_is_not_named|test_a_failure_without_a_starting_document_is_not_named|test_failed_conversion_of_a_document_that_is_not_open_string_is_translated) " | sed 's/ (.*) \.\.\. / /'
@@ -6710,7 +6710,7 @@ Ran 1620 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_conversion_presenter.py client/tests/test_export_coordinator.py client/tests/test_i18n.py client/ui/conversion_presenter.py client/documents/export_coordinator.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -6737,7 +6737,7 @@ b6929558c675a31124b2e1f418db2d2b87a7576a
 
 ### Task 7: Localize the remaining English messages and drop a misused _() (D8, D9)
 
-- [ ] **Step 1: Red: Test Plan C6, H, A (strings 6-9, A2-A4).** `test_user_preprocessing_script.py` (4 spaces): the two errors of the script's contract in zh_TW. `test_conversion_service.py`: through `format_conversion_error`, a `main` that returns `None` and one rebound to a non-callable. `test_dual_view_browser.py`: the browser error in zh_TW. `test_export_coordinator.py`, `test_gui_document_flows.py`: the exported page without conversion data holds `此文件沒有可顯示的轉換資料。` (two characterization tests flip; the `assertNotIn` checks look for the zh sentence, Spec Corrections 11); the title test drops `gui._()`. `test_document_formats.py`: `build_export_wildcard(get_format("html"), _)` gives `HTML 檔 (*.html)|*.html`. `test_i18n.py`: strings 6-9; the three save filters are `N_` calls (A3); `_update_window_title` calls no `_` (A4); the compiled catalog holds exactly the `_()`/`N_()` strings of the client (A2, Spec Corrections 13)**
+- [x] **Step 1: Red: Test Plan C6, H, A (strings 6-9, A2-A4).** `test_user_preprocessing_script.py` (4 spaces): the two errors of the script's contract in zh_TW. `test_conversion_service.py`: through `format_conversion_error`, a `main` that returns `None` and one rebound to a non-callable. `test_dual_view_browser.py`: the browser error in zh_TW. `test_export_coordinator.py`, `test_gui_document_flows.py`: the exported page without conversion data holds `此文件沒有可顯示的轉換資料。` (two characterization tests flip; the `assertNotIn` checks look for the zh sentence, Spec Corrections 11); the title test drops `gui._()`. `test_document_formats.py`: `build_export_wildcard(get_format("html"), _)` gives `HTML 檔 (*.html)|*.html`. `test_i18n.py`: strings 6-9; the three save filters are `N_` calls (A3); `_update_window_title` calls no `_` (A4); the compiled catalog holds exactly the `_()`/`N_()` strings of the client (A2, Spec Corrections 13)**
 
 Edit: `client/tests/test_user_preprocessing_script.py`
 
@@ -7222,7 +7222,7 @@ Ran 362 tests
 FAILED (failures=12)
 ```
 
-- [ ] **Step 2: Green: D8 and D9** (`client/documents/formats.py`, `client/dual_view/browser.py`, `client/conversion/preprocessing/user_script.py`, 4 spaces; `client/gui.py`, tabs). The script's two errors are translated when raised, as the second one is formatted.**
+- [x] **Step 2: Green: D8 and D9** (`client/documents/formats.py`, `client/dual_view/browser.py`, `client/conversion/preprocessing/user_script.py`, 4 spaces; `client/gui.py`, tabs). The script's two errors are translated when raised, as the second one is formatted.**
 
 Edit: `client/documents/formats.py`
 
@@ -7430,7 +7430,7 @@ Edit: `client/gui.py`
 		return DualViewFrame(self, title=_("Dual View"), on_closed=self._on_dual_view_closed)
 ```
 
-- [ ] **Step 3: Green apart from the catalog.**
+- [x] **Step 3: Green apart from the catalog.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_user_preprocessing_script tests.test_conversion_service tests.test_dual_view_browser tests.test_export_coordinator tests.test_gui_document_flows tests.test_document_formats tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -7458,7 +7458,7 @@ Ran 362 tests
 FAILED (failures=8)
 ```
 
-- [ ] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
+- [x] **Step 4: Regenerate the template, pin its date, merge** (from the repository root through `cmd`; the tools write LF).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -7496,7 +7496,7 @@ msgstr ""
 26
 ```
 
-- [ ] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
+- [x] **Step 5: Fill the msgstr** (block script, as every other block), check that a second `msgmerge` changes nothing, compile the `.mo`, give the two text files their working-tree CRLF back.
 
 Edit: `client/locales/zh_TW/LC_MESSAGES/dotexpress.po`
 
@@ -7635,7 +7635,7 @@ locales/zh_TW/LC_MESSAGES/dotexpress.po:1
 source msgids: 404 sha256 ad00d55f0a0da6a34e9676798b47ac1dfeb2d3ea7cadf1e5a53137265ce04d9b
 ```
 
-- [ ] **Step 6: Green: the new tests, the modules, the full suite.**
+- [x] **Step 6: Green: the new tests, the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_user_preprocessing_script tests.test_conversion_service tests.test_dual_view_browser tests.test_export_coordinator tests.test_gui_document_flows tests.test_document_formats tests.test_i18n -v 2>&1 | grep -E "^(test_a_script_error_of_the_contract_is_shown_in_zh_tw|test_html_save_filter_is_marked_where_defined|test_html_save_filter_is_translated|test_remaining_english_message_strings_are_translated|test_the_catalog_holds_exactly_the_marked_strings|test_window_title_is_not_passed_to_gettext) " | sed 's/ (.*) \.\.\. / /'
@@ -7658,7 +7658,7 @@ Ran 1626 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_user_preprocessing_script.py client/tests/test_conversion_service.py client/tests/test_dual_view_browser.py client/tests/test_export_coordinator.py client/tests/test_gui_document_flows.py client/tests/test_document_formats.py client/tests/test_i18n.py client/documents/formats.py client/dual_view/browser.py client/conversion/preprocessing/user_script.py client/gui.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -7690,7 +7690,7 @@ Expected:
 ```
 ### Task 8: Open the default document after a Delete All rollback without a valid document (P1-3 defect 4; added to F-12 by the user)
 
-- [ ] **Step 1: Red: the P1-3 defect 4 pin flipped.** `test_gui_document_flows.py` (4 spaces): `test_delete_all_failure_without_valid_document_clears_editors_only` becomes `test_delete_all_failure_without_valid_document_opens_the_default_document`: after the error box and the invalid-files dialog, the title `DotExpress`, then `new - DotExpress`, the focus in the source editor, `new.dep` written; a new test holds `new` on disk (a folder) and expects `new (2)` (F-8's free-name rule); the delegation test `test_delete_all_failure_reviews_paths_from_service` expects `_update_window_title` and `_ensure_open_document_exists` around `_clear_document_editors`.
+- [x] **Step 1: Red: the P1-3 defect 4 pin flipped.** `test_gui_document_flows.py` (4 spaces): `test_delete_all_failure_without_valid_document_clears_editors_only` becomes `test_delete_all_failure_without_valid_document_opens_the_default_document`: after the error box and the invalid-files dialog, the title `DotExpress`, then `new - DotExpress`, the focus in the source editor, `new.dep` written; a new test holds `new` on disk (a folder) and expects `new (2)` (F-8's free-name rule); the delegation test `test_delete_all_failure_reviews_paths_from_service` expects `_update_window_title` and `_ensure_open_document_exists` around `_clear_document_editors`.
 
 Edit: `client/tests/test_gui_document_flows.py`
 
@@ -7829,7 +7829,7 @@ Ran 224 tests
 FAILED (failures=3)
 ```
 
-- [ ] **Step 2: Green: do what a complete Delete All does** (`client/gui.py`, tabs): in `on_delete_all_documents`, when the rollback leaves no valid document, `_update_window_title()`, `_clear_document_editors()` and `_ensure_open_document_exists()`, in the order of the success path.
+- [x] **Step 2: Green: do what a complete Delete All does** (`client/gui.py`, tabs): in `on_delete_all_documents`, when the rollback leaves no valid document, `_update_window_title()`, `_clear_document_editors()` and `_ensure_open_document_exists()`, in the order of the success path.
 
 Edit: `client/gui.py`
 
@@ -7857,7 +7857,7 @@ Edit: `client/gui.py`
 		self._update_window_title()
 ```
 
-- [ ] **Step 3: Regenerate the catalogs** (no new string; the `#:` references of `gui.py` move by four lines, so the template and the `.po` are regenerated as in the earlier tasks; the `.mo` does not change).
+- [x] **Step 3: Regenerate the catalogs** (no new string; the `#:` references of `gui.py` move by four lines, so the template and the `.po` are regenerated as in the earlier tasks; the `.mo` does not change).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -7890,7 +7890,7 @@ msgfmt exit 0
 source msgids: 404 sha256 ad00d55f0a0da6a34e9676798b47ac1dfeb2d3ea7cadf1e5a53137265ce04d9b
 ```
 
-- [ ] **Step 4: Green: the changed tests, the module, the full suite.**
+- [x] **Step 4: Green: the changed tests, the module, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_gui_document_flows -v 2>&1 | grep -E "^(test_delete_all_failure_without_valid_document_opens_the_default_document|test_delete_all_failure_with_new_held_on_disk_opens_a_free_default_name|test_delete_all_failure_reviews_paths_from_service) " | sed 's/ (.*) \.\.\. / /'
@@ -7912,7 +7912,7 @@ OK (skipped=6)
 0
 ```
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_gui_document_flows.py client/gui.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po
@@ -7937,7 +7937,7 @@ Expected:
 
 `scripts/tests` runs from the repository root: `$PY -B -X utf8 -m unittest discover -s scripts/tests -t .`. `test_vendor_helper_snapshot` needs `include/nvda/source/louisHelper.py`, which a worktree or clone without the `include/nvda` submodule lacks (the test is then skipped); Task 0 Step 2 copies that one file from the main checkout (never staged; git does not list files inside a submodule path that is not initialized). The other tests of `scripts/tests` need the full `include/liblouis` and `include/nvda` submodules, which a worktree does not have: there they raise `FileNotFoundError` before and after this task (13 errors); in the main checkout, which has the submodules, `results.md` of the 2026-10-09-03 Windows verification records `Ran 33`, `failures=1` (F-W5 only).
 
-- [ ] **Step 1: Red: the snapshot test as it is.** It reads the snapshot with `read_bytes().decode()`; the snapshot is LF in the repository and CRLF in a Windows working tree (`core.autocrlf=true`), while the expected text, read with `read_text`, has LF.
+- [x] **Step 1: Red: the snapshot test as it is.** It reads the snapshot with `read_bytes().decode()`; the snapshot is LF in the repository and CRLF in a Windows working tree (`core.autocrlf=true`), while the expected text, read with `read_text`, has LF.
 
 ```bash
 cd $REPO
@@ -7956,7 +7956,7 @@ Ran 33 tests
 FAILED (failures=1, errors=13)
 ```
 
-- [ ] **Step 2: Green: compare with LF line ends** (`scripts/tests/test_vendor_helper_snapshot.py`, 4 spaces). The vendored file and `.gitattributes` are not changed: a `.gitattributes` rule would only take effect for files checked out again, and would change the bytes of the user's working tree.
+- [x] **Step 2: Green: compare with LF line ends** (`scripts/tests/test_vendor_helper_snapshot.py`, 4 spaces). The vendored file and `.gitattributes` are not changed: a `.gitattributes` rule would only take effect for files checked out again, and would change the bytes of the user's working tree.
 
 Edit: `scripts/tests/test_vendor_helper_snapshot.py`
 
@@ -8007,7 +8007,7 @@ FAILED (errors=13)
 vendor unchanged
 ```
 
-- [ ] **Step 3: Commit** (no file under `client/`: the client tree stays Task 8's).
+- [x] **Step 3: Commit** (no file under `client/`: the client tree stays Task 8's).
 
 ```bash
 git -C $REPO add scripts/tests/test_vendor_helper_snapshot.py
@@ -8030,7 +8030,7 @@ Expected:
 
 `BASE` is `main` at `e0337df`.
 
-- [ ] **Step 1: Criterion 1, full suite.**
+- [x] **Step 1: Criterion 1, full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest discover -s tests 2>&1 | $PY $T/tools/brief.py
@@ -8043,7 +8043,7 @@ Ran 1627 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 2: Criterion 2, focused modules; the F-12 tests ran and passed; two orders of three modules.** The verbose run is kept in `$T/verbose.txt`, so a failure there is named.
+- [x] **Step 2: Criterion 2, focused modules; the F-12 tests ran and passed; two orders of three modules.** The verbose run is kept in `$T/verbose.txt`, so a failure there is named.
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_i18n tests.test_export_coordinator tests.test_conversion_presenter tests.test_conversion_text_dictionary_rules tests.test_import_problems tests.test_workspace_service tests.test_config tests.test_gui_document_flows tests.test_document_workspace tests.test_conversion_service tests.test_translation_settings tests.test_translation_tables tests.test_view_settings tests.test_document_formats tests.test_dual_view_browser tests.test_user_preprocessing_script 2>&1 | $PY $T/tools/brief.py
@@ -8065,7 +8065,7 @@ OK
 OK (skipped=2)
 ```
 
-- [ ] **Step 3: Criterion 3 (no KNOWN BUG pin of P1-4 defect 4 or of P1-3 known defect 4 is left) and the shuffled module order, six seeds** (one process each, about two minutes).
+- [x] **Step 3: Criterion 3 (no KNOWN BUG pin of P1-4 defect 4 or of P1-3 known defect 4 is left) and the shuffled module order, six seeds** (one process each, about two minutes).
 
 ```bash
 grep -rn "KNOWN BUG (P1-4 spec, defect 4)\|KNOWN BUG (P1-3 spec, known defect 4)" tests | wc -l
@@ -8079,7 +8079,7 @@ Expected:
       6 ran=1627 failures=0 errors=0 skipped=6 []
 ```
 
-- [ ] **Step 4: Criterion 4, catalogs.** A fresh template differs from the committed one only in `POT-Creation-Date`; 404 msgids, all translated, 0 fuzzy; the four revived entries are active with their old translations and no obsolete copy; `git diff` against `main` adds the twenty-three entries (plus `#:` reference lines and entries that move); the obsolete entries that went away.
+- [x] **Step 4: Criterion 4, catalogs.** A fresh template differs from the committed one only in `POT-Creation-Date`; 404 msgids, all translated, 0 fuzzy; the four revived entries are active with their old translations and no obsolete copy; `git diff` against `main` adds the twenty-three entries (plus `#:` reference lines and entries that move); the obsolete entries that went away.
 
 ```bash
 (cd $REPO && cmd //c "scripts\\generate-pot.bat $(cygpath -w $T/second.pot)"); echo "generate-pot exit $?"
@@ -8112,7 +8112,7 @@ source msgids: 404 sha256 ad00d55f0a0da6a34e9676798b47ac1dfeb2d3ea7cadf1e5a53137
 26
 ```
 
-- [ ] **Step 5: Criteria 5-7: fixtures, untouched modules, touched files, application data.**
+- [x] **Step 5: Criteria 5-7: fixtures, untouched modules, touched files, application data.**
 
 ```bash
 BASE=e0337df
@@ -8177,7 +8177,7 @@ application data unchanged
 worktree application data checked
 ```
 
-- [ ] **Step 6: Criterion 8, mutation check** (44 mutants: the spec's 31 as 32, its item 30 being two (each of the script's two errors) and its item 20 being the client id returning the save problem (the frame never saves the client id); and 10 more: a damaged package that also catches `OSError`, the box without the folder line, the entry ignoring `exclude_name`, Import seeing no unlisted entry, the dictionary's read errors not wrapped, the read error not recognized by `format_conversion_error`, `set_lang` returning the problem, the first failed setter stopping the others, the box always on the frame, the HTML save filter unmarked; and Task 8's two: the rollback without the title update, and without the default document; about eight minutes). Each mutant must be caught by at least one test.
+- [x] **Step 6: Criterion 8, mutation check** (44 mutants: the spec's 31 as 32, its item 30 being two (each of the script's two errors) and its item 20 being the client id returning the save problem (the frame never saves the client id); and 10 more: a damaged package that also catches `OSError`, the box without the folder line, the entry ignoring `exclude_name`, Import seeing no unlisted entry, the dictionary's read errors not wrapped, the read error not recognized by `format_conversion_error`, `set_lang` returning the problem, the first failed setter stopping the others, the box always on the frame, the HTML save filter unmarked; and Task 8's two: the rollback without the title update, and without the default document; about eight minutes). Each mutant must be caught by at least one test.
 
 ```bash
 $PY $T/tools/f12_mutants.py $REPO/client $T/mut; echo "exit $?"
@@ -8239,7 +8239,7 @@ Not part of the replay. Run everything from the repository root, one item at a t
 
 **Fix and regression items** (user, 2026-10-11). A **fix** item is one whose expected result differs between the builds; it runs on both builds (`N-f11c`, the build of `main` `e0337df`'s code, then `N-f12`). A **regression** item runs on `N-f12` only, and on `N-f11c` too only when it misses its expectation (that run is then reported). Items 109-117 and 120 are fix items; 118 is a regression item; 119 is manual (NVDA) and stays unchecked. Item 120 is the Delete All rollback of Task 8 (added to F-12 by the user, 2026-10-11).
 
-- [ ] **Step 1: Build** (PowerShell, in the worktree). The main checkout's venv (Python 3.13, wxPython, PyInstaller 6.21.0) is put first on `PATH`; `scripts\build-dotexpress.bat` calls `pyinstaller` from `PATH` and assumes no venv of its own.
+- [x] **Step 1: Build** (PowerShell, in the worktree). The main checkout's venv (Python 3.13, wxPython, PyInstaller 6.21.0) is put first on `PATH`; `scripts\build-dotexpress.bat` calls `pyinstaller` from `PATH` and assumes no venv of its own.
 
 ```powershell
 Set-Location D:\workspace\DotExpress-f12
@@ -8258,11 +8258,11 @@ git status --short -- client scripts
 
 Expected: `D:\workspace\DotExpress\client\.venv\Scripts\pyinstaller.exe`, `build complete` (the batch file's exit code is that of its final `popd`, so it proves nothing; on failure read `%TEMP%\f12-build.log`), the twelve `bundled from the worktree` lines (printed with their doubled backslash), `gui.py analyzed from the worktree`, a size near 48.8 MB, and no `git status` output (`client\build\`, `client\dist\`, `client\DotExpress.spec` are git-ignored). The `.mo` is bundled through `--add-data "locales;locales"`.
 
-- [ ] **Step 2: Write the GUI scripts** into `docs/superpowers/history/2026-10-11-02-f12-localization-cleanup/auto/` (tabs): a helper `f12gui.py` that reuses, unchanged, `f9gui.py` of F-9 and through it F-8b's, F-8a's, F-7's and F-5's helpers and `dx.py`, `docs.py`, `dicts.py` of `2026-10-09-03-windows-verification/auto/`; `safe_run.py` (F-11's, adapted to `f12gui`); one script per item (`item109.py` ... `item118.py`, `item120.py`; 109 and 110 may share one). Each script deletes its work folder first (after ending any process under it), copies the exe into it, starts it once so that it creates its folders, closes it, writes its test files (packages with `zipfile`, `config.json`, dictionaries and `preprocessing.py` as bytes) and starts it again. A box is read through UIA (`f5gui.describe`: title, main instruction, content, buttons, focus; `safe_run` masks a focus that belongs to another program) and answered with a key; the work folder is shown as `<d>`, the random part of a temporary file name as `<rnd>`. Drafts run against `N-f12` and `N-f11c` in `D:\dxtest\autodraft*-f12` folders until each script runs through; their logs are not results.
+- [x] **Step 2: Write the GUI scripts** into `docs/superpowers/history/2026-10-11-02-f12-localization-cleanup/auto/` (tabs): a helper `f12gui.py` that reuses, unchanged, `f9gui.py` of F-9 and through it F-8b's, F-8a's, F-7's and F-5's helpers and `dx.py`, `docs.py`, `dicts.py` of `2026-10-09-03-windows-verification/auto/`; `safe_run.py` (F-11's, adapted to `f12gui`); one script per item (`item109.py` ... `item118.py`, `item120.py`; 109 and 110 may share one). Each script deletes its work folder first (after ending any process under it), copies the exe into it, starts it once so that it creates its folders, closes it, writes its test files (packages with `zipfile`, `config.json`, dictionaries and `preprocessing.py` as bytes) and starts it again. A box is read through UIA (`f5gui.describe`: title, main instruction, content, buttons, focus; `safe_run` masks a focus that belongs to another program) and answered with a key; the work folder is shown as `<d>`, the random part of a temporary file name as `<rnd>`. Drafts run against `N-f12` and `N-f11c` in `D:\dxtest\autodraft*-f12` folders until each script runs through; their logs are not results.
 
-- [ ] **Step 3: The items** (Git Bash, from the repository root): fix items on `D:\dxtest\N-f11c\DotExpress.exe` (folders `auto<N>-f11c-f12`) and on the new build (folders `auto<N>-f12`); the regression item on the new build only. Read each log against Step 4 before the next run.
+- [x] **Step 3: The items** (Git Bash, from the repository root): fix items on `D:\dxtest\N-f11c\DotExpress.exe` (folders `auto<N>-f11c-f12`) and on the new build (folders `auto<N>-f12`); the regression item on the new build only. Read each log against Step 4 before the next run.
 
-- [ ] **Step 4: Expected behaviour.** `<OS text>` is the error text of the operating system; a reason in `...` is the full zh_TW text of the spec's table.
+- [x] **Step 4: Expected behaviour.** `<OS text>` is the error text of the operating system; a reason in `...` is the full zh_TW text of the spec's table.
 
 | # | Class | Steps | Expected on `N-f12` | Expected on `N-f11c` |
 | --- | --- | --- | --- | --- |
@@ -8271,7 +8271,7 @@ Expected: `D:\workspace\DotExpress\client\.venv\Scripts\pyinstaller.exe`, `build
 | 111 | fix | Import, "All supported" filter, the names of `alpha.txt` (listed), `big5.txt`, a 40-character `.txt`, `locked.txt` (held share-none by the lock helper before the Import, Spec Corrections 16), `broken.dep` (not a zip), `foo.xyz` typed together | Import Issues lines: `alpha.txt: 文件「alpha」已存在。`, `big5.txt: 檔案不是以 UTF-8 文字儲存。...`, `<40 x>.txt: 文件名稱長度需為 1 到 32 個字元。`, `locked.txt: 無法開啟檔案。...`, `broken.dep: 匯入的檔案必須是有效的 DotExpress DEP 封裝檔。`, `foo.xyz: 無法匯入這種類型的檔案。` | the English and raw lines of the spec's probe 1 |
 | 112 | fix | `config.json` selects `big5dict` (Big5 CSV); Convert a short text; the same with `caps` (`Text,Braille,Type`), `empty` (0 bytes), and a readable dictionary held share-none; then Export All (BRL) of two pending documents with `big5dict` | each Convert: `轉譯失敗：無法讀取字典「<name>」。<reason>` with NOT_UTF8, the header reason (twice), CANNOT_OPEN; the Export All summary: one line per document with the same text | `轉譯失敗：'utf-8' codec ...`, `CSV must contain ...`, `[Errno 13] ...` |
 | 113 | fix | Workspace `alpha.dep` (valid) and `bad.dep` (invalid, kept at startup with Keep Invalid Files). Add `BAD`; Rename `alpha` to `bad`; Import `bad.txt` | Add and Rename: the box `錯誤` with string 18 naming `bad.dep` (main instruction) and string 19 with the workspace path (content); the name dialog back with the name; Import: `bad.txt: ` + string 18; the files unchanged | `文件「BAD」已存在。`, `文件「bad」已存在。`; `bad.txt: Document "bad" already exists.` |
-| 114 | fix | (a) `config.json` held share-none by the lock helper from before the start; Settings: change the width, OK; then Ctrl+wheel in the source editor (Spec Corrections 16). (b) `config.json` = `{` and a folder `config.json.bak`; Settings: change the width, Apply, then OK | (a) after OK one box `設定未儲存` with string 21 (the path) and the CANNOT_OPEN reason, owned by the settings dialog; no box after Ctrl+wheel; the font size changes on screen; `config.json` keeps its bytes. (b) after Apply the box with string 22, owned by the settings dialog; nothing after OK; `config.json` still `{` | no box in either case |
+| 114 | fix | (a) `config.json` held share-none by the lock helper after the start, before pressing OK (held from before the start, the app does not start); Settings: change the width, OK; then Ctrl+wheel in the source editor (Spec Corrections 16). (b) `config.json` = `{` and a folder `config.json.bak`; Settings: change the width, Apply, then OK | (a) after OK one box `設定未儲存` with string 21 (the path) and the CANNOT_OPEN reason, owned by the settings dialog; no box after Ctrl+wheel; the font size changes on screen; `config.json` keeps its bytes. (b) after Apply the box with string 22, owned by the settings dialog; nothing after OK; `config.json` still `{` | no box in either case |
 | 115 | fix | `preprocessing.py` in the dictionary folder whose `main` sleeps 5 s, then raises `ValueError("boom")`. (a) open `alpha`, Ctrl+Enter, Ctrl+Tab at once to `beta`; wait. (b) open `alpha`, select `beta` (pending) in the list, File > Export > BRL; wait. (c) as (a) without Ctrl+Tab | (a) `錯誤`: `無法轉換文件「alpha」。` (main instruction), `文字處理失敗：boom` (content); (b) the same naming `beta`; (c) `文字處理失敗：boom` alone | (a), (b) `文字處理失敗：boom` alone; (c) the same |
 | 116 | fix | The default document `new` (no conversion data): File > Export > Dual View HTML; read the save dialog's file type list; save | the type list shows `HTML 檔 (*.html)`; the file contains `此文件沒有可顯示的轉換資料。` | `HTML files (*.html)`; the English sentence |
 | 117 | fix | `preprocessing.py` whose `main` returns `None`; Convert | `文字處理失敗：main 必須傳回 str，而不是 NoneType。` | `文字處理失敗：main must return str, got NoneType.` |
@@ -8280,7 +8280,7 @@ Expected: `D:\workspace\DotExpress\client\.venv\Scripts\pyinstaller.exe`, `build
 
 A task dialog without a blank line in its message has no main instruction (`main` is `None`, the text is the content). If a key or a click goes to another window (a `RuntimeError` from `safe_run`, or a box that never opens), that is a tool problem: run the item again in a new folder and record it.
 
-- [ ] **Step 5: Record and commit the results.** Write `docs/superpowers/history/2026-10-11-02-f12-localization-cleanup/auto-results.md` in the style of `2026-10-11-01-f11-dictionary-editor-ux/auto-results.md` (zh-TW): the build (PyInstaller version, `Build complete!`, the bundled modules, size, sha256), the method, then one row per item (109-118, 120) with ✔/△/✘, the observed boxes, files and logs on `N-f12` and, for fix items, on `N-f11c`. Any deviation from Step 4 is reported to the orchestrator, not explained away; a re-run after a GUI timing problem is recorded with the first attempt's log name. End the file with a short section **「仍需人工（使用者）」** for item 119, worded for the user (do not mark it done): with `N-f12` and NVDA running, listen to the boxes of items 112 (one case), 113 (Add), 114 (a) and 115 (a): is the whole text read, including the document or dictionary name and the path; does Esc close each box; where is the focus afterwards.
+- [x] **Step 5: Record and commit the results.** Write `docs/superpowers/history/2026-10-11-02-f12-localization-cleanup/auto-results.md` in the style of `2026-10-11-01-f11-dictionary-editor-ux/auto-results.md` (zh-TW): the build (PyInstaller version, `Build complete!`, the bundled modules, size, sha256), the method, then one row per item (109-118, 120) with ✔/△/✘, the observed boxes, files and logs on `N-f12` and, for fix items, on `N-f11c`. Any deviation from Step 4 is reported to the orchestrator, not explained away; a re-run after a GUI timing problem is recorded with the first attempt's log name. End the file with a short section **「仍需人工（使用者）」** for item 119, worded for the user (do not mark it done): with `N-f12` and NVDA running, listen to the boxes of items 112 (one case), 113 (Add), 114 (a) and 115 (a): is the whole text read, including the document or dictionary name and the path; does Esc close each box; where is the focus afterwards.
 
 Then add a section **Implementation Notes** at the end of this plan (what was applied, any deviation, the commit hashes and tree ids, the exe), as the F-11 plan has, and commit:
 
@@ -8303,5 +8303,7 @@ Planning and implementation were merged into one run (the user, 2026-10-11), and
 2. **Replays.** The fill replay recorded the 59 expected blocks (`--record --fill`); the verify replay found one mismatch, in Task 2's red run: the cut diff line `Impor[142 chars]3/sources/bad.txt` shows the last character of the system temporary folder's random name, which differs per run. `brief.py` now shows that character, before `/sources/`, as `<c>` (and Global Constraints say so); the block's line, cut to 160 characters as `brief.py` does, was changed in the same way; the next verify replay and the final replay (a fresh clone of the worktree's branch with the plan commit, every step's blocks applied by Task 0 Step 3's `apply_blocks.py`: 24 apply steps) both ended with 0 mismatches, including the 44 mutants (all caught), six shuffle seeds and the catalogs (404 translated, 0 fuzzy). The sentence of the Dry Run section that named 42 mutants now says 44.
 3. **Build.** `D:\dxtest\N-f12\DotExpress.exe` from `b52ac5c` (Step 1's command; PyInstaller 6.21.0, Python 3.13.15, `Build complete!` in about 44 s; the twelve modules and `gui.py` from the worktree), 48,792,061 bytes, sha256 `0D0239440B5D7E51977B9F5C74E752F46661186DEEC935AE6096284C44D49C82`, built when more than 600 MB of memory was free. The worktree's git-ignored runtime (Task 0 Step 2's guarded copies of the liblouis DLL and tables, `louis_helper.py`, MathCAT and the two include files) was copied into the worktree before the build; none of it is staged.
 4. **GUI items.** The record is `docs/superpowers/history/2026-10-11-02-f12-localization-cleanup/auto-results.md`. Fix items 109-117 and 120 on `N-f11c` and `N-f12`, regression item 118 on `N-f12` only (all of it matched, so no `N-f11c` run); every result matched Step 4, except the one step of 114 (a) below. Item 119 (NVDA) is manual and stays unchecked. The scripts ran through `auto/safe_run.py`; `auto/run_item.sh` is the driver that waited for 600 MB of memory and named the folders and logs.
-5. **Deviations.** (a) **114 (a):** an app whose `config.json` is held share-none from before the start does not start at all (F-8's startup check reports that it cannot write its data folder and exits), so the script holds the file after the start, before OK; the expected result is unchanged. The plan's Step 4 row and the spec's item 114 (a) still say "from before the start"; this note and the results record are the correction. (b) **Script problems, re-run after deleting their folders and logs:** a missing constant in `f12gui` (109), a Big5 file that could not be encoded and a here-doc that turned `\r\n` into line breaks (112, both before the app started), and a mask for temporary file names that did not cover `.brl` and `.bak` names (110, 114 (b)). (c) The plan commit's tooling sentence about `brief.py` (the `<c>` mask) is the one change made to the plan's text blocks after the fill replay besides this note. (d) `msgmerge`'s eight wrong fuzzy guesses (Spec Corrections 14) were replaced by the plan's blocks as designed; the catalogs hold 404 translated, 0 fuzzy.
+5. **Deviations.** (a) **114 (a):** an app whose `config.json` is held share-none from before the start does not start at all (F-8's startup check reports that it cannot write its data folder and exits), so the script holds the file after the start, before OK; the expected result is unchanged. The plan's Step 4 row and the spec's item 114 (a) said "from before the start"; both now say "locked after the start, before pressing OK" (fix phase, review M-4). (b) **Script problems, re-run after deleting their folders and logs:** a missing constant in `f12gui` (109), a Big5 file that could not be encoded and a here-doc that turned `\r\n` into line breaks (112, both before the app started), and a mask for temporary file names that did not cover `.brl` and `.bak` names (110, 114 (b)). (c) The plan commit's tooling sentence about `brief.py` (the `<c>` mask) is the one change made to the plan's text blocks after the fill replay besides this note. (d) `msgmerge`'s eight wrong fuzzy guesses (Spec Corrections 14) were replaced by the plan's blocks as designed; the catalogs hold 404 translated, 0 fuzzy.
 6. **Left for the user.** GUI item 119 (NVDA, four boxes), the orchestrator's merge of `fix/f12-localization-cleanup`, and the open questions Q1 to Q3 (decided by the orchestrator with the recommended defaults; the user may override before merge).
+
+7. **Fix phase (the F-12 review of `c1295df`, 2026-10-11; Spec Corrections 19).** Red first: the tests of M-1, M-2, M-3 and M-5 failed before the code (`test_gui_document_flows` 8 failures, `test_import_problems` and `test_document_workspace` 9). One commit `bdb3e78` holds the code, the tests and the catalogs (the catalog change is shared by the three strings): `Ran 1632` (1627 + 5 tests), `OK (skipped=6)`, 407 msgids translated, 0 fuzzy, `HEAD:client` `a967d8d4cea147cf25ccc0f490c8f94e41e711ce`; the three fixtures keep their sha256. `msgmerge` guessed two wrong fuzzy translations (the damaged-file string from the EPUB text, the write-permission string from CANNOT_OPEN), replaced by the fill step; a second `msgmerge` changes nothing; 26 obsolete entries as before. Build `D:\dxtest\N-f12b\DotExpress.exe` (48,791,375 bytes, sha256 `0F79EAC81386C2DE53D3E92BBA61DE5414A3114B49902E462AF333270BCEC4C2`) with more than 600 MB free; N-f12 and N-f11c are untouched. GUI items 114 (a) and (b) and 111 re-run on N-f12b and N-f11c in fresh `auto*-f12b` and `auto*-f11c-f12b` folders (`auto/run_item.sh` has the builds `newb` and `beforeb`); all as expected (`auto-results.md`, "Fix phase"). The plan's step boxes are ticked (they were all done); the dispositions of the review are in `review_task.md`: M-6 by design (Q1), M-7 a follow-up for the user to record.

@@ -34,6 +34,20 @@
 | 118 | regression | (a) `轉換完成。`（資訊框），點字結果 `⠁⠃` 加空白補到寬度；(b) 新增 `alpha`：`文件「alpha」已存在。`，名稱對話框再次出現（保留 `alpha`）；(c) 設定「確定」沒有框，`config.json` 的 `conversion.width` 為 30；(d) 重新啟動並使用 520,000 字元的 `alpha`：Ctrl+Enter、Ctrl+Tab 到 `beta`：`轉換完成。結果已儲存到文件「alpha」。`，`beta` 的編輯區為 `beta body`／`⠃`，`alpha.dep` 的點字有 991,999 字元 | （全部符合預期，未在 N-f11c 執行） | ✔ |
 | 120 | fix | `alpha`、`beta` 皆有效，`alpha` 開著；啟動後 `beta.dep` 被 share-none 占住。File > Delete All、是：`刪除文件失敗：[WinError 32] 程序無法存取檔案，因為檔案正由另一個程序使用。: '<d>\\workspace\\beta.dep'` 錯誤框；無效檔案對話框列出 `beta.dep`（保留）；之後視窗標題 `new - DotExpress`，清單為 `new`，編輯區為空，`workspace` 有 `beta.dep` 與 `new.dep` | 同樣的錯誤框與無效檔案對話框；之後標題仍是 `alpha - DotExpress`，清單為空，編輯區為空，`workspace` 只有 `beta.dep`（沒有 `new.dep`） | ✔ |
 
+## 修正階段（F-12 審查 M-1、M-2、M-3、M-5；2026-10-11）
+
+- 受測：`fix/f12-localization-cleanup` 在 `bdb3e78` 之後的 packaged build，以下稱 N-f12b。Build 方法同上（`scripts\build-dotexpress.bat`，主簽出的 `client\.venv\Scripts` 置於 `PATH` 最前面，`Build complete!`），`HEAD:client` `a967d8d4cea147cf25ccc0f490c8f94e41e711ce`。`D:\dxtest\N-f12b\DotExpress.exe`：48,791,375 bytes，sha256 `0F79EAC81386C2DE53D3E92BBA61DE5414A3114B49902E462AF333270BCEC4C2`。建置與每個項目開始前可用記憶體都至少 600 MB（建置前 1,119 MB）。N-f12、N-f11c 與其他 build 沒有動。
+- 重跑的項目與方法：114 (a)、114 (b)（M-2、M-5 改了訊息框的原因）與 111（M-1 與 M-3 改了匯入問題的程式路徑）。每個項目都在新資料夾執行：N-f12b 為 `D:\dxtest\auto<N>-f12b`，N-f11c 為 `D:\dxtest\auto<N>-f11c-f12b`；一次一個；經 `auto/safe_run.py`（只在受測程式位於前景時送按鍵，log 不含其他程式的名稱）；`auto/run_item.sh` 新增 build 名稱 `newb`、`beforeb`。沒有任何腳本讀寫剪貼簿。只結束 exe 位於這些資料夾的程序與該項目的 `lockshare.py`。
+- 腳本小問題：`auto114a-f12b` 第一次執行的最後一行是 `config.json bytes unchanged: False`。原因是腳本在視窗出現後立即讀取「之前」的位元組，而程式在稍後才寫入 client id（檔案的修改時間早於鎖定時間，`config.log` 也沒有寫入記錄），與程式碼無關。`item114.py` 在讀取前加了 2 秒等待，該次資料夾與 log 已刪除並重跑，以下是重跑的結果。
+
+| # | N-f12b（改後） | N-f11c（改前） | 判定 |
+| --- | --- | --- | --- |
+| 114 (a) | 設定對話框改轉換寬度後按「確定」：一個框，標題 `設定未儲存`，owner `DotExpress 設定：轉譯`，content `無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。`（`PermissionError`，與 N-f12 相同）；Ctrl＋滾輪沒有框，字型高度 -16 → -17；`config.json` 位元組不變 | 沒有框；字型高度 -16 → -17；`config.json` 不變 | ✔ |
+| 114 (b) | 按「套用」：一個框，owner 設定對話框，content `檔案已損壞，而且在取代它之前無法先備份為「<d>\config.json.bak」。詳細資訊：[WinError 5] 存取被拒。: '<d>\\.config.json.bak.<rnd>.tmp' -> '<d>\\config.json.bak'`（備份失敗的文字仍附作業系統文字，刻意保留，見 Spec Corrections 19）；按「確定」後沒有框；`config.json` 仍是 `{`，`config.json.bak` 仍是資料夾 | 沒有框；其餘相同 | ✔ |
+| 111 | 匯入問題的六行與 N-f12 完全相同（沒有 DOCX、EPUB、PDF 的檔案，所以 M-3 的文字沒有出現在這個項目）；`log\gui.log` 有一筆 ERROR：`Cannot import "broken.dep" as dep: BadZipFile: File is not a zip file` 與 traceback（M-1 的記錄；沒有框） | 英文與原始 Python 文字，與先前記錄相同；沒有 `gui.log` | ✔ |
+
+- 設定存檔失敗時「不是存取錯誤」的原因（磁碟已滿、其他 `OSError`）與損壞的 DOCX、EPUB、PDF 的新文字沒有在 GUI 重現（要有真實的磁碟已滿、或一個損壞的檔案經檔案對話框匯入），它們由單元測試涵蓋（`test_gui_document_flows`、`test_import_problems` 的真實函式庫檔案、`test_document_workspace`）。
+
 ## 仍需人工（使用者）
 
-- [ ] **項目 119（NVDA）：** 以 `D:\dxtest\N-f12\DotExpress.exe` 並開啟 NVDA，聽以下四個框：項目 112 的其中一種情況（例如 big5dict 的 Convert）、113（新增 `BAD`）、114 (a)（設定存檔失敗）、115 (a)（切換到 `beta` 之後的轉換失敗）。請確認：整段文字是否都被讀出，包括文件名稱、字典名稱與路徑；按 Esc 是否能關閉每個框；關閉之後焦點在哪裡。這項沒有自動化，未勾選。
+- [ ] **項目 119（NVDA）：** 以 `D:\dxtest\N-f12b\DotExpress.exe`（含審查修正的 build；先前的 N-f12 也可以，這四個框的文字相同）並開啟 NVDA，聽以下四個框：項目 112 的其中一種情況（例如 big5dict 的 Convert）、113（新增 `BAD`）、114 (a)（設定存檔失敗）、115 (a)（切換到 `beta` 之後的轉換失敗）。請確認：整段文字是否都被讀出，包括文件名稱、字典名稱與路徑；按 Esc 是否能關閉每個框；關閉之後焦點在哪裡。這項沒有自動化，未勾選。

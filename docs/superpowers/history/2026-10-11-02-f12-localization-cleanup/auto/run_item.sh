@@ -4,7 +4,12 @@
 UIA=/c/Users/tseng/AppData/Local/Temp/claude/D--workspace-DotExpress/450e2986-a576-497a-aa7c-f1429e710d71/scratchpad/uia/Scripts/python.exe
 AUTO=/d/workspace/DotExpress-f12/docs/superpowers/history/2026-10-11-02-f12-localization-cleanup/auto
 LABEL=$1; SCRIPT=$2; BUILD=$3; PREFIX=${4:-auto}; shift 4
-if [ "$BUILD" = new ]; then EXE='D:\dxtest\N-f12\DotExpress.exe'; SUF=-f12; else EXE='D:\dxtest\N-f11c\DotExpress.exe'; SUF=-f11c-f12; fi
+case "$BUILD" in
+  new) EXE='D:\dxtest\N-f12\DotExpress.exe'; SUF=-f12 ;;
+  newb) EXE='D:\dxtest\N-f12b\DotExpress.exe'; SUF=-f12b ;;
+  beforeb) EXE='D:\dxtest\N-f11c\DotExpress.exe'; SUF=-f11c-f12b ;;
+  *) EXE='D:\dxtest\N-f11c\DotExpress.exe'; SUF=-f11c-f12 ;;
+esac
 FOLDER="D:\\dxtest\\${PREFIX}${LABEL}${SUF}"
 LOG="/d/dxtest/${PREFIX}${LABEL}${SUF}.log"
 while true; do

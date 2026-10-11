@@ -29,6 +29,8 @@ else:
 	H.config(d, b"{")
 	os.makedirs(cfg + ".bak")
 app, w, shown = H.start(d)
+# The app writes its client id a moment after the window is up; read config.json after that.
+time.sleep(2)
 before = A.read(cfg)
 if case == "a":
 	holder = H.lock(cfg, "none")

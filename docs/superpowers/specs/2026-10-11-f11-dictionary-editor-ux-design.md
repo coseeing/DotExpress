@@ -45,7 +45,7 @@ After this task:
 - A locked Import source gets F-6's "cannot be opened" reason.
 - The editor's file is read before the dialog exists.
 
-New user-visible strings: **11** (see "User-Visible Strings"). The msgid count goes from 369 to 380. One more question needs the user (O1); see "Open Questions".
+New user-visible strings: **11** (see "User-Visible Strings"). The msgid count goes from 369 to 380. The user decided O1 on 2026-10-11: (b) (D14); see "Open Questions".
 
 Non-goals:
 
@@ -54,6 +54,24 @@ Non-goals:
 - a BOM for new dictionaries;
 - the wording of messages outside this task (F-12);
 - F-10 (UEB line breaks, `$`).
+
+## Corrected after planning (F-11, 2026-10-11)
+
+Re-checked against the code of `main` `1ce6ce5` while writing the plan (`docs/superpowers/plans/2026-10-11-f11-dictionary-editor-ux.md`): every decision D1-D14, the behavior table and the reachability list hold, with the corrections and refinements below. The plan's section "Spec Corrections and Refinements" holds the same list.
+
+1. **Baseline and counts.** On `1ce6ce5` the suite gives `Ran 1483`, `FAILED (errors=1, skipped=7)` (F-W6 only) and the catalogs hold 369 msgids. F-11 adds 70 tests net: `Ran 1485` after Task 1, `1490` after Task 2, `1508` after Task 3, `1512` after Task 4, `1516` after Task 5, `1522` after Task 6, `1526` after Task 7, `1539` after Task 8, `1551` after Task 9, `1553` after Task 10 (the spec estimated about 60 new tests and 8 flipped or removed). The end state is `OK (skipped=6)`, not `skipped=7`: `test_dictionary_presenter.PresenterRenameTest.test_rename_case_only_change_renames_file` skipped itself on a case-insensitive file system ("a case-only rename is reported as a duplicate", which is F-W6); Task 1 removes that skip, so the test runs on Windows. msgids 369 -> 380: string 11 in Task 7, strings 1-7 in Task 8, strings 8-10 in Task 9; D14 adds none (re-checked). The acceptance-criterion-2 set (the ten modules of the spec) goes from `Ran 482`, `FAILED (errors=1, skipped=1)` to `Ran 549`, `OK`.
+2. **Migration order.** The tasks are: 1 D10, 2 D11, 3 D5 and D6, 4 D9, 5 D2 and D8, 6 D14, 7 D12 (string 11), 8 D1 (strings 1-7), 9 D3, D4 and D7 (strings 8-10), 10 D13; each commit keeps the spec's subject. Reasons: (a) D1 comes before D4. With D4 alone, OK on a golden-trace sequence that ends without a net change would write nothing, so the recorded CSV would be missing until D1; D1's box makes every trace OK write (`TRACE_CSV` has two hidden rows), so the trace passes in every commit. (b) The catalogs are regenerated only in the three tasks that add strings, and Task 9 is the last task that moves lines above msgids (Task 10 changes no file with msgids), so no `#:` reference is stale at the end. (c) D14 comes before D13, so the conversion rule and its parity test include the first-tone case from the start. (d) String 7, `&Back to Editing`, is first used by D1's box, so it comes with Task 8.
+3. **`confirm_box` is wx's generic dialog (O12).** Measured while planning (wx 4.2.5, Windows 11 zh-TW, a wx dialog that shows the box from its OK handler, as the editor does): a native task dialog with custom labels (`wx.MessageDialog`, `wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`, `SetOKCancelLabels`) returns `wx.ID_OK` for **Alt+F4**, while Esc, Enter and the close box return `wx.ID_CANCEL`. With only the OK label customized it is the same; with `SetYesNoLabels` Alt+F4 returns `wx.ID_YES`; with the standard labels it returns `wx.ID_CANCEL`. The spec's probe 2 showed the box over a frame with no modal dialog running; that setup still returns `wx.ID_CANCEL` (re-run while planning). With a task dialog, Alt+F4 in the D1 box would remove the hidden rows and in the D7 box discard the changes. `wx.GenericMessageDialog` with the same style and labels answers Esc, Alt+F4, Enter and the close box with `wx.ID_CANCEL`; Alt+S, Alt+B and Alt+D press the labelled buttons; the focus starts on 返回編輯(B) (in the packaged build: GUI items 95, 99, 35). For the user, the two boxes are classic dialogs (a warning icon, one text line per line of the message, no bold main instruction) instead of task dialogs; whether NVDA reads them in full is manual item 107. `message_box`, the task dialog of every other box, is unchanged. Decided by the user (2026-10-11): use the classic dialog, as built. The user's hard requirement is that Esc, Alt+F4 and the close box never trigger Remove and Save or Discard Changes; that they answer Back to Editing is not required in itself. (F-5's close dialog also has custom labels; it is shown from the frame, not from a modal dialog, so this measurement does not apply to it; not checked here.)
+4. **The F-W6 test's last assertion** `assertFalse((directory / "alpha.csv").exists())` cannot hold on a case-insensitive file system: after the rename the file still answers to `alpha.csv`. Task 1 replaces it with the folder listing `["Alpha.csv", "default.csv"]`, which holds on every file system.
+5. **D11: the source is read before the copy is written.** `import_dictionary` validates and reads the source inside one `try` (`validate_dictionary_csv`, then `Path.read_bytes`) and writes the copy from those bytes, so a `PermissionError` of the source is told apart from one writing the copy without looking inside `write_bytes_atomically`. Dictionaries are small CSV files; the bytes copied are the same.
+6. **D13: rows that stay convert as before; the raw value is parsed first (O13).** `from_paths` parses a Bopomofo row's raw value as before; only when that raises does it apply the editor's test (the stripped sequence, then with the tone space of D14) and skip the row if that fails too. With the real parser a raw value that parses always passes the editor's test (it has no leading space and at most the one final tone space), so the rule equals `_is_editable`; `EditorParityTest` checks 23 rows, and a test pins that a row that stays is parsed once, on its raw value. A Bopomofo row the editor shows converts exactly as before, so a hand-written final first-tone row without its space (`抹,ㄇㄚ,Bopomofo`) keeps today's fallback conversion of its raw symbols; the editor shows it as `ㄇㄚ ` and writes the space only when the file is saved after a change. Decided by orchestrator with the recommended default; user may override before merge.
+7. **The trace replay has two adaptations, not one.** Besides answering the D1 box and taking its record out of the OK step (D1), the replay takes the editor's new `Bind` of its Cancel button out of the open step's log when it is there (D7); `test_construction_log_is_exact` pins the whole construction log. The fake entry dialog keeps the dialog open after a duplicate and takes the next scripted answer, cancelling when none is left, so the recorded `MessageBox` events stay the same. `dictionary_entries_trace.json` is unchanged (`f493da52...`).
+8. **D9: after Delete the selection goes to the first equal row.** With two identical rows, deleting the second selects the first: the equality rule the golden trace records (O10). Edit keeping a twin's text and Replace select by identity.
+9. **D12 in the frame:** `gui.py` imports `DictionaryEntryListModel`, loads the model and passes `model=`; the unexpected-error line goes to `gui.py`'s module logger `dotexpress.gui` (`gui.log`). In the constructor the path and model are set after the native `__init__`, and a failure while building calls `Destroy` and re-raises.
+10. **Strings.** The duplicate message keeps one call site (`show_duplicate_source_text` in `dialog.py`), used by the entry dialog and by the editor's backstop, so D8 adds no msgid. `msgmerge` guesses two wrong fuzzy translations: `Failed to open the dictionary editor: {error}` <- `無法刪除字典：{error}` (Task 7) and `Do you want to discard the changes you made to dictionary "{name}"?` <- `要刪除字典「{name}」嗎？` (Task 9); the fill steps replace both msgstr values and drop the fuzzy flag.
+11. **Tests the spec did not list:** `test_wx_call_sites` (the only `GenericMessageDialog` is `confirm_box`), `test_message_box` (`confirm_box`, two tests), `test_dialog_validation` (D8: three tests; D14: two), the conversion golden cases (one flipped, three added), `test_dictionary_entries`' round trip (the hidden rows are no longer rules), the presenter's case-only rename (unskipped). The validation test of D14 collects the error messages instead of letting the parser's error escape: `text.zhuyin.ParseError` is a frozen dataclass, and unittest cannot attach a traceback to it (the run stops without a `Ran` line).
+12. **Windows items:** 95-106 as the spec numbers them, the manual NVDA item is 107; "Before" is `D:\dxtest\N-f9b` (F-9 after its review, the code of `1ce6ce5`); the new build goes to `D:\dxtest\N-f11`. Corrections: item 98 expected "bom_lf.csv stays without BOM", but `bom_lf.csv` has a BOM (and LF line ends): after the edit it keeps its BOM and gets CRLF. Item 106 uses readings that differ from liblouis's own, so that the output shows that both rules are used: `中心,ㄓㄨㄥˋㄒㄧㄣ ,Bopomofo` in `tone1.csv` and the Add `抹`/`ㄇㄚ` (a first-tone reading typed without its space). Item 105 takes the share-none lock after the Import file dialog has closed: the Windows file dialog does not accept a file that no one may share, and in use another program takes the file while the name is typed. Items 23-29 run in the new scripts `rerun23.py` (23, 24) and `rerun25.py` (25-29), which edit a row first so that OK writes; item 35 runs in a new `item35.py`; items 44 and 47 run F-6's `item42.py` and `item47.py` unchanged (their logs are equal on both builds apart from the folder name in item 47's `gui.log` line).
+13. **D14 is adopted (O1 (b), decided by the user on 2026-10-11).** Task 6 implements it; GUI item 106 is in scope.
 
 ## Current State (verified 2026-10-11 on `main` `1ce6ce5`, worktree `D:\workspace\DotExpress-f11`, `HEAD:client` `a64da653`)
 
@@ -233,9 +251,9 @@ With `TRACE_CSV` (no BOM, header `text,braille,type`, no extra column), the byte
 - The golden case "Bopomofo row with a processing that raises" flips: the row is now skipped.
 - `translation_golden.json` is not affected: its one dictionary row is valid.
 
-**D14. First-tone final syllables (pending the user's answer to O1).**
+**D14. First-tone final syllables (O1 (b), decided by the user on 2026-10-11).**
 
-The spec recommends (b) of O1:
+The user chose (b) of O1 (2026-10-11):
 
 - for a `Bopomofo` row, the canonical sequence is `braille.strip()`;
 - if that does not parse but `braille.strip() + " "` does, the canonical sequence is `braille.strip() + " "`: the final first-tone space is kept;
@@ -246,7 +264,7 @@ Effects:
 - such rows are shown, edited, saved with their tone space, and converted as today;
 - typing `ㄓㄨㄥ ㄒㄧㄣ` in the entry dialog is accepted and stored as `ㄓㄨㄥ ㄒㄧㄣ `.
 
-If the user chooses (a), D14 is dropped. Such rows then stay hidden, are listed in the D1 box with the reason "not valid", are removed on Remove and Save, and are ignored by conversion.
+Option (a), not chosen, would have dropped D14: such rows would stay hidden, be listed in the D1 box with the reason "not valid", be removed on Remove and Save, and be ignored by conversion.
 
 **D15. Strings and catalogs.** The 11 strings of the table below. `generate-pot.bat`, `msgmerge`, then the msgstr values, then `msgfmt --check --statistics`: all translated, 0 fuzzy. `POT-Creation-Date` stays fixed. Check that `msgmerge` did not mark a new msgid fuzzy by pairing it with an old one, for example `&Discard Changes` with `Close &Without Saving`, or `Unsaved Changes` with `Cannot Save Document`.
 
@@ -290,7 +308,7 @@ Remove and Save leaves `text,braille,type\r\n臺北,⠞⠺,Braille\r\n`. Convert
 - `PreservedDictionaryRow` gains `line: int = field(default=0, compare=False)` and `fields: tuple[str, ...] = field(default=(), compare=False)`, plus a `reason` property (`"no_source_text"` or `"invalid_bopomofo"`). `DictionaryEntry` gains `fields` (`compare=False`, `repr=False`).
 - `load_dictionary_file(path)` (D6). `load_dictionary_rows` returns `load_dictionary_file(path).rows`. `load_dictionary_entries` is unchanged.
 - `save_dictionary_entries(path, entries, layout=DictionaryLayout())` (D5). With the default layout it writes exactly today's bytes for entries, so callers that pass no layout keep their output.
-- D14 (if adopted): `canonical_bopomofo(braille) -> str | None`, used by `_is_editable`, the loader and `validate_dictionary_entry`.
+- D14: `canonical_bopomofo(braille) -> str | None`, used by `_is_editable`, the loader and `validate_dictionary_entry`.
 
 ### `client/dictionaries/entry_list_model.py` (tabs)
 
@@ -418,7 +436,7 @@ TDD: each step's tests are written first and fail for the stated reason. Indenta
    - a default layout gives today's bytes;
    - hidden rows are never written.
 5. `PreservedDictionaryRow.reason` for a blank text, a whitespace-only text and an invalid sequence.
-6. (D14, if adopted) `canonical_bopomofo`: `ㄇㄚ` becomes `ㄇㄚ `, `ㄇㄚ ` stays, `ㄉㄨˋㄗ˙` stays, `ㄉㄨˋ|ㄗ˙` is `None`. The loader shows `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`.
+6. (D14) `canonical_bopomofo`: `ㄇㄚ` becomes `ㄇㄚ `, `ㄇㄚ ` stays, `ㄉㄨˋㄗ˙` stays, `ㄉㄨˋ|ㄗ˙` is `None`. The loader shows `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`.
 
 ### B. Model (`tests/test_dictionary_entry_list_model.py`)
 
@@ -523,7 +541,7 @@ About 60 new tests and 8 flipped or removed (A 16, B 14, C 14, D 3, E 8, F 6, G 
 7. `fix: save a dictionary only after a change and ask before discarding changes (F-11, P2-2 Q2, Q5)`: D3, D4, D7, strings 7 to 10, catalogs.
 8. `fix: confirm and remove dictionary rows the editor cannot show (F-11, #7)`: D1, strings 1 to 6, catalogs; C3, C4, C10 (OK part).
 9. `fix: ignore hidden dictionary rows when converting (F-11, #8)`: D13; tests F.
-10. If O1 is (b): `fix: keep the tone space of a first-tone final syllable (F-11)`: D14.
+10. `fix: keep the tone space of a first-tone final syllable (F-11)`: D14 (O1 (b); the plan runs it as Task 6, see "Corrected after planning (F-11)" 2).
 
 Each commit ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and stages explicit paths only.
 
@@ -568,7 +586,7 @@ Scripts go to the history folder `auto/`. They reuse `2026-10-09-03-windows-veri
 | 103 | `dict_badbopo`: Add `肚子` / `ㄉㄨˋㄗ˙` / 注音; OK; 移除並儲存 | Add accepted; the D1 box lists rows 3 and 4; file: `臺北` and the new `肚子,ㄉㄨˋㄗ˙,Bopomofo` | Add refused (F-4 D5) |
 | 104 | Select `alpha` in Settings; Dictionary Management, Rename to `Alpha` | no message; the list shows `Alpha` selected; `dictionary\Alpha.csv`; `config.json` `selected_dictionary` is `Alpha`; a conversion still uses it | 字典「Alpha」已存在。 |
 | 105 | Lock `src.csv` share-none (`lock.py`); Import it | `匯入字典失敗：無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。`; no new file in `dictionary\` | `[Errno 13] Permission denied: ...` |
-| 106 | (D14, if adopted) `tone1.csv` with `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`; open; Add `媽` / `ㄇㄚ`; OK | row shown; the Add is accepted; the file holds `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo` and `媽,ㄇㄚ ,Bopomofo`; converting `中心媽` uses both | the row is hidden; the Add shows the format error |
+| 106 | (D14; the plan's data: "Corrected after planning (F-11)" 12) `tone1.csv` with `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`; open; Add `媽` / `ㄇㄚ`; OK | row shown; the Add is accepted; the file holds `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo` and `媽,ㄇㄚ ,Bopomofo`; converting `中心媽` uses both | the row is hidden; the Add shows the format error |
 
 Re-run with new expectations (the scripts set a change first where a write is the point):
 
@@ -589,7 +607,7 @@ The F-6 items 42 to 51 are unchanged; 44 and 47 are re-run because the editor no
 ## Risks
 
 - **Conversion output changes for existing dictionaries** (medium, intended by U6). Whitespace-only rules and invalid Bopomofo rules stop working. The D1 box lists them on the next OK. The release notes should say so.
-- **First-tone final rows (O1)** (medium). With (a), valid-looking rows ending in a first-tone syllable are ignored by conversion and offered for removal as "not valid". The recommended (b) avoids this, but it adds scope and one more behaviour change (the entry dialog accepts a sequence without its final space).
+- **First-tone final rows (O1, decided: (b))** (low). (b) keeps such rows shown and converted; the one behaviour change is that the entry dialog accepts a sequence without its final space and stores it with the space.
 - **The trace replay is adapted, not re-recorded** (low). The replay strips the D1 box record and answers it. A bug in that adaptation could hide a regression of the OK step. Test C3 checks the OK step on its own.
 - **Selection rule split** (low). Identity after Add/Replace and equality after Delete/filter. It only differs with identical rows. It is kept because the golden trace pins equality (probe 1).
 - **`csv.reader` parity** (low). A divergence from `DictReader` would change which rows are hidden. Test A3 compares both on every corpus.
@@ -598,12 +616,13 @@ The F-6 items 42 to 51 are unchanged; 44 and 47 are re-run because the editor no
 
 ## Open Questions
 
-**Needs the user's decision (user-visible):**
+**Decided by the user:**
 
-- **O1. Bopomofo rows whose last syllable is first tone.** Today the editor hides them, because its strip removes the tone space (probe 4). Conversion uses them. The entry dialog cannot enter them. Under U1 and U6 as written:
+- **O1. Bopomofo rows whose last syllable is first tone. Decided by the user (2026-10-11): (b).** Today the editor hides them, because its strip removes the tone space (probe 4). Conversion uses them. The entry dialog cannot enter them. Under U1 and U6 as written:
   - **(a)** they become ignored by conversion and are listed for removal on OK as "not valid";
   - **(b) (recommended)** the strip keeps a final first-tone space (D14). They are shown, edited, saved with the space and converted as today, and typing them without the trailing space is accepted.
-  The plan can start with steps 1 to 9; step 10 waits for this answer.
+  The plan implements (b) (D14, its Task 6); GUI item 106 is in scope.
+- **O12. The two confirmation boxes (found while planning). Decided by the user (2026-10-11): the classic dialog (`wx.GenericMessageDialog`).** A native task dialog with custom labels, shown from the editor, answers Alt+F4 with its OK button ("Corrected after planning (F-11)" 3). Hard requirement: Esc, Alt+F4 and the close box never trigger Remove and Save or Discard Changes.
 
 **Decided by orchestrator with the recommended default; user may override before merge:**
 
@@ -617,6 +636,7 @@ The F-6 items 42 to 51 are unchanged; 44 and 47 are re-run because the editor no
 - **O9.** Line ends stay CRLF and quoting stays minimal when writing (D5). The user decided the BOM only.
 - **O10.** The selection after Delete and filter keeps the equality rule (D9).
 - **O11.** A missing dictionary file is no longer created by an unchanged OK (D4).
+- **O13.** (added by the plan) Conversion parses a Bopomofo row's raw value first, as before, and applies the editor's test only when that fails; rows that stay convert exactly as before ("Corrected after planning (F-11)" 6).
 
 ## User-Visible Defaults Introduced by This Spec (not decided by the user)
 

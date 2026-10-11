@@ -45,7 +45,7 @@ F-11 是 `task.md` 排序中的第 4 項「F-11 字典編輯器 UX」。本任�
 - 匯入被鎖住的來源檔，顯示 F-6 的「無法開啟檔案」說明。
 - 編輯器在對話框建立之前讀檔。
 
-新增使用者可見字串：**11 個**（見「使用者可見字串」）。msgid 從 369 個變成 380 個。另有一個問題需要使用者決定（O1），見「待決問題」。
+新增使用者可見字串：**11 個**（見「使用者可見字串」）。msgid 從 369 個變成 380 個。使用者已於 2026-10-11 決定 O1：選 (b)（D14），見「待決問題」。
 
 非目標：
 
@@ -54,6 +54,24 @@ F-11 是 `task.md` 排序中的第 4 項「F-11 字典編輯器 UX」。本任�
 - 新字典加上 BOM；
 - 本任務以外的訊息用詞（F-12）；
 - F-10（UEB 斷行、`$`）。
+
+## 規劃後的修正（F-11，2026-10-11）
+
+撰寫 plan（`docs/superpowers/plans/2026-10-11-f11-dictionary-editor-ux.md`）時，對照 `main` `1ce6ce5` 的程式碼重新確認：D1～D14、改前改後表與可到達性清單都成立，另有以下修正與補充。plan 的「Spec Corrections and Refinements」一節是同樣的內容（英文）。
+
+1. **基準與數量。** 在 `1ce6ce5` 上，完整測試為 `Ran 1483`、`FAILED (errors=1, skipped=7)`（只有 F-W6），catalog 有 369 個 msgid。F-11 淨增 70 個測試：Task 1 後 `Ran 1485`，Task 2 後 `1490`，Task 3 後 `1508`，Task 4 後 `1512`，Task 5 後 `1516`，Task 6 後 `1522`，Task 7 後 `1526`，Task 8 後 `1539`，Task 9 後 `1551`，Task 10 後 `1553`（spec 原估約 60 個新測試、8 個翻轉或移除）。最終結果是 `OK (skipped=6)`，不是 `skipped=7`：`test_dictionary_presenter.PresenterRenameTest.test_rename_case_only_change_renames_file` 在不分大小寫的檔案系統上會自己跳過（理由「只改大小寫的改名被當成重複」就是 F-W6）；Task 1 拿掉這個跳過，所以它在 Windows 上也會執行。msgid 從 369 變成 380：字串 11 在 Task 7，字串 1～7 在 Task 8，字串 8～10 在 Task 9；D14 不新增字串（已重新確認）。驗收條件 2 的模組組合（spec 的十個模組）從 `Ran 482`、`FAILED (errors=1, skipped=1)` 變成 `Ran 549`、`OK`。
+2. **遷移順序。** 各 task 依序為：1 D10，2 D11，3 D5 與 D6，4 D9，5 D2 與 D8，6 D14，7 D12（字串 11），8 D1（字串 1～7），9 D3、D4 與 D7（字串 8～10），10 D13；每個 commit 沿用 spec 的標題。理由：(a) D1 在 D4 之前。若只有 D4，golden trace 中最後沒有淨修改的序列按「確定」時不會寫檔，記錄下來的 CSV 就要到 D1 之後才會出現；D1 的對話框讓 trace 的每次「確定」都寫檔（`TRACE_CSV` 有兩列隱藏列），所以每個 commit 中 trace 都通過。(b) 只有新增字串的三個 task 重新產生 catalog，而 Task 9 是最後一個會移動 msgid 上方程式行的 task（Task 10 不改任何含 msgid 的檔案），所以最後沒有過時的 `#:` 參照。(c) D14 在 D13 之前，轉換的規則與其一致性測試從一開始就包含一聲結尾的情況。(d) 字串 7「`&Back to Editing`」最先由 D1 的對話框使用，所以放在 Task 8。
+3. **`confirm_box` 使用 wx 的一般對話框（O12）。** 規劃時實測（wx 4.2.5、Windows 11 繁中，由 wx 對話框的「確定」處理函式顯示訊息框，與編輯器相同）：使用自訂按鈕文字的原生 task dialog（`wx.MessageDialog`、`wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`、`SetOKCancelLabels`）按 **Alt+F4** 會傳回 `wx.ID_OK`；Esc、Enter 與關閉鈕傳回 `wx.ID_CANCEL`。只自訂「確定」的文字時相同；使用 `SetYesNoLabels` 時 Alt+F4 傳回 `wx.ID_YES`；使用標準文字時傳回 `wx.ID_CANCEL`。spec 的探針 2 是在沒有執行中的 modal 對話框時，於 frame 上顯示訊息框；那種情況仍傳回 `wx.ID_CANCEL`（規劃時重跑過）。若用 task dialog，在 D1 的對話框按 Alt+F4 會移除隱藏列，在 D7 的對話框按 Alt+F4 會放棄變更。改用 `wx.GenericMessageDialog`（相同樣式與按鈕文字）時，Esc、Alt+F4、Enter 與關閉鈕都傳回 `wx.ID_CANCEL`；Alt+S、Alt+B、Alt+D 會按下對應按鈕；焦點一開始在「返回編輯(B)」（packaged build 的 GUI 項目 95、99、35）。對使用者而言，這兩個對話框是傳統對話框（警告圖示、訊息每一行一段文字、沒有粗體的主要指示），而不是 task dialog；NVDA 是否完整讀出由手動項目 107 確認。其他所有訊息框使用的 `message_box`（task dialog）不變。使用者於 2026-10-11 決定：使用傳統對話框，即目前的做法。使用者的硬性要求是：Esc、Alt+F4 與關閉鈕絕不能觸發「移除並儲存」或「放棄變更」；它們是否等於「返回編輯」本身不是要求。（F-5 的關閉對話框也有自訂按鈕文字；它是從 frame 顯示，不是從 modal 對話框，所以這項實測不適用；本任務未檢查。）
+4. **F-W6 測試的最後一個斷言** `assertFalse((directory / "alpha.csv").exists())` 在不分大小寫的檔案系統上不可能成立：改名後檔案仍可用 `alpha.csv` 找到。Task 1 改為檢查資料夾清單 `["Alpha.csv", "default.csv"]`，在任何檔案系統上都成立。
+5. **D11：先讀來源，再寫入副本。** `import_dictionary` 在同一個 `try` 內檢查並讀取來源（`validate_dictionary_csv`，然後 `Path.read_bytes`），再用讀到的位元組寫入副本，因此不必深入 `write_bytes_atomically`，就能分辨來源的 `PermissionError` 與寫入副本時的錯誤。字典是小的 CSV 檔，複製的位元組相同。
+6. **D13：保留的列照舊轉換；先解析原始值（O13）。** `from_paths` 照舊先解析注音列的原始值；只有原始值失敗時，才套用編輯器的判斷（去空白後的注音，再加上 D14 的一聲空白），兩者都失敗才略過該列。用真正的解析器時，能解析的原始值必定通過編輯器的判斷（不會以空白開頭，結尾最多只有一個一聲空白），所以規則與 `_is_editable` 相同；`EditorParityTest` 檢查 23 列，另有一個測試確認保留的列只解析一次、解析的是原始值。編輯器會顯示的注音列照舊轉換，所以手寫、結尾一聲卻沒有空白的列（`抹,ㄇㄚ,Bopomofo`）仍沿用目前以原始符號轉換的方式；編輯器顯示為 `ㄇㄚ `，只有在修改後存檔時才寫入空白。協調者依建議預設決定；使用者可在 merge 前推翻。
+7. **trace 重播有兩處調整，不是一處。** 除了回答 D1 的對話框並把它的記錄從「確定」那一步移除（D1），重播也會在開啟那一步的記錄中有編輯器新增的「取消」按鈕 `Bind` 時把它移除（D7）；完整的建構記錄由 `test_construction_log_is_exact` 固定。假的詞條對話框遇到重複時維持開啟，接著取下一個預先排定的回答，沒有就取消，所以記錄下來的 `MessageBox` 事件不變。`dictionary_entries_trace.json` 不變（`f493da52...`）。
+8. **D9：刪除後選取第一個相等的列。** 有兩列完全相同時，刪除第二列後選取第一列：這是 golden trace 記錄的相等比對規則（O10）。保留相同來源文字的編輯與取代則以 identity 選取。
+9. **D12 在主視窗中：** `gui.py` 匯入 `DictionaryEntryListModel`，載入模型後以 `model=` 傳入；非預期錯誤寫入 `gui.py` 的模組 logger `dotexpress.gui`（`gui.log`）。建構函式在原生 `__init__` 之後才設定路徑與模型；建立過程失敗時呼叫 `Destroy` 再重新拋出。
+10. **字串。** 重複訊息只有一個呼叫點（`dialog.py` 的 `show_duplicate_source_text`），詞條對話框與編輯器的後備檢查共用，所以 D8 不新增 msgid。`msgmerge` 猜錯兩個 fuzzy 翻譯：`Failed to open the dictionary editor: {error}` <- `無法刪除字典：{error}`（Task 7）與 `Do you want to discard the changes you made to dictionary "{name}"?` <- `要刪除字典「{name}」嗎？`（Task 9）；填寫 msgstr 的步驟會取代兩者並移除 fuzzy 標記。
+11. **spec 沒有列出的測試：** `test_wx_call_sites`（唯一的 `GenericMessageDialog` 是 `confirm_box`）、`test_message_box`（`confirm_box`，兩個測試）、`test_dialog_validation`（D8 三個；D14 兩個）、轉換的 golden 案例（翻轉一個，新增三個）、`test_dictionary_entries` 的往返測試（隱藏列不再是規則）、presenter 的只改大小寫改名（取消跳過）。D14 的驗證測試收集錯誤訊息，而不是讓解析器的錯誤往外拋：`text.zhuyin.ParseError` 是 frozen dataclass，unittest 無法替它附加 traceback（測試會在沒有 `Ran` 行的情況下中止）。
+12. **Windows 項目：** 95～106 沿用 spec 的編號，手動 NVDA 項目為 107；「改前」是 `D:\dxtest\N-f9b`（F-9 審查修正後，程式碼等於 `1ce6ce5`）；新 build 放在 `D:\dxtest\N-f11`。修正：項目 98 原本預期「`bom_lf.csv` 仍沒有 BOM」，但 `bom_lf.csv` 有 BOM（且是 LF 換行）：編輯後保留 BOM、改為 CRLF。項目 106 改用與 liblouis 預設讀音不同的注音，讓輸出能看出兩條規則都有用到：`tone1.csv` 中的 `中心,ㄓㄨㄥˋㄒㄧㄣ ,Bopomofo`，以及新增 `抹`／`ㄇㄚ`（一聲讀音，輸入時沒有空白）。項目 105 在「匯入」的檔案對話框關閉後才以不共用方式鎖住檔案：Windows 的檔案對話框不接受沒有人能共用的檔案，實際使用時則是其他程式在輸入名稱時取得檔案。項目 23～29 改用新腳本 `rerun23.py`（23、24）與 `rerun25.py`（25～29），先編輯一列讓「確定」會寫檔；項目 35 使用新的 `item35.py`；項目 44 與 47 執行 F-6 的 `item42.py` 與 `item47.py`，不修改（兩個 build 的記錄除了項目 47 的 `gui.log` 那行中的資料夾名稱之外完全相同）。
+13. **採用 D14（O1 選 (b)，使用者於 2026-10-11 決定）。** 由 Task 6 實作；GUI 項目 106 列入範圍。
 
 ## 現況（2026-10-11 在 `main` `1ce6ce5`、worktree `D:\workspace\DotExpress-f11`、`HEAD:client` `a64da653` 上確認）
 
@@ -233,9 +251,9 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 - golden 案例「Bopomofo row with a processing that raises」翻轉：這列現在被跳過。
 - `translation_golden.json` 不受影響：它唯一的字典列是合法的。
 
-**D14. 最後一個音節是一聲（待使用者回答 O1）。**
+**D14. 最後一個音節是一聲（O1 選 (b)，使用者於 2026-10-11 決定）。**
 
-本 spec 建議 O1 的 (b)：
+使用者選擇 O1 的 (b)（2026-10-11）：
 
 - `Bopomofo` 列的標準注音是 `braille.strip()`；
 - 若它無法解析，但 `braille.strip() + " "` 可以，標準注音就是 `braille.strip() + " "`，也就是保留最後的一聲空白；
@@ -246,7 +264,7 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 - 這類列會顯示、可以編輯、存檔時保留聲調空白，轉換與現在相同；
 - 在詞條對話框輸入 `ㄓㄨㄥ ㄒㄧㄣ` 會被接受，存成 `ㄓㄨㄥ ㄒㄧㄣ `。
 
-若使用者選 (a)，就拿掉 D14。這類列會維持隱藏，在 D1 的確認框中以「格式不正確」列出，「移除並儲存」時被刪除，轉換也忽略它們。
+未採用的 (a) 會拿掉 D14：這類列會維持隱藏，在 D1 的確認框中以「格式不正確」列出，「移除並儲存」時被刪除，轉換也忽略它們。
 
 **D15. 字串與 catalog。** 下表 11 個字串。依序執行 `generate-pot.bat`、`msgmerge`、補上 msgstr、`msgfmt --check --statistics`：全部已翻譯、0 fuzzy。`POT-Creation-Date` 維持固定。檢查 `msgmerge` 沒有把新 msgid 配對到舊字串而標成 fuzzy，例如 `&Discard Changes` 配到 `Close &Without Saving`，或 `Unsaved Changes` 配到 `Cannot Save Document`。
 
@@ -290,7 +308,7 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 - `PreservedDictionaryRow` 新增 `line: int = field(default=0, compare=False)`、`fields: tuple[str, ...] = field(default=(), compare=False)`，以及 `reason` property（`"no_source_text"` 或 `"invalid_bopomofo"`）。`DictionaryEntry` 新增 `fields`（`compare=False`、`repr=False`）。
 - `load_dictionary_file(path)`（D6）。`load_dictionary_rows` 回傳 `load_dictionary_file(path).rows`。`load_dictionary_entries` 不變。
 - `save_dictionary_entries(path, entries, layout=DictionaryLayout())`（D5）。使用預設 layout 時，詞條寫出的位元組與現在完全相同，所以沒傳 layout 的呼叫端輸出不變。
-- D14（若採用）：`canonical_bopomofo(braille) -> str | None`，供 `_is_editable`、讀檔與 `validate_dictionary_entry` 使用。
+- D14：`canonical_bopomofo(braille) -> str | None`，供 `_is_editable`、讀檔與 `validate_dictionary_entry` 使用。
 
 ### `client/dictionaries/entry_list_model.py`（tab）
 
@@ -418,7 +436,7 @@ TDD：每一步的測試先寫，並因預期的原因失敗。縮排依各檔�
    - 預設 layout 寫出現在的位元組；
    - 隱藏列永遠不寫出。
 5. `PreservedDictionaryRow.reason`：空白文字、只有空白的文字、不合法的注音。
-6. （D14，若採用）`canonical_bopomofo`：`ㄇㄚ` 變成 `ㄇㄚ `、`ㄇㄚ ` 不變、`ㄉㄨˋㄗ˙` 不變、`ㄉㄨˋ|ㄗ˙` 為 `None`。讀檔時會顯示 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`。
+6. （D14）`canonical_bopomofo`：`ㄇㄚ` 變成 `ㄇㄚ `、`ㄇㄚ ` 不變、`ㄉㄨˋㄗ˙` 不變、`ㄉㄨˋ|ㄗ˙` 為 `None`。讀檔時會顯示 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`。
 
 ### B. 模型（`tests/test_dictionary_entry_list_model.py`）
 
@@ -523,7 +541,7 @@ TDD：每一步的測試先寫，並因預期的原因失敗。縮排依各檔�
 7. `fix: save a dictionary only after a change and ask before discarding changes (F-11, P2-2 Q2, Q5)`：D3、D4、D7、字串 7～10、catalog。
 8. `fix: confirm and remove dictionary rows the editor cannot show (F-11, #7)`：D1、字串 1～6、catalog；C3、C4、C10（確定的部分）。
 9. `fix: ignore hidden dictionary rows when converting (F-11, #8)`：D13；測試 F。
-10. 若 O1 選 (b)：`fix: keep the tone space of a first-tone final syllable (F-11)`：D14。
+10. `fix: keep the tone space of a first-tone final syllable (F-11)`：D14（O1 選 (b)；plan 以 Task 6 執行，見「規劃後的修正（F-11）」2）。
 
 每個 commit 結尾加 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`，只 stage 明確路徑。
 
@@ -568,7 +586,7 @@ build 與 process 規則同 F-9：
 | 103 | `dict_badbopo`：新增 `肚子`／`ㄉㄨˋㄗ˙`／注音；按確定；移除並儲存 | 新增被接受；D1 對話框列出第 3、4 列；檔案為 `臺北` 與新的 `肚子,ㄉㄨˋㄗ˙,Bopomofo` | 新增被拒絕（F-4 D5） |
 | 104 | 在設定選 `alpha`；字典管理中改名為 `Alpha` | 沒有訊息；清單顯示 `Alpha` 並選取；`dictionary\Alpha.csv`；`config.json` 的 `selected_dictionary` 為 `Alpha`；轉換仍使用它 | 字典「Alpha」已存在。 |
 | 105 | 以 share-none 鎖住 `src.csv`（`lock.py`）；匯入它 | `匯入字典失敗：無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。`；`dictionary\` 中沒有新檔案 | `[Errno 13] Permission denied: ...` |
-| 106 | （D14，若採用）`tone1.csv` 含 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`；開啟；新增 `媽`／`ㄇㄚ`；按確定 | 那一列有顯示；新增被接受；檔案含 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo` 與 `媽,ㄇㄚ ,Bopomofo`；轉換 `中心媽` 兩條都用到 | 那一列被隱藏；新增出現格式錯誤 |
+| 106 | （D14；plan 使用的資料見「規劃後的修正（F-11）」12）`tone1.csv` 含 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`；開啟；新增 `媽`／`ㄇㄚ`；按確定 | 那一列有顯示；新增被接受；檔案含 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo` 與 `媽,ㄇㄚ ,Bopomofo`；轉換 `中心媽` 兩條都用到 | 那一列被隱藏；新增出現格式錯誤 |
 
 以新的預期重跑（需要寫檔時，腳本先做一次修改）：
 
@@ -589,7 +607,7 @@ F-6 的項目 42～51 不變；因為編輯器改為先讀檔，重跑 44 與 47
 ## 風險
 
 - **既有字典的轉換結果改變**（中，U6 的本意）。只有空白的規則與不合法的注音規則不再生效。下次按「確定」時，D1 確認框會列出它們。發布說明應提到這點。
-- **最後一個音節是一聲的列（O1）**（中）。選 (a) 時，這些看起來合法的列會被轉換忽略，並以「格式不正確」列出等待移除。建議的 (b) 可以避免，但會擴大範圍，也多一項行為改變（詞條對話框接受沒有最後空白的注音）。
+- **最後一個音節是一聲的列（O1，已決定 (b)）**（低）。(b) 讓這類列維持顯示並用於轉換；唯一的行為改變是詞條對話框接受沒有最後空白的注音，並存成有空白的形式。
 - **trace 重播是調整過的，不是重新錄製**（低）。重播會拿掉並回答 D1 確認框的記錄。這個調整若有錯，可能掩蓋 OK 步驟的退化。測試 C3 另外單獨檢查 OK 步驟。
 - **選取規則分成兩種**（低）。新增／取代後用 identity，刪除／篩選後用相等。只有完全相同的列時才有差別。保留相等是因為 golden trace 固定了它（探針 1）。
 - **`csv.reader` 的一致性**（低）。與 `DictReader` 不一致會改變哪些列被隱藏。測試 A3 對每份語料比對兩者。
@@ -598,12 +616,13 @@ F-6 的項目 42～51 不變；因為編輯器改為先讀檔，重跑 44 與 47
 
 ## 待決問題
 
-**需要使用者決定（使用者可見）：**
+**使用者已決定：**
 
-- **O1. 最後一個音節是一聲的注音列。** 現在編輯器會隱藏它們，因為去空白把聲調空白也去掉了（探針 4）。轉換會使用它們。詞條對話框無法輸入它們。依目前寫下的 U1 與 U6：
+- **O1. 最後一個音節是一聲的注音列。使用者於 2026-10-11 決定：(b)。** 現在編輯器會隱藏它們，因為去空白把聲調空白也去掉了（探針 4）。轉換會使用它們。詞條對話框無法輸入它們。依目前寫下的 U1 與 U6：
   - **(a)** 轉換開始忽略它們，按「確定」時以「格式不正確」列出等待移除；
   - **(b)（建議）** 去空白時保留最後的一聲空白（D14）。它們會顯示、可以編輯、存檔時保留空白、轉換與現在相同；輸入時沒打最後的空白也會被接受。
-  plan 可以先做步驟 1～9；步驟 10 等這個答案。
+  plan 實作 (b)（D14，plan 的 Task 6）；GUI 項目 106 列入範圍。
+- **O12. 兩個確認框（規劃時發現）。使用者於 2026-10-11 決定：使用傳統對話框（`wx.GenericMessageDialog`）。** 從編輯器顯示時，使用自訂按鈕文字的原生 task dialog 會把 Alt+F4 當成按下「確定」（「規劃後的修正（F-11）」3）。硬性要求：Esc、Alt+F4 與關閉鈕絕不能觸發「移除並儲存」或「放棄變更」。
 
 **協調者依建議預設決定；使用者可在 merge 前推翻：**
 
@@ -617,6 +636,7 @@ F-6 的項目 42～51 不變；因為編輯器改為先讀檔，重跑 44 與 47
 - **O9.** 寫檔時換行維持 CRLF、引號維持最少（D5）。使用者只決定了 BOM。
 - **O10.** 刪除與篩選後的選取維持相等比對（D9）。
 - **O11.** 檔案不存在時，沒修改按「確定」不再建立它（D4）。
+- **O13.**（plan 新增）轉換照舊先解析注音列的原始值，只有失敗時才套用編輯器的判斷；保留的列轉換結果與以前完全相同（「規劃後的修正（F-11）」6）。
 
 ## 本 spec 新引入的使用者可見預設（不是使用者的決定）
 

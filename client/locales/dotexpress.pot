@@ -875,6 +875,15 @@ msgid ""
 "main must define exactly one positional parameter and no other parameters."
 msgstr ""
 
+#: conversion/preprocessing/user_script.py:76
+msgid "main is not callable."
+msgstr ""
+
+#: conversion/preprocessing/user_script.py:79
+#, python-brace-format
+msgid "main must return str, got {type}."
+msgstr ""
+
 #: dialog.py:33
 msgid "CSV files (*.csv)|*.csv"
 msgstr ""
@@ -884,7 +893,7 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: dialog.py:58 dialog.py:123 gui.py:527 settings/dialogs.py:144
+#: dialog.py:58 dialog.py:123 gui.py:528 settings/dialogs.py:144
 #: settings/dialogs.py:295 ui/message_box.py:29
 msgid "Cancel"
 msgstr ""
@@ -904,8 +913,8 @@ msgstr ""
 
 #: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:896
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
-#: documents/export_coordinator.py:145 gui.py:492 gui.py:777 gui.py:1089
-#: gui.py:1101 ui/conversion_presenter.py:298
+#: documents/export_coordinator.py:145 gui.py:493 gui.py:778 gui.py:1090
+#: gui.py:1102 ui/conversion_presenter.py:298
 msgid "Error"
 msgstr ""
 
@@ -1202,7 +1211,7 @@ msgid ""
 "delimited)\" format, for example with Save As in Excel."
 msgstr ""
 
-#: dictionaries/read_problems.py:50 documents/import_problems.py:36 gui.py:467
+#: dictionaries/read_problems.py:50 documents/import_problems.py:36 gui.py:468
 msgid ""
 "The file cannot be opened. It may be in use by another program, or you may "
 "not have permission to read it. Close the other program and try again."
@@ -1267,47 +1276,55 @@ msgstr ""
 msgid "All Supported Files"
 msgstr ""
 
-#: documents/formats.py:118
+#: documents/formats.py:112 gui.py:334
+msgid "No conversion data is available for this document."
+msgstr ""
+
+#: documents/formats.py:122
 msgid "DEP"
 msgstr ""
 
-#: documents/formats.py:124
+#: documents/formats.py:128
 msgid "DotExpress files (*.dep)|*.dep"
 msgstr ""
 
-#: documents/formats.py:125
+#: documents/formats.py:129
 msgid "Package DEP"
 msgstr ""
 
-#: documents/formats.py:130
+#: documents/formats.py:134
 msgid "DOCX"
 msgstr ""
 
-#: documents/formats.py:140
+#: documents/formats.py:144
 msgid "EPUB"
 msgstr ""
 
-#: documents/formats.py:150
+#: documents/formats.py:154
 msgid "PDF"
 msgstr ""
 
-#: documents/formats.py:160
+#: documents/formats.py:164
 msgid "TXT"
 msgstr ""
 
-#: documents/formats.py:170
+#: documents/formats.py:174
 msgid "BRL"
 msgstr ""
 
-#: documents/formats.py:176
+#: documents/formats.py:180
 msgid "Braille files (*.brl)|*.brl"
 msgstr ""
 
-#: documents/formats.py:177
+#: documents/formats.py:181
 msgid "Braille BRL"
 msgstr ""
 
-#: documents/formats.py:190
+#: documents/formats.py:193
+msgid "HTML files (*.html)|*.html"
+msgstr ""
+
+#: documents/formats.py:194
 msgid "Dual View HTML"
 msgstr ""
 
@@ -1337,7 +1354,7 @@ msgstr ""
 msgid "This file type cannot be imported."
 msgstr ""
 
-#: documents/workspace.py:461 gui.py:762
+#: documents/workspace.py:461 gui.py:763
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr ""
@@ -1349,9 +1366,13 @@ msgid ""
 "file is not in the document list."
 msgstr ""
 
-#: documents/workspace_service.py:272 gui.py:510 gui.py:520
+#: documents/workspace_service.py:272 gui.py:511 gui.py:521
 #, python-brace-format
 msgid "Failed to save document: {error}"
+msgstr ""
+
+#: dual_view/browser.py:105
+msgid "No supported browser or system HTML opener is available."
 msgstr ""
 
 #: gui.py:184
@@ -1370,11 +1391,11 @@ msgstr ""
 msgid "Braille Result"
 msgstr ""
 
-#: gui.py:253 gui.py:1167
+#: gui.py:253 gui.py:1168
 msgid "File"
 msgstr ""
 
-#: gui.py:266 gui.py:1167 settings/dialogs.py:357
+#: gui.py:266 gui.py:1168 settings/dialogs.py:357
 msgid "Translation"
 msgstr ""
 
@@ -1390,27 +1411,23 @@ msgstr ""
 msgid "Help"
 msgstr ""
 
-#: gui.py:322 ui/translation_menu.py:9
+#: gui.py:323 ui/translation_menu.py:9
 msgid "Dual View"
 msgstr ""
 
-#: gui.py:333
-msgid "No conversion data is available for this document."
-msgstr ""
-
-#: gui.py:356
+#: gui.py:357
 #, python-brace-format
 msgid "Failed to open dual view: {error}"
 msgstr ""
 
-#: gui.py:472
+#: gui.py:473
 #, python-brace-format
 msgid ""
 "The file is damaged, and a backup copy could not be saved as \"{backup}\" "
 "before replacing it. Details: {error}"
 msgstr ""
 
-#: gui.py:478
+#: gui.py:479
 #, python-brace-format
 msgid ""
 "DotExpress cannot save its settings to \"{path}\". Changes to the settings "
@@ -1420,48 +1437,48 @@ msgid ""
 "{reason}"
 msgstr ""
 
-#: gui.py:481
+#: gui.py:482
 msgid "Settings Not Saved"
 msgstr ""
 
-#: gui.py:521
+#: gui.py:522
 msgid "Cannot Save Document"
 msgstr ""
 
-#: gui.py:525
+#: gui.py:526
 msgid ""
 "Changes made since the last successful save have not been saved. If you "
 "close without saving, these changes will be lost."
 msgstr ""
 
-#: gui.py:527
+#: gui.py:528
 msgid "&Retry"
 msgstr ""
 
-#: gui.py:527
+#: gui.py:528
 msgid "Close &Without Saving"
 msgstr ""
 
-#: gui.py:534
+#: gui.py:535
 #, python-brace-format
 msgid "Failed to open website: {error}"
 msgstr ""
 
-#: gui.py:537
+#: gui.py:538
 msgid "About DotExpress"
 msgstr ""
 
-#: gui.py:550
+#: gui.py:551
 #, python-brace-format
 msgid "Unable to open text processing script: {error}"
 msgstr ""
 
-#: gui.py:551 settings/dialogs.py:123 settings/dialogs.py:163
+#: gui.py:552 settings/dialogs.py:123 settings/dialogs.py:163
 #: ui/translation_menu.py:10
 msgid "Text Processing"
 msgstr ""
 
-#: gui.py:657
+#: gui.py:658
 #, python-brace-format
 msgid ""
 "Some characters in document \"{name}\" cannot be shown ({count} in all). "
@@ -1472,23 +1489,23 @@ msgid ""
 "one appears in the braille as an escape code."
 msgstr ""
 
-#: gui.py:662
+#: gui.py:663
 msgid "Characters Replaced"
 msgstr ""
 
-#: gui.py:726
+#: gui.py:727
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr ""
 
-#: gui.py:772
+#: gui.py:773
 #, python-brace-format
 msgid ""
 "Choose another name, or move or delete that file. Workspace folder:\n"
 "{folder}"
 msgstr ""
 
-#: gui.py:806
+#: gui.py:807
 #, python-brace-format
 msgid ""
 "DotExpress was interrupted while saving or renaming a document. These "
@@ -1499,76 +1516,76 @@ msgid ""
 "Check that their content is what you expect."
 msgstr ""
 
-#: gui.py:809
+#: gui.py:810
 msgid "Documents Recovered"
 msgstr ""
 
-#: gui.py:867
+#: gui.py:868
 msgid "Add Document"
 msgstr ""
 
-#: gui.py:883
+#: gui.py:884
 msgid "Rename Document"
 msgstr ""
 
-#: gui.py:907
+#: gui.py:908
 #, python-brace-format
 msgid "Do you want to delete document \"{name}\"?"
 msgstr ""
 
-#: gui.py:908
+#: gui.py:909
 msgid "Confirm Delete Document"
 msgstr ""
 
-#: gui.py:917 gui.py:944
+#: gui.py:918 gui.py:945
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr ""
 
-#: gui.py:936
+#: gui.py:937
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr ""
 
-#: gui.py:937
+#: gui.py:938
 msgid "Confirm Delete All"
 msgstr ""
 
-#: gui.py:966
+#: gui.py:967
 msgid "Import Document"
 msgstr ""
 
-#: gui.py:986
+#: gui.py:987
 msgid "Import Issues"
 msgstr ""
 
-#: gui.py:987
+#: gui.py:988
 msgid "Some files were skipped during import."
 msgstr ""
 
-#: gui.py:1100
+#: gui.py:1101
 #, python-brace-format
 msgid "Failed to open the dictionary editor: {error}"
 msgstr ""
 
-#: gui.py:1225
+#: gui.py:1226
 msgid "Export Document"
 msgstr ""
 
-#: gui.py:1235
+#: gui.py:1236
 msgid "Export All Documents"
 msgstr ""
 
-#: gui.py:1244
+#: gui.py:1245
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr ""
 
-#: gui.py:1247
+#: gui.py:1248
 msgid "Confirm Overwrite"
 msgstr ""
 
-#: gui.py:1253
+#: gui.py:1254
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1579,7 +1596,7 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: gui.py:1256
+#: gui.py:1257
 msgid "Startup Error"
 msgstr ""
 

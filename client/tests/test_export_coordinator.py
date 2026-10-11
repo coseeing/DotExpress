@@ -241,7 +241,8 @@ class ExportCoordinatorTest(unittest.TestCase):
                 writer.assert_called_once_with(Path("/tmp/alpha.html"), document, ExportContext(dual_view_results=expected))
 
         self.coordinator.write_document(self.root / "alpha.html", document, "html", dual_view_results=())
-        self.assertIn("No conversion data", (self.root / "alpha.html").read_text(encoding="utf-8"))
+        # The page's text in zh_TW, as the in-app Dual View shows it (F-12 D8).
+        self.assertIn("此文件沒有可顯示的轉換資料。", (self.root / "alpha.html").read_text(encoding="utf-8"))
 
     def test_write_document_rejects_non_exportable_format(self) -> None:
         descriptor = replace(get_format("txt"), writer=Mock())
@@ -454,7 +455,7 @@ class ExportCoordinatorTest(unittest.TestCase):
         self.assertEqual(self._take(), [self._exported()])
         html = (self.root / "beta.html").read_text(encoding="utf-8")
         self.assertIn('<span class="source">fresh-b</span>', html)
-        self.assertNotIn("No conversion data", html)
+        self.assertNotIn("此文件沒有可顯示的轉換資料。", html)
         self.assertEqual(self.documents.dual_view_results_by_document, {})
         self.assertEqual(self.documents.get_document("beta"), Document("beta", "b", None))
 
@@ -677,7 +678,7 @@ class ExportCoordinatorTest(unittest.TestCase):
             with self.subTest(name=name):
                 html = (self.root / f"{name}.html").read_text(encoding="utf-8")
                 self.assertIn(f'<span class="source">{source}</span>', html)
-                self.assertNotIn("No conversion data", html)
+                self.assertNotIn("此文件沒有可顯示的轉換資料。", html)
         self.assertEqual(list(self.documents.dual_view_results_by_document), ["alpha"])
 
 

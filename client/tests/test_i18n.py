@@ -256,6 +256,19 @@ class TranslationTest(unittest.TestCase):
             "無法轉換文件「{name}」。\n\n{error}",
         )
 
+    def test_remaining_english_message_strings_are_translated(self) -> None:
+        # F-12 (D8): the HTML save filter, the browser error and the text processing script's
+        # two errors of its contract.
+        expected = {
+            "HTML files (*.html)|*.html": "HTML 檔 (*.html)|*.html",
+            "No supported browser or system HTML opener is available.": "找不到可用的瀏覽器，也沒有可開啟 HTML 檔的系統程式。",
+            "main is not callable.": "main 不是可以呼叫的函式。",
+            "main must return str, got {type}.": "main 必須傳回 str，而不是 {type}。",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 
@@ -470,6 +483,65 @@ class ExtractionMarkerTest(unittest.TestCase):
                 "message",
             ],
         )
+
+    def test_html_save_filter_is_marked_where_defined(self) -> None:
+        # F-12 (D8): build_export_wildcard translates it where it is shown.
+        wildcards = {
+            keyword.value.args[0].value if isinstance(keyword.value, ast.Call) else ast.unparse(keyword.value): (
+                ast.unparse(keyword.value.func) if isinstance(keyword.value, ast.Call) else None
+            )
+            for node in ast.walk(_module_tree("documents/formats.py"))
+            if isinstance(node, ast.Call)
+            for keyword in node.keywords
+            if keyword.arg == "export_wildcard"
+        }
+
+        self.assertEqual(
+            wildcards,
+            {
+                "DotExpress files (*.dep)|*.dep": "N_",
+                "Braille files (*.brl)|*.brl": "N_",
+                "HTML files (*.html)|*.html": "N_",
+            },
+        )
+
+    def test_window_title_is_not_passed_to_gettext(self) -> None:
+        # F-12 (D9): "alpha - DotExpress" is not a msgid; DotExpress and the name stay as they are.
+        method = next(
+            node
+            for node in ast.walk(_module_tree("gui.py"))
+            if isinstance(node, ast.FunctionDef) and node.name == "_update_window_title"
+        )
+        calls = sorted(ast.unparse(node.func) for node in ast.walk(method) if isinstance(node, ast.Call))
+
+        self.assertEqual(calls, ["format_window_title", "self.SetTitle"])
+
+    def test_the_catalog_holds_exactly_the_marked_strings(self) -> None:
+        # F-12 (Test Plan A2): every _() and N_() string of the client is a catalog entry, and the
+        # compiled catalog holds no other.
+        marked = set()
+        for dirpath, dirnames, filenames in os.walk(CLIENT_ROOT):
+            dirnames[:] = sorted(name for name in dirnames if name not in {"tests", ".venv", "__pycache__", "build", "dist"})
+            if Path(dirpath).relative_to(CLIENT_ROOT).parts[:2] == ("braille", "liblouis"):
+                continue
+            for filename in sorted(filenames):
+                if not filename.endswith(".py"):
+                    continue
+                path = Path(dirpath) / filename
+                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=str(path))):
+                    if (
+                        isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Name)
+                        and node.func.id in {"_", "N_"}
+                        and node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)
+                    ):
+                        marked.add(node.args[0].value)
+        catalog = set(i18n.load_translation()._catalog) - {""}
+
+        self.assertEqual(sorted(marked - catalog), [])
+        self.assertEqual(sorted(catalog - marked), [])
 
     def test_generate_pot_extracts_n_keyword(self) -> None:
         script = (CLIENT_ROOT.parent / "scripts" / "generate-pot.bat").read_text(encoding="utf-8")

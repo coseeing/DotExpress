@@ -7,6 +7,8 @@ from pathlib import Path
 import shutil
 import subprocess
 
+from i18n import _
+
 
 @dataclass(frozen=True)
 class BrowserDefinition:
@@ -100,6 +102,6 @@ def open_html_in_browser(
 
     fallback = getattr(os, "startfile", None) if startfile is _DEFAULT_STARTFILE else startfile
     if fallback is None:
-        raise OSError("No supported browser or system HTML opener is available.")
+        raise OSError(_("No supported browser or system HTML opener is available."))
     fallback(str(html_path.resolve()))
     return "system"

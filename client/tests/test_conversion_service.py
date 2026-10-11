@@ -18,6 +18,7 @@ from conversion.service import (
     translate_with_language_segments,
 )
 from translate import TranslationResult
+from ui.conversion_presenter import format_conversion_error
 
 
 LANG = "zh_TW"
@@ -525,6 +526,22 @@ class DictionaryErrorTimingTest(DictionaryConversionTestCase):
 
         self.assertEqual(context.exception.stage, "text_processing")
         self.assertEqual(str(context.exception.error), "script boom")
+
+    def test_a_script_error_of_the_contract_is_shown_in_zh_tw(self) -> None:
+        # F-12 (D8): a main that returns None is the realistic case.
+        cases = (
+            ("def main(text):\n    return None\n", "文字處理失敗：main 必須傳回 str，而不是 NoneType。"),
+            ("def main(text):\n    return text\nmain = 1\n", "文字處理失敗：main 不是可以呼叫的函式。"),
+        )
+        self.dictionary_path.write_text("text,braille,type\n", encoding="utf-8")
+        for source, message in cases:
+            with self.subTest(source=source):
+                (self.dictionary_dir / "preprocessing.py").write_text(source, encoding="utf-8")
+
+                with self.assertRaises(ConversionStageError) as context:
+                    self._convert("abc", self._runtime())
+
+                self.assertEqual(format_conversion_error(context.exception), message)
 
     def test_math_before_the_first_text_is_translated_before_the_dictionary_error(self) -> None:
         self.dictionary_path.write_text("", encoding="utf-8")

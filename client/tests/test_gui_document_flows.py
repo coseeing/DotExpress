@@ -58,6 +58,8 @@ from tests.unreadable_dictionary_files import big5_decode_error
 
 # Half of a surrogate pair, as pasting part of an emoji can leave it in an editor (F-5 review M-7).
 LONE_SURROGATE = chr(0xD83D)
+# The text of an exported Dual View page without conversion data (F-12 D8).
+EMPTY_PAGE = "此文件沒有可顯示的轉換資料。"
 
 
 def make_paths(root: Path = Path("unused-root"), **folders: Path) -> app_paths.ApplicationPaths:
@@ -1618,7 +1620,8 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             self.assertIn('<span class="source">a</span>', cached_html)
 
             frame._export_coordinator.write_document(root / "beta.html", Document("beta", "text", "b"), "html")
-            empty_html = render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml))
+            # The page without conversion data says so in zh_TW (F-12 D8).
+            empty_html = render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml), empty_message=EMPTY_PAGE)
             self.assertEqual((root / "beta.html").read_bytes(), text_file_bytes(empty_html))
             self.assertNotEqual(cached_html, empty_html)
 
@@ -1674,7 +1677,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             )
             self.assertEqual(
                 (root / "beta.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml)),
+                render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml), empty_message=EMPTY_PAGE),
             )
         frame.show_info.assert_called_once_with(
             gui._(ExportBatchResult().summary_template),
@@ -4200,7 +4203,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._exported(frame)])
         html = target.read_text(encoding="utf-8")
         self.assertIn('<span class="source">fresh-a</span>', html)
-        self.assertNotIn("No conversion data", html)
+        self.assertNotIn("此文件沒有可顯示的轉換資料。", html)
         self.assertEqual(frame._document_controller.dual_view_results_by_document, {})
         self.assertEqual(frame._document_controller.documents, [Document("alpha", "alpha text", None)])
         self.assertEqual(frame.output_txt.value, "")
@@ -4530,7 +4533,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
             [
                 ("set", "input", "beta text"),
                 ("set", "output", "⠃"),
-                ("title", gui._(gui.format_window_title("beta"))),
+                ("title", gui.format_window_title("beta")),
                 ("dual_view.refresh",),
                 ("focus", "input"),
             ],

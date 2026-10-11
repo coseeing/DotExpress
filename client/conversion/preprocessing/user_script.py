@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from i18n import N_
+from i18n import N_, _
 from shared.atomic_write import write_text_atomically
 
 
@@ -71,9 +71,10 @@ def execute_preprocessing_script(path: Path | str, input_text: str) -> str:
     }
     exec(compile(source, str(source_path), "exec"), namespace)
     main = namespace.get("main")
+    # Translated when raised, as the second one is formatted (F-12 D8).
     if not callable(main):
-        raise TypeError("main is not callable.")
+        raise TypeError(_("main is not callable."))
     output = main(input_text)
     if not isinstance(output, str):
-        raise TypeError(f"main must return str, got {type(output).__name__}.")
+        raise TypeError(_("main must return str, got {type}.").format(type=type(output).__name__))
     return output

@@ -316,7 +316,8 @@ class BrailleFrame(wx.Frame):
 		apply_document_menu_state(target_items, menu_state)
 
 	def _update_window_title(self) -> None:
-		self.SetTitle(_(format_window_title(self._document_controller.open_document_name)))
+		# Not a msgid: DotExpress and the document name stay as they are (F-12 D9).
+		self.SetTitle(format_window_title(self._document_controller.open_document_name))
 
 	def _create_dual_view_frame(self) -> DualViewFrame:
 		return DualViewFrame(self, title=_("Dual View"), on_closed=self._on_dual_view_closed)

@@ -144,11 +144,15 @@ class UserPreprocessingScriptTest(unittest.TestCase):
             "def main(text):\n    return text\nmain = None\n",
             "def main(text):\n    return 42\n",
         )
-        for source in invalid_sources:
+        # Translated when raised (F-12 D8), as the second one is formatted.
+        messages = ("main 不是可以呼叫的函式。", "main 必須傳回 str，而不是 int。")
+        for source, message in zip(invalid_sources, messages):
             with self.subTest(source=source):
                 self.path.write_text(source, encoding="utf-8")
-                with self.assertRaises(TypeError):
+                with self.assertRaises(TypeError) as raised:
                     execute_preprocessing_script(self.path, "source")
+
+                self.assertEqual(str(raised.exception), message)
 
     def test_execution_rejects_externally_written_invalid_contract(self) -> None:
         self.path.write_text("def main(first, second):\n    return first\n", encoding="utf-8")

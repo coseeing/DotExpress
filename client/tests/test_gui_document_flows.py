@@ -58,6 +58,8 @@ from tests.unreadable_dictionary_files import big5_decode_error
 
 # Half of a surrogate pair, as pasting part of an emoji can leave it in an editor (F-5 review M-7).
 LONE_SURROGATE = chr(0xD83D)
+# The text of an exported Dual View page without conversion data (F-12 D8).
+EMPTY_PAGE = "此文件沒有可顯示的轉換資料。"
 
 
 def make_paths(root: Path = Path("unused-root"), **folders: Path) -> app_paths.ApplicationPaths:
@@ -272,6 +274,8 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         frame._workspace_service.workspace_dir = self.workspace
         # F-8 (D1, D2): a bare Mock would answer "taken" and loop the name prompt.
         frame._workspace_service.package_name_taken.return_value = False
+        # F-12 (D5): the same for the entry that holds a name on disk.
+        frame._workspace_service.unlisted_package_entry.return_value = None
         frame._workspace_service.free_document_name.side_effect = lambda base: base
         # F-8 (D4): a bare Mock would be a truthy list of recovered names.
         frame._workspace_service.take_recovered_document_names.return_value = []
@@ -505,12 +509,16 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
             frame.on_delete_all_documents(None)
 
         frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
+        # No valid document is left: as after a complete Delete All, the title follows and the
+        # default document is opened (F-12, P1-3 defect 4).
         self.assertEqual(
             frame.ui.mock_calls,
             [
                 call._refresh_document_list(),
                 call._review_invalid_workspace_files(invalid_paths),
+                call._update_window_title(),
                 call._clear_document_editors(),
+                call._ensure_open_document_exists(),
                 call._refresh_dual_view(),
             ],
         )
@@ -924,9 +932,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         previous_tables = {"default": "zh-tw.ctb"}
         frame.translation_tables = previous_tables
 
-        with patch.object(gui, "save_translation_settings"), \
-             patch.object(gui, "save_translation_tables"), \
-             patch.object(gui, "save_view_settings"):
+        with patch.object(gui, "save_translation_settings", return_value=None), \
+             patch.object(gui, "save_translation_tables", return_value=None), \
+             patch.object(gui, "save_view_settings", return_value=None):
             result = frame.apply_settings_from_dialog(snapshot)
 
         self.assertEqual(frame.translation_settings, snapshot.translation)
@@ -1006,9 +1014,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame.get_dictionary_names_for_dialog = Mock(return_value=["default"])
         snapshot = make_snapshot(tables={"default": "test-default.ctb", "math": "test-math.ctb"})
 
-        with patch.object(gui, "save_translation_settings"), \
-             patch.object(gui, "save_translation_tables"), \
-             patch.object(gui, "save_view_settings"):
+        with patch.object(gui, "save_translation_settings", return_value=None), \
+             patch.object(gui, "save_translation_tables", return_value=None), \
+             patch.object(gui, "save_view_settings", return_value=None):
             frame.apply_settings_from_dialog(snapshot)
         frame._config_store.get_lang.return_value = "zh_TW"
         frame._config_store.get_charset_maps.return_value = {"CJKCharactersLanguage": "zh"}
@@ -1234,6 +1242,8 @@ class DictionaryManagementFrameTest(unittest.TestCase):
             frame._register_output_font = Mock(return_value=False)
             frame._paths = make_paths(dictionary=dictionary_dir, workspace=Path("workspace"))
             frame._config_store = Mock(spec=gui.ConfigStore)
+            # A save that works: no settings save problem to report (F-12 D6).
+            frame._config_store.set_selected_dictionary.return_value = None
             with (
                 patch.object(
                     gui,
@@ -1614,7 +1624,8 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             self.assertIn('<span class="source">a</span>', cached_html)
 
             frame._export_coordinator.write_document(root / "beta.html", Document("beta", "text", "b"), "html")
-            empty_html = render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml))
+            # The page without conversion data says so in zh_TW (F-12 D8).
+            empty_html = render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml), empty_message=EMPTY_PAGE)
             self.assertEqual((root / "beta.html").read_bytes(), text_file_bytes(empty_html))
             self.assertNotEqual(cached_html, empty_html)
 
@@ -1670,7 +1681,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             )
             self.assertEqual(
                 (root / "beta.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml)),
+                render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml), empty_message=EMPTY_PAGE),
             )
         frame.show_info.assert_called_once_with(
             gui._(ExportBatchResult().summary_template),
@@ -2975,6 +2986,18 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._package("beta"), beta)
         self.assertEqual(self._state(frame), before)
 
+    def _unlisted_name_events(self, title: str, initial_name: str, typed_name: str, entry: str, frame) -> list:
+        # F-12 (D5): the box names the entry on disk and shows the workspace folder.
+        message = (
+            f"名稱「{typed_name}」已被工作區資料夾中的「{entry}」使用，但這個檔案不在文件清單中。\n\n"
+            f"請改用其他名稱，或將這個檔案移走或刪除。工作區資料夾：\n{self.workspace}"
+        )
+        return [
+            ("DocumentNameDialog", gui._(title), initial_name),
+            ("MessageBox", message, gui._("Error"), gui.wx.OK | gui.wx.ICON_ERROR, frame),
+            ("DocumentNameDialog", gui._(title), typed_name),
+        ]
+
     def _frame_with_a_kept_invalid_bad_package(self):
         """alpha listed and open, bad.dep invalid and kept at startup (F-8, M-1)."""
         alpha = Document("alpha", "a", "1")
@@ -2990,7 +3013,7 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
         frame.on_add_document(None)
 
-        self.assertEqual(self.events, self._duplicate_name_events("Add Document", "", "bad", frame))
+        self.assertEqual(self.events, self._unlisted_name_events("Add Document", "", "bad", "bad.dep", frame))
         self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
         self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
         self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
@@ -3004,11 +3027,70 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
         frame.on_rename_document(None)
 
-        self.assertEqual(self.events, self._duplicate_name_events("Rename Document", "alpha", "bad", frame))
+        self.assertEqual(self.events, self._unlisted_name_events("Rename Document", "alpha", "bad", "bad.dep", frame))
         self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
         self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
         self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
         self.assertEqual(self._state(frame), before)
+
+    def test_add_of_another_case_of_an_unlisted_name_names_the_entry_on_disk(self) -> None:
+        # F-12 (D5): the box names bad.dep, as it is spelled on disk, not the typed BAD.
+        frame = self._frame_with_a_kept_invalid_bad_package()
+        if not os.path.lexists(self.workspace / "BAD.dep"):
+            self.skipTest("case-sensitive file system: BAD is a free name")
+        self.names = ["BAD", None]
+
+        frame.on_add_document(None)
+
+        self.assertEqual(self.events, self._unlisted_name_events("Add Document", "", "BAD", "bad.dep", frame))
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+
+    def test_add_of_a_name_held_by_a_folder_names_the_folder(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        self._block("folder")
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.names = ["folder", None]
+
+        frame.on_add_document(None)
+
+        self.assertEqual(self.events, self._unlisted_name_events("Add Document", "", "folder", "folder.dep", frame))
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+
+    def test_a_listed_duplicate_keeps_its_message_before_any_entry_on_disk(self) -> None:
+        # F-12 (D5): the document list is checked first (an unlisted ALPHA.dep can exist next
+        # to the listed alpha on a case-sensitive file system).
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.names = ["alpha", None]
+
+        with patch.object(DocumentWorkspaceService, "unlisted_package_entry", return_value="ALPHA.dep", create=True) as entry:
+            frame.on_add_document(None)
+
+        self.assertEqual(self.events, self._duplicate_name_events("Add Document", "", "alpha", frame))
+        entry.assert_not_called()
+
+    def test_import_of_a_name_held_by_an_unlisted_package_names_the_file(self) -> None:
+        # F-12 (D5): without the folder line, which would repeat on every line.
+        frame = self._frame_with_a_kept_invalid_bad_package()
+        source_dir = self.root / "sources"
+        source_dir.mkdir()
+        (source_dir / "bad.txt").write_text("b", encoding="utf-8")
+        self.import_paths = [str(source_dir / "bad.txt")]
+
+        frame.on_import_document(None)
+
+        self.assertEqual(
+            self.events[-1],
+            (
+                "FileIssuesDialog",
+                gui._("Import Issues"),
+                gui._("Some files were skipped during import."),
+                ["bad.txt: 名稱「bad」已被工作區資料夾中的「bad.dep」使用，但這個檔案不在文件清單中。"],
+            ),
+        )
+        self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
 
     # --- delete ------------------------------------------------------------
 
@@ -3148,10 +3230,11 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._state(frame), ([documents[2]], "gamma", "gamma", {"gamma": ("seg-c",)}))
         self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("c", "3"))
 
-    def test_delete_all_failure_without_valid_document_clears_editors_only(self) -> None:
-        # KNOWN BUG (P1-3 spec, known defect 4), pinned as it is today, NOT desired
-        # behavior: the rollback leaves no valid document, so only the editors are
-        # cleared (no title update, no default document). A later fix task flips this.
+    def test_delete_all_failure_without_valid_document_opens_the_default_document(self) -> None:
+        # Was the KNOWN BUG of P1-3 known defect 4 (the rollback left no valid document, and
+        # only the editors were cleared: the title kept the deleted name, no document was
+        # open), fixed by F-12: as after a complete Delete All, the title follows and the
+        # default document is created and opened.
         documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
         self._write_packages(documents[0])
         self._block("beta")
@@ -3160,12 +3243,35 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
         frame.on_delete_all_documents(None)
 
-        self.assertEqual(len(self.events), 3)
+        self.assertEqual(len(self.events), 6)
         self._assert_error_box(self.events[1], "Failed to delete document: {error}", "beta.dep", frame)
-        self.assertEqual(self.events[2], ("InvalidWorkspaceFilesDialog", [self.workspace / "beta.dep"]))
-        self.assertEqual(self._listing(), ["beta.dep"])
-        self.assertEqual(self._state(frame), ([], None, None, {}))
+        self.assertEqual(
+            self.events[2:],
+            [
+                ("InvalidWorkspaceFilesDialog", [self.workspace / "beta.dep"]),
+                ("title", "DotExpress"),
+                ("title", "new - DotExpress"),
+                ("focus", "input"),
+            ],
+        )
+        self.assertEqual(self._listing(), ["beta.dep", "new.dep"])
+        self.assertEqual(self._state(frame), ([Document("new", "", None)], "new", "new", {}))
         self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("", ""))
+
+    def test_delete_all_failure_with_new_held_on_disk_opens_a_free_default_name(self) -> None:
+        # F-12 (P1-3 defect 4): the default document follows F-8's free-name rule, so a
+        # package on disk named new is not replaced.
+        documents = [Document("alpha", "a", "1"), Document("new", "b", "2")]
+        self._write_packages(documents[0])
+        self._block("new")
+        frame = self._make_workspace_frame(documents, open_name="alpha", selected_name="alpha")
+        self.answers = [gui.wx.YES]
+
+        frame.on_delete_all_documents(None)
+
+        self.assertEqual(self.events[3:], [("title", "DotExpress"), ("title", "new (2) - DotExpress"), ("focus", "input")])
+        self.assertEqual(self._listing(), ["new (2).dep", "new.dep"])
+        self.assertEqual(self._state(frame), ([Document("new (2)", "", None)], "new (2)", "new (2)", {}))
 
     def test_delete_all_without_documents_does_nothing(self) -> None:
         frame = self._make_workspace_frame()
@@ -3237,11 +3343,39 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(
             lines,
             [
-                'Alpha.txt: Document "Alpha" already exists.',
-                f"delta.dep: [Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}",
+                "Alpha.txt: 文件「Alpha」已存在。",
+                f"delta.dep: 儲存文件失敗：[Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}",
             ],
         )
         self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
+    def test_import_issues_explain_each_skipped_file(self) -> None:
+        # F-12 (D3): a reason the user can act on, in zh_TW, on each line.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        source_dir = self.root / "sources"
+        source_dir.mkdir()
+        (source_dir / "big5.txt").write_bytes("臺北".encode("cp950"))
+        (source_dir / "foo.xyz").write_text("F", encoding="utf-8")
+        self.import_paths = [str(source_dir / "big5.txt"), str(source_dir / "foo.xyz")]
+
+        frame.on_import_document(None)
+
+        self.assertEqual(
+            self.events[-1],
+            (
+                "FileIssuesDialog",
+                gui._("Import Issues"),
+                gui._("Some files were skipped during import."),
+                [
+                    "big5.txt: 檔案不是以 UTF-8 文字儲存。請重新存成 UTF-8，例如在記事本中使用「另存新檔」。",
+                    "foo.xyz: 無法匯入這種類型的檔案。",
+                ],
+            ),
+        )
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
 
     # --- U+0000 (F-8 D12, D13) ---------------------------------------------
 
@@ -3331,7 +3465,7 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
                     "FileIssuesDialog",
                     gui._("Import Issues"),
                     gui._("Some files were skipped during import."),
-                    ['Alpha.txt: Document "Alpha" already exists.'],
+                    ["Alpha.txt: 文件「Alpha」已存在。"],
                 ),
             ],
         )
@@ -3815,16 +3949,16 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
             ),
             (ConversionStageError("translation", RuntimeError("boom")), gui._("Translation failed: {error}"), "boom"),
             (ConversionStageError("other", RuntimeError("odd")), gui._("Translation failed: {error}"), "odd"),
-            # KNOWN BUG (P1-4 spec, defect 4): the two public fallback texts are not msgids, so they stay English.
+            # The two public fallback texts are msgids since F-12 (D2; were English, P1-4 defect 4).
             (
                 ConversionStageError("translation", RuntimeError("")),
                 gui._("Translation failed: {error}"),
-                "An unknown error occurred.",
+                "發生不明的錯誤。",
             ),
             (
                 ConversionStageError("translation", RuntimeError("Can't translate: tables zh-tw.ctb inbuf=12")),
                 gui._("Translation failed: {error}"),
-                "The selected translation table could not translate this text.",
+                "選取的轉譯表無法轉譯這段文字。",
             ),
         )
         for error, template, error_text in cases:
@@ -4097,7 +4231,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._take(), [("timer.Stop", 1)] + self._busy(False) + [self._exported(frame)])
         html = target.read_text(encoding="utf-8")
         self.assertIn('<span class="source">fresh-a</span>', html)
-        self.assertNotIn("No conversion data", html)
+        self.assertNotIn("此文件沒有可顯示的轉換資料。", html)
         self.assertEqual(frame._document_controller.dual_view_results_by_document, {})
         self.assertEqual(frame._document_controller.documents, [Document("alpha", "alpha text", None)])
         self.assertEqual(frame.output_txt.value, "")
@@ -4174,17 +4308,17 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         )
 
         self.calls.run_next()
-        # KNOWN BUG (P1-4 spec, defect 4): the partial-export summary is not translated.
+        # The Export All summary in zh_TW (F-12 D1; was English, P1-4 defect 4).
         summary = (
-            "Exported documents: 4\n"
-            "Failed documents: 2\n"
+            "成功匯出的文件：4\n"
+            "匯出失敗的文件：2\n"
             "\n"
             f"d4-write-fail: {write_reason}\n"
             f"d5-convert-fail: {gui._('Translation failed: {error}').format(error='t5 boom')}"
         )
         self.assertEqual(
             self._take(),
-            [self._box(frame, summary, "Export Complete with Errors", gui.wx.OK | gui.wx.ICON_WARNING)],
+            [self._box(frame, summary, "匯出完成，但有錯誤", gui.wx.OK | gui.wx.ICON_WARNING)],
         )
         self.assertEqual(self.calls.pending, [])
         self.assertEqual(
@@ -4205,10 +4339,10 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._take(), [("call_after",)])
         self.calls.run_next()
 
-        # KNOWN BUG (P1-4 spec, defect 4): the message is not a msgid; only the caption is translated.
+        # The Export All summary in zh_TW (F-12 D1; was English, P1-4 defect 4).
         self.assertEqual(
             self._take(),
-            [self._info(frame, "All documents were exported successfully.", gui._("Export Complete"))],
+            [self._info(frame, "所有文件皆已成功匯出。", "匯出完成")],
         )
         self.assertEqual(sorted(path.name for path in self.export_dir.iterdir()), ["alpha.brl", "beta.brl"])
 
@@ -4224,10 +4358,10 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._take(), [("call_after",)])
         self.calls.run_next()
 
-        summary = f"Exported documents: 0\nFailed documents: 2\n\np1: {message}\np2: {message}"
+        summary = f"成功匯出的文件：0\n匯出失敗的文件：2\n\np1: {message}\np2: {message}"
         self.assertEqual(
             self._take(),
-            [self._box(frame, summary, "Export Complete with Errors", gui.wx.OK | gui.wx.ICON_WARNING)],
+            [self._box(frame, summary, "匯出完成，但有錯誤", gui.wx.OK | gui.wx.ICON_WARNING)],
         )
         self.assertEqual(self.threads, [])
         self.assertEqual(list(self.export_dir.iterdir()), [])
@@ -4268,7 +4402,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
                 self._overwrite_question(frame),
                 ("call_after",),
                 ("call_after",),
-                self._info(frame, "All documents were exported successfully.", gui._("Export Complete")),
+                self._info(frame, "所有文件皆已成功匯出。", "匯出完成"),
             ],
         )
         self.assertEqual((self.export_dir / "alpha.brl").read_text(encoding="utf-8"), "⠁")
@@ -4355,7 +4489,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
 
         self.assertEqual(
             self._boxes(),
-            [self._exported_box(), ("All documents were exported successfully.", gui._("Export Complete"))],
+            [self._exported_box(), ("所有文件皆已成功匯出。", "匯出完成")],
         )
         self.assertEqual([request.raw_text for request in self.requests], ["t0", "t0", "t1", "t2"])
         self.assertEqual(self._written(), {"open.brl": "⠴", "p1.brl": "⠂", "p2.brl": "⠆"})
@@ -4427,7 +4561,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
             [
                 ("set", "input", "beta text"),
                 ("set", "output", "⠃"),
-                ("title", gui._(gui.format_window_title("beta"))),
+                ("title", gui.format_window_title("beta")),
                 ("dual_view.refresh",),
                 ("focus", "input"),
             ],
@@ -4621,7 +4755,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.calls.run_next()
         self.assertEqual(
             self._take(),
-            [self._info(frame, "All documents were exported successfully.", gui._("Export Complete"))],
+            [self._info(frame, "所有文件皆已成功匯出。", "匯出完成")],
         )
         self.assertEqual(frame.output_txt.value, "⠍")
         self.assertEqual((self.export_dir / "p1.brl").read_text(encoding="utf-8"), "⠃")
@@ -5056,6 +5190,167 @@ class FrameExportViewMethodsTest(unittest.TestCase):
         )
 
 
+class SettingsSaveProblemFrameTest(unittest.TestCase):
+    """F-12 (D6): the first settings change of a session that cannot be saved shows one box."""
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.root = Path(temp_dir.name)
+        self.config_path = self.root / "config.json"
+        self.boxes: list = []
+        self.active_window = None
+        for logged in (config._logged_load_failures, config._logged_skipped_saves):
+            logged.clear()
+            self.addCleanup(logged.clear)
+        for patcher in (
+            patch.object(gui, "message_box", lambda *args, **kwargs: self.boxes.append((args, kwargs))),
+            patch.object(gui.wx, "GetActiveWindow", lambda: self.active_window, create=True),
+            patch.object(gui.DotExpressSettingsDialog, "open_instance", return_value=None),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        # A failed save logs to config.log: never to the real one.
+        self.addCleanup(isolate_file_logs("dotexpress.config"))
+
+    def _frame(self) -> gui.BrailleFrame:
+        frame = object.__new__(gui.BrailleFrame)
+        frame._config_store = config.ConfigStore(self.config_path)
+        frame._apply_editor_view_settings = Mock()
+        frame.get_dictionary_names_for_dialog = Mock(return_value=["default", "math"])
+        frame.translation_settings = TranslationSettings("unicode", 40, "default")
+        frame.view_settings = ViewSettings(12, "light", "default")
+        return frame
+
+    def _box(self, frame, reason: str, parent=None) -> tuple:
+        message = (
+            f"DotExpress 無法將設定儲存到「{self.config_path}」。設定的變更在關閉 DotExpress 之前有效，但不會保留。"
+            f"在下次啟動 DotExpress 之前，不會再顯示這則訊息。\n\n{reason}"
+        )
+        return ((message, "設定未儲存", gui.wx.OK | gui.wx.ICON_WARNING), {"parent": parent or frame})
+
+    CANNOT_OPEN = "無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。"
+
+    def test_a_settings_change_that_cannot_be_saved_shows_one_box_and_still_applies(self) -> None:
+        # A folder at config.json cannot be read, as a locked file: UNREADABLE.
+        self.config_path.mkdir()
+        frame = self._frame()
+        snapshot = make_snapshot(translation=TranslationSettings("ascii", 52, "math"), view=ViewSettings(18, "dark", "default"))
+
+        frame.apply_settings_from_dialog(snapshot)
+        frame.apply_settings_from_dialog(snapshot)
+
+        self.assertEqual(self.boxes, [self._box(frame, self.CANNOT_OPEN)])
+        self.assertEqual(frame.translation_settings, TranslationSettings("ascii", 52, "math"))
+        self.assertEqual(frame.view_settings, ViewSettings(18, "dark", "default"))
+        self.assertTrue(self.config_path.is_dir())
+
+    def test_font_size_and_dictionary_changes_report_through_the_same_flag(self) -> None:
+        self.config_path.mkdir()
+        for first, second in (("font", "dictionary"), ("dictionary", "font")):
+            with self.subTest(first=first):
+                self.boxes.clear()
+                frame = self._frame()
+                changes = {
+                    "font": lambda: frame._set_view_font_size(20),
+                    "dictionary": lambda: frame._set_active_dictionary("math"),
+                }
+
+                changes[first]()
+                after_first = list(self.boxes)
+                changes[second]()
+
+                self.assertEqual(after_first, [self._box(frame, self.CANNOT_OPEN)])
+                self.assertEqual(self.boxes, after_first)
+                self.assertEqual(frame.view_settings.font_size, 20)
+                self.assertEqual(frame.translation_settings.selected_dictionary, "math")
+
+    def test_no_box_when_the_settings_are_saved(self) -> None:
+        frame = self._frame()
+
+        frame.apply_settings_from_dialog(make_snapshot(translation=TranslationSettings("ascii", 52, "math")))
+        frame._set_view_font_size(20)
+        frame._set_active_dictionary("default")
+
+        self.assertEqual(self.boxes, [])
+        saved = json.loads(self.config_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["conversion"]["output_mode"], "ascii")
+        self.assertEqual(saved["view"]["font_size"], 20)
+
+    CANNOT_WRITE_ACCESS = "無法寫入檔案。檔案可能正被其他程式使用，或你沒有寫入權限。請關閉其他程式後再試一次。"
+    CANNOT_WRITE = "無法寫入檔案。請確認磁碟還有可用空間，且你有該資料夾的寫入權限。"
+
+    def test_each_kind_of_problem_gives_its_reason(self) -> None:
+        error = OSError(13, "Access denied")
+        backup = self.root / "config.json.bak"
+        cases = (
+            ("UNREADABLE", None, self.CANNOT_OPEN),
+            (
+                "BACKUP_FAILED",
+                backup,
+                f"檔案已損壞，而且在取代它之前無法先備份為「{backup}」。詳細資訊：{error}",
+            ),
+            ("WRITE_FAILED", None, self.CANNOT_WRITE_ACCESS),
+        )
+        for kind, backup_path, reason in cases:
+            with self.subTest(kind):
+                self.boxes.clear()
+                frame = self._frame()
+                problem = config.ConfigSaveProblem(
+                    getattr(config.ConfigSaveProblemKind, kind), error, self.config_path, backup_path
+                )
+
+                frame._report_settings_save_problem(problem)
+
+                self.assertEqual(self.boxes, [self._box(frame, reason)])
+
+    def test_only_an_access_error_says_the_file_is_in_use_or_not_permitted(self) -> None:
+        # F-12 review M-2, M-5: the other errors get a reason that is true, and never show the
+        # operating system's text, which holds the random name of the temporary file.
+        temp_name = r"C:\data\.config.json.bak.k3j9x2.tmp"
+        sharing = OSError(32, "sharing violation")
+        sharing.winerror = 32
+        denied = OSError()
+        denied.winerror = 5
+        by_errno = OSError(errno.EACCES, "Access denied")
+        io_error = OSError(errno.EIO, "I/O error")
+        disk_full = OSError(errno.ENOSPC, "No space left on device", temp_name)
+        folder = IsADirectoryError(errno.EISDIR, "Is a directory", "config.json")
+        cases = (
+            ("UNREADABLE", PermissionError(errno.EACCES, "denied"), self.CANNOT_OPEN),
+            ("UNREADABLE", sharing, self.CANNOT_OPEN),
+            ("UNREADABLE", denied, self.CANNOT_OPEN),
+            ("UNREADABLE", by_errno, self.CANNOT_OPEN),
+            ("UNREADABLE", io_error, f"無法讀取檔案：{io_error}"),
+            ("UNREADABLE", folder, f"無法讀取檔案：{folder}"),
+            ("WRITE_FAILED", PermissionError(errno.EACCES, "denied", temp_name), self.CANNOT_WRITE_ACCESS),
+            ("WRITE_FAILED", sharing, self.CANNOT_WRITE_ACCESS),
+            ("WRITE_FAILED", denied, self.CANNOT_WRITE_ACCESS),
+            ("WRITE_FAILED", disk_full, self.CANNOT_WRITE),
+            ("WRITE_FAILED", RuntimeError(temp_name), self.CANNOT_WRITE),
+        )
+        for kind, error, reason in cases:
+            with self.subTest(kind=kind, error=repr(error)):
+                self.boxes.clear()
+                frame = self._frame()
+                problem = config.ConfigSaveProblem(getattr(config.ConfigSaveProblemKind, kind), error, self.config_path)
+
+                frame._report_settings_save_problem(problem)
+
+                self.assertEqual(self.boxes, [self._box(frame, reason)])
+                self.assertNotIn("k3j9x2", self.boxes[0][0][0])
+
+    def test_the_box_belongs_to_the_active_window(self) -> None:
+        # The settings dialog after Apply, Dictionary Management after a rename.
+        self.config_path.mkdir()
+        frame = self._frame()
+        self.active_window = Mock(name="settings dialog")
+
+        frame._set_active_dictionary("math")
+
+        self.assertEqual(self.boxes, [self._box(frame, self.CANNOT_OPEN, parent=self.active_window)])
+
+
 class _RecordingFont:
     """``wx.Font`` stand-in: the font it copies and the calls made on it."""
 
@@ -5147,6 +5442,8 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
         frame.view_settings = view
         frame._apply_editor_view_settings = Mock()
         frame._config_store = Mock(spec=gui.ConfigStore)
+        # A save that works: no settings save problem to report (F-12 D6).
+        frame._config_store.set_view_settings.return_value = None
         return frame
 
     def make_dialog(self):
@@ -5201,7 +5498,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
             with self.subTest(start=start, rotation=rotation):
                 frame = self.make_frame(ViewSettings(start, "dark", "default"))
                 dialog = self.make_dialog()
-                with self.open_dialog(dialog), patch.object(gui, "save_view_settings") as save:
+                with self.open_dialog(dialog), patch.object(gui, "save_view_settings", return_value=None) as save:
                     frame.on_editor_mousewheel(self.wheel(rotation))
 
                 # KNOWN QUIRK (P2-4 spec, 1): the size did not change, but it is saved and synced again.
@@ -5217,7 +5514,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
                 frame = self.make_frame()
                 dialog = self.make_dialog()
                 event = self.wheel(rotation, control_down)
-                with self.open_dialog(dialog), patch.object(gui, "save_view_settings") as save:
+                with self.open_dialog(dialog), patch.object(gui, "save_view_settings", return_value=None) as save:
                     frame.on_editor_mousewheel(event)
 
                 event.Skip.assert_called_once_with()
@@ -5228,7 +5525,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
 
     def test_without_an_open_dialog_the_editors_and_the_config_still_change(self) -> None:
         frame = self.make_frame()
-        with self.open_dialog(None), patch.object(gui, "save_view_settings") as save:
+        with self.open_dialog(None), patch.object(gui, "save_view_settings", return_value=None) as save:
             frame.on_editor_mousewheel(self.wheel(-120))
 
         expected = ViewSettings(11, "dark", "default")
@@ -5239,7 +5536,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
     def test_a_cancelled_dialog_is_no_longer_synced(self) -> None:
         frame = self.make_frame()
         dialog = self.make_dialog()
-        with self.open_dialog(dialog), patch.object(gui, "save_view_settings") as save:
+        with self.open_dialog(dialog), patch.object(gui, "save_view_settings", return_value=None) as save:
             frame.on_editor_mousewheel(self.wheel(120))
             dialog.on_cancel()
             self.assertIsNone(gui.DotExpressSettingsDialog._instance)
@@ -5262,7 +5559,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
         with (
             patch.object(gui.TextProcessingDialog, "_instance", text_dialog),
             self.open_dialog(None),
-            patch.object(gui, "save_view_settings") as save,
+            patch.object(gui, "save_view_settings", return_value=None) as save,
         ):
             frame.on_editor_mousewheel(self.wheel(120))
 

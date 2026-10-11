@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 import config
 from settings.view import (
@@ -18,6 +19,15 @@ class ViewSettingsTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_save_returns_what_the_store_returns(self) -> None:
+        # F-12 (D6): the save problem, or None.
+        store = Mock(spec=config.ConfigStore)
+        problem = object()
+        store.set_view_settings.return_value = problem
+
+        self.assertIs(save_view_settings(store, ViewSettings(18, "dark", "default")), problem)
+        self.assertIsNone(save_view_settings(self.store, ViewSettings(18, "dark", "default")))
 
     def test_normalize_clamps_font_and_replaces_unknown_choices(self) -> None:
         self.assertEqual(

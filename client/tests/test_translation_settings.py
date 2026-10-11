@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 import config
 from settings.translation import (
@@ -24,6 +25,24 @@ class TranslationSettingsTest(unittest.TestCase):
     def _write_config(self, conversion: dict[str, object]) -> None:
         with open(self.store.path, "w", encoding="utf-8") as f:
             json.dump({"conversion": conversion}, f)
+
+    def test_save_calls_every_setter_and_returns_the_first_problem(self) -> None:
+        # F-12 (D6): the frame shows the first problem; a failed setter does not stop the others.
+        store = Mock(spec=config.ConfigStore)
+        first, second = object(), object()
+        store.set_output_mode.return_value = None
+        store.set_conversion_width.return_value = first
+        store.set_selected_dictionary.return_value = second
+
+        problem = save_translation_settings(store, TranslationSettings("ascii", 52, "alpha"))
+
+        self.assertIs(problem, first)
+        store.set_output_mode.assert_called_once_with("ascii")
+        store.set_conversion_width.assert_called_once_with(52)
+        store.set_selected_dictionary.assert_called_once_with("alpha")
+
+    def test_save_returns_none_when_every_setter_saves(self) -> None:
+        self.assertIsNone(save_translation_settings(self.store, TranslationSettings("ascii", 52, "alpha")))
 
     def test_load_normalizes_invalid_config(self) -> None:
         self._write_config(

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from conversion.math_service import latex_to_mathml
 from dual_view.html import render_dual_view_html
 from dual_view.model import build_dual_view_model
-from i18n import N_
+from i18n import N_, _
 
 if TYPE_CHECKING:
     from documents.importers import ImportedDocument
@@ -106,7 +106,11 @@ def _write_html(path: Path | str, document: Document, context: ExportContext) ->
     from documents.workspace import write_export_text
 
     destination = Path(path)
-    html = render_dual_view_html(build_dual_view_model(context.dual_view_results, mathml_converter=latex_to_mathml))
+    html = render_dual_view_html(
+        build_dual_view_model(context.dual_view_results, mathml_converter=latex_to_mathml),
+        # As the in-app Dual View shows it (F-12 D8).
+        empty_message=_("No conversion data is available for this document."),
+    )
     write_export_text(destination, html)
     return destination
 
@@ -176,7 +180,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
         export_wildcard=N_("Braille files (*.brl)|*.brl"),
         export_label=N_("Braille BRL"),
     ),
-    # "HTML" and the HTML save filter are not msgids; marking them would add new catalog entries.
+    # "HTML" is not a msgid: the label stays as it is, like ASCII and Unicode. The save filter is (F-12 D8).
     DocumentFormatDescriptor(
         key="html",
         extension=HTML_EXTENSION,
@@ -186,7 +190,7 @@ DOCUMENT_FORMATS: tuple[DocumentFormatDescriptor, ...] = (
         requires_braille=False,
         importable=False,
         exportable=True,
-        export_wildcard="HTML files (*.html)|*.html",
+        export_wildcard=N_("HTML files (*.html)|*.html"),
         export_label=N_("Dual View HTML"),
     ),
 )

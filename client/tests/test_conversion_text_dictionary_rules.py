@@ -14,6 +14,7 @@ from conversion.text.dictionary_rules import (
     split_bracket_segments,
 )
 from dictionaries.entries import DictionaryEntry, load_dictionary_rows
+from tests.unreadable_dictionary_files import BIG5, FIELD_LIMIT
 from text.zhuyin import normalize_zhuyin_sequence
 
 
@@ -229,6 +230,9 @@ class ErrorCase(NamedTuple):
 
 
 def _error_cases() -> tuple[ErrorCase, ...]:
+    # The selected dictionary's read errors come wrapped since F-12 (D4); the Bopomofo file's
+    # do not.
+    read_error = dictionary_rules.DictionaryRulesReadError
     return (
         ErrorCase("Bopomofo file missing", VALID_DICTIONARY, None, FileNotFoundError, None),
         ErrorCase("Bopomofo file empty", VALID_DICTIONARY, b"", ValueError, NO_HEADER),
@@ -237,17 +241,17 @@ def _error_cases() -> tuple[ErrorCase, ...]:
         # test_from_paths_ignores_a_utf8_bom_in_both_files); a file that is only a BOM has no header.
         ErrorCase("Bopomofo file is only a BOM", VALID_DICTIONARY, b"\xef\xbb\xbf", ValueError, NO_HEADER),
         ErrorCase("Bopomofo file not UTF-8", VALID_DICTIONARY, b"Bopomofo,Braille\n\xff,x\n", UnicodeDecodeError, None),
-        ErrorCase("dictionary empty", b"", VALID_BOPOMOFO, ValueError, NO_HEADER),
-        ErrorCase("dictionary columns missing", b"text,braille\n", VALID_BOPOMOFO, ValueError, DICTIONARY_COLUMNS),
-        ErrorCase("dictionary is only a BOM", b"\xef\xbb\xbf", VALID_BOPOMOFO, ValueError, NO_HEADER),
+        ErrorCase("dictionary empty", b"", VALID_BOPOMOFO, read_error, NO_HEADER),
+        ErrorCase("dictionary columns missing", b"text,braille\n", VALID_BOPOMOFO, read_error, DICTIONARY_COLUMNS),
+        ErrorCase("dictionary is only a BOM", b"\xef\xbb\xbf", VALID_BOPOMOFO, read_error, NO_HEADER),
         ErrorCase(
             "dictionary with a doubled BOM",
             b"\xef\xbb\xbf\xef\xbb\xbftext,braille,type\n",
             VALID_BOPOMOFO,
-            ValueError,
+            read_error,
             DICTIONARY_COLUMNS,
         ),
-        ErrorCase("dictionary not UTF-8", b"text,braille,type\n\xe9,x,\n", VALID_BOPOMOFO, UnicodeDecodeError, None),
+        ErrorCase("dictionary not UTF-8", b"text,braille,type\n\xe9,x,\n", VALID_BOPOMOFO, read_error, None),
         ErrorCase("both malformed: Bopomofo first", b"text,braille\n", b"Bopomofo,Ascii\n", ValueError, BOPOMOFO_COLUMNS),
     )
 
@@ -621,6 +625,72 @@ class LoadedDictionaryRulesTest(DictionaryFilesTestCase):
         self.assertEqual(LoadedDictionaryRules().apply(""), {"raw": "", "replacement": ""})
 
 
+class DictionaryRulesReadErrorTest(DictionaryFilesTestCase):
+    """F-12 (D4): the selected dictionary that cannot be read is reported as such."""
+
+    def _load(self, processing=_identity) -> Exception:
+        try:
+            LoadedDictionaryRules.from_paths(self.dictionary_path, self.bopomofo_path, processing=processing)
+        except Exception as error:  # noqa: BLE001 (the error is the value under test)
+            return error
+        self.fail("from_paths raised nothing")
+
+    def test_a_dictionary_that_cannot_be_read_raises_the_read_error(self) -> None:
+        cases = (
+            ("not UTF-8 (Big5)", BIG5, UnicodeDecodeError, False),
+            ("a field over the csv limit", FIELD_LIMIT, csv.Error, False),
+            ("headers in capitals", b"Text,Braille,Type\r\nw,x,General\r\n", ValueError, True),
+            ("an empty file", b"", ValueError, True),
+        )
+        self.bopomofo_path.write_bytes(VALID_BOPOMOFO)
+        for label, data, cause, header_not_recognized in cases:
+            with self.subTest(label):
+                self.dictionary_path.write_bytes(data)
+
+                error = self._load()
+
+                self.assertIsInstance(error, dictionary_rules.DictionaryRulesReadError)
+                self.assertEqual(error.path, self.dictionary_path)
+                self.assertIs(type(error.error), cause)
+                self.assertEqual(str(error), str(error.error))
+                self.assertIs(error.header_not_recognized, header_not_recognized)
+
+    def test_a_dictionary_that_cannot_be_opened_raises_the_read_error(self) -> None:
+        self.dictionary_path.write_bytes(VALID_DICTIONARY)
+        self.bopomofo_path.write_bytes(VALID_BOPOMOFO)
+        denied = PermissionError(13, "Permission denied", str(self.dictionary_path))
+        original_open = Path.open
+
+        def open_(path, *args, **kwargs):
+            if path.name == "dictionary.csv":
+                raise denied
+            return original_open(path, *args, **kwargs)
+
+        with patch.object(Path, "open", open_):
+            error = self._load()
+
+        self.assertIsInstance(error, dictionary_rules.DictionaryRulesReadError)
+        self.assertIs(error.error, denied)
+        self.assertIs(error.__cause__, denied)
+        self.assertFalse(error.header_not_recognized)
+
+    def test_the_bundled_bopomofo_file_is_not_wrapped(self) -> None:
+        # A broken installation, not the user's dictionary: its message stays as it is.
+        self.dictionary_path.write_bytes(VALID_DICTIONARY)
+        self.bopomofo_path.write_bytes(b"Bopomofo,Braille\n\xff,x\n")
+
+        self.assertIs(type(self._load()), UnicodeDecodeError)
+
+    def test_an_error_while_processing_the_rows_is_not_wrapped(self) -> None:
+        # The file was read; a row that cannot be turned into a rule is another problem.
+        self.dictionary_path.write_text(DICTIONARY_HEADER + "台,ㄊㄞˊ,Bopomofo\n", encoding="utf-8")
+        self.bopomofo_path.write_bytes(VALID_BOPOMOFO)
+
+        error = self._load(processing=lambda sequence: 5)
+
+        self.assertIs(type(error), TypeError)
+
+
 class EditorParityTest(DictionaryFilesTestCase):
     """Conversion ignores exactly the rows the dictionary editor hides (F-11 D13, U6)."""
 
@@ -732,7 +802,7 @@ class DictionaryRulesLoaderTest(DictionaryFilesTestCase):
         with patch.object(
             LoadedDictionaryRules, "from_paths", wraps=LoadedDictionaryRules.from_paths
         ) as from_paths:
-            with self.assertRaisesRegex(ValueError, "^CSV must contain header row\\.$"):
+            with self.assertRaisesRegex(dictionary_rules.DictionaryRulesReadError, "^CSV must contain header row\\.$"):
                 loader.load()
             self.dictionary_path.write_text(DICTIONARY_HEADER + "甲,X,\n", encoding="utf-8")
             rules = loader.load()

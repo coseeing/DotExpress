@@ -52,6 +52,7 @@ from documents.workspace import (
     recover_interrupted_packages,
     save_document_package,
 )
+from i18n import _
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,27 @@ class DocumentWorkspaceService:
         if exclude_name is not None and name.casefold() == exclude_name.casefold():
             return False
         return os.path.lexists(self.package_path(name))
+
+    def unlisted_package_entry(self, name: str, *, exclude_name: str | None = None) -> str | None:
+        """The name on disk of what takes ``name``'s package path, or ``None`` if nothing does (F-12 D5).
+
+        ``None`` exactly when ``package_name_taken`` is false. Callers check the document list
+        first, so the entry is one that is not listed: an invalid package kept at startup, a
+        package copied in while DotExpress runs, a folder. The workspace folder is listed, so
+        the spelling is the one on disk (``bad.dep`` for ``BAD``); ``"<name>.dep"`` if the
+        listing does not show the entry.
+        """
+        if not self.package_name_taken(name, exclude_name=exclude_name):
+            return None
+        wanted = f"{name}{DEP_EXTENSION}".casefold()
+        try:
+            with os.scandir(self._workspace_dir) as entries:
+                for entry in entries:
+                    if entry.name.casefold() == wanted:
+                        return entry.name
+        except OSError:
+            pass
+        return f"{name}{DEP_EXTENSION}"
 
     def free_document_name(self, base: str) -> str:
         """``base`` if no document and no package has it, else ``"base (2)"``, ``"base (3)"``... (F-8 D2)."""
@@ -220,11 +242,20 @@ class DocumentWorkspaceService:
         self._controller.add_document(document)
 
     def import_files(self, paths: Iterable[Path], *, format_key: str) -> ImportResult:
-        on_disk = {path.stem for path in self._workspace_dir.glob(f"*{DEP_EXTENSION}")}
+        listed = set(self._controller.document_names)
+        listed_folded = {name.casefold() for name in listed}
+        # A package on disk that is not listed holds its name (F-8 D1); the reason names its
+        # file (F-12 D5).
+        unlisted = {
+            path.stem: path.name
+            for path in self._workspace_dir.glob(f"*{DEP_EXTENSION}")
+            if path.stem.casefold() not in listed_folded
+        }
         documents, load_issues = batch_import_documents(
             list(paths),
             format_key=format_key,
-            existing_names=set(self._controller.document_names) | on_disk,
+            existing_names=listed,
+            unlisted_entries=unlisted,
         )
         saved: list[Document] = []
         save_issues: list[BatchIssue] = []
@@ -238,7 +269,7 @@ class DocumentWorkspaceService:
                     raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(package_path))
                 save_document_package(package_path, document)
             except Exception as exc:
-                save_issues.append(BatchIssue(path=package_path, reason=str(exc)))
+                save_issues.append(BatchIssue(path=package_path, reason=_("Failed to save document: {error}").format(error=exc)))
                 continue
             self._remember(document)
             saved.append(document)

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from config import (
+    ConfigSaveProblem,
     ConfigStore,
     DEFAULT_BRAILLE_FONT,
     DEFAULT_VIEW_FONT_SIZE,
@@ -43,9 +44,9 @@ def load_view_settings(store: ConfigStore) -> ViewSettings:
     )
 
 
-def save_view_settings(store: ConfigStore, settings: ViewSettings) -> None:
+def save_view_settings(store: ConfigStore, settings: ViewSettings) -> ConfigSaveProblem | None:
     normalized = normalize_view_settings(settings)
-    store.set_view_settings(
+    return store.set_view_settings(
         normalized.font_size,
         normalized.scheme,
         normalized.braille_font,

@@ -104,7 +104,8 @@ class DualViewBrowserTest(unittest.TestCase):
         startfile.assert_not_called()
 
     def test_missing_non_windows_fallback_raises_os_error(self) -> None:
-        with self.assertRaisesRegex(OSError, "No supported browser"):
+        # In zh_TW since F-12 (D8): it follows 無法開啟雙視檢視：.
+        with self.assertRaisesRegex(OSError, "^找不到可用的瀏覽器，也沒有可開啟 HTML 檔的系統程式。$"):
             open_html_in_browser(
                 Path("/tmp/dual-view-one.html"),
                 (900, 600),

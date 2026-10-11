@@ -759,6 +759,96 @@ class ConfigDataSafetyTest(unittest.TestCase):
         self.assertEqual(self._saved(), {"view": {"font_size": 20}, "conversion": {"width": 30, "output_mode": "ascii"}})
 
 
+class ConfigSaveProblemTest(unittest.TestCase):
+    """F-12 (D6): a save that does not reach config.json returns why; the F-8 rules stay."""
+
+    SETTERS = (
+        ("set_output_mode", ("ascii",)),
+        ("set_conversion_width", (52,)),
+        ("set_selected_dictionary", ("alpha",)),
+        ("set_translation_tables", ({"default": "zh-tw.ctb"},)),
+        ("set_view_settings", (18, "dark", "default")),
+    )
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.directory = Path(temp_dir.name)
+        self.path = self.directory / "config.json"
+        self.backup = self.directory / "config.json.bak"
+        self.store = config.ConfigStore(self.path)
+        for logged in (config._logged_load_failures, config._logged_skipped_saves):
+            logged.clear()
+            self.addCleanup(logged.clear)
+
+    def _problem(self):
+        return config.ConfigSaveProblem
+
+    def _kind(self, name: str):
+        return getattr(config.ConfigSaveProblemKind, name)
+
+    def test_every_setter_returns_none_when_the_save_works(self) -> None:
+        for name, args in self.SETTERS:
+            with self.subTest(name):
+                self.assertIsNone(getattr(self.store, name)(*args))
+
+        self.assertEqual(self._saved_keys(), ["conversion", "language_detection", "view"])
+
+    def _saved_keys(self) -> list[str]:
+        return sorted(json.loads(self.path.read_text(encoding="utf-8")))
+
+    def test_a_file_that_cannot_be_read_is_unreadable(self) -> None:
+        # A folder at config.json: opening it for reading fails, as for a locked file.
+        self.path.mkdir()
+
+        with self.assertLogs("dotexpress.config", level="WARNING"):
+            problems = [getattr(self.store, name)(*args) for name, args in self.SETTERS]
+
+        for (name, _args), problem in zip(self.SETTERS, problems):
+            with self.subTest(name):
+                self.assertIsInstance(problem, self._problem())
+                self.assertIs(problem.kind, self._kind("UNREADABLE"))
+                self.assertIsInstance(problem.error, OSError)
+                self.assertEqual(problem.path, self.path)
+                self.assertIsNone(problem.backup_path)
+        self.assertTrue(self.path.is_dir())
+
+    def test_a_damaged_file_whose_backup_fails_is_backup_failed(self) -> None:
+        self.path.write_bytes(b"{")
+        self.backup.mkdir()
+
+        with self.assertLogs("dotexpress.config", level="WARNING") as captured:
+            problem = self.store.set_output_mode("ascii")
+
+        self.assertIs(problem.kind, self._kind("BACKUP_FAILED"))
+        self.assertIsInstance(problem.error, OSError)
+        self.assertEqual((problem.path, problem.backup_path), (self.path, self.backup))
+        self.assertEqual(self.path.read_bytes(), b"{")
+        errors = [record.getMessage() for record in captured.records if record.levelno == logging.ERROR]
+        self.assertEqual(errors, [f"Failed to save config file {self.path}"])
+
+    def test_a_write_that_fails_is_write_failed(self) -> None:
+        error = OSError(errno.ENOSPC, "injected")
+
+        with patch("os.replace", side_effect=error), self.assertLogs("dotexpress.config", level="ERROR") as captured:
+            problem = self.store.set_view_settings(18, "dark", "default")
+
+        self.assertEqual(problem, self._problem()(self._kind("WRITE_FAILED"), error, self.path))
+        self.assertFalse(self.path.exists())
+        self.assertEqual([record.getMessage() for record in captured.records], [f"Failed to save config file {self.path}"])
+
+    def test_the_client_id_and_the_language_ignore_a_failed_save(self) -> None:
+        # Not settings the user changed; the client id is saved on a background thread.
+        self.path.mkdir()
+
+        with self.assertLogs("dotexpress.config", level="WARNING"), patch.object(config, "_runtime_lang", None):
+            client_id = self.store.get_or_create_client_id()
+            language = self.store.set_lang("en", persist=True)
+
+        self.assertEqual(str(UUID(client_id)), client_id)
+        self.assertIsNone(language)
+
+
 class ConfigModuleShapeTest(unittest.TestCase):
     """P2-6: config IO lives on ``ConfigStore``; the module holds no path and no IO functions."""
 

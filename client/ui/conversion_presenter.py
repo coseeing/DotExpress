@@ -15,7 +15,8 @@ ignored, and no view method runs after that (F-9).
 A manual conversion's result goes to the document that was open when it started. If
 another document is open when it completes, the result is saved to the starting
 document and the open one is left alone; if the starting document is gone or holds
-another text, the result is discarded and logged (F-9).
+another text, the result is discarded and logged (F-9). A failure names the starting
+document when another one is open (F-12).
 """
 
 from __future__ import annotations
@@ -40,6 +41,8 @@ from conversion.service import (
     convert_text_with_alignment,
     get_public_error_message,
 )
+from conversion.text.dictionary_rules import DictionaryRulesReadError
+from dictionaries.read_problems import describe_dictionary_read_error
 from documents.controller import DocumentController
 from documents.workspace import Document
 from i18n import _
@@ -115,13 +118,31 @@ def missing_default_table_message(translation_tables: Mapping[str, object]) -> s
     return _("Please select a translation table first.")
 
 
+def describe_dictionary_rules_read_error(error: DictionaryRulesReadError) -> str:
+    """Which dictionary cannot be read and why, in one line (F-12 D4).
+
+    One line, not F-6's headline and reason paragraphs: the text is also a line of the
+    Export All summary. The header reason uses the words of the editor's message (F-11).
+    """
+    if error.header_not_recognized:
+        reason = _(
+            "Its header is not recognized. The first line of the file must contain the text, braille, and type headers."
+        )
+    else:
+        reason = describe_dictionary_read_error(error.error)
+    return _('Dictionary "{name}" cannot be read. {reason}').format(name=error.path.stem, reason=reason)
+
+
 def format_conversion_error(error: ConversionStageError) -> str:
     message_templates = {
         "ascii": _("ASCII conversion failed: {error}"),
         "text_processing": _("Text processing failed: {error}"),
     }
     message_template = message_templates.get(error.stage, _("Translation failed: {error}"))
-    error_text = _(get_public_error_message(error.error))
+    if isinstance(error.error, DictionaryRulesReadError):
+        error_text = describe_dictionary_rules_read_error(error.error)
+    else:
+        error_text = _(get_public_error_message(error.error))
     return message_template.format(error=error_text)
 
 
@@ -274,9 +295,15 @@ class ConversionPresenter:
             if active.job.export is not None:
                 active.job.export.on_error(message)
             else:
-                self._view.show_error(message, _("Error"))
+                self._view.show_error(self._name_unopened_document(active.job.manual, message), _("Error"))
         finally:
             self._finish_completion()
+
+    def _name_unopened_document(self, target: _ManualTarget, message: str) -> str:
+        """``message``, led by the name of the job's document if another one is open now (F-12 D7)."""
+        if target.document_name is None or target.document_name == self._documents.open_document_name:
+            return message
+        return _('Document "{name}" could not be converted.\n\n{error}').format(name=target.document_name, error=message)
 
     def _complete_manual(self, target: _ManualTarget, output: ConversionOutput) -> None:
         braille = output.display_text

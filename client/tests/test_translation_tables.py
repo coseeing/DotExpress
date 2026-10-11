@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 import config
 from settings.translation_tables import load_translation_tables, save_translation_tables
@@ -14,6 +15,15 @@ class TranslationTablesTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
+
+    def test_save_returns_what_the_store_returns(self) -> None:
+        # F-12 (D6): the save problem, or None.
+        store = Mock(spec=config.ConfigStore)
+        problem = object()
+        store.set_translation_tables.return_value = problem
+
+        self.assertIs(save_translation_tables(store, {"default": "zh-tw.ctb"}), problem)
+        self.assertIsNone(save_translation_tables(self.store, {"default": "zh-tw.ctb"}))
 
     def test_load_translation_tables_returns_copy(self) -> None:
         stored_tables = {"default": "zh-tw.ctb", "en": "en-ueb-g1.ctb"}

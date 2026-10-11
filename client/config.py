@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -56,6 +59,35 @@ _logged_skipped_saves: dict[str, str] = {}
 
 def _signature(error: BaseException) -> str:
     return f"{type(error).__name__}: {error}"
+
+
+class ConfigSaveProblemKind(Enum):
+    UNREADABLE = "unreadable"  # config.json exists but could not be read, so it is kept
+    BACKUP_FAILED = "backup_failed"  # damaged, and config.json.bak could not be written first
+    WRITE_FAILED = "write_failed"
+
+
+@dataclass(frozen=True)
+class ConfigSaveProblem:
+    """Why a setting did not reach config.json (F-12 D6); the change still applies in memory."""
+
+    kind: ConfigSaveProblemKind
+    error: BaseException
+    path: Path
+    backup_path: Path | None = None  # BACKUP_FAILED only
+
+
+# Windows: access denied, sharing violation, lock violation.
+_ACCESS_WINERRORS = (5, 32, 33)
+
+
+def is_access_error(error: BaseException) -> bool:
+    """Whether ``error`` means the file is held by another program or may not be used (F-12 review M-2)."""
+    if isinstance(error, PermissionError):
+        return True
+    if not isinstance(error, OSError):
+        return False
+    return getattr(error, "winerror", None) in _ACCESS_WINERRORS or error.errno in (errno.EACCES, errno.EPERM)
 
 
 class _UnreadableConfig(dict):
@@ -159,14 +191,24 @@ class ConfigStore:
         content = self._path.read_bytes()
         write_bytes_atomically(self._path.with_name(f"{self._path.name}.bak"), lambda stream: stream.write(content))
 
-    def _save(self, data: dict) -> None:
+    def _save(self, data: dict) -> ConfigSaveProblem | None:
+        """Write ``data``; ``None`` if it was written, else why not (logged as before, F-8 D11)."""
         path = str(self._path)
         if isinstance(data, _UnreadableConfig) and isinstance(data.error, OSError):
             self._skip_save_of_unreadable_file(data.error)
-            return
-        try:
-            if isinstance(data, _UnreadableConfig):
+            return ConfigSaveProblem(ConfigSaveProblemKind.UNREADABLE, data.error, self._path)
+        if isinstance(data, _UnreadableConfig):
+            try:
                 self._backup_unreadable()
+            except Exception as error:
+                _log_current_exception(logging.ERROR, "Failed to save config file %s", path)
+                return ConfigSaveProblem(
+                    ConfigSaveProblemKind.BACKUP_FAILED,
+                    error,
+                    self._path,
+                    self._path.with_name(f"{self._path.name}.bak"),
+                )
+        try:
             if not os.path.exists(path):
                 data = {
                     "language_detection": {
@@ -181,15 +223,17 @@ class ConfigStore:
                 encoding="utf-8",
                 newline=None,
             )
-        except Exception:
+        except Exception as error:
             _log_current_exception(logging.ERROR, "Failed to save config file %s", path)
+            return ConfigSaveProblem(ConfigSaveProblemKind.WRITE_FAILED, error, self._path)
+        return None
 
-    def _set_section_value(self, section: str, key: str, value: object) -> None:
+    def _set_section_value(self, section: str, key: str, value: object) -> ConfigSaveProblem | None:
         data = self._load()
         section_data = _get_section(data, section).copy()
         section_data[key] = value
         data[section] = section_data
-        self._save(data)
+        return self._save(data)
 
     def _get_dict_setting(self, section: str, key: str, default: dict) -> dict:
         data = self._load()
@@ -231,32 +275,32 @@ class ConfigStore:
     def get_translation_tables(self) -> dict:
         return self._get_dict_setting(CONVERSION_SECTION, TRANSLATION_TABLES_KEY, DEFAULT_TRANSLATION_TABLES)
 
-    def set_translation_tables(self, tables: dict[str, str]) -> None:
-        self._set_section_value(CONVERSION_SECTION, TRANSLATION_TABLES_KEY, dict(tables))
+    def set_translation_tables(self, tables: dict[str, str]) -> ConfigSaveProblem | None:
+        return self._set_section_value(CONVERSION_SECTION, TRANSLATION_TABLES_KEY, dict(tables))
 
     def get_output_mode(self, default: str = DEFAULT_OUTPUT_MODE) -> str:
         data = self._load()
         value = _get_section(data, CONVERSION_SECTION).get(OUTPUT_MODE_KEY)
         return value if isinstance(value, str) else default
 
-    def set_output_mode(self, output_mode: str) -> None:
-        self._set_section_value(CONVERSION_SECTION, OUTPUT_MODE_KEY, output_mode)
+    def set_output_mode(self, output_mode: str) -> ConfigSaveProblem | None:
+        return self._set_section_value(CONVERSION_SECTION, OUTPUT_MODE_KEY, output_mode)
 
     def get_conversion_width(self, default: int = DEFAULT_CONVERSION_WIDTH) -> int:
         data = self._load()
         width = _coerce_int(_get_section(data, CONVERSION_SECTION).get(WIDTH_KEY))
         return width if width is not None else default
 
-    def set_conversion_width(self, width: int) -> None:
-        self._set_section_value(CONVERSION_SECTION, WIDTH_KEY, width)
+    def set_conversion_width(self, width: int) -> ConfigSaveProblem | None:
+        return self._set_section_value(CONVERSION_SECTION, WIDTH_KEY, width)
 
     def get_selected_dictionary(self, default: str = "default") -> str:
         data = self._load()
         value = _get_section(data, CONVERSION_SECTION).get(SELECTED_DICTIONARY_KEY)
         return value if isinstance(value, str) else default
 
-    def set_selected_dictionary(self, dictionary_name: str) -> None:
-        self._set_section_value(CONVERSION_SECTION, SELECTED_DICTIONARY_KEY, dictionary_name)
+    def set_selected_dictionary(self, dictionary_name: str) -> ConfigSaveProblem | None:
+        return self._set_section_value(CONVERSION_SECTION, SELECTED_DICTIONARY_KEY, dictionary_name)
 
     def get_view_font_size(self, default: int = DEFAULT_VIEW_FONT_SIZE) -> int:
         data = self._load()
@@ -273,7 +317,7 @@ class ConfigStore:
         value = _get_section(data, VIEW_SECTION).get(BRAILLE_FONT_KEY)
         return value if isinstance(value, str) else default
 
-    def set_view_settings(self, font_size: int, scheme: str, braille_font: str) -> None:
+    def set_view_settings(self, font_size: int, scheme: str, braille_font: str) -> ConfigSaveProblem | None:
         data = self._load()
         section_data = _get_section(data, VIEW_SECTION).copy()
         section_data.update(
@@ -284,7 +328,7 @@ class ConfigStore:
             }
         )
         data[VIEW_SECTION] = section_data
-        self._save(data)
+        return self._save(data)
 
     def get_or_create_client_id(self) -> str:
         data = self._load()
@@ -295,5 +339,7 @@ class ConfigStore:
         section_data = _get_section(data, CLIENT_SECTION).copy()
         section_data[CLIENT_ID_KEY] = client_id
         data[CLIENT_SECTION] = section_data
+        # Not a setting the user changed, and saved on a background thread: a problem is only
+        # logged (F-12 D6).
         self._save(data)
         return client_id

@@ -30,6 +30,7 @@ from documents.workspace import (
     create_default_document,
     normalize_document_name,
     replace_lone_surrogates,
+    unlisted_entry_reason,
 )
 from documents.workspace_service import DocumentWorkspaceService
 from ui.action_menu import get_document_menu_enabled_state
@@ -37,7 +38,7 @@ from ui.conversion_presenter import ConversionPresenter
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from ui.menu_builder import apply_document_menu_state, build_document_menu
 from ui.message_box import message_box
-from config import ConfigStore, DEFAULT_TRANSLATION_TABLES
+from config import ConfigSaveProblem, ConfigSaveProblemKind, ConfigStore, DEFAULT_TRANSLATION_TABLES, is_access_error
 from settings.translation import (
 	TranslationSettings,
 	load_translation_settings,
@@ -118,6 +119,8 @@ class BrailleFrame(wx.Frame):
 	# Class attributes, so that frames built without __init__ (tests) have them too (F-7, M-5).
 	_closing = False
 	_close_finished = False
+	# The first settings save problem of the session was shown (F-12 D6).
+	_settings_save_problem_reported = False
 
 	def __init__(
 		self,
@@ -313,7 +316,8 @@ class BrailleFrame(wx.Frame):
 		apply_document_menu_state(target_items, menu_state)
 
 	def _update_window_title(self) -> None:
-		self.SetTitle(_(format_window_title(self._document_controller.open_document_name)))
+		# Not a msgid: DotExpress and the document name stay as they are (F-12 D9).
+		self.SetTitle(format_window_title(self._document_controller.open_document_name))
 
 	def _create_dual_view_frame(self) -> DualViewFrame:
 		return DualViewFrame(self, title=_("Dual View"), on_closed=self._on_dual_view_closed)
@@ -433,9 +437,12 @@ class BrailleFrame(wx.Frame):
 		self.translation_tables = tables
 		self._apply_editor_view_settings(view)
 
-		save_translation_settings(self._config_store, translation)
-		save_translation_tables(self._config_store, tables)
-		save_view_settings(self._config_store, view)
+		problems = (
+			save_translation_settings(self._config_store, translation),
+			save_translation_tables(self._config_store, tables),
+			save_view_settings(self._config_store, view),
+		)
+		self._report_settings_save_problem(next((problem for problem in problems if problem is not None), None))
 		return DotExpressSettingsSnapshot.create(translation, tables, view)
 
 	def _set_active_dictionary(self, selected_name: str) -> None:
@@ -444,7 +451,47 @@ class BrailleFrame(wx.Frame):
 			width=self.translation_settings.width,
 			selected_dictionary=selected_name,
 		)
-		self._config_store.set_selected_dictionary(selected_name)
+		self._report_settings_save_problem(self._config_store.set_selected_dictionary(selected_name))
+
+	def _report_settings_save_problem(self, problem: ConfigSaveProblem | None) -> None:
+		"""Show the first settings save problem of the session; later ones are only logged (F-12 D6).
+
+		Once per session, as Ctrl+wheel saves on every notch. Shown after the change, which
+		still applies, in a box that belongs to the active window (the settings dialog,
+		Dictionary Management), else to the frame.
+		"""
+		if problem is None or self._settings_save_problem_reported:
+			return
+		self._settings_save_problem_reported = True
+		if problem.kind is ConfigSaveProblemKind.UNREADABLE:
+			if is_access_error(problem.error):
+				reason = _(
+					"The file cannot be opened. It may be in use by another program, or you may not have "
+					"permission to read it. Close the other program and try again."
+				)
+			else:
+				reason = _("The file cannot be read: {error}").format(error=problem.error)
+		elif problem.kind is ConfigSaveProblemKind.BACKUP_FAILED:
+			reason = _(
+				'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}'
+			).format(backup=problem.backup_path, error=problem.error)
+		elif is_access_error(problem.error):
+			reason = _(
+				"The file cannot be written. It may be in use by another program, or you may not have "
+				"permission to write to it. Close the other program and try again."
+			)
+		else:
+			# Not the operating system's text: it holds the random name of the temporary file.
+			reason = _("The file cannot be written. Check that the disk has free space and that you can write to the folder.")
+		message_box(
+			_(
+				'DotExpress cannot save its settings to "{path}". Changes to the settings apply until DotExpress is closed, '
+				"but they are not kept. This message is not shown again until DotExpress is started again.\n\n{reason}"
+			).format(path=problem.path, reason=reason),
+			_("Settings Not Saved"),
+			wx.OK | wx.ICON_WARNING,
+			parent=wx.GetActiveWindow() or self,
+		)
 
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
@@ -595,7 +642,7 @@ class BrailleFrame(wx.Frame):
 			replace(self.view_settings, font_size=font_size)
 		)
 		self._apply_editor_view_settings(self.view_settings)
-		save_view_settings(self._config_store, self.view_settings)
+		self._report_settings_save_problem(save_view_settings(self._config_store, self.view_settings))
 		settings_dialog = DotExpressSettingsDialog.open_instance()
 		if settings_dialog is not None:
 			settings_dialog.sync_font_size(self.view_settings.font_size)
@@ -721,19 +768,24 @@ class BrailleFrame(wx.Frame):
 				if dialog.ShowModal() != wx.ID_OK:
 					return None
 				document_name = normalize_document_name(dialog.get_document_name())
-			# A package on disk that is not listed (kept invalid at startup) counts too (F-8).
-			if self._document_controller.document_name_exists(
-				document_name, exclude_name=exclude_name
-			) or self._workspace_service.package_name_taken(document_name, exclude_name=exclude_name):
-				message_box(
-					_('Document "{name}" already exists.').format(name=document_name),
-					_("Error"),
-					wx.OK | wx.ICON_ERROR,
-					parent=self,
+			if self._document_controller.document_name_exists(document_name, exclude_name=exclude_name):
+				message = _('Document "{name}" already exists.').format(name=document_name)
+			else:
+				# An entry on disk that is not listed (an invalid package kept at startup) holds
+				# the name too (F-8); the box names it and the workspace folder (F-12 D5).
+				entry = self._workspace_service.unlisted_package_entry(document_name, exclude_name=exclude_name)
+				if entry is None:
+					return document_name
+				message = "\n\n".join(
+					(
+						unlisted_entry_reason(document_name, entry),
+						_("Choose another name, or move or delete that file. Workspace folder:\n{folder}").format(
+							folder=self._workspace_service.workspace_dir
+						),
+					)
 				)
-				prefill_name = document_name
-				continue
-			return document_name
+			message_box(message, _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
+			prefill_name = document_name
 
 	def _create_default_document(self) -> bool:
 		default_document = create_default_document()
@@ -907,7 +959,11 @@ class BrailleFrame(wx.Frame):
 			if self._document_controller.has_documents:
 				self._open_document_by_name(self._document_controller.first_document_name)
 			else:
+				# No valid document is left: as after a complete Delete All, the title follows
+				# and the default document is created and opened (F-12, P1-3 defect 4).
+				self._update_window_title()
 				self._clear_document_editors()
+				self._ensure_open_document_exists()
 			self._refresh_dual_view()
 			return
 		self._update_window_title()

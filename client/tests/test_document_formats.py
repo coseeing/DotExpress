@@ -20,6 +20,7 @@ from documents.formats import (
     get_importable_formats,
 )
 from documents.workspace import Document
+from i18n import _
 from tests.full_disk import full_disk
 
 
@@ -175,6 +176,10 @@ class DocumentFormatsTest(unittest.TestCase):
             with self.subTest(format_key=key):
                 self.assertEqual(build_export_wildcard(get_format(key)), wildcard)
                 self.assertEqual(build_export_wildcard(get_format(key), lambda value: f"T[{value}]"), f"T[{wildcard}]")
+
+    def test_html_save_filter_is_translated(self) -> None:
+        # F-12 (D8): a msgid like the BRL filter; the label HTML stays as it is.
+        self.assertEqual(build_export_wildcard(get_format("html"), _), "HTML 檔 (*.html)|*.html")
 
     def test_export_wildcard_rejects_non_exportable_format(self) -> None:
         with self.assertRaisesRegex(ValueError, 'Unsupported export format: "txt"\\.'):

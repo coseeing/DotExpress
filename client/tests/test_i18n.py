@@ -168,6 +168,107 @@ class TranslationTest(unittest.TestCase):
             "無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。",
         )
 
+    def test_export_summary_and_conversion_fallback_strings_are_translated(self) -> None:
+        # F-12 (D1, D2): the Export All summary (its three texts revived from obsolete catalog
+        # entries) and the two public conversion fallback texts; all were English (P1-4 defect 4).
+        expected = {
+            "Export Complete with Errors": "匯出完成，但有錯誤",
+            "All documents were exported successfully.": "所有文件皆已成功匯出。",
+            "Exported documents: {success_count}\nFailed documents: {failure_count}\n\n{failures}": (
+                "成功匯出的文件：{success_count}\n匯出失敗的文件：{failure_count}\n\n{failures}"
+            ),
+            "An unknown error occurred.": "發生不明的錯誤。",
+            "The selected translation table could not translate this text.": "選取的轉譯表無法轉譯這段文字。",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
+    def test_import_problem_strings_are_translated(self) -> None:
+        # F-12 (D3): the reasons of the Import Issues dialog; the DEP one is revived from an
+        # obsolete catalog entry.
+        expected = {
+            "The file is not saved as UTF-8 text. Save it again as UTF-8, for example with Save As in Notepad.": (
+                "檔案不是以 UTF-8 文字儲存。請重新存成 UTF-8，例如在記事本中使用「另存新檔」。"
+            ),
+            "This file type cannot be imported.": "無法匯入這種類型的檔案。",
+            "The file name extension does not match the selected file type.": "副檔名與選取的檔案類型不符。",
+            "Imported file must be a valid DotExpress DEP package.": "匯入的檔案必須是有效的 DotExpress DEP 封裝檔。",
+            "This PDF file is encrypted and cannot be imported.": "這個 PDF 檔已加密，無法匯入。",
+            "The EPUB file is damaged or has no readable content.": "EPUB 檔已損壞，或沒有可讀取的內容。",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
+    def test_unreadable_dictionary_conversion_strings_are_translated(self) -> None:
+        # F-12 (D4): a conversion that cannot read the selected dictionary; the header reason
+        # uses the words of F-11's message for the editor.
+        expected = {
+            'Dictionary "{name}" cannot be read. {reason}': "無法讀取字典「{name}」。{reason}",
+            "Its header is not recognized. The first line of the file must contain the text, braille, and type headers.": (
+                "無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。"
+            ),
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
+    def test_unlisted_entry_strings_are_translated(self) -> None:
+        # F-12 (D5): a document name held by a file in the workspace folder that is not listed.
+        expected = {
+            'The name "{name}" is used by "{file}" in the workspace folder, but that file is not in the document list.': (
+                "名稱「{name}」已被工作區資料夾中的「{file}」使用，但這個檔案不在文件清單中。"
+            ),
+            "Choose another name, or move or delete that file. Workspace folder:\n{folder}": (
+                "請改用其他名稱，或將這個檔案移走或刪除。工作區資料夾：\n{folder}"
+            ),
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
+    def test_settings_not_saved_strings_are_translated(self) -> None:
+        # F-12 (D6): the box of the first settings change of a session that cannot be saved.
+        message = (
+            'DotExpress cannot save its settings to "{path}". Changes to the settings apply until DotExpress is closed, '
+            "but they are not kept. This message is not shown again until DotExpress is started again.\n\n{reason}"
+        )
+        backup = 'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}'
+        expected = {
+            "Settings Not Saved": "設定未儲存",
+            message: (
+                "DotExpress 無法將設定儲存到「{path}」。設定的變更在關閉 DotExpress 之前有效，但不會保留。"
+                "在下次啟動 DotExpress 之前，不會再顯示這則訊息。\n\n{reason}"
+            ),
+            backup: "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。詳細資訊：{error}",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
+    def test_failed_conversion_of_a_document_that_is_not_open_string_is_translated(self) -> None:
+        # F-12 (D7): a failed conversion of a document that is not the open one names it.
+        translation = i18n.load_translation()
+
+        self.assertEqual(
+            translation.gettext('Document "{name}" could not be converted.\n\n{error}'),
+            "無法轉換文件「{name}」。\n\n{error}",
+        )
+
+    def test_remaining_english_message_strings_are_translated(self) -> None:
+        # F-12 (D8): the HTML save filter, the browser error and the text processing script's
+        # two errors of its contract.
+        expected = {
+            "HTML files (*.html)|*.html": "HTML 檔 (*.html)|*.html",
+            "No supported browser or system HTML opener is available.": "找不到可用的瀏覽器，也沒有可開啟 HTML 檔的系統程式。",
+            "main is not callable.": "main 不是可以呼叫的函式。",
+            "main must return str, got {type}.": "main 必須傳回 str，而不是 {type}。",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 
@@ -345,6 +446,102 @@ class ExtractionMarkerTest(unittest.TestCase):
 
         self.assertEqual(len(self.FORMER_MARKER_MSGIDS), 44)
         self.assertEqual(sorted(set(self.FORMER_MARKER_MSGIDS) - extracted), [])
+
+    def test_export_summary_and_conversion_fallback_texts_are_marked_where_defined(self) -> None:
+        # F-12 (D1, D2): these values are translated where they are shown, so each must be an
+        # N_ call where it is defined, or it stays English.
+        tree = _module_tree("documents/export_results.py")
+        values = {
+            target.id: node.value
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        names = (
+            "EXPORT_COMPLETE_TITLE",
+            "EXPORT_COMPLETE_WITH_ERRORS_TITLE",
+            "EXPORT_ALL_SUCCESS_MESSAGE",
+            "EXPORT_ALL_PARTIAL_MESSAGE",
+        )
+        self.assertEqual(
+            {name: ast.unparse(values[name].func) if isinstance(values[name], ast.Call) else None for name in names},
+            dict.fromkeys(names, "N_"),
+        )
+        returns = [
+            ast.unparse(node.value)
+            for node in sorted(
+                (node for node in ast.walk(_module_tree("conversion/plain_text.py")) if isinstance(node, ast.Return)),
+                key=lambda node: node.lineno,
+            )
+        ]
+        self.assertEqual(
+            returns,
+            [
+                "N_('An unknown error occurred.')",
+                "N_('The selected translation table could not translate this text.')",
+                "message",
+            ],
+        )
+
+    def test_html_save_filter_is_marked_where_defined(self) -> None:
+        # F-12 (D8): build_export_wildcard translates it where it is shown.
+        wildcards = {
+            keyword.value.args[0].value if isinstance(keyword.value, ast.Call) else ast.unparse(keyword.value): (
+                ast.unparse(keyword.value.func) if isinstance(keyword.value, ast.Call) else None
+            )
+            for node in ast.walk(_module_tree("documents/formats.py"))
+            if isinstance(node, ast.Call)
+            for keyword in node.keywords
+            if keyword.arg == "export_wildcard"
+        }
+
+        self.assertEqual(
+            wildcards,
+            {
+                "DotExpress files (*.dep)|*.dep": "N_",
+                "Braille files (*.brl)|*.brl": "N_",
+                "HTML files (*.html)|*.html": "N_",
+            },
+        )
+
+    def test_window_title_is_not_passed_to_gettext(self) -> None:
+        # F-12 (D9): "alpha - DotExpress" is not a msgid; DotExpress and the name stay as they are.
+        method = next(
+            node
+            for node in ast.walk(_module_tree("gui.py"))
+            if isinstance(node, ast.FunctionDef) and node.name == "_update_window_title"
+        )
+        calls = sorted(ast.unparse(node.func) for node in ast.walk(method) if isinstance(node, ast.Call))
+
+        self.assertEqual(calls, ["format_window_title", "self.SetTitle"])
+
+    def test_the_catalog_holds_exactly_the_marked_strings(self) -> None:
+        # F-12 (Test Plan A2): every _() and N_() string of the client is a catalog entry, and the
+        # compiled catalog holds no other.
+        marked = set()
+        for dirpath, dirnames, filenames in os.walk(CLIENT_ROOT):
+            dirnames[:] = sorted(name for name in dirnames if name not in {"tests", ".venv", "__pycache__", "build", "dist"})
+            if Path(dirpath).relative_to(CLIENT_ROOT).parts[:2] == ("braille", "liblouis"):
+                continue
+            for filename in sorted(filenames):
+                if not filename.endswith(".py"):
+                    continue
+                path = Path(dirpath) / filename
+                for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=str(path))):
+                    if (
+                        isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Name)
+                        and node.func.id in {"_", "N_"}
+                        and node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)
+                    ):
+                        marked.add(node.args[0].value)
+        catalog = set(i18n.load_translation()._catalog) - {""}
+
+        self.assertEqual(sorted(marked - catalog), [])
+        self.assertEqual(sorted(catalog - marked), [])
 
     def test_generate_pot_extracts_n_keyword(self) -> None:
         script = (CLIENT_ROOT.parent / "scripts" / "generate-pot.bat").read_text(encoding="utf-8")

@@ -858,6 +858,14 @@ msgstr ""
 msgid "Zulu grade 2"
 msgstr ""
 
+#: conversion/plain_text.py:11
+msgid "An unknown error occurred."
+msgstr ""
+
+#: conversion/plain_text.py:13
+msgid "The selected translation table could not translate this text."
+msgstr ""
+
 #: conversion/preprocessing/user_script.py:40
 msgid "The script must define exactly one top-level synchronous main function."
 msgstr ""
@@ -865,6 +873,15 @@ msgstr ""
 #: conversion/preprocessing/user_script.py:49
 msgid ""
 "main must define exactly one positional parameter and no other parameters."
+msgstr ""
+
+#: conversion/preprocessing/user_script.py:76
+msgid "main is not callable."
+msgstr ""
+
+#: conversion/preprocessing/user_script.py:79
+#, python-brace-format
+msgid "main must return str, got {type}."
 msgstr ""
 
 #: dialog.py:33
@@ -876,7 +893,7 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: dialog.py:58 dialog.py:123 gui.py:490 settings/dialogs.py:144
+#: dialog.py:58 dialog.py:123 gui.py:537 settings/dialogs.py:144
 #: settings/dialogs.py:295 ui/message_box.py:29
 msgid "Cancel"
 msgstr ""
@@ -896,8 +913,8 @@ msgstr ""
 
 #: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:896
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
-#: documents/export_coordinator.py:135 gui.py:455 gui.py:730 gui.py:1047
-#: gui.py:1059 ui/conversion_presenter.py:277
+#: documents/export_coordinator.py:145 gui.py:502 gui.py:787 gui.py:1103
+#: gui.py:1115 ui/conversion_presenter.py:298
 msgid "Error"
 msgstr ""
 
@@ -909,7 +926,7 @@ msgstr ""
 msgid "Add Dictionary Entry"
 msgstr ""
 
-#: dialog.py:105 dialog.py:427 gui.py:197
+#: dialog.py:105 dialog.py:427 gui.py:200
 msgid "Source Text"
 msgstr ""
 
@@ -922,8 +939,8 @@ msgid "Type"
 msgstr ""
 
 #: dialog.py:182 dialog.py:208 dialog.py:346 dialog.py:893
-#: ui/conversion_presenter.py:174 ui/conversion_presenter.py:293
-#: ui/conversion_presenter.py:310
+#: ui/conversion_presenter.py:195 ui/conversion_presenter.py:320
+#: ui/conversion_presenter.py:337
 msgid "Info"
 msgstr ""
 
@@ -956,15 +973,15 @@ msgstr ""
 msgid "Please enter the document name."
 msgstr ""
 
-#: dialog.py:260
+#: dialog.py:260 documents/import_problems.py:44
 msgid "Document name must be 1 to 32 characters."
 msgstr ""
 
-#: dialog.py:261
+#: dialog.py:261 documents/import_problems.py:45
 msgid "Document name is not a valid Windows file name."
 msgstr ""
 
-#: dialog.py:271 gui.py:183
+#: dialog.py:271 gui.py:186
 msgid "Document Name"
 msgstr ""
 
@@ -1194,7 +1211,7 @@ msgid ""
 "delimited)\" format, for example with Save As in Excel."
 msgstr ""
 
-#: dictionaries/read_problems.py:50
+#: dictionaries/read_problems.py:50 documents/import_problems.py:38 gui.py:469
 msgid ""
 "The file cannot be opened. It may be in use by another program, or you may "
 "not have permission to read it. Close the other program and try again."
@@ -1207,7 +1224,7 @@ msgid ""
 "closed. Details: {error}"
 msgstr ""
 
-#: dictionaries/read_problems.py:57
+#: dictionaries/read_problems.py:57 documents/import_problems.py:54 gui.py:473
 #, python-brace-format
 msgid "The file cannot be read: {error}"
 msgstr ""
@@ -1217,159 +1234,267 @@ msgstr ""
 msgid "Dictionary \"{name}\" cannot be read."
 msgstr ""
 
-#: documents/export_coordinator.py:135
+#: documents/export_coordinator.py:126 ui/conversion_presenter.py:306
+#, python-brace-format
+msgid ""
+"Document \"{name}\" could not be converted.\n"
+"\n"
+"{error}"
+msgstr ""
+
+#: documents/export_coordinator.py:145
 #, python-brace-format
 msgid "Failed to export document: {error}"
 msgstr ""
 
-#: documents/export_coordinator.py:137
+#: documents/export_coordinator.py:147
 msgid "The document was exported successfully."
 msgstr ""
 
-#: documents/export_coordinator.py:137
+#: documents/export_coordinator.py:147 documents/export_results.py:8
 msgid "Export Complete"
+msgstr ""
+
+#: documents/export_results.py:9
+msgid "Export Complete with Errors"
+msgstr ""
+
+#: documents/export_results.py:10
+msgid "All documents were exported successfully."
+msgstr ""
+
+#: documents/export_results.py:12
+#, python-brace-format
+msgid ""
+"Exported documents: {success_count}\n"
+"Failed documents: {failure_count}\n"
+"\n"
+"{failures}"
 msgstr ""
 
 #: documents/formats.py:22
 msgid "All Supported Files"
 msgstr ""
 
-#: documents/formats.py:118
-msgid "DEP"
-msgstr ""
-
-#: documents/formats.py:124
-msgid "DotExpress files (*.dep)|*.dep"
-msgstr ""
-
-#: documents/formats.py:125
-msgid "Package DEP"
-msgstr ""
-
-#: documents/formats.py:130
-msgid "DOCX"
-msgstr ""
-
-#: documents/formats.py:140
-msgid "EPUB"
-msgstr ""
-
-#: documents/formats.py:150
-msgid "PDF"
-msgstr ""
-
-#: documents/formats.py:160
-msgid "TXT"
-msgstr ""
-
-#: documents/formats.py:170
-msgid "BRL"
-msgstr ""
-
-#: documents/formats.py:176
-msgid "Braille files (*.brl)|*.brl"
-msgstr ""
-
-#: documents/formats.py:177
-msgid "Braille BRL"
-msgstr ""
-
-#: documents/formats.py:190
-msgid "Dual View HTML"
-msgstr ""
-
-#: gui.py:181
-msgid "Documents"
-msgstr ""
-
-#: gui.py:187
-msgid "Document List"
-msgstr ""
-
-#: gui.py:188
-msgid "Press the Applications key to open the menu."
-msgstr ""
-
-#: gui.py:202
-msgid "Braille Result"
-msgstr ""
-
-#: gui.py:250 gui.py:1125
-msgid "File"
-msgstr ""
-
-#: gui.py:263 gui.py:1125 settings/dialogs.py:357
-msgid "Translation"
-msgstr ""
-
-#: gui.py:267
-msgid "Coseeing Website"
-msgstr ""
-
-#: gui.py:270
-msgid "About"
-msgstr ""
-
-#: gui.py:273
-msgid "Help"
-msgstr ""
-
-#: gui.py:319 ui/translation_menu.py:9
-msgid "Dual View"
-msgstr ""
-
-#: gui.py:330
+#: documents/formats.py:112 gui.py:334
 msgid "No conversion data is available for this document."
 msgstr ""
 
-#: gui.py:353
-#, python-brace-format
-msgid "Failed to open dual view: {error}"
+#: documents/formats.py:122
+msgid "DEP"
 msgstr ""
 
-#: gui.py:473 gui.py:483
+#: documents/formats.py:128
+msgid "DotExpress files (*.dep)|*.dep"
+msgstr ""
+
+#: documents/formats.py:129
+msgid "Package DEP"
+msgstr ""
+
+#: documents/formats.py:134
+msgid "DOCX"
+msgstr ""
+
+#: documents/formats.py:144
+msgid "EPUB"
+msgstr ""
+
+#: documents/formats.py:154
+msgid "PDF"
+msgstr ""
+
+#: documents/formats.py:164
+msgid "TXT"
+msgstr ""
+
+#: documents/formats.py:174
+msgid "BRL"
+msgstr ""
+
+#: documents/formats.py:180
+msgid "Braille files (*.brl)|*.brl"
+msgstr ""
+
+#: documents/formats.py:181
+msgid "Braille BRL"
+msgstr ""
+
+#: documents/formats.py:193
+msgid "HTML files (*.html)|*.html"
+msgstr ""
+
+#: documents/formats.py:194
+msgid "Dual View HTML"
+msgstr ""
+
+#: documents/import_problems.py:48 documents/workspace.py:34
+msgid "Imported file must be a valid DotExpress DEP package."
+msgstr ""
+
+#: documents/import_problems.py:51
+msgid "The file is damaged or is not in the expected format."
+msgstr ""
+
+#: documents/import_problems.py:53
+msgid ""
+"The file is not saved as UTF-8 text. Save it again as UTF-8, for example "
+"with Save As in Notepad."
+msgstr ""
+
+#: documents/importers/base.py:22 documents/workspace.py:35
+msgid "The file name extension does not match the selected file type."
+msgstr ""
+
+#: documents/importers/epub_importer.py:15
+msgid "The EPUB file is damaged or has no readable content."
+msgstr ""
+
+#: documents/importers/pdf_importer.py:16
+msgid "This PDF file is encrypted and cannot be imported."
+msgstr ""
+
+#: documents/workspace.py:454
+msgid "This file type cannot be imported."
+msgstr ""
+
+#: documents/workspace.py:466 gui.py:772
+#, python-brace-format
+msgid "Document \"{name}\" already exists."
+msgstr ""
+
+#: documents/workspace.py:479
+#, python-brace-format
+msgid ""
+"The name \"{name}\" is used by \"{file}\" in the workspace folder, but that "
+"file is not in the document list."
+msgstr ""
+
+#: documents/workspace_service.py:272 gui.py:520 gui.py:530
 #, python-brace-format
 msgid "Failed to save document: {error}"
 msgstr ""
 
-#: gui.py:484
-msgid "Cannot Save Document"
+#: dual_view/browser.py:105
+msgid "No supported browser or system HTML opener is available."
+msgstr ""
+
+#: gui.py:184
+msgid "Documents"
+msgstr ""
+
+#: gui.py:190
+msgid "Document List"
+msgstr ""
+
+#: gui.py:191
+msgid "Press the Applications key to open the menu."
+msgstr ""
+
+#: gui.py:205
+msgid "Braille Result"
+msgstr ""
+
+#: gui.py:253 gui.py:1181
+msgid "File"
+msgstr ""
+
+#: gui.py:266 gui.py:1181 settings/dialogs.py:357
+msgid "Translation"
+msgstr ""
+
+#: gui.py:270
+msgid "Coseeing Website"
+msgstr ""
+
+#: gui.py:273
+msgid "About"
+msgstr ""
+
+#: gui.py:276
+msgid "Help"
+msgstr ""
+
+#: gui.py:323 ui/translation_menu.py:9
+msgid "Dual View"
+msgstr ""
+
+#: gui.py:357
+#, python-brace-format
+msgid "Failed to open dual view: {error}"
+msgstr ""
+
+#: gui.py:476
+#, python-brace-format
+msgid ""
+"The file is damaged, and a backup copy could not be saved as \"{backup}\" "
+"before replacing it. Details: {error}"
+msgstr ""
+
+#: gui.py:480
+msgid ""
+"The file cannot be written. It may be in use by another program, or you may "
+"not have permission to write to it. Close the other program and try again."
+msgstr ""
+
+#: gui.py:485
+msgid ""
+"The file cannot be written. Check that the disk has free space and that you "
+"can write to the folder."
 msgstr ""
 
 #: gui.py:488
+#, python-brace-format
+msgid ""
+"DotExpress cannot save its settings to \"{path}\". Changes to the settings "
+"apply until DotExpress is closed, but they are not kept. This message is not "
+"shown again until DotExpress is started again.\n"
+"\n"
+"{reason}"
+msgstr ""
+
+#: gui.py:491
+msgid "Settings Not Saved"
+msgstr ""
+
+#: gui.py:531
+msgid "Cannot Save Document"
+msgstr ""
+
+#: gui.py:535
 msgid ""
 "Changes made since the last successful save have not been saved. If you "
 "close without saving, these changes will be lost."
 msgstr ""
 
-#: gui.py:490
+#: gui.py:537
 msgid "&Retry"
 msgstr ""
 
-#: gui.py:490
+#: gui.py:537
 msgid "Close &Without Saving"
 msgstr ""
 
-#: gui.py:497
+#: gui.py:544
 #, python-brace-format
 msgid "Failed to open website: {error}"
 msgstr ""
 
-#: gui.py:500
+#: gui.py:547
 msgid "About DotExpress"
 msgstr ""
 
-#: gui.py:513
+#: gui.py:560
 #, python-brace-format
 msgid "Unable to open text processing script: {error}"
 msgstr ""
 
-#: gui.py:514 settings/dialogs.py:123 settings/dialogs.py:163
+#: gui.py:561 settings/dialogs.py:123 settings/dialogs.py:163
 #: ui/translation_menu.py:10
 msgid "Text Processing"
 msgstr ""
 
-#: gui.py:620
+#: gui.py:667
 #, python-brace-format
 msgid ""
 "Some characters in document \"{name}\" cannot be shown ({count} in all). "
@@ -1380,21 +1505,23 @@ msgid ""
 "one appears in the braille as an escape code."
 msgstr ""
 
-#: gui.py:625
+#: gui.py:672
 msgid "Characters Replaced"
 msgstr ""
 
-#: gui.py:689
+#: gui.py:736
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr ""
 
-#: gui.py:729
+#: gui.py:782
 #, python-brace-format
-msgid "Document \"{name}\" already exists."
+msgid ""
+"Choose another name, or move or delete that file. Workspace folder:\n"
+"{folder}"
 msgstr ""
 
-#: gui.py:764
+#: gui.py:816
 #, python-brace-format
 msgid ""
 "DotExpress was interrupted while saving or renaming a document. These "
@@ -1405,76 +1532,76 @@ msgid ""
 "Check that their content is what you expect."
 msgstr ""
 
-#: gui.py:767
+#: gui.py:819
 msgid "Documents Recovered"
 msgstr ""
 
-#: gui.py:825
+#: gui.py:877
 msgid "Add Document"
 msgstr ""
 
-#: gui.py:841
+#: gui.py:893
 msgid "Rename Document"
 msgstr ""
 
-#: gui.py:865
+#: gui.py:917
 #, python-brace-format
 msgid "Do you want to delete document \"{name}\"?"
 msgstr ""
 
-#: gui.py:866
+#: gui.py:918
 msgid "Confirm Delete Document"
 msgstr ""
 
-#: gui.py:875 gui.py:902
+#: gui.py:927 gui.py:954
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr ""
 
-#: gui.py:894
+#: gui.py:946
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr ""
 
-#: gui.py:895
+#: gui.py:947
 msgid "Confirm Delete All"
 msgstr ""
 
-#: gui.py:924
+#: gui.py:980
 msgid "Import Document"
 msgstr ""
 
-#: gui.py:944
+#: gui.py:1000
 msgid "Import Issues"
 msgstr ""
 
-#: gui.py:945
+#: gui.py:1001
 msgid "Some files were skipped during import."
 msgstr ""
 
-#: gui.py:1058
+#: gui.py:1114
 #, python-brace-format
 msgid "Failed to open the dictionary editor: {error}"
 msgstr ""
 
-#: gui.py:1183
+#: gui.py:1239
 msgid "Export Document"
 msgstr ""
 
-#: gui.py:1193
+#: gui.py:1249
 msgid "Export All Documents"
 msgstr ""
 
-#: gui.py:1202
+#: gui.py:1258
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr ""
 
-#: gui.py:1205
+#: gui.py:1261
 msgid "Confirm Overwrite"
 msgstr ""
 
-#: gui.py:1211
+#: gui.py:1267
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1485,7 +1612,7 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: gui.py:1214
+#: gui.py:1270
 msgid "Startup Error"
 msgstr ""
 
@@ -1621,30 +1748,41 @@ msgstr ""
 msgid "Export All"
 msgstr ""
 
-#: ui/conversion_presenter.py:115
+#: ui/conversion_presenter.py:118
 msgid "Please select a translation table first."
 msgstr ""
 
-#: ui/conversion_presenter.py:120
+#: ui/conversion_presenter.py:129
+msgid ""
+"Its header is not recognized. The first line of the file must contain the "
+"text, braille, and type headers."
+msgstr ""
+
+#: ui/conversion_presenter.py:133
+#, python-brace-format
+msgid "Dictionary \"{name}\" cannot be read. {reason}"
+msgstr ""
+
+#: ui/conversion_presenter.py:138
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:121
+#: ui/conversion_presenter.py:139
 #, python-brace-format
 msgid "Text processing failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:123
+#: ui/conversion_presenter.py:141
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:293
+#: ui/conversion_presenter.py:320
 msgid "Conversion completed."
 msgstr ""
 
-#: ui/conversion_presenter.py:309
+#: ui/conversion_presenter.py:336
 #, python-brace-format
 msgid "Conversion completed. The result was saved to document \"{name}\"."
 msgstr ""

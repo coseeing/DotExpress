@@ -116,6 +116,38 @@ def mapping(
     return "".join(result)
 
 
+class DictionaryRulesReadError(Exception):
+    """The selected dictionary file cannot be read for a conversion (F-12 D4).
+
+    ``path`` is the file and ``error`` the error that stopped the read: an ``OSError``, a
+    ``UnicodeDecodeError``, a ``csv.Error``, or, when ``header_not_recognized`` is true, the
+    ``ValueError`` of a first line that does not name the text, braille and type columns (an
+    empty file included). ``str()`` is the text of ``error``.
+    """
+
+    def __init__(self, path: Path | str, error: Exception, *, header_not_recognized: bool = False) -> None:
+        super().__init__(str(error))
+        self.path = Path(path)
+        self.error = error
+        self.header_not_recognized = header_not_recognized
+
+
+def _read_dictionary_rows(path: Path) -> list[dict[str, str | None]]:
+    """Every row of the dictionary at ``path``; raises ``DictionaryRulesReadError`` if it cannot be read."""
+    try:
+        with path.open("r", newline="", encoding="utf-8-sig") as f_d:
+            reader = csv.DictReader(f_d)
+            if reader.fieldnames is None:
+                header_error = ValueError("CSV must contain header row.")
+            elif not {"text", "braille", "type"}.issubset(reader.fieldnames):
+                header_error = ValueError("CSV must contain columns: text, braille, type")
+            else:
+                return list(reader)
+    except (UnicodeDecodeError, OSError, csv.Error) as error:
+        raise DictionaryRulesReadError(path, error) from error
+    raise DictionaryRulesReadError(path, header_error, header_not_recognized=True)
+
+
 @dataclass(frozen=True)
 class LoadedDictionaryRules:
     """Parsed dictionary rules with their match tries, read once and applied many times.
@@ -144,6 +176,10 @@ class LoadedDictionaryRules:
         """Read the dictionary and Bopomofo rule files.
 
         A missing dictionary gives empty rules without opening the Bopomofo file.
+        A dictionary that cannot be read (opened, decoded, parsed as CSV, or whose header
+        is not recognized) raises ``DictionaryRulesReadError``; its rows are read in full
+        before any of them is processed, so an error while processing a row is not one of
+        these. The bundled Bopomofo file's errors are raised as they are (F-12 D4).
         A leading UTF-8 BOM is ignored. A row the dictionary editor hides is not a rule:
         a source text that is empty once stripped, or a Bopomofo sequence that does not
         parse as it is once its leading whitespace is gone (F-11 D13, D14). A Bopomofo
@@ -170,40 +206,35 @@ class LoadedDictionaryRules:
                 replacements_bopomofo.append((source, target))
         bopomofo_trie = _build_trie(replacements_bopomofo)
 
-        with dictionary_path.open("r", newline="", encoding="utf-8-sig") as f_d:
-            reader = csv.DictReader(f_d)
-            if reader.fieldnames is None:
-                raise ValueError("CSV must contain header row.")
-            if not {"text", "braille", "type"}.issubset(reader.fieldnames):
-                raise ValueError("CSV must contain columns: text, braille, type")
+        rows = _read_dictionary_rows(dictionary_path)
 
-            raws: list[tuple[str, str]] = []
-            replacements: list[tuple[str, str]] = []
-            for row in reader:
-                source = (row.get("text") or "")
-                target = (row.get("braille") or "")
-                if not source.strip():
+        raws: list[tuple[str, str]] = []
+        replacements: list[tuple[str, str]] = []
+        for row in rows:
+            source = (row.get("text") or "")
+            target = (row.get("braille") or "")
+            if not source.strip():
+                continue
+
+            type_ = (row.get("type") or "")
+            if type_ == "Bopomofo":
+                # The editor's rule (dictionaries.entries.canonical_bopomofo); this module
+                # imports nothing from dictionaries.
+                try:
+                    target = processing(target.lstrip())
+                except Exception:
                     continue
-
-                type_ = (row.get("type") or "")
-                if type_ == "Bopomofo":
-                    # The editor's rule (dictionaries.entries.canonical_bopomofo); this module
-                    # imports nothing from dictionaries.
-                    try:
-                        target = processing(target.lstrip())
-                    except Exception:
-                        continue
-                    if isinstance(target, str):
-                        target_parts = [target]
-                    else:
-                        target_parts = list(target)
-                    replacement_parts = [_scan_trie(part, bopomofo_trie) for part in target_parts]
+                if isinstance(target, str):
+                    target_parts = [target]
                 else:
-                    replacement_parts = target.split("@")
+                    target_parts = list(target)
+                replacement_parts = [_scan_trie(part, bopomofo_trie) for part in target_parts]
+            else:
+                replacement_parts = target.split("@")
 
-                raw_parts, replacement_parts = _align_source_and_replacement_parts(source, replacement_parts)
-                raws.append((source, _wrap_atomic_parts(raw_parts)))
-                replacements.append((source, _wrap_atomic_parts(replacement_parts)))
+            raw_parts, replacement_parts = _align_source_and_replacement_parts(source, replacement_parts)
+            raws.append((source, _wrap_atomic_parts(raw_parts)))
+            replacements.append((source, _wrap_atomic_parts(replacement_parts)))
 
         return cls(tuple(raws), tuple(replacements))
 

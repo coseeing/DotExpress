@@ -36,7 +36,7 @@ F-11 是 `task.md` 排序中的第 4 項「F-11 字典編輯器 UX」。本任�
 完成後：
 
 - 開啟編輯器、沒修改就按「確定」，不寫任何東西。有隱藏列時，會先出現 D1 的確認框。
-- 有修改後按「確定」，依序寫入顯示中的詞條。每一筆照現在的方式去空白、正規化類型。檔案的表頭、多出的欄位和 BOM 都保留。
+- 有修改後按「確定」，依序寫入顯示中的詞條。每一筆照現在的方式去空白（注音只去掉開頭的空白，D14）、正規化類型。檔案的表頭、多出的欄位和 BOM 都保留。
 - 取消、Esc、關閉鈕只在有修改時詢問。預設答案是留在編輯器。
 - 新增／編輯時來源文字重複，會在詞條對話框裡告知，輸入的內容保留。
 - 刪除和編輯作用在選取的那一列，有兩列完全相同時也一樣。
@@ -45,7 +45,7 @@ F-11 是 `task.md` 排序中的第 4 項「F-11 字典編輯器 UX」。本任�
 - 匯入被鎖住的來源檔，顯示 F-6 的「無法開啟檔案」說明。
 - 編輯器在對話框建立之前讀檔。
 
-新增使用者可見字串：**11 個**（見「使用者可見字串」）。msgid 從 369 個變成 380 個。審查修正再新增字串 12（380 -> 381；「審查後的修正（F-11）」1）。使用者已於 2026-10-11 決定 O1：選 (b)（D14），見「待決問題」。
+新增使用者可見字串：**11 個**（見「使用者可見字串」）。msgid 從 369 個變成 380 個。審查修正再新增字串 12（380 -> 381；「審查後的修正（F-11）」1）。使用者已於 2026-10-11 決定 O1：選 (b)（D14），見「待決問題」。使用者於 2026-10-11 決定審查 I-1：注音只去掉開頭的空白，原樣無法解析的注音列會被隱藏、不用於轉換（D14、「審查後的修正（F-11）」5）。
 
 非目標：
 
@@ -64,24 +64,24 @@ F-11 是 `task.md` 排序中的第 4 項「F-11 字典編輯器 UX」。本任�
 3. **`confirm_box` 使用 wx 的一般對話框（O12）。** 規劃時實測（wx 4.2.5、Windows 11 繁中，由 wx 對話框的「確定」處理函式顯示訊息框，與編輯器相同）：使用自訂按鈕文字的原生 task dialog（`wx.MessageDialog`、`wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING`、`SetOKCancelLabels`）按 **Alt+F4** 會傳回 `wx.ID_OK`；Esc、Enter 與關閉鈕傳回 `wx.ID_CANCEL`。只自訂「確定」的文字時相同；使用 `SetYesNoLabels` 時 Alt+F4 傳回 `wx.ID_YES`；使用標準文字時傳回 `wx.ID_CANCEL`。spec 的探針 2 是在沒有執行中的 modal 對話框時，於 frame 上顯示訊息框；那種情況仍傳回 `wx.ID_CANCEL`（規劃時重跑過）。若用 task dialog，在 D1 的對話框按 Alt+F4 會移除隱藏列，在 D7 的對話框按 Alt+F4 會放棄變更。改用 `wx.GenericMessageDialog`（相同樣式與按鈕文字）時，Esc、Alt+F4、Enter 與關閉鈕都傳回 `wx.ID_CANCEL`；Alt+S、Alt+B、Alt+D 會按下對應按鈕；焦點一開始在「返回編輯(B)」（packaged build 的 GUI 項目 95、99、35）。對使用者而言，這兩個對話框是傳統對話框（警告圖示、訊息每一行一段文字、沒有粗體的主要指示），而不是 task dialog；NVDA 是否完整讀出由手動項目 107 確認。其他所有訊息框使用的 `message_box`（task dialog）不變。使用者於 2026-10-11 決定：使用傳統對話框，即目前的做法。使用者的硬性要求是：Esc、Alt+F4 與關閉鈕絕不能觸發「移除並儲存」或「放棄變更」；它們是否等於「返回編輯」本身不是要求。（F-5 的關閉對話框也有自訂按鈕文字；它是從 frame 顯示，不是從 modal 對話框，所以這項實測不適用；本任務未檢查。）
 4. **F-W6 測試的最後一個斷言** `assertFalse((directory / "alpha.csv").exists())` 在不分大小寫的檔案系統上不可能成立：改名後檔案仍可用 `alpha.csv` 找到。Task 1 改為檢查資料夾清單 `["Alpha.csv", "default.csv"]`，在任何檔案系統上都成立。
 5. **D11：先讀來源，再寫入副本。** `import_dictionary` 在同一個 `try` 內檢查並讀取來源（`validate_dictionary_csv`，然後 `Path.read_bytes`），再用讀到的位元組寫入副本，因此不必深入 `write_bytes_atomically`，就能分辨來源的 `PermissionError` 與寫入副本時的錯誤。字典是小的 CSV 檔，複製的位元組相同。
-6. **D13：保留的列照舊轉換；先解析原始值（O13）。** `from_paths` 照舊先解析注音列的原始值；只有原始值失敗時，才套用編輯器的判斷（去空白後的注音，再加上 D14 的一聲空白），兩者都失敗才略過該列。用真正的解析器時，能解析的原始值必定通過編輯器的判斷（不會以空白開頭，結尾最多只有一個一聲空白），所以規則與 `_is_editable` 相同；`EditorParityTest` 檢查 23 列，另有一個測試確認保留的列只解析一次、解析的是原始值。編輯器會顯示的注音列照舊轉換，所以手寫、結尾一聲卻沒有空白的列（`抹,ㄇㄚ,Bopomofo`）仍沿用目前以原始符號轉換的方式；編輯器顯示為 `ㄇㄚ `，只有在修改後存檔時才寫入空白。協調者依建議預設決定；使用者可在 merge 前推翻。
+6. **D13：編輯器顯示的注音列才用於轉換，轉換的就是編輯器顯示的注音（O13）。使用者於 2026-10-11 決定（審查 I-1）。** `from_paths` 對 `target.lstrip()`（去掉開頭空白後的注音）解析一次；拋出例外就略過該列。不再有 fallback：無法解析的注音不會再以原始符號轉換，也不會補上聲調空白。這就是編輯器的規則（`canonical_bopomofo`，D14），用的是同一個解析器，所以兩者完全一致；`EditorParityTest` 檢查 31 列，另有一個測試確認解析器只呼叫一次、解析的是去掉開頭空白後的注音。用真正的解析器時，能解析的原始值不會以空白開頭（開頭的空白會被當成聲調，其他空白字元會被拒絕），所以以前能解析的列轉換結果完全不變。改變的是：結尾一聲卻沒有空白的列（`抹,ㄇㄚ,Bopomofo`）或最後一個音節後面還有空白的列（`ㄇㄚ  `、`ㄉㄨˋㄗ˙ `），以前經由 fallback 成為規則，現在被忽略（編輯器隱藏、按「確定」時列出）；開頭有空白的列（` ㄇㄚ `）以前經由 fallback 轉換、開頭的空白也被當成符號（`⠄⠍⠜⠄`），現在依編輯器顯示的注音轉換（`⠍⠜⠄`），也就是任何一次存檔之後的結果。這取代 plan 的預設（先解析原始值，編輯器會顯示的列保留 fallback）；在那個預設下，這種列的點字會在一次無關的修改存檔後改變（審查 I-1）。
 7. **trace 重播有兩處調整，不是一處。** 除了回答 D1 的對話框並把它的記錄從「確定」那一步移除（D1），重播也會在開啟那一步的記錄中有編輯器新增的「取消」按鈕 `Bind` 時把它移除（D7）；完整的建構記錄由 `test_construction_log_is_exact` 固定。假的詞條對話框遇到重複時維持開啟，接著取下一個預先排定的回答，沒有就取消，所以記錄下來的 `MessageBox` 事件不變。`dictionary_entries_trace.json` 不變（`f493da52...`）。
 8. **D9：刪除後選取第一個相等的列。** 有兩列完全相同時，刪除第二列後選取第一列：這是 golden trace 記錄的相等比對規則（O10）。保留相同來源文字的編輯與取代則以 identity 選取。
 9. **D12 在主視窗中：** `gui.py` 匯入 `DictionaryEntryListModel`，載入模型後以 `model=` 傳入；非預期錯誤寫入 `gui.py` 的模組 logger `dotexpress.gui`（`gui.log`）。建構函式在原生 `__init__` 之後才設定路徑與模型；建立過程失敗時呼叫 `Destroy` 再重新拋出。
 10. **字串。** 重複訊息只有一個呼叫點（`dialog.py` 的 `show_duplicate_source_text`），詞條對話框與編輯器的後備檢查共用，所以 D8 不新增 msgid。`msgmerge` 猜錯兩個 fuzzy 翻譯：`Failed to open the dictionary editor: {error}` <- `無法刪除字典：{error}`（Task 7）與 `Do you want to discard the changes you made to dictionary "{name}"?` <- `要刪除字典「{name}」嗎？`（Task 9）；填寫 msgstr 的步驟會取代兩者並移除 fuzzy 標記。
 11. **spec 沒有列出的測試：** `test_wx_call_sites`（唯一的 `GenericMessageDialog` 是 `confirm_box`）、`test_message_box`（`confirm_box`，兩個測試）、`test_dialog_validation`（D8 三個；D14 兩個）、轉換的 golden 案例（翻轉一個，新增三個）、`test_dictionary_entries` 的往返測試（隱藏列不再是規則）、presenter 的只改大小寫改名（取消跳過）。D14 的驗證測試收集錯誤訊息，而不是讓解析器的錯誤往外拋：`text.zhuyin.ParseError` 是 frozen dataclass，unittest 無法替它附加 traceback（測試會在沒有 `Ran` 行的情況下中止）。
-12. **Windows 項目：** 95～106 沿用 spec 的編號，手動 NVDA 項目為 107；「改前」是 `D:\dxtest\N-f9b`（F-9 審查修正後，程式碼等於 `1ce6ce5`）；新 build 放在 `D:\dxtest\N-f11`。修正：項目 98 原本預期「`bom_lf.csv` 仍沒有 BOM」，但 `bom_lf.csv` 有 BOM（且是 LF 換行）：編輯後保留 BOM、改為 CRLF。項目 106 改用與 liblouis 預設讀音不同的注音，讓輸出能看出兩條規則都有用到：`tone1.csv` 中的 `中心,ㄓㄨㄥˋㄒㄧㄣ ,Bopomofo`，以及新增 `抹`／`ㄇㄚ`（一聲讀音，輸入時沒有空白）。項目 105 在「匯入」的檔案對話框關閉後才以不共用方式鎖住檔案：Windows 的檔案對話框不接受沒有人能共用的檔案，實際使用時則是其他程式在輸入名稱時取得檔案。項目 23～29 改用新腳本 `rerun23.py`（23、24）與 `rerun25.py`（25～29），先編輯一列讓「確定」會寫檔；項目 35 使用新的 `item35.py`；項目 44 與 47 執行 F-6 的 `item42.py` 與 `item47.py`，不修改（兩個 build 的記錄除了項目 47 的 `gui.log` 那行中的資料夾名稱之外完全相同）。
+12. **Windows 項目：** 95～106 沿用 spec 的編號，手動 NVDA 項目為 107；「改前」是 `D:\dxtest\N-f9b`（F-9 審查修正後，程式碼等於 `1ce6ce5`）；新 build 放在 `D:\dxtest\N-f11`。修正：項目 98 原本預期「`bom_lf.csv` 仍沒有 BOM」，但 `bom_lf.csv` 有 BOM（且是 LF 換行）：編輯後保留 BOM、改為 CRLF。項目 106 改用與 liblouis 預設讀音不同的注音，讓輸出能看出兩條規則都有用到：`tone1.csv` 中的 `中心,ㄓㄨㄥˋㄒㄧㄣ ,Bopomofo`，以及新增 `抹`／`ㄇㄚ`（一聲讀音，輸入時沒有空白）。使用者決定審查 I-1（2026-10-11）之後，項目 106 改用 `auto/item106.py`：`tone1.csv` 含 `中心,ㄓㄨㄥˋㄒㄧㄣ ,Bopomofo` 與 `抹,ㄇㄚ,Bopomofo`（沒有聲調空白），新增先用 `末`／`ㄇㄚ`（被拒絕），再用 `末`／`ㄇㄚ `（被接受）；預期結果見下面表格中的項目 106。項目 105 在「匯入」的檔案對話框關閉後才以不共用方式鎖住檔案：Windows 的檔案對話框不接受沒有人能共用的檔案，實際使用時則是其他程式在輸入名稱時取得檔案。項目 23～29 改用新腳本 `rerun23.py`（23、24）與 `rerun25.py`（25～29），先編輯一列讓「確定」會寫檔；項目 35 使用新的 `item35.py`；項目 44 與 47 執行 F-6 的 `item42.py` 與 `item47.py`，不修改（兩個 build 的記錄除了項目 47 的 `gui.log` 那行中的資料夾名稱之外完全相同）。
 13. **採用 D14（O1 選 (b)，使用者於 2026-10-11 決定）。** 由 Task 6 實作；GUI 項目 106 列入範圍。
 
 ## 審查後的修正（F-11，2026-10-11）
 
 審查（`docs/superpowers/history/2026-10-11-01-f11-dictionary-editor-ux/review_task.md`）發現以下各點；本 spec 描述它們的段落已配合更新。
 
-1. **表頭無法辨識的字典絕不會被清空（審查 M-1）。** 表頭沒有 `text` 欄（Excel 可能寫成 `Text,Braille,Type`，或 `source,braille,type`），或第一行是空行時，每一列都會被讀成沒有來源文字，所以 D1 確認框把它們全部列為隱藏列，「移除並儲存」只寫出表頭、沒有任何資料列。現在當表頭沒有 `text` 欄且至少有一列被隱藏時，`LoadedDictionary.header_recognized` 為 False；模型從讀檔結果取得這個值，為 False 時 `save` 不寫入並拋出 `ValueError`。「確定」先檢查它：顯示字串 12 `無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。`（標題「錯誤」，`wx.OK | wx.ICON_ERROR`；用語沿用匯入的「匯入的檔案必須包含 text、braille 與 type 表頭。」），不寫入，編輯器保持開啟並還原焦點，不論有沒有修改；不顯示 D1 確認框。「取消」照舊（有修改時顯示 D7 確認框）。開啟編輯器不變（清單是空的）。沒有 `text` 欄、也沒有資料列的表頭不會遺失任何東西，所以「確定」照舊儲存（補上必要欄位）。這是最簡單又安全的做法：「確定」中一個檢查、模型中一個防護，不改讀檔的分類（它與 `DictReader` 和轉換一致），也不改開啟編輯器的流程。不採用：拒絕開啟編輯器（要在 frame 與字典管理新增路徑，而轉換本來就拒絕這種檔案），以及在 D1 確認框加一行表頭說明（仍會提議移除每一列）。msgid 380 -> 381。Decided by orchestrator with the recommended default; user may override before merge.
-2. **補上的必要欄位不再覆蓋超出表頭的欄位（審查 M-5）。** 表頭缺少 `text`、`braille`、`type` 其中之一時，寫檔把補上的欄位放在表頭的欄位之後、超出表頭的欄位之前，超出的欄位往右移：`text,braille`／`a,⠁,Bopomofo,extra` 寫成 `text,braille,type`／`a,⠁,General,Bopomofo,extra`（以前是 `a,⠁,General,extra`）。沒有表頭（預設 layout）時，記錄的前幾個欄位仍是 `text`、`braille`、`type`。Decided by orchestrator with the recommended default; user may override before merge.
+1. **表頭無法辨識的字典絕不會被清空（審查 M-1）。** 表頭沒有 `text` 欄（Excel 可能寫成 `Text,Braille,Type`，或 `source,braille,type`），或第一行是空行時，每一列都會被讀成沒有來源文字，所以 D1 確認框把它們全部列為隱藏列，「移除並儲存」只寫出表頭、沒有任何資料列。現在當表頭沒有 `text` 欄且至少有一列被隱藏時，`LoadedDictionary.header_recognized` 為 False；模型從讀檔結果取得這個值，為 False 時 `save` 不寫入並拋出 `ValueError`。「確定」先檢查它：顯示字串 12 `無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。`（標題「錯誤」，`wx.OK | wx.ICON_ERROR`；用語沿用匯入的「匯入的檔案必須包含 text、braille 與 type 表頭。」），不寫入，編輯器保持開啟並還原焦點，不論有沒有修改；不顯示 D1 確認框。「取消」照舊（有修改時顯示 D7 確認框）。開啟編輯器不變（清單是空的）。沒有 `text` 欄、也沒有資料列的表頭不會遺失任何東西，所以「確定」照舊儲存（補上必要欄位）。這是最簡單又安全的做法：「確定」中一個檢查、模型中一個防護，不改讀檔的分類（它與 `DictReader` 和轉換一致），也不改開啟編輯器的流程。不採用：拒絕開啟編輯器（要在 frame 與字典管理新增路徑，而轉換本來就拒絕這種檔案），以及在 D1 確認框加一行表頭說明（仍會提議移除每一列）。msgid 380 -> 381。使用者已接受（2026-10-11）。
+2. **補上的必要欄位不再覆蓋超出表頭的欄位（審查 M-5）。** 表頭缺少 `text`、`braille`、`type` 其中之一時，寫檔把補上的欄位放在表頭的欄位之後、超出表頭的欄位之前，超出的欄位往右移：`text,braille`／`a,⠁,Bopomofo,extra` 寫成 `text,braille,type`／`a,⠁,General,Bopomofo,extra`（以前是 `a,⠁,General,extra`）。沒有表頭（預設 layout）時，記錄的前幾個欄位仍是 `text`、`braille`、`type`。使用者已接受（2026-10-11）。
 3. **D1、D7、「各檔案的設計」、「無障礙」與「風險」也改為描述 `wx.GenericMessageDialog`（審查 M-3）**，與「規劃後的修正（F-11）」3 一致；這些段落原本描述的是 `wx.MessageDialog` 與 task dialog。
 4. **審查修正新增的測試（審查 M-2 與各項修正）：** 隱藏列說明代入去空白後的值、全空欄位的記錄（`,,`）是有行號的隱藏列、焦點在對話框出現前讀取（測試替身的對話框現在會像真的對話框一樣拿走焦點）、寫檔補上的欄位（M-5）、讀檔、模型與編輯器的表頭檢查，以及字串 12（M-1）。`Ran 1553` -> `1564`，`OK (skipped=6)`。
-5. **審查 I-1**（一聲結尾卻沒有聲調空白的列，在一次無關的存檔之前轉換時沒有一聲的點）等待使用者決定；在那之前 O13 不變。
+5. **審查 I-1（一聲結尾卻沒有聲調空白的列顯示為 `ㄇㄚ `，但在一次無關的存檔之前轉換時沒有一聲的點）。使用者於 2026-10-11 決定。** 注音欄只去掉開頭的空白；結尾的空白完全保留檔案中或輸入時的樣子，任何地方都不再補上聲調空白。原樣無法解析的注音（缺少聲調空白、結尾有兩個空白、結尾是 tab）是不合法的：編輯器隱藏它，「確定」時在 D1 確認框列出，轉換忽略它，編輯器與轉換用同一條規則。`ㄇㄚ ` 與 `ㄓㄨㄥˋㄒㄧㄣ ` 仍然合法：會顯示、可以編輯、存檔時位元組不變、轉換與以前相同。詞條對話框不再去掉注音欄結尾的空白，所以沒打空白的 `ㄇㄚ` 會出現原有的「請輸入有效的注音序列。」（沒有新字串）。D13、D14、「規劃後的修正（F-11）」6（O13）、O1、風險、「各檔案的設計」、測試計畫 A6 與 Windows 項目 106 都已更新。catalog 只有 `dialog.py` 的參照行號改變。測試：`Ran 1564` -> `1567`，`OK (skipped=6)`；golden 案例「first-tone Bopomofo rows convert as before」保留有空白的列、去掉沒有空白的列，另新增兩個案例（最後一個音節後面還有空白；開頭有空白）。`translation_golden.json`、`translation_liblouis_golden.json` 與 `dictionary_entries_trace.json` 不變：它們都沒有結果會改變的注音列。
 
 ## 現況（2026-10-11 在 `main` `1ce6ce5`、worktree `D:\workspace\DotExpress-f11`、`HEAD:client` `a64da653` 上確認）
 
@@ -255,26 +255,27 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 
 **D13. 轉換忽略編輯器隱藏的列（U6、#8）。**
 
-- 在 `LoadedDictionaryRules.from_paths` 中，以下情況跳過該列：`source.strip()` 為空；或 `type_ == "Bopomofo"` 且 `processing(target.strip())` 拋出例外。
+- 在 `LoadedDictionaryRules.from_paths` 中，以下情況跳過該列：`source.strip()` 為空；或 `type_ == "Bopomofo"` 且 `processing(target.lstrip())` 拋出例外（只去掉開頭的空白，D14；使用者於 2026-10-11 決定）。
 - `type_` 是原始類型。編輯器的 `normalize_entry_type` 只把完全相同的字串 `Bopomofo` 當成注音，兩者一致。
-- `processing` 是注入的解析器，正式環境是 `normalize_zhuyin_sequence`。所以 `dictionary_rules.py` 仍不 import `dictionaries`，而判斷結果等於對去空白後的值執行 `_is_editable`。
+- `processing` 是注入的解析器，正式環境是 `normalize_zhuyin_sequence`。所以 `dictionary_rules.py` 仍不 import `dictionaries`，而判斷結果等於對編輯器顯示的值執行 `_is_editable`。
 - 一致性測試確認：對一組語料，「用 `normalize_zhuyin_sequence` 轉換時被跳過」等於「被 `load_dictionary_rows` 隱藏」（測試計畫 F）。
-- 留下來的列，轉換方式與現在完全相同（原始來源、原始目標；`processing(target)` 對原始值拋出例外時，同樣走 fallback）。只有隱藏列會改變輸出。
+- 留下來的列以原始來源與原始目標轉換；`Bopomofo` 列以 `processing(target.lstrip())`（編輯器顯示的注音）轉換，沒有 fallback（「規劃後的修正（F-11）」6，使用者於 2026-10-11 決定）。原始值能解析的列轉換結果與以前完全相同；隱藏列與開頭有空白的注音列會改變輸出。
 - golden 案例「Bopomofo row with a processing that raises」翻轉：這列現在被跳過。
 - `translation_golden.json` 不受影響：它唯一的字典列是合法的。
 
-**D14. 最後一個音節是一聲（O1 選 (b)，使用者於 2026-10-11 決定）。**
+**D14. 最後一個音節是一聲（O1 選 (b)，使用者於 2026-10-11 決定；下面的規則是使用者在審查 I-1 之後於 2026-10-11 決定的）。**
 
-使用者選擇 O1 的 (b)（2026-10-11）：
+使用者選擇 O1 的 (b)（2026-10-11）。D14 的第一版會先去空白，只有加上聲調空白才能解析時再補回空白；審查 I-1 之後，使用者把它改成（2026-10-11）：
 
-- `Bopomofo` 列的標準注音是 `braille.strip()`；
-- 若它無法解析，但 `braille.strip() + " "` 可以，標準注音就是 `braille.strip() + " "`，也就是保留最後的一聲空白；
-- 這套規則用在讀檔的分類與值、`validate_dictionary_entry` 與 `AddSymbolDialog.get_entry`，以及 D13 的跳過判斷。
+- `Bopomofo` 列的標準注音是 `braille.lstrip()`：只去掉開頭的空白，結尾的空白完全保留檔案中或輸入時的樣子；
+- 這個注音原樣能解析，這列才合法；任何地方都不補上聲調空白；
+- 這套規則用在讀檔的分類與值、`validate_dictionary_entry` 與 `AddSymbolDialog.get_braille`，以及 D13 的跳過判斷（轉換的也是同一個注音）。來源文字與其他類型照舊去掉前後的空白。
 
 效果：
 
-- 這類列會顯示、可以編輯、存檔時保留聲調空白，轉換與現在相同；
-- 在詞條對話框輸入 `ㄓㄨㄥ ㄒㄧㄣ` 會被接受，存成 `ㄓㄨㄥ ㄒㄧㄣ `。
+- 有聲調空白的列（`中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`、`媽,ㄇㄚ ,Bopomofo`）會顯示、可以編輯、存檔時位元組不變，轉換與現在相同；
+- 沒有聲調空白的列（`抹,ㄇㄚ,Bopomofo`），或最後一個音節後面還有空白的列（`ㄇㄚ  `、`ㄉㄨˋㄗ˙ `、tab 或 U+3000），是不合法的：會被隱藏，在 D1 確認框中以「格式不正確」列出，「移除並儲存」時被刪除，轉換也忽略它們；
+- 在詞條對話框輸入有空白的 `ㄓㄨㄥ ㄒㄧㄣ ` 會被接受，照輸入的樣子儲存；沒有空白的 `ㄓㄨㄥ ㄒㄧㄣ` 或 `ㄇㄚ` 會出現原有的「請輸入有效的注音序列。」（沒有新字串）。
 
 未採用的 (a) 會拿掉 D14：這類列會維持隱藏，在 D1 的確認框中以「格式不正確」列出，「移除並儲存」時被刪除，轉換也忽略它們。
 
@@ -320,7 +321,7 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 - `PreservedDictionaryRow` 新增 `line: int = field(default=0, compare=False)`、`fields: tuple[str, ...] = field(default=(), compare=False)`，以及 `reason` property（`"no_source_text"` 或 `"invalid_bopomofo"`）。`DictionaryEntry` 新增 `fields`（`compare=False`、`repr=False`）。
 - `load_dictionary_file(path)`（D6）。`load_dictionary_rows` 回傳 `load_dictionary_file(path).rows`。`load_dictionary_entries` 不變。
 - `save_dictionary_entries(path, entries, layout=DictionaryLayout())`（D5）。使用預設 layout 時，詞條寫出的位元組與現在完全相同，所以沒傳 layout 的呼叫端輸出不變。
-- D14：`canonical_bopomofo(braille) -> str | None`，供 `_is_editable`、讀檔與 `validate_dictionary_entry` 使用。
+- D14：`canonical_bopomofo(braille) -> str | None`（`braille.lstrip()` 原樣能解析時傳回它，否則 `None`；使用者於 2026-10-11 決定），供 `_is_editable`、讀檔與 `validate_dictionary_entry` 使用。`AddSymbolDialog.get_braille` 對注音欄只去掉開頭的空白。
 - `LoadedDictionary.header_recognized`；寫檔把補上的欄位放在超出表頭的欄位之前（「審查後的修正（F-11）」1、2）。
 
 ### `client/dictionaries/entry_list_model.py`（tab）
@@ -363,7 +364,7 @@ F-4 的 D5 由 `tests/test_dictionary_entry_list_model.py` 的 `test_add_or_repl
 
 ### `client/conversion/text/dictionary_rules.py`（4 個空白）
 
-- `from_paths` 中 D13 的跳過判斷。docstring 註明規則與編輯器相同。
+- `from_paths` 中 D13 的跳過判斷：`processing(target.lstrip())`，拋出例外就略過該列，沒有 fallback（使用者於 2026-10-11 決定）。docstring 註明規則與編輯器相同。
 
 ### Catalog
 
@@ -451,7 +452,7 @@ TDD：每一步的測試先寫，並因預期的原因失敗。縮排依各檔�
    - 預設 layout 寫出現在的位元組；
    - 隱藏列永遠不寫出。
 5. `PreservedDictionaryRow.reason`：空白文字、只有空白的文字、不合法的注音。
-6. （D14）`canonical_bopomofo`：`ㄇㄚ` 變成 `ㄇㄚ `、`ㄇㄚ ` 不變、`ㄉㄨˋㄗ˙` 不變、`ㄉㄨˋ|ㄗ˙` 為 `None`。讀檔時會顯示 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`。
+6. （D14，使用者於 2026-10-11 決定）`canonical_bopomofo`：`ㄇㄚ ` 不變、` ㄇㄚ ` 變成 `ㄇㄚ `、`ㄉㄨˋㄗ˙` 不變；`ㄇㄚ`、`ㄇㄚ  `、`ㄉㄨˋㄗ˙ ` 與 `ㄉㄨˋ|ㄗ˙` 為 `None`（不補任何東西）。讀檔時會顯示 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`，沒有修改的存檔保留它的位元組；`抹,ㄇㄚ,Bopomofo` 被隱藏。
 
 ### B. 模型（`tests/test_dictionary_entry_list_model.py`）
 
@@ -602,7 +603,7 @@ build 與 process 規則同 F-9：
 | 103 | `dict_badbopo`：新增 `肚子`／`ㄉㄨˋㄗ˙`／注音；按確定；移除並儲存 | 新增被接受；D1 對話框列出第 3、4 列；檔案為 `臺北` 與新的 `肚子,ㄉㄨˋㄗ˙,Bopomofo` | 新增被拒絕（F-4 D5） |
 | 104 | 在設定選 `alpha`；字典管理中改名為 `Alpha` | 沒有訊息；清單顯示 `Alpha` 並選取；`dictionary\Alpha.csv`；`config.json` 的 `selected_dictionary` 為 `Alpha`；轉換仍使用它 | 字典「Alpha」已存在。 |
 | 105 | 以 share-none 鎖住 `src.csv`（`lock.py`）；匯入它 | `匯入字典失敗：無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。`；`dictionary\` 中沒有新檔案 | `[Errno 13] Permission denied: ...` |
-| 106 | （D14；plan 使用的資料見「規劃後的修正（F-11）」12）`tone1.csv` 含 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`；開啟；新增 `媽`／`ㄇㄚ`；按確定 | 那一列有顯示；新增被接受；檔案含 `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo` 與 `媽,ㄇㄚ ,Bopomofo`；轉換 `中心媽` 兩條都用到 | 那一列被隱藏；新增出現格式錯誤 |
+| 106 | （D14，依使用者 2026-10-11 的決定；`auto/item106.py`，「規劃後的修正（F-11）」12）`tone1.csv` 含 `中心,ㄓㄨㄥˋㄒㄧㄣ ,Bopomofo` 與 `抹,ㄇㄚ,Bopomofo`；轉換 `中心抹末`；開啟；新增 `末`／`ㄇㄚ`，再新增 `末`／`ㄇㄚ `；按確定、返回編輯；按確定、移除並儲存；再轉換一次 | 有空白的那一列有顯示，沒有空白的被隱藏；第一次轉換用到 `中心`、沒有用到 `抹`（預設讀音）；`ㄇㄚ` 出現格式錯誤，`ㄇㄚ ` 被接受；按確定列出 `第 3 列：「抹」的注音「ㄇㄚ」格式不正確`；返回編輯時檔案不變；移除並儲存後檔案含 `中心,ㄓㄨㄥˋㄒㄧㄣ ,Bopomofo` 與 `末,ㄇㄚ ,Bopomofo`；第二次轉換用到 `中心` 與 `末` | 兩列都被隱藏；兩次新增都出現格式錯誤；按確定時沒有確認框、編輯器關閉、檔案不變；兩次轉換都用到 `中心` 與 `抹`（經由 fallback，`⠍⠜`） |
 | 108 | （審查 M-1，審查修正新增）`caps.csv`（`Text,Braille,Type`／兩列）與 `blank1.csv`（第一行空白、`text,braille,type`、一列）：分別開啟；按確定；新增 `戊己`／`⠑⠋`，按確定；取消、放棄變更 | 清單是空的；每次按確定：錯誤框 `無法儲存字典「caps」：無法辨識檔案的表頭。…`，owner 是編輯器，沒有 D1 確認框，編輯器保持開啟，檔案的位元組與修改時間不變，焦點回到「確定」；新增後按取消：D7 確認框；放棄變更後關閉；檔案不變，字典管理 `0` | 按確定就關閉編輯器並把檔案改寫成 `text,braille,type` 與每列一個 `,,`（各列的值不見了）；新增後是 `,,`／`,,`／`戊己,⠑⠋,General`，筆數 `1` |
 
 以新的預期重跑（需要寫檔時，腳本先做一次修改）：
@@ -624,7 +625,7 @@ F-6 的項目 42～51 不變；因為編輯器改為先讀檔，重跑 44 與 47
 ## 風險
 
 - **既有字典的轉換結果改變**（中，U6 的本意）。只有空白的規則與不合法的注音規則不再生效。下次按「確定」時，D1 確認框會列出它們。發布說明應提到這點。
-- **最後一個音節是一聲的列（O1，已決定 (b)）**（低）。(b) 讓這類列維持顯示並用於轉換；唯一的行為改變是詞條對話框接受沒有最後空白的注音，並存成有空白的形式。
+- **最後一個音節是一聲的列（O1，已決定 (b)；審查 I-1 由使用者於 2026-10-11 決定）**（低）。有聲調空白的列照舊顯示並用於轉換。存檔時沒有聲調空白、或最後一個音節後面還有空白的列，以前經由 fallback 成為規則；現在會被隱藏、按「確定」時列出、轉換忽略它們，所以它們的轉換結果會改變。開頭有空白的列，現在轉換時不再把那些空白當成符號。詞條對話框會拒絕沒有聲調空白、或聲調符號後面還有空白的注音。版本說明應該寫出這些改變。
 - **trace 重播是調整過的，不是重新錄製**（低）。重播會拿掉並回答 D1 確認框的記錄。這個調整若有錯，可能掩蓋 OK 步驟的退化。測試 C3 另外單獨檢查 OK 步驟。
 - **選取規則分成兩種**（低）。新增／取代後用 identity，刪除／篩選後用相等。只有完全相同的列時才有差別。保留相等是因為 golden trace 固定了它（探針 1）。
 - **`csv.reader` 的一致性**（低）。與 `DictReader` 不一致會改變哪些列被隱藏。測試 A3 對每份語料比對兩者。
@@ -639,7 +640,8 @@ F-6 的項目 42～51 不變；因為編輯器改為先讀檔，重跑 44 與 47
 - **O1. 最後一個音節是一聲的注音列。使用者於 2026-10-11 決定：(b)。** 現在編輯器會隱藏它們，因為去空白把聲調空白也去掉了（探針 4）。轉換會使用它們。詞條對話框無法輸入它們。依目前寫下的 U1 與 U6：
   - **(a)** 轉換開始忽略它們，按「確定」時以「格式不正確」列出等待移除；
   - **(b)（建議）** 去空白時保留最後的一聲空白（D14）。它們會顯示、可以編輯、存檔時保留空白、轉換與現在相同；輸入時沒打最後的空白也會被接受。
-  plan 實作 (b)（D14，plan 的 Task 6）；GUI 項目 106 列入範圍。
+  plan 實作 (b)（D14，plan 的 Task 6）；GUI 項目 106 列入範圍。審查 I-1 之後，使用者決定（2026-10-11）只去掉開頭的空白：聲調空白必須在檔案中或由使用者輸入，沒有聲調空白的列不合法（D14）。
+- **O13. 轉換使用哪些注音列、用哪個值（plan 新增）。使用者於 2026-10-11 決定（審查 I-1）：** 正好是編輯器顯示的列，以編輯器顯示的注音（`target.lstrip()`）轉換，沒有 fallback。plan 的預設（先解析原始值，編輯器會顯示的列保留 fallback）不再使用（「規劃後的修正（F-11）」6）。
 - **O12. 兩個確認框（規劃時發現）。使用者於 2026-10-11 決定：使用傳統對話框（`wx.GenericMessageDialog`）。** 從編輯器顯示時，使用自訂按鈕文字的原生 task dialog 會把 Alt+F4 當成按下「確定」（「規劃後的修正（F-11）」3）。硬性要求：Esc、Alt+F4 與關閉鈕絕不能觸發「移除並儲存」或「放棄變更」。
 
 **協調者依建議預設決定；使用者可在 merge 前推翻：**
@@ -654,7 +656,6 @@ F-6 的項目 42～51 不變；因為編輯器改為先讀檔，重跑 44 與 47
 - **O9.** 寫檔時換行維持 CRLF、引號維持最少（D5）。使用者只決定了 BOM。
 - **O10.** 刪除與篩選後的選取維持相等比對（D9）。
 - **O11.** 檔案不存在時，沒修改按「確定」不再建立它（D4）。
-- **O13.**（plan 新增）轉換照舊先解析注音列的原始值，只有失敗時才套用編輯器的判斷；保留的列轉換結果與以前完全相同（「規劃後的修正（F-11）」6）。
 
 ## 本 spec 新引入的使用者可見預設（不是使用者的決定）
 
@@ -670,8 +671,8 @@ F-6 的項目 42～51 不變；因為編輯器改為先讀檔，重跑 44 與 47
 8. **編輯器的一般失敗訊息** `無法開啟字典編輯器：{error}`（D12）。
 9. **接受編輯分身**（O6），以及**新增／取代後以 identity 選取**（D9）。
 10. **「移除並儲存」失敗後再問一次**（O4）。
-11. **表頭無法辨識的字典，「確定」不儲存：** 顯示字串 12，編輯器保持開啟（「審查後的修正（F-11）」1）。
-12. **寫檔補上必要欄位時，超出表頭的欄位往右移**（「審查後的修正（F-11）」2）。
+11. **表頭無法辨識的字典，「確定」不儲存：** 顯示字串 12，編輯器保持開啟（「審查後的修正（F-11）」1）。使用者已接受（2026-10-11）。
+12. **寫檔補上必要欄位時，超出表頭的欄位往右移**（「審查後的修正（F-11）」2）。使用者已接受（2026-10-11）。
 
 ## 範圍外／後續項目
 

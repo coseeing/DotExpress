@@ -81,6 +81,9 @@ ODD_RECORDS_CSV = (
 	" \r\n"
 	"\u809a\u5b50,\u3109\u3128\u02cb|\u3117\u02d9,Bopomofo\r\n"
 ).encode("utf-8")
+# Records of empty fields around an entry and a blank line: csv.DictReader reads each as a
+# row (F-11 D6; review M-2 b).
+EMPTY_FIELDS_CSV = b"text,braille,type\r\n,,\r\nAlpha,x,General\r\n\r\n,,,\r\n"
 # A column named twice: csv.DictReader reads the last position, so the second row has no
 # source text.
 TWICE_CSV = "text,braille,type,text\r\nAlpha,\u2801,General,Alpha2\r\nBeta,\u2803,General\r\n".encode("utf-8")
@@ -415,6 +418,16 @@ class DictionaryLayoutTest(unittest.TestCase):
 			[(4, ""), (5, 'q,"x"'), (9, " "), (10, "\u809a\u5b50")],
 		)
 
+	def test_a_record_of_empty_fields_is_a_hidden_row_on_its_line(self) -> None:
+		# csv.DictReader gives ",," a row whose fields are "" (review M-2 b); only a blank line is skipped.
+		rows = self.load(EMPTY_FIELDS_CSV).rows
+
+		self.assertEqual(len(rows), 3)
+		self.assertEqual(
+			[(row.line, row.fields) for row in rows if isinstance(row, PreservedDictionaryRow)],
+			[(2, ("", "", "")), (5, ("", "", "", ""))],
+		)
+
 	def test_rows_keep_every_field_of_their_record(self) -> None:
 		rows = self.load(ODD_RECORDS_CSV).rows
 
@@ -444,6 +457,7 @@ class DictionaryLayoutTest(unittest.TestCase):
 			"LF and quotes": 'text,braille,type\n"Alpha",\u2801,General\nZhuyin,invalid,Bopomofo\n'.encode("utf-8"),
 			"no type column": b"text,braille\r\nAlpha,x\r\n",
 			"empty": b"",
+			"records of empty fields": EMPTY_FIELDS_CSV,
 		}
 		with tempfile.TemporaryDirectory() as temp_dir:
 			path = Path(temp_dir) / "sample.csv"

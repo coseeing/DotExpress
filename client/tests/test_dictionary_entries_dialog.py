@@ -320,6 +320,12 @@ class _ScriptedEntryDialog:
         return self._entry
 
 
+# What wx.Window.FindFocus returns after a box: a box takes the keyboard focus while it is
+# shown and Windows does not always give it back, so the editor reads the focus before the
+# box (F-11 D7; review M-2 c).
+_BOX_BUTTON = object()
+
+
 def _skip_fsync(_descriptor: int) -> None:
     """Stand-in for ``os.fsync`` while an editor is open; see ``_EditorHarness.open``."""
 
@@ -457,11 +463,13 @@ class _EditorHarness:
     def _message_box(self, message: str, caption: str, style: int, parent=None) -> int:
         self.record("MessageBox", message, caption, style)
         self.message_box_parents.append(parent)
+        self.focus = _BOX_BUTTON
         return FLAGS.OK
 
     def _confirm_box(self, message: str, caption: str, ok_label: str, cancel_label: str, parent=None) -> bool:
         self.record("ConfirmBox", message, caption, ok_label, cancel_label)
         self.confirm_parents.append(parent)
+        self.focus = _BOX_BUTTON
         if not self.confirm_answers:
             raise AssertionError("a confirmation box opened without a scripted answer")
         return self.confirm_answers.pop(0)
@@ -1699,6 +1707,22 @@ class DictionaryEntriesDialogOkTest(_EditorTestCase):
         self.assertTrue(harness.press_ok())
         self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
 
+    def test_a_failed_save_puts_the_focus_back_where_it_was_before_the_message(self) -> None:
+        # Without hidden rows too: the focus is read before any box (F-11 D7; review M-2 c).
+        harness = self.open_editor([ALPHA])
+        harness.script_entry("Beta", "\u2803")
+        harness.click("Add")
+        harness.focus = harness.ok_button
+        harness.take_log()
+
+        with patch("os.replace", side_effect=PermissionError(13, "denied")):
+            self.assertFalse(harness.press_ok())
+
+        self.assertEqual(
+            harness.take_log(),
+            [["MessageBox", "\u5132\u5b58\u5931\u6557\uff1a[Errno 13] denied", ERROR_TITLE, ERROR_FLAGS], ["SetFocus", "ok"]],
+        )
+
     def test_dictionary_without_write_access_shows_the_message_and_keeps_the_file(self) -> None:
         # A read-only dictionary failed in the old in-place open("w"); the atomic save
         # keeps that verdict and its message instead of renaming over the file.
@@ -1826,6 +1850,20 @@ class DictionaryEntriesDialogHiddenRowsTest(_EditorTestCase):
         harness.press_ok()
 
         self.assertEqual(harness.take_log(), [_hidden_rows_box("dictionary", _no_source_text(4), _no_source_text(5))])
+
+    def test_a_row_line_shows_the_stripped_source_text_and_sequence(self) -> None:
+        # D1: spaces around the fields are not shown (review M-2 a; the S6 probe's row).
+        data = (HEADER + " \u809a\u5b50 , \u3109\u3128\u02cb|\u3117\u02d9 ,Bopomofo\r\n").encode("utf-8")
+        harness = self.open_editor(data=data)
+        harness.take_log()
+        harness.script_confirm(False)
+
+        harness.press_ok()
+
+        self.assertEqual(
+            harness.take_log(),
+            [_hidden_rows_box("dictionary", _invalid_bopomofo(2, "\u809a\u5b50", "\u3109\u3128\u02cb|\u3117\u02d9"))],
+        )
 
     def test_at_most_ten_hidden_rows_are_listed(self) -> None:
         for count, listed, other in ((10, 10, None), (11, 10, "\u53e6\u6709 1 \u5217\u672a\u5217\u51fa"), (13, 10, "\u53e6\u6709 3 \u5217\u672a\u5217\u51fa")):

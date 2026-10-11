@@ -849,15 +849,33 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
 
         self.assertEqual(harness.take_log(), [["Dialog.__init__", TITLE, DIALOG_STYLE]])
 
-    def test_bom_dictionary_opens_with_its_rows_and_ok_saves_them_without_the_bom(self) -> None:
+    def test_bom_dictionary_opens_with_its_rows_and_ok_after_a_change_keeps_the_bom(self) -> None:
         # Was the P2-2 Q1 KNOWN BUG (data loss), fixed by F-2: the BOM made the header
-        # "\ufefftext", the editor showed no rows and OK wrote the header only.
+        # "\ufefftext", the editor showed no rows and OK wrote the header only. Since F-11
+        # (D5) the BOM is kept (F-2 to F-9 wrote the file without it).
         harness = self.open_editor(data=b"\xef\xbb\xbftext,braille,type\r\nAlpha,\xe2\xa0\x81,General\r\n")
+        harness.script_entry(*BETA)
+        harness.click("Add")
 
-        self.assertEqual(harness.rows(), [ALPHA_CELLS])
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS])
         self.assertTrue(harness.press_ok())
-        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\n")
-        self.assertFalse(harness.path.read_bytes().startswith(b"\xef\xbb\xbf"))
+        self.assertEqual(harness.saved_csv(), "\ufeff" + HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
+
+    def test_ok_after_a_change_keeps_the_header_and_the_extra_columns(self) -> None:
+        # F-11 (D5): "note" was dropped. The edited row keeps its note (O5), the new one has none.
+        data = "text,note,braille,type\r\nAlpha,first,\u2801,General\r\nBeta,second,\u2803,General\r\n".encode("utf-8")
+        harness = self.open_editor(data=data)
+        harness.select(1)
+        harness.script_entry("Beta", "\u2803\u2803")
+        harness.click("Edit")
+        harness.script_entry("Gamma", "\u281b", "Braille")
+        harness.click("Add")
+
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(
+            harness.saved_csv(),
+            "text,note,braille,type\r\nAlpha,first,\u2801,General\r\nBeta,second,\u2803\u2803,General\r\nGamma,,\u281b,Braille\r\n",
+        )
 
     def test_only_ok_gets_a_handler_and_both_standard_buttons_are_localized(self) -> None:
         harness = self.open_editor([ALPHA])

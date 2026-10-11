@@ -273,6 +273,18 @@ class ReplaceTest(_ModelTestCase):
 		self.assertEqual(update, EntryListUpdate(2))
 		self.assertSameObjects(self.model.entries, [self.alpha, self.alpine, bravo])
 
+	def test_replacement_gets_the_fields_of_the_replaced_row_and_a_new_entry_has_none(self) -> None:
+		# F-11 (D5, O5): an edited row keeps its extra columns; the entry dialog gives none.
+		self.alpine.fields = ("Alpine", "note", "\u2801\u2807", "General")
+		bravo, gamma = _entry("Bravo", "\u2803\u2817"), _entry("Gamma", "\u281b")
+
+		self.model.replace(1, bravo)
+		self.model.add(gamma)
+
+		self.assertEqual(self.model.entries[1].fields, ("Alpine", "note", "\u2801\u2807", "General"))
+		self.assertIs(self.model.entries[1], bravo)
+		self.assertEqual(gamma.fields, ())
+
 	def test_same_text_is_accepted(self) -> None:
 		changed = _entry("Alpha", "\u2801\u2801", "Braille")
 
@@ -477,6 +489,20 @@ class LoadSaveTest(unittest.TestCase):
 		DictionaryEntryListModel.load(source).save(target)
 
 		self.assertEqual(target.read_bytes(), MIXED_CSV_SAVED)
+
+	def test_save_keeps_the_bom_header_and_extra_columns_of_the_loaded_file(self) -> None:
+		# F-11 (D5): the layout comes from the load; a new entry gets empty extra fields.
+		path = self.directory / "excel.csv"
+		path.write_bytes(b"\xef\xbb\xbf" + "text,note,braille,type\r\nAlpha,first,\u2801,General\r\n".encode("utf-8"))
+		model = DictionaryEntryListModel.load(path)
+		model.add(_entry("Beta", "\u2803"))
+
+		model.save(path)
+
+		self.assertEqual(
+			path.read_bytes(),
+			b"\xef\xbb\xbf" + "text,note,braille,type\r\nAlpha,first,\u2801,General\r\nBeta,,\u2803,General\r\n".encode("utf-8"),
+		)
 
 
 class ImportGuardTest(unittest.TestCase):

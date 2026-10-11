@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from conversion.text.dictionary_rules import LoadedDictionaryRules
+from dictionaries import entries as entries_module
 from dictionaries.entries import (
 	DictionaryEntry,
 	PreservedDictionaryRow,
@@ -14,6 +15,7 @@ from dictionaries.entries import (
 	save_dictionary_entries,
 	validate_dictionary_entry,
 )
+from tests.unreadable_dictionary_files import FIELD_LIMIT, LATE_BIG5
 from text.zhuyin import normalize_zhuyin_sequence
 
 BOPOMOFO_DATA = Path(__file__).resolve().parents[1] / "data" / "Bopomofo2Braille.csv"
@@ -56,6 +58,62 @@ MIXED_ROWS = [
 # What saving MIXED_ROWS writes: the same bytes, except that the row with a missing
 # field gets its empty third field.
 MIXED_CSV_SAVED = MIXED_CSV.replace(",\u2803\r\n".encode("utf-8"), ",\u2803,\r\n".encode("utf-8"))
+BOM = b"\xef\xbb\xbf"
+# A dictionary kept in Excel (F-11 D5): a BOM, a column of notes between the required
+# ones, CRLF. The writer keeps all three.
+EXTRA_CSV = BOM + (
+	"text,note,braille,type\r\n"
+	"Alpha,first,\u2801,General\r\n"
+	"Beta,,\u2803,General\r\n"
+).encode("utf-8")
+# Records the loader reads differently from a plain table (F-11 D6, probe 5): a blank
+# line, a quoted field over two lines, a short row, an overflow field, a whitespace-only
+# line.
+ODD_RECORDS_CSV = (
+	"text,braille,type\r\n"
+	"Alpha,\u2801,General\r\n"
+	"\r\n"
+	",\u2803,General\r\n"
+	'"q,""x""","a\r\nb",Bopomofo\r\n'
+	"short\r\n"
+	"Beta,\u2803,General,overflow\r\n"
+	" \r\n"
+	"\u809a\u5b50,\u3109\u3128\u02cb|\u3117\u02d9,Bopomofo\r\n"
+).encode("utf-8")
+# A column named twice: csv.DictReader reads the last position, so the second row has no
+# source text.
+TWICE_CSV = "text,braille,type,text\r\nAlpha,\u2801,General,Alpha2\r\nBeta,\u2803,General\r\n".encode("utf-8")
+
+
+def _dictreader_rows(path: Path) -> list:
+	"""The loader before F-11 (csv.DictReader), verbatim: the oracle of the parity tests."""
+	if not path.exists():
+		return []
+
+	rows = []
+	with path.open("r", newline="", encoding="utf-8-sig") as fp:
+		reader = csv.DictReader(fp)
+		for row in reader:
+			entry = DictionaryEntry(
+				text=(row.get("text") or "").strip(),
+				braille=(row.get("braille") or "").strip(),
+				entry_type=normalize_entry_type(row.get("type")),
+			)
+			if entries_module._is_editable(entry):
+				rows.append(entry)
+			else:
+				rows.append(
+					PreservedDictionaryRow(
+						text=row.get("text") or "",
+						braille=row.get("braille") or "",
+						entry_type=row.get("type") or "",
+					)
+				)
+	return rows
+
+
+def _values(rows) -> list:
+	return [(type(row).__name__, row.text, row.braille, row.entry_type) for row in rows]
 
 
 class NormalizeEntryTypeTest(unittest.TestCase):
@@ -228,6 +286,22 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 		self.assertEqual(after, before)
 		self.assertIn("\u809a\u5b50", [source for source, _replacement in before.replacement_rules])
 
+	def test_rows_carry_their_record_and_entries_still_compare_by_value(self) -> None:
+		# F-11 (D6): the record's fields and the start line are kept, outside equality.
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			path.write_bytes(MIXED_CSV)
+
+			rows = load_dictionary_rows(path)
+
+		self.assertEqual(rows, MIXED_ROWS)
+		self.assertEqual(rows[0].fields, ("Alpha", "\u2801", "General"))
+		self.assertEqual(rows[5].fields, ("", "\u2803"))
+		self.assertEqual(rows[6].fields, ('q,"x"', "a\r\nb", "Bopomofo"))
+		self.assertEqual([row.line for row in rows if isinstance(row, PreservedDictionaryRow)], [3, 4, 5, 6, 7, 8])
+		self.assertEqual(DictionaryEntry("Alpha", "\u2801", "General", ("x",)), DictionaryEntry("Alpha", "\u2801", "General"))
+		self.assertNotIn("fields", repr(rows[0]))
+
 	def test_a_preserved_row_is_never_equal_to_an_entry(self) -> None:
 		# The model removes and reselects entries by equality; a hidden row must never match.
 		preserved = PreservedDictionaryRow("Alpha", "\u2801", "General")
@@ -236,6 +310,186 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 		self.assertNotEqual(preserved, entry)
 		self.assertNotEqual(entry, preserved)
 		self.assertEqual([entry].count(preserved), 0)
+
+
+class DictionaryLayoutTest(unittest.TestCase):
+	"""The loader records what the writer keeps of the file (F-11 D5, D6)."""
+
+	def load(self, data: bytes | None):
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			if data is not None:
+				path.write_bytes(data)
+			return entries_module.load_dictionary_file(path)
+
+	def test_layout_records_the_bom_and_the_header_as_read(self) -> None:
+		cases = (
+			("no BOM", b"text,braille,type\r\nAlpha,x,General\r\n", False, ("text", "braille", "type")),
+			("BOM and an extra column", EXTRA_CSV, True, ("text", "note", "braille", "type")),
+			("a column named twice", TWICE_CSV, False, ("text", "braille", "type", "text")),
+			("no type column", b"text,braille\r\nAlpha,x\r\n", False, ("text", "braille")),
+			("an empty file", b"", False, ()),
+			("only a BOM", BOM, True, ()),
+			("a blank first line", b"\r\ntext,braille,type\r\n", False, ()),
+		)
+		for name, data, has_bom, header in cases:
+			with self.subTest(name):
+				self.assertEqual(self.load(data).layout, entries_module.DictionaryLayout(has_bom, header))
+
+	def test_a_missing_file_has_no_rows_and_the_default_layout(self) -> None:
+		loaded = self.load(None)
+
+		self.assertEqual(loaded.rows, ())
+		self.assertEqual(loaded.layout, entries_module.DictionaryLayout(False, ()))
+
+	def test_hidden_rows_record_the_line_on_which_their_record_starts(self) -> None:
+		# The header is line 1; a blank line is skipped but counted; a quoted field over two
+		# lines makes the next record start two lines later (probe 5).
+		rows = self.load(ODD_RECORDS_CSV).rows
+
+		self.assertEqual(
+			[(row.line, row.text) for row in rows if isinstance(row, PreservedDictionaryRow)],
+			[(4, ""), (5, 'q,"x"'), (9, " "), (10, "\u809a\u5b50")],
+		)
+
+	def test_rows_keep_every_field_of_their_record(self) -> None:
+		rows = self.load(ODD_RECORDS_CSV).rows
+
+		self.assertEqual(
+			[row.fields for row in rows],
+			[
+				("Alpha", "\u2801", "General"),
+				("", "\u2803", "General"),
+				('q,"x"', "a\r\nb", "Bopomofo"),
+				("short",),
+				("Beta", "\u2803", "General", "overflow"),
+				(" ",),
+				("\u809a\u5b50", "\u3109\u3128\u02cb|\u3117\u02d9", "Bopomofo"),
+			],
+		)
+
+	def test_values_and_classes_equal_those_of_dictreader(self) -> None:
+		# A column named twice takes the value of its last position, a missing field is "",
+		# blank records are skipped, the first record is the header even when it is blank.
+		corpora = {
+			"MIXED_CSV": MIXED_CSV,
+			"DICT_BADBOPO": DICT_BADBOPO,
+			"EXTRA_CSV": EXTRA_CSV,
+			"ODD_RECORDS_CSV": ODD_RECORDS_CSV,
+			"TWICE_CSV": TWICE_CSV,
+			"blank first line": b"\r\ntext,braille,type\r\nAlpha,x,General\r\n",
+			"LF and quotes": 'text,braille,type\n"Alpha",\u2801,General\nZhuyin,invalid,Bopomofo\n'.encode("utf-8"),
+			"no type column": b"text,braille\r\nAlpha,x\r\n",
+			"empty": b"",
+		}
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			for name, data in corpora.items():
+				with self.subTest(name):
+					path.write_bytes(data)
+
+					self.assertEqual(_values(load_dictionary_rows(path)), _values(_dictreader_rows(path)))
+
+	def test_read_errors_equal_those_of_dictreader(self) -> None:
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			for name, data in (("late Big5", LATE_BIG5), ("field limit", FIELD_LIMIT)):
+				with self.subTest(name):
+					path.write_bytes(data)
+					with self.assertRaises(Exception) as expected:
+						_dictreader_rows(path)
+
+					with self.assertRaises(type(expected.exception)) as actual:
+						load_dictionary_rows(path)
+
+					self.assertEqual(str(actual.exception), str(expected.exception))
+
+
+class DictionaryWriterLayoutTest(unittest.TestCase):
+	"""The writer keeps the BOM, the header and the extra fields of the file (F-11 D5)."""
+
+	def save(self, rows, layout=None) -> bytes:
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			if layout is None:
+				save_dictionary_entries(path, rows)
+			else:
+				save_dictionary_entries(path, rows, layout)
+			return path.read_bytes()
+
+	def round_trip(self, data: bytes) -> bytes:
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "sample.csv"
+			path.write_bytes(data)
+			loaded = entries_module.load_dictionary_file(path)
+			save_dictionary_entries(path, loaded.rows, loaded.layout)
+			return path.read_bytes()
+
+	def test_bom_is_kept_and_never_added(self) -> None:
+		alpha = DictionaryEntry("Alpha", "\u2801", "General")
+		with_bom = self.save([alpha], entries_module.DictionaryLayout(True, ("text", "braille", "type")))
+		without = self.save([alpha], entries_module.DictionaryLayout(False, ("text", "braille", "type")))
+
+		self.assertEqual(with_bom, BOM + "text,braille,type\r\nAlpha,\u2801,General\r\n".encode("utf-8"))
+		self.assertEqual(without, "text,braille,type\r\nAlpha,\u2801,General\r\n".encode("utf-8"))
+
+	def test_an_unchanged_file_with_a_bom_and_an_extra_column_is_written_back_byte_for_byte(self) -> None:
+		self.assertEqual(self.round_trip(EXTRA_CSV), EXTRA_CSV)
+
+	def test_header_order_is_kept_and_missing_required_columns_are_appended(self) -> None:
+		layout = entries_module.DictionaryLayout(False, ("type", "note", "text"))
+
+		data = self.save([DictionaryEntry("Alpha", "\u2801", "Braille")], layout)
+
+		self.assertEqual(data, "type,note,text,braille\r\nBraille,,Alpha,\u2801\r\n".encode("utf-8"))
+
+	def test_rows_keep_extra_and_overflow_fields_and_are_stripped_and_normalized(self) -> None:
+		data = (
+			"text,note,braille,type\r\n"
+			" Alpha ,first,  \u2801 ,Custom,overflow\r\n"
+			"short\r\n"
+		).encode("utf-8")
+
+		self.assertEqual(
+			self.round_trip(data),
+			"text,note,braille,type\r\nAlpha,first,\u2801,General,overflow\r\nshort,,,General\r\n".encode("utf-8"),
+		)
+
+	def test_a_new_row_has_empty_extra_fields_and_an_edited_row_keeps_them(self) -> None:
+		layout = entries_module.DictionaryLayout(False, ("text", "note", "braille", "type"))
+		edited = DictionaryEntry("Alpine", "\u2801\u2807", "General", ("Alpha", "first", "\u2801", "General"))
+		new = DictionaryEntry("Gamma", "\u281b", "Braille")
+
+		data = self.save([edited, new], layout)
+
+		self.assertEqual(
+			data,
+			"text,note,braille,type\r\nAlpine,first,\u2801\u2807,General\r\nGamma,,\u281b,Braille\r\n".encode("utf-8"),
+		)
+
+	def test_a_column_named_twice_gets_the_value_at_its_last_position(self) -> None:
+		# DictReader reads the last position, so the writer writes there; the other keeps its value.
+		layout = entries_module.DictionaryLayout(False, ("text", "braille", "type", "text"))
+		entry = DictionaryEntry("Zeta", "\u2801", "General", ("Alpha", "\u2801", "General", "Alpha2"))
+
+		data = self.save([entry], layout)
+
+		self.assertEqual(data, "text,braille,type,text\r\nAlpha,\u2801,General,Zeta\r\n".encode("utf-8"))
+
+	def test_hidden_rows_are_written_with_their_fields(self) -> None:
+		# Until the editor removes them (F-11 D1), the rows it hides keep their whole record.
+		data = "text,note,braille,type\r\n,kept,\u2803,General\r\n".encode("utf-8")
+
+		self.assertEqual(self.round_trip(data), data)
+
+	def test_default_layout_gives_the_bytes_of_the_writer_before_f11(self) -> None:
+		entries = [DictionaryEntry("Alpha", "\u2801", "General"), DictionaryEntry("q,\"x\"", "a b", "Braille")]
+
+		self.assertEqual(
+			self.save(entries),
+			'text,braille,type\r\nAlpha,\u2801,General\r\n"q,""x""",a b,Braille\r\n'.encode("utf-8"),
+		)
+		self.assertEqual(self.save(entries, entries_module.DictionaryLayout()), self.save(entries))
 
 
 if __name__ == "__main__":

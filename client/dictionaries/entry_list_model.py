@@ -10,7 +10,9 @@ Rows that are not a ``DictionaryEntry`` (``PreservedDictionaryRow``: a blank
 source text, or a Bopomofo sequence that does not parse) are never shown,
 filtered, edited or removed: they keep their place in the file and ``save``
 writes them back unchanged (F-4). ``entries`` and the visible list hold the
-entries only.
+entries only. ``save`` writes with the layout of the loaded file (its BOM and
+header); a replaced entry takes over the fields of the row it replaces, so its
+extra columns are kept (F-11 D5).
 
 Comparison rules, kept from the pre-P2-2 dialog (a file may hold identical rows):
 
@@ -32,8 +34,9 @@ from pathlib import Path
 from dictionaries.entries import (
 	ENTRY_TYPE_LABELS,
 	DictionaryEntry,
+	DictionaryLayout,
 	DictionaryRow,
-	load_dictionary_rows,
+	load_dictionary_file,
 	save_dictionary_entries,
 )
 
@@ -57,19 +60,21 @@ class EntryListUpdate:
 class DictionaryEntryListModel:
 	"""Full list, filter and visible list of one dictionary CSV."""
 
-	def __init__(self, rows: Iterable[DictionaryRow] = ()) -> None:
+	def __init__(self, rows: Iterable[DictionaryRow] = (), layout: DictionaryLayout = DictionaryLayout()) -> None:
 		self._rows: list[DictionaryRow] = list(rows)
+		self._layout = layout
 		self._filter_text = ""
 		self._visible: list[DictionaryEntry] = list(self._entries)
 
 	@classmethod
 	def load(cls, path: Path) -> DictionaryEntryListModel:
-		"""Read every row of ``path`` with ``load_dictionary_rows``; errors propagate."""
-		return cls(load_dictionary_rows(path))
+		"""Read every row of ``path`` and its layout with ``load_dictionary_file``; errors propagate."""
+		loaded = load_dictionary_file(path)
+		return cls(loaded.rows, loaded.layout)
 
 	def save(self, path: Path) -> None:
-		"""Write every row (preserved rows unchanged, in place); errors propagate."""
-		save_dictionary_entries(path, self._rows)
+		"""Write every row (preserved rows unchanged, in place) with the layout; errors propagate."""
+		save_dictionary_entries(path, self._rows, self._layout)
 
 	@property
 	def _entries(self) -> list[DictionaryEntry]:
@@ -147,6 +152,7 @@ class DictionaryEntryListModel:
 		if self.source_text_exists(entry.text, exclude_entry=current_entry):
 			raise DuplicateEntryError(entry.text)
 		full_index = next(index for index, candidate in enumerate(self._rows) if candidate is current_entry)
+		entry.fields = current_entry.fields
 		self._rows[full_index] = entry
 		self._refilter()
 		return EntryListUpdate(self._selection_after(entry, visible_index))

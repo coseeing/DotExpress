@@ -162,6 +162,20 @@ class SourceTextExistsTest(unittest.TestCase):
 		self.assertTrue(model.source_text_exists("Alpha", exclude_entry=twin))
 		self.assertTrue(model.source_text_exists("Beta", exclude_entry=alpha))
 
+	def test_is_duplicate_excludes_the_edited_entry_and_lets_it_keep_its_text(self) -> None:
+		# F-11 (D9, O6): with two identical rows, either one can be edited without changing
+		# its source text; the edit adds no new duplicate.
+		first, beta, second = _entry("a"), _entry("b", "\u2803"), _entry("a")
+		model = DictionaryEntryListModel([first, beta, second])
+
+		self.assertTrue(model.is_duplicate("a"))
+		self.assertFalse(model.is_duplicate("c"))
+		self.assertFalse(model.is_duplicate("a", editing=second))
+		self.assertFalse(model.is_duplicate("c", editing=second))
+		self.assertTrue(model.is_duplicate("b", editing=second))
+		self.assertTrue(model.is_duplicate("a", editing=beta))
+		self.assertFalse(model.is_duplicate("A", editing=beta))
+
 
 class ApplyFilterTest(_ModelTestCase):
 	def setUp(self) -> None:
@@ -318,18 +332,38 @@ class ReplaceTest(_ModelTestCase):
 		self.assertEqual(caught.exception.identifier, "Alpha")
 		self.assertUnchanged(self.model, [self.alpha, self.alpine, self.beta], [self.beta], "bet")
 
-	def test_identical_rows_replace_the_visible_object_but_cannot_keep_their_text(self) -> None:
+	def test_identical_rows_replace_the_visible_object_and_can_keep_their_text(self) -> None:
+		# Was the P2-2 Q4 KNOWN BUG (first half): the other identical row made the text a
+		# duplicate. Fixed by F-11 (D9, O6).
 		first, second = _entry("a"), _entry("a")
 		model = DictionaryEntryListModel([first, _entry("b"), second])
+		changed = _entry("a", "\u2803")
 
-		with self.assertRaises(DuplicateEntryError):
-			model.replace(2, _entry("a", "\u2803"))
-		c = _entry("c")
-		update = model.replace(2, c)
+		update = model.replace(2, changed)
 
 		self.assertEqual(update, EntryListUpdate(2))
 		self.assertIs(model.entries[0], first)
-		self.assertIs(model.entries[2], c)
+		self.assertIs(model.entries[2], changed)
+
+	def test_replacement_is_selected_by_identity_even_when_it_equals_another_row(self) -> None:
+		# F-11 (D9): equality would select the first of two identical rows.
+		first, braille = _entry("a"), _entry("a", "\u2801", "Braille")
+		model = DictionaryEntryListModel([first, _entry("b"), braille])
+		twin = _entry("a")
+
+		update = model.replace(2, twin)
+
+		self.assertEqual(update, EntryListUpdate(2))
+		self.assertIs(model.entries[2], twin)
+
+	def test_another_row_cannot_take_the_text_of_an_identical_pair(self) -> None:
+		first, beta, second = _entry("a"), _entry("b"), _entry("a")
+		model = DictionaryEntryListModel([first, beta, second])
+
+		with self.assertRaises(DuplicateEntryError):
+			model.replace(1, _entry("a", "\u2803"))
+
+		self.assertSameObjects(model.entries, [first, beta, second])
 
 	def test_out_of_range_index_raises_index_error_and_changes_nothing(self) -> None:
 		self.model.apply_filter("alp")
@@ -363,15 +397,29 @@ class RemoveTest(_ModelTestCase):
 		self.assertEqual(self.model.remove(0), EntryListUpdate(None))
 		self.assertUnchanged(self.model, [self.alpha, self.beta], [], "gam")
 
-	def test_identical_rows_remove_the_first_equal_and_select_the_remaining_twin(self) -> None:
+	def test_identical_rows_remove_the_selected_one_and_select_the_remaining_twin(self) -> None:
+		# Was the P2-2 Q4 KNOWN BUG (second half): the first equal row was removed. Fixed by
+		# F-11 (D9); the selection still goes to an equal row (by equality, as the golden
+		# trace records).
 		first, braille, second = _entry("a"), _entry("a", "\u2801", "Braille"), _entry("a")
 		beta = _entry("Beta", "\u2803")
 		model = DictionaryEntryListModel([first, beta, braille, second])
 
 		update = model.remove(3)
 
-		self.assertEqual(update, EntryListUpdate(2))
-		self.assertSameObjects(model.entries, [beta, braille, second])
+		self.assertEqual(update, EntryListUpdate(0))
+		self.assertSameObjects(model.entries, [first, beta, braille])
+
+	def test_removing_the_second_of_two_identical_rows_keeps_the_fields_of_the_first(self) -> None:
+		# F-11 (D9, B2): the saved order is a, b, with the first a's record.
+		first, beta, second = _entry("a"), _entry("b", "\u2803"), _entry("a")
+		first.fields, second.fields = ("a", "\u2801", "General", "first"), ("a", "\u2801", "General", "third")
+		model = DictionaryEntryListModel([first, beta, second])
+
+		model.remove(2)
+
+		self.assertEqual([entry.fields for entry in model.entries], [("a", "\u2801", "General", "first"), ()])
+		self.assertIs(model.entries[0], first)
 
 	def test_out_of_range_index_raises_index_error_and_changes_nothing(self) -> None:
 		for index in (-1, 3):

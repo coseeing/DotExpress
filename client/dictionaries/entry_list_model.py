@@ -14,15 +14,18 @@ entries only. ``save`` writes with the layout of the loaded file (its BOM and
 header); a replaced entry takes over the fields of the row it replaces, so its
 extra columns are kept (F-11 D5).
 
-Comparison rules, kept from the pre-P2-2 dialog (a file may hold identical rows):
+Comparison rules (a file may hold identical rows):
 
-* the selection is restored by equality: the first visible entry equal to the
-  previous one wins;
-* ``replace`` swaps the full-list item that *is* the visible entry (identity);
-* ``remove`` removes the first full-list entry *equal* to the visible one;
+* ``replace`` and ``remove`` act on the full-list item that *is* the visible
+  entry (identity; ``remove`` took the first *equal* one before F-11, P2-2 Q4);
+* after ``add`` and ``replace`` the new entry is selected by identity; after
+  ``remove`` and a filter change the selection is restored by equality, the
+  first visible entry equal to the previous one winning (as the golden trace
+  records);
 * the duplicate check compares ``text`` exactly (case-sensitive) over every
   row, entries hidden by the filter and preserved rows included, and excludes
-  the edited entry by identity.
+  the edited entry by identity; an edit that keeps the edited entry's own text
+  is never a duplicate (F-11 D9).
 """
 
 from __future__ import annotations
@@ -131,6 +134,16 @@ class DictionaryEntryListModel:
 		"""
 		return any(row.text == text and row is not exclude_entry for row in self._rows)
 
+	def is_duplicate(self, text: str, editing: DictionaryEntry | None = None) -> bool:
+		"""Whether adding (``editing`` None) or editing ``editing`` to ``text`` duplicates a row.
+
+		An edit that keeps the entry's own text adds no duplicate, even when an identical
+		row exists (F-11 D9).
+		"""
+		if editing is not None and text == editing.text:
+			return False
+		return self.source_text_exists(text, exclude_entry=editing)
+
 	def apply_filter(self, filter_text: str, selected_index: int | None = None) -> EntryListUpdate:
 		preferred_entry = self.visible_entry(selected_index)
 		self._filter_text = filter_text
@@ -145,23 +158,27 @@ class DictionaryEntryListModel:
 		if filter_cleared:
 			self._filter_text = ""
 		self._refilter()
-		return EntryListUpdate(self._selection_after(entry, 0), filter_cleared=filter_cleared)
+		return EntryListUpdate(self._selection_after(entry, 0, by_identity=True), filter_cleared=filter_cleared)
 
 	def replace(self, visible_index: int, entry: DictionaryEntry) -> EntryListUpdate:
 		current_entry = self._visible_at(visible_index)
-		if self.source_text_exists(entry.text, exclude_entry=current_entry):
+		if self.is_duplicate(entry.text, editing=current_entry):
 			raise DuplicateEntryError(entry.text)
-		full_index = next(index for index, candidate in enumerate(self._rows) if candidate is current_entry)
+		full_index = self._full_index(current_entry)
 		entry.fields = current_entry.fields
 		self._rows[full_index] = entry
 		self._refilter()
-		return EntryListUpdate(self._selection_after(entry, visible_index))
+		return EntryListUpdate(self._selection_after(entry, visible_index, by_identity=True))
 
 	def remove(self, visible_index: int) -> EntryListUpdate:
 		current_entry = self._visible_at(visible_index)
-		self._rows.remove(current_entry)
+		del self._rows[self._full_index(current_entry)]
 		self._refilter()
 		return EntryListUpdate(self._selection_after(current_entry, visible_index))
+
+	def _full_index(self, entry: DictionaryEntry) -> int:
+		"""The full-list position of the row that *is* ``entry`` (F-11 D9)."""
+		return next(index for index, candidate in enumerate(self._rows) if candidate is entry)
 
 	def _visible_at(self, index: int) -> DictionaryEntry:
 		if index < 0 or index >= len(self._visible):
@@ -174,13 +191,22 @@ class DictionaryEntryListModel:
 		else:
 			self._visible = list(self._entries)
 
-	def _selection_after(self, preferred_entry: DictionaryEntry | None, fallback_index: int) -> int | None:
+	def _selection_after(
+		self,
+		preferred_entry: DictionaryEntry | None,
+		fallback_index: int,
+		*,
+		by_identity: bool = False,
+	) -> int | None:
 		if not self._visible:
 			return None
 		index = min(fallback_index, len(self._visible) - 1)
 		if preferred_entry is not None:
-			try:
-				index = self._visible.index(preferred_entry)
-			except ValueError:
-				pass
+			if by_identity:
+				index = next((position for position, entry in enumerate(self._visible) if entry is preferred_entry), index)
+			else:
+				try:
+					index = self._visible.index(preferred_entry)
+				except ValueError:
+					pass
 		return index

@@ -1221,26 +1221,23 @@ class DictionaryEntriesDialogEditTest(_EditorTestCase):
         # KNOWN BUG (P2-2 spec, Q6), pinned as it is today, NOT desired: the typed entry is discarded.
         self.assertEqual(harness.state(), before)
 
-    def test_identical_rows_edit_replaces_the_selected_row_but_cannot_keep_its_text(self) -> None:
+    def test_identical_rows_edit_of_the_selected_row_can_keep_its_text(self) -> None:
+        # Was the P2-2 Q4 KNOWN BUG (first half): the other identical row made its own text
+        # a duplicate. Fixed by F-11 (D9, O6).
         harness = self.open_editor([["a", "\u2801", "General"], BETA, ["a", "\u2801", "General"]])
         harness.select(2)
+        harness.take_log()
         harness.script_entry("a", "\u2803")
 
         harness.click("Edit")
 
-        # KNOWN BUG (P2-2 spec, Q4), pinned as it is today, NOT desired: the other
-        # identical row makes its own text a duplicate.
-        self.assertEqual(harness.take_log()[-1], ["MessageBox", _duplicate_message("a"), ERROR_TITLE, ERROR_FLAGS])
-        harness.script_entry("c", "\u2809")
-
-        harness.click("Edit")
-
-        self.assertEqual(harness.rows(), [["a", "\u2801", GENERAL], BETA_CELLS, ["c", "\u2809", GENERAL]])
+        self.assertNotIn("MessageBox", [event[0] for event in harness.take_log()])
+        self.assertEqual(harness.rows(), [["a", "\u2801", GENERAL], BETA_CELLS, ["a", "\u2803", GENERAL]])
         self.assertEqual(harness.list.selected, 2)
         self.assertTrue(harness.press_ok())
         self.assertEqual(
             harness.saved_csv(),
-            HEADER + "a,\u2801,General\r\nBeta,\u2803,General\r\nc,\u2809,General\r\n",
+            HEADER + "a,\u2801,General\r\nBeta,\u2803,General\r\na,\u2803,General\r\n",
         )
 
     def test_filter_is_kept_and_a_hidden_result_selects_the_same_index_clamped(self) -> None:
@@ -1319,23 +1316,24 @@ class DictionaryEntriesDialogDeleteTest(_EditorTestCase):
         self.assertEqual(harness.take_log(), [])
         self.assertEqual(harness.rows(), [ALPHA_CELLS])
 
-    def test_identical_rows_delete_removes_the_first_equal_row(self) -> None:
-        harness = self.open_editor([["a", "\u2801", "General"], BETA, ["a", "\u2801", "Braille"], ["a", "\u2801", "General"]])
+    def test_identical_rows_delete_removes_the_selected_row(self) -> None:
+        # Was the P2-2 Q4 KNOWN BUG (second half): the first equal row went, not the selected
+        # one. Fixed by F-11 (D9); the remaining equal row gets the selection, as before.
+        data = (HEADER + "a,\u2801,General,first\r\nBeta,\u2803,General,\r\na,\u2801,Braille,\r\na,\u2801,General,fourth\r\n")
+        harness = self.open_editor(data=data.replace(HEADER, "text,braille,type,note\r\n").encode("utf-8"))
         harness.select(3)
 
         harness.click("Delete")
 
-        # KNOWN BUG (P2-2 spec, Q4), pinned as it is today, NOT desired: the first equal
-        # row goes, not the selected one; the remaining equal row gets the selection.
         self.assertEqual(
             harness.rows(),
-            [BETA_CELLS, ["a", "\u2801", UNICODE_BRAILLE], ["a", "\u2801", GENERAL]],
+            [["a", "\u2801", GENERAL], BETA_CELLS, ["a", "\u2801", UNICODE_BRAILLE]],
         )
-        self.assertEqual(harness.list.selected, 2)
+        self.assertEqual(harness.list.selected, 0)
         self.assertTrue(harness.press_ok())
         self.assertEqual(
             harness.saved_csv(),
-            HEADER + "Beta,\u2803,General\r\na,\u2801,Braille\r\na,\u2801,General\r\n",
+            "text,braille,type,note\r\na,\u2801,General,first\r\nBeta,\u2803,General,\r\na,\u2801,Braille,\r\n",
         )
 
 

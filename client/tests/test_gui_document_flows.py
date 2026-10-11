@@ -509,12 +509,16 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
             frame.on_delete_all_documents(None)
 
         frame._show_file_error.assert_called_once_with(gui._("Failed to delete document: {error}"), error)
+        # No valid document is left: as after a complete Delete All, the title follows and the
+        # default document is opened (F-12, P1-3 defect 4).
         self.assertEqual(
             frame.ui.mock_calls,
             [
                 call._refresh_document_list(),
                 call._review_invalid_workspace_files(invalid_paths),
+                call._update_window_title(),
                 call._clear_document_editors(),
+                call._ensure_open_document_exists(),
                 call._refresh_dual_view(),
             ],
         )
@@ -3226,10 +3230,11 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._state(frame), ([documents[2]], "gamma", "gamma", {"gamma": ("seg-c",)}))
         self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("c", "3"))
 
-    def test_delete_all_failure_without_valid_document_clears_editors_only(self) -> None:
-        # KNOWN BUG (P1-3 spec, known defect 4), pinned as it is today, NOT desired
-        # behavior: the rollback leaves no valid document, so only the editors are
-        # cleared (no title update, no default document). A later fix task flips this.
+    def test_delete_all_failure_without_valid_document_opens_the_default_document(self) -> None:
+        # Was the KNOWN BUG of P1-3 known defect 4 (the rollback left no valid document, and
+        # only the editors were cleared: the title kept the deleted name, no document was
+        # open), fixed by F-12: as after a complete Delete All, the title follows and the
+        # default document is created and opened.
         documents = [Document("alpha", "a", "1"), Document("beta", "b", "2")]
         self._write_packages(documents[0])
         self._block("beta")
@@ -3238,12 +3243,35 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
         frame.on_delete_all_documents(None)
 
-        self.assertEqual(len(self.events), 3)
+        self.assertEqual(len(self.events), 6)
         self._assert_error_box(self.events[1], "Failed to delete document: {error}", "beta.dep", frame)
-        self.assertEqual(self.events[2], ("InvalidWorkspaceFilesDialog", [self.workspace / "beta.dep"]))
-        self.assertEqual(self._listing(), ["beta.dep"])
-        self.assertEqual(self._state(frame), ([], None, None, {}))
+        self.assertEqual(
+            self.events[2:],
+            [
+                ("InvalidWorkspaceFilesDialog", [self.workspace / "beta.dep"]),
+                ("title", "DotExpress"),
+                ("title", "new - DotExpress"),
+                ("focus", "input"),
+            ],
+        )
+        self.assertEqual(self._listing(), ["beta.dep", "new.dep"])
+        self.assertEqual(self._state(frame), ([Document("new", "", None)], "new", "new", {}))
         self.assertEqual((frame.input_txt.value, frame.output_txt.value), ("", ""))
+
+    def test_delete_all_failure_with_new_held_on_disk_opens_a_free_default_name(self) -> None:
+        # F-12 (P1-3 defect 4): the default document follows F-8's free-name rule, so a
+        # package on disk named new is not replaced.
+        documents = [Document("alpha", "a", "1"), Document("new", "b", "2")]
+        self._write_packages(documents[0])
+        self._block("new")
+        frame = self._make_workspace_frame(documents, open_name="alpha", selected_name="alpha")
+        self.answers = [gui.wx.YES]
+
+        frame.on_delete_all_documents(None)
+
+        self.assertEqual(self.events[3:], [("title", "DotExpress"), ("title", "new (2) - DotExpress"), ("focus", "input")])
+        self.assertEqual(self._listing(), ["new (2).dep", "new.dep"])
+        self.assertEqual(self._state(frame), ([Document("new (2)", "", None)], "new (2)", "new (2)", {}))
 
     def test_delete_all_without_documents_does_nothing(self) -> None:
         frame = self._make_workspace_frame()

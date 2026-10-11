@@ -936,8 +936,8 @@ msgstr "來源文字「{identifier}」已存在。"
 
 #: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:896
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
-#: documents/export_coordinator.py:145 gui.py:493 gui.py:778 gui.py:1090
-#: gui.py:1102 ui/conversion_presenter.py:298
+#: documents/export_coordinator.py:145 gui.py:493 gui.py:778 gui.py:1094
+#: gui.py:1106 ui/conversion_presenter.py:298
 msgid "Error"
 msgstr "錯誤"
 
@@ -1434,11 +1434,11 @@ msgstr "可按快顯鍵開啟選單。"
 msgid "Braille Result"
 msgstr "點字結果"
 
-#: gui.py:253 gui.py:1168
+#: gui.py:253 gui.py:1172
 msgid "File"
 msgstr "檔案"
 
-#: gui.py:266 gui.py:1168 settings/dialogs.py:357
+#: gui.py:266 gui.py:1172 settings/dialogs.py:357
 msgid "Translation"
 msgstr "轉譯"
 
@@ -1609,42 +1609,42 @@ msgstr "刪除全部會移除所有文件。要繼續嗎？"
 msgid "Confirm Delete All"
 msgstr "確認刪除全部"
 
-#: gui.py:967
+#: gui.py:971
 msgid "Import Document"
 msgstr "匯入文件"
 
-#: gui.py:987
+#: gui.py:991
 msgid "Import Issues"
 msgstr "匯入問題"
 
-#: gui.py:988
+#: gui.py:992
 msgid "Some files were skipped during import."
 msgstr "匯入時有部分檔案被略過。"
 
-#: gui.py:1101
+#: gui.py:1105
 #, python-brace-format
 msgid "Failed to open the dictionary editor: {error}"
 msgstr "無法開啟字典編輯器：{error}"
 
-#: gui.py:1226
+#: gui.py:1230
 msgid "Export Document"
 msgstr "匯出文件"
 
-#: gui.py:1236
+#: gui.py:1240
 msgid "Export All Documents"
 msgstr "匯出全部文件"
 
-#: gui.py:1245
+#: gui.py:1249
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr "目的資料夾中已有一個或多個檔案會被覆蓋。要全部覆蓋嗎？"
 
-#: gui.py:1248
+#: gui.py:1252
 msgid "Confirm Overwrite"
 msgstr "確認覆蓋"
 
-#: gui.py:1254
+#: gui.py:1258
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1661,7 +1661,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: gui.py:1257
+#: gui.py:1261
 msgid "Startup Error"
 msgstr "啟動錯誤"
 

@@ -950,7 +950,11 @@ class BrailleFrame(wx.Frame):
 			if self._document_controller.has_documents:
 				self._open_document_by_name(self._document_controller.first_document_name)
 			else:
+				# No valid document is left: as after a complete Delete All, the title follows
+				# and the default document is created and opened (F-12, P1-3 defect 4).
+				self._update_window_title()
 				self._clear_document_editors()
+				self._ensure_open_document_exists()
 			self._refresh_dual_view()
 			return
 		self._update_window_title()

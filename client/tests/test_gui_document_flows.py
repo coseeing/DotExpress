@@ -926,9 +926,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         previous_tables = {"default": "zh-tw.ctb"}
         frame.translation_tables = previous_tables
 
-        with patch.object(gui, "save_translation_settings"), \
-             patch.object(gui, "save_translation_tables"), \
-             patch.object(gui, "save_view_settings"):
+        with patch.object(gui, "save_translation_settings", return_value=None), \
+             patch.object(gui, "save_translation_tables", return_value=None), \
+             patch.object(gui, "save_view_settings", return_value=None):
             result = frame.apply_settings_from_dialog(snapshot)
 
         self.assertEqual(frame.translation_settings, snapshot.translation)
@@ -1008,9 +1008,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame.get_dictionary_names_for_dialog = Mock(return_value=["default"])
         snapshot = make_snapshot(tables={"default": "test-default.ctb", "math": "test-math.ctb"})
 
-        with patch.object(gui, "save_translation_settings"), \
-             patch.object(gui, "save_translation_tables"), \
-             patch.object(gui, "save_view_settings"):
+        with patch.object(gui, "save_translation_settings", return_value=None), \
+             patch.object(gui, "save_translation_tables", return_value=None), \
+             patch.object(gui, "save_view_settings", return_value=None):
             frame.apply_settings_from_dialog(snapshot)
         frame._config_store.get_lang.return_value = "zh_TW"
         frame._config_store.get_charset_maps.return_value = {"CJKCharactersLanguage": "zh"}
@@ -1236,6 +1236,8 @@ class DictionaryManagementFrameTest(unittest.TestCase):
             frame._register_output_font = Mock(return_value=False)
             frame._paths = make_paths(dictionary=dictionary_dir, workspace=Path("workspace"))
             frame._config_store = Mock(spec=gui.ConfigStore)
+            # A save that works: no settings save problem to report (F-12 D6).
+            frame._config_store.set_selected_dictionary.return_value = None
             with (
                 patch.object(
                     gui,
@@ -5157,6 +5159,128 @@ class FrameExportViewMethodsTest(unittest.TestCase):
         )
 
 
+class SettingsSaveProblemFrameTest(unittest.TestCase):
+    """F-12 (D6): the first settings change of a session that cannot be saved shows one box."""
+
+    def setUp(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.root = Path(temp_dir.name)
+        self.config_path = self.root / "config.json"
+        self.boxes: list = []
+        self.active_window = None
+        for logged in (config._logged_load_failures, config._logged_skipped_saves):
+            logged.clear()
+            self.addCleanup(logged.clear)
+        for patcher in (
+            patch.object(gui, "message_box", lambda *args, **kwargs: self.boxes.append((args, kwargs))),
+            patch.object(gui.wx, "GetActiveWindow", lambda: self.active_window, create=True),
+            patch.object(gui.DotExpressSettingsDialog, "open_instance", return_value=None),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        # A failed save logs to config.log: never to the real one.
+        self.addCleanup(isolate_file_logs("dotexpress.config"))
+
+    def _frame(self) -> gui.BrailleFrame:
+        frame = object.__new__(gui.BrailleFrame)
+        frame._config_store = config.ConfigStore(self.config_path)
+        frame._apply_editor_view_settings = Mock()
+        frame.get_dictionary_names_for_dialog = Mock(return_value=["default", "math"])
+        frame.translation_settings = TranslationSettings("unicode", 40, "default")
+        frame.view_settings = ViewSettings(12, "light", "default")
+        return frame
+
+    def _box(self, frame, reason: str, parent=None) -> tuple:
+        message = (
+            f"DotExpress 無法將設定儲存到「{self.config_path}」。設定的變更在關閉 DotExpress 之前有效，但不會保留。"
+            f"在下次啟動 DotExpress 之前，不會再顯示這則訊息。\n\n{reason}"
+        )
+        return ((message, "設定未儲存", gui.wx.OK | gui.wx.ICON_WARNING), {"parent": parent or frame})
+
+    CANNOT_OPEN = "無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。"
+
+    def test_a_settings_change_that_cannot_be_saved_shows_one_box_and_still_applies(self) -> None:
+        # A folder at config.json cannot be read, as a locked file: UNREADABLE.
+        self.config_path.mkdir()
+        frame = self._frame()
+        snapshot = make_snapshot(translation=TranslationSettings("ascii", 52, "math"), view=ViewSettings(18, "dark", "default"))
+
+        frame.apply_settings_from_dialog(snapshot)
+        frame.apply_settings_from_dialog(snapshot)
+
+        self.assertEqual(self.boxes, [self._box(frame, self.CANNOT_OPEN)])
+        self.assertEqual(frame.translation_settings, TranslationSettings("ascii", 52, "math"))
+        self.assertEqual(frame.view_settings, ViewSettings(18, "dark", "default"))
+        self.assertTrue(self.config_path.is_dir())
+
+    def test_font_size_and_dictionary_changes_report_through_the_same_flag(self) -> None:
+        self.config_path.mkdir()
+        for first, second in (("font", "dictionary"), ("dictionary", "font")):
+            with self.subTest(first=first):
+                self.boxes.clear()
+                frame = self._frame()
+                changes = {
+                    "font": lambda: frame._set_view_font_size(20),
+                    "dictionary": lambda: frame._set_active_dictionary("math"),
+                }
+
+                changes[first]()
+                after_first = list(self.boxes)
+                changes[second]()
+
+                self.assertEqual(after_first, [self._box(frame, self.CANNOT_OPEN)])
+                self.assertEqual(self.boxes, after_first)
+                self.assertEqual(frame.view_settings.font_size, 20)
+                self.assertEqual(frame.translation_settings.selected_dictionary, "math")
+
+    def test_no_box_when_the_settings_are_saved(self) -> None:
+        frame = self._frame()
+
+        frame.apply_settings_from_dialog(make_snapshot(translation=TranslationSettings("ascii", 52, "math")))
+        frame._set_view_font_size(20)
+        frame._set_active_dictionary("default")
+
+        self.assertEqual(self.boxes, [])
+        saved = json.loads(self.config_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["conversion"]["output_mode"], "ascii")
+        self.assertEqual(saved["view"]["font_size"], 20)
+
+    def test_each_kind_of_problem_gives_its_reason(self) -> None:
+        error = OSError(13, "Access denied")
+        backup = self.root / "config.json.bak"
+        cases = (
+            ("UNREADABLE", None, self.CANNOT_OPEN),
+            (
+                "BACKUP_FAILED",
+                backup,
+                f"檔案已損壞，而且在取代它之前無法先備份為「{backup}」。詳細資訊：{error}",
+            ),
+            ("WRITE_FAILED", None, str(error)),
+        )
+        for kind, backup_path, reason in cases:
+            with self.subTest(kind):
+                self.boxes.clear()
+                frame = self._frame()
+                problem = config.ConfigSaveProblem(
+                    getattr(config.ConfigSaveProblemKind, kind), error, self.config_path, backup_path
+                )
+
+                frame._report_settings_save_problem(problem)
+
+                self.assertEqual(self.boxes, [self._box(frame, reason)])
+
+    def test_the_box_belongs_to_the_active_window(self) -> None:
+        # The settings dialog after Apply, Dictionary Management after a rename.
+        self.config_path.mkdir()
+        frame = self._frame()
+        self.active_window = Mock(name="settings dialog")
+
+        frame._set_active_dictionary("math")
+
+        self.assertEqual(self.boxes, [self._box(frame, self.CANNOT_OPEN, parent=self.active_window)])
+
+
 class _RecordingFont:
     """``wx.Font`` stand-in: the font it copies and the calls made on it."""
 
@@ -5248,6 +5372,8 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
         frame.view_settings = view
         frame._apply_editor_view_settings = Mock()
         frame._config_store = Mock(spec=gui.ConfigStore)
+        # A save that works: no settings save problem to report (F-12 D6).
+        frame._config_store.set_view_settings.return_value = None
         return frame
 
     def make_dialog(self):
@@ -5302,7 +5428,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
             with self.subTest(start=start, rotation=rotation):
                 frame = self.make_frame(ViewSettings(start, "dark", "default"))
                 dialog = self.make_dialog()
-                with self.open_dialog(dialog), patch.object(gui, "save_view_settings") as save:
+                with self.open_dialog(dialog), patch.object(gui, "save_view_settings", return_value=None) as save:
                     frame.on_editor_mousewheel(self.wheel(rotation))
 
                 # KNOWN QUIRK (P2-4 spec, 1): the size did not change, but it is saved and synced again.
@@ -5318,7 +5444,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
                 frame = self.make_frame()
                 dialog = self.make_dialog()
                 event = self.wheel(rotation, control_down)
-                with self.open_dialog(dialog), patch.object(gui, "save_view_settings") as save:
+                with self.open_dialog(dialog), patch.object(gui, "save_view_settings", return_value=None) as save:
                     frame.on_editor_mousewheel(event)
 
                 event.Skip.assert_called_once_with()
@@ -5329,7 +5455,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
 
     def test_without_an_open_dialog_the_editors_and_the_config_still_change(self) -> None:
         frame = self.make_frame()
-        with self.open_dialog(None), patch.object(gui, "save_view_settings") as save:
+        with self.open_dialog(None), patch.object(gui, "save_view_settings", return_value=None) as save:
             frame.on_editor_mousewheel(self.wheel(-120))
 
         expected = ViewSettings(11, "dark", "default")
@@ -5340,7 +5466,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
     def test_a_cancelled_dialog_is_no_longer_synced(self) -> None:
         frame = self.make_frame()
         dialog = self.make_dialog()
-        with self.open_dialog(dialog), patch.object(gui, "save_view_settings") as save:
+        with self.open_dialog(dialog), patch.object(gui, "save_view_settings", return_value=None) as save:
             frame.on_editor_mousewheel(self.wheel(120))
             dialog.on_cancel()
             self.assertIsNone(gui.DotExpressSettingsDialog._instance)
@@ -5363,7 +5489,7 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
         with (
             patch.object(gui.TextProcessingDialog, "_instance", text_dialog),
             self.open_dialog(None),
-            patch.object(gui, "save_view_settings") as save,
+            patch.object(gui, "save_view_settings", return_value=None) as save,
         ):
             frame.on_editor_mousewheel(self.wheel(120))
 

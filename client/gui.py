@@ -38,7 +38,7 @@ from ui.conversion_presenter import ConversionPresenter
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from ui.menu_builder import apply_document_menu_state, build_document_menu
 from ui.message_box import message_box
-from config import ConfigStore, DEFAULT_TRANSLATION_TABLES
+from config import ConfigSaveProblem, ConfigSaveProblemKind, ConfigStore, DEFAULT_TRANSLATION_TABLES
 from settings.translation import (
 	TranslationSettings,
 	load_translation_settings,
@@ -119,6 +119,8 @@ class BrailleFrame(wx.Frame):
 	# Class attributes, so that frames built without __init__ (tests) have them too (F-7, M-5).
 	_closing = False
 	_close_finished = False
+	# The first settings save problem of the session was shown (F-12 D6).
+	_settings_save_problem_reported = False
 
 	def __init__(
 		self,
@@ -434,9 +436,12 @@ class BrailleFrame(wx.Frame):
 		self.translation_tables = tables
 		self._apply_editor_view_settings(view)
 
-		save_translation_settings(self._config_store, translation)
-		save_translation_tables(self._config_store, tables)
-		save_view_settings(self._config_store, view)
+		problems = (
+			save_translation_settings(self._config_store, translation),
+			save_translation_tables(self._config_store, tables),
+			save_view_settings(self._config_store, view),
+		)
+		self._report_settings_save_problem(next((problem for problem in problems if problem is not None), None))
 		return DotExpressSettingsSnapshot.create(translation, tables, view)
 
 	def _set_active_dictionary(self, selected_name: str) -> None:
@@ -445,7 +450,38 @@ class BrailleFrame(wx.Frame):
 			width=self.translation_settings.width,
 			selected_dictionary=selected_name,
 		)
-		self._config_store.set_selected_dictionary(selected_name)
+		self._report_settings_save_problem(self._config_store.set_selected_dictionary(selected_name))
+
+	def _report_settings_save_problem(self, problem: ConfigSaveProblem | None) -> None:
+		"""Show the first settings save problem of the session; later ones are only logged (F-12 D6).
+
+		Once per session, as Ctrl+wheel saves on every notch. Shown after the change, which
+		still applies, in a box that belongs to the active window (the settings dialog,
+		Dictionary Management), else to the frame.
+		"""
+		if problem is None or self._settings_save_problem_reported:
+			return
+		self._settings_save_problem_reported = True
+		if problem.kind is ConfigSaveProblemKind.UNREADABLE:
+			reason = _(
+				"The file cannot be opened. It may be in use by another program, or you may not have "
+				"permission to read it. Close the other program and try again."
+			)
+		elif problem.kind is ConfigSaveProblemKind.BACKUP_FAILED:
+			reason = _(
+				'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}'
+			).format(backup=problem.backup_path, error=problem.error)
+		else:
+			reason = str(problem.error)
+		message_box(
+			_(
+				'DotExpress cannot save its settings to "{path}". Changes to the settings apply until DotExpress is closed, '
+				"but they are not kept. This message is not shown again until DotExpress is started again.\n\n{reason}"
+			).format(path=problem.path, reason=reason),
+			_("Settings Not Saved"),
+			wx.OK | wx.ICON_WARNING,
+			parent=wx.GetActiveWindow() or self,
+		)
 
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
@@ -596,7 +632,7 @@ class BrailleFrame(wx.Frame):
 			replace(self.view_settings, font_size=font_size)
 		)
 		self._apply_editor_view_settings(self.view_settings)
-		save_view_settings(self._config_store, self.view_settings)
+		self._report_settings_save_problem(save_view_settings(self._config_store, self.view_settings))
 		settings_dialog = DotExpressSettingsDialog.open_instance()
 		if settings_dialog is not None:
 			settings_dialog.sync_font_size(self.view_settings.font_size)

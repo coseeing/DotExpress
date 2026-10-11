@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from config import (
+    ConfigSaveProblem,
     ConfigStore,
     DEFAULT_CONVERSION_WIDTH,
     DEFAULT_OUTPUT_MODE,
@@ -60,8 +61,12 @@ def load_translation_settings(store: ConfigStore, dictionary_names: list[str]) -
     return normalize_translation_settings(settings, dictionary_names)
 
 
-def save_translation_settings(store: ConfigStore, settings: TranslationSettings) -> None:
-    store.set_output_mode(settings.output_mode)
-    store.set_conversion_width(settings.width)
-    store.set_selected_dictionary(settings.selected_dictionary)
+def save_translation_settings(store: ConfigStore, settings: TranslationSettings) -> ConfigSaveProblem | None:
+    """Save the three settings, each one even if another fails; the first problem, or ``None`` (F-12 D6)."""
+    problems = (
+        store.set_output_mode(settings.output_mode),
+        store.set_conversion_width(settings.width),
+        store.set_selected_dictionary(settings.selected_dictionary),
+    )
+    return next((problem for problem in problems if problem is not None), None)
 

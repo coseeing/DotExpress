@@ -228,6 +228,25 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
 
+    def test_settings_not_saved_strings_are_translated(self) -> None:
+        # F-12 (D6): the box of the first settings change of a session that cannot be saved.
+        message = (
+            'DotExpress cannot save its settings to "{path}". Changes to the settings apply until DotExpress is closed, '
+            "but they are not kept. This message is not shown again until DotExpress is started again.\n\n{reason}"
+        )
+        backup = 'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}'
+        expected = {
+            "Settings Not Saved": "設定未儲存",
+            message: (
+                "DotExpress 無法將設定儲存到「{path}」。設定的變更在關閉 DotExpress 之前有效，但不會保留。"
+                "在下次啟動 DotExpress 之前，不會再顯示這則訊息。\n\n{reason}"
+            ),
+            backup: "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。詳細資訊：{error}",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

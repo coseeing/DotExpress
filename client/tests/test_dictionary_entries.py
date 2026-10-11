@@ -532,6 +532,16 @@ class DictionaryWriterLayoutTest(unittest.TestCase):
 			"text,note,braille,type\r\nAlpha,first,\u2801,General,overflow\r\nshort,,,General\r\n".encode("utf-8"),
 		)
 
+	def test_an_appended_column_goes_before_the_overflow_fields(self) -> None:
+		# A required column the header lacks follows the header's columns, and the fields
+		# beyond the header move right: none is overwritten (F-11 review M-5).
+		data = "text,braille\r\na,\u2801,Bopomofo,extra\r\nb\r\n".encode("utf-8")
+
+		self.assertEqual(
+			self.round_trip(data),
+			"text,braille,type\r\na,\u2801,General,Bopomofo,extra\r\nb,,General\r\n".encode("utf-8"),
+		)
+
 	def test_a_new_row_has_empty_extra_fields_and_an_edited_row_keeps_them(self) -> None:
 		layout = entries_module.DictionaryLayout(False, ("text", "note", "braille", "type"))
 		edited = DictionaryEntry("Alpine", "\u2801\u2807", "General", ("Alpha", "first", "\u2801", "General"))

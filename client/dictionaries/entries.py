@@ -191,18 +191,24 @@ def save_dictionary_entries(
 	lacks appended (``text,braille,type`` without a header). Each row is its record as
 	read, padded to the header, with its text, braille and type in their columns (the
 	last position of a column named twice): extra columns and overflow fields are kept,
-	a new row has them empty (F-11 D5). UTF-8, CRLF, minimal quoting.
+	a new row has them empty (F-11 D5). An appended column goes between the header's
+	fields and the overflow fields, which move right (F-11 review M-5). UTF-8, CRLF,
+	minimal quoting.
 	"""
 	dictionary_path.parent.mkdir(parents=True, exist_ok=True)
 	header = list(layout.header)
 	header.extend(name for name in REQUIRED_COLUMNS if name not in header)
+	# Without a header (the default layout), a record's first fields are text, braille, type.
+	read_columns = len(layout.header) if layout.header else len(header)
 	positions = [_column(header, name) for name in REQUIRED_COLUMNS]
 
 	def _write(fp) -> None:
 		writer = csv.writer(fp)
 		writer.writerow(header)
 		for row in rows:
-			fields = list(row.fields) + [""] * (len(header) - len(row.fields))
+			fields = list(row.fields[:read_columns])
+			fields += [""] * (len(header) - len(fields))
+			fields += row.fields[read_columns:]
 			for position, value in zip(positions, (row.text, row.braille, row.entry_type)):
 				fields[position] = value
 			writer.writerow(fields)

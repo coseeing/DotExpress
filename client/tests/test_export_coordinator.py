@@ -27,6 +27,9 @@ MISSING_TABLE = "missing table"
 LOGGER = "dotexpress.gui"
 # Half of a surrogate pair, as pasting part of an emoji can leave it in an editor (F-5 review M-7).
 LONE_SURROGATE = chr(0xD83D)
+# The Export All summary as the user sees it (F-12 D1; it was English, P1-4 defect 4).
+ALL_EXPORTED = "所有文件皆已成功匯出。"
+EXPORTED_WITH_ERRORS = "匯出完成，但有錯誤"
 
 
 def setUpModule() -> None:
@@ -145,8 +148,7 @@ class ExportCoordinatorTest(unittest.TestCase):
         return ("show_info", _("The document was exported successfully."), _("Export Complete"))
 
     def _all_exported(self) -> tuple:
-        # KNOWN BUG (P1-4 spec, defect 4): the message is not a msgid; only the caption is translated.
-        return ("show_info", "All documents were exported successfully.", _("Export Complete"))
+        return ("show_info", ALL_EXPORTED, "匯出完成")
 
     def _os_error_text(self, path: Path) -> str:
         try:
@@ -544,13 +546,12 @@ class ExportCoordinatorTest(unittest.TestCase):
         on_error("Translation failed")
         self.calls.run_all()
 
-        # KNOWN BUG (P1-4 spec, defect 4): the partial-export summary is not translated.
         self.assertEqual(
             self._take()[-1],
             (
                 "show_warning",
-                f"Exported documents: 1\nFailed documents: 2\n\nconvert-fail: Translation failed\nwrite-fail: {reason}",
-                "Export Complete with Errors",
+                f"成功匯出的文件：1\n匯出失敗的文件：2\n\nconvert-fail: Translation failed\nwrite-fail: {reason}",
+                EXPORTED_WITH_ERRORS,
             ),
         )
         self.assertEqual(self._written(), {"alpha.brl": "⠁"})
@@ -574,8 +575,8 @@ class ExportCoordinatorTest(unittest.TestCase):
             [
                 (
                     "show_warning",
-                    f"Exported documents: 0\nFailed documents: 2\n\nalpha: {MISSING_TABLE}\nbeta: {MISSING_TABLE}",
-                    "Export Complete with Errors",
+                    f"成功匯出的文件：0\n匯出失敗的文件：2\n\nalpha: {MISSING_TABLE}\nbeta: {MISSING_TABLE}",
+                    EXPORTED_WITH_ERRORS,
                 )
             ],
         )
@@ -600,8 +601,8 @@ class ExportCoordinatorTest(unittest.TestCase):
                 ("call_after",),
                 (
                     "show_warning",
-                    f"Exported documents: 0\nFailed documents: 2\n\nalpha: {reason}\nbeta: {reason}",
-                    "Export Complete with Errors",
+                    f"成功匯出的文件：0\n匯出失敗的文件：2\n\nalpha: {reason}\nbeta: {reason}",
+                    EXPORTED_WITH_ERRORS,
                 ),
             ],
         )
@@ -625,8 +626,8 @@ class ExportCoordinatorTest(unittest.TestCase):
             self._take()[-1],
             (
                 "show_warning",
-                "Exported documents: 2\nFailed documents: 1\n\nbeta: injected",
-                "Export Complete with Errors",
+                "成功匯出的文件：2\n匯出失敗的文件：1\n\nbeta: injected",
+                EXPORTED_WITH_ERRORS,
             ),
         )
         self.assertEqual(self._written(), {"alpha.brl": "⠁", "gamma.brl": "⠛"})
@@ -722,9 +723,9 @@ class ExportThroughConversionPresenterTest(unittest.TestCase):
                 ("call_after",),
                 (
                     "show_warning",
-                    "Exported documents: 2\nFailed documents: 1\n\nbroken: "
+                    "成功匯出的文件：2\n匯出失敗的文件：1\n\nbroken: "
                     + _("Translation failed: {error}").format(error="bad"),
-                    "Export Complete with Errors",
+                    EXPORTED_WITH_ERRORS,
                 ),
             ],
         )

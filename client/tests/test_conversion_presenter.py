@@ -185,10 +185,10 @@ class ConversionPresenterTest(unittest.TestCase):
                 )
 
     def test_format_conversion_error_public_texts(self) -> None:
-        # KNOWN BUG (P1-4 spec, defect 4): the two public fallback texts are not msgids, so they stay English.
+        # The two public fallback texts are msgids since F-12 (D2; were English, P1-4 defect 4).
         for raw, public in (
-            ("", "An unknown error occurred."),
-            ("Can't translate: tables zh-tw.ctb inbuf=12", "The selected translation table could not translate this text."),
+            ("", "發生不明的錯誤。"),
+            ("Can't translate: tables zh-tw.ctb inbuf=12", "選取的轉譯表無法轉譯這段文字。"),
         ):
             with self.subTest(raw=raw):
                 self.assertEqual(

@@ -858,6 +858,14 @@ msgstr ""
 msgid "Zulu grade 2"
 msgstr ""
 
+#: conversion/plain_text.py:11
+msgid "An unknown error occurred."
+msgstr ""
+
+#: conversion/plain_text.py:13
+msgid "The selected translation table could not translate this text."
+msgstr ""
+
 #: conversion/preprocessing/user_script.py:40
 msgid "The script must define exactly one top-level synchronous main function."
 msgstr ""
@@ -1226,8 +1234,25 @@ msgstr ""
 msgid "The document was exported successfully."
 msgstr ""
 
-#: documents/export_coordinator.py:137
+#: documents/export_coordinator.py:137 documents/export_results.py:8
 msgid "Export Complete"
+msgstr ""
+
+#: documents/export_results.py:9
+msgid "Export Complete with Errors"
+msgstr ""
+
+#: documents/export_results.py:10
+msgid "All documents were exported successfully."
+msgstr ""
+
+#: documents/export_results.py:12
+#, python-brace-format
+msgid ""
+"Exported documents: {success_count}\n"
+"Failed documents: {failure_count}\n"
+"\n"
+"{failures}"
 msgstr ""
 
 #: documents/formats.py:22

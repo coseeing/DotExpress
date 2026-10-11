@@ -168,6 +168,22 @@ class TranslationTest(unittest.TestCase):
             "無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。",
         )
 
+    def test_export_summary_and_conversion_fallback_strings_are_translated(self) -> None:
+        # F-12 (D1, D2): the Export All summary (its three texts revived from obsolete catalog
+        # entries) and the two public conversion fallback texts; all were English (P1-4 defect 4).
+        expected = {
+            "Export Complete with Errors": "匯出完成，但有錯誤",
+            "All documents were exported successfully.": "所有文件皆已成功匯出。",
+            "Exported documents: {success_count}\nFailed documents: {failure_count}\n\n{failures}": (
+                "成功匯出的文件：{success_count}\n匯出失敗的文件：{failure_count}\n\n{failures}"
+            ),
+            "An unknown error occurred.": "發生不明的錯誤。",
+            "The selected translation table could not translate this text.": "選取的轉譯表無法轉譯這段文字。",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 
@@ -345,6 +361,43 @@ class ExtractionMarkerTest(unittest.TestCase):
 
         self.assertEqual(len(self.FORMER_MARKER_MSGIDS), 44)
         self.assertEqual(sorted(set(self.FORMER_MARKER_MSGIDS) - extracted), [])
+
+    def test_export_summary_and_conversion_fallback_texts_are_marked_where_defined(self) -> None:
+        # F-12 (D1, D2): these values are translated where they are shown, so each must be an
+        # N_ call where it is defined, or it stays English.
+        tree = _module_tree("documents/export_results.py")
+        values = {
+            target.id: node.value
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        names = (
+            "EXPORT_COMPLETE_TITLE",
+            "EXPORT_COMPLETE_WITH_ERRORS_TITLE",
+            "EXPORT_ALL_SUCCESS_MESSAGE",
+            "EXPORT_ALL_PARTIAL_MESSAGE",
+        )
+        self.assertEqual(
+            {name: ast.unparse(values[name].func) if isinstance(values[name], ast.Call) else None for name in names},
+            dict.fromkeys(names, "N_"),
+        )
+        returns = [
+            ast.unparse(node.value)
+            for node in sorted(
+                (node for node in ast.walk(_module_tree("conversion/plain_text.py")) if isinstance(node, ast.Return)),
+                key=lambda node: node.lineno,
+            )
+        ]
+        self.assertEqual(
+            returns,
+            [
+                "N_('An unknown error occurred.')",
+                "N_('The selected translation table could not translate this text.')",
+                "message",
+            ],
+        )
 
     def test_generate_pot_extracts_n_keyword(self) -> None:
         script = (CLIENT_ROOT.parent / "scripts" / "generate-pot.bat").read_text(encoding="utf-8")

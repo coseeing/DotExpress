@@ -881,6 +881,14 @@ msgstr "祖魯文一級"
 msgid "Zulu grade 2"
 msgstr "祖魯文二級"
 
+#: conversion/plain_text.py:11
+msgid "An unknown error occurred."
+msgstr "發生不明的錯誤。"
+
+#: conversion/plain_text.py:13
+msgid "The selected translation table could not translate this text."
+msgstr "選取的轉譯表無法轉譯這段文字。"
+
 #: conversion/preprocessing/user_script.py:40
 msgid "The script must define exactly one top-level synchronous main function."
 msgstr "程式必須恰好定義一個頂層同步 main 函式。"
@@ -1260,9 +1268,30 @@ msgstr "匯出文件失敗：{error}"
 msgid "The document was exported successfully."
 msgstr "文件已成功匯出。"
 
-#: documents/export_coordinator.py:137
+#: documents/export_coordinator.py:137 documents/export_results.py:8
 msgid "Export Complete"
 msgstr "匯出完成"
+
+#: documents/export_results.py:9
+msgid "Export Complete with Errors"
+msgstr "匯出完成，但有錯誤"
+
+#: documents/export_results.py:10
+msgid "All documents were exported successfully."
+msgstr "所有文件皆已成功匯出。"
+
+#: documents/export_results.py:12
+#, python-brace-format
+msgid ""
+"Exported documents: {success_count}\n"
+"Failed documents: {failure_count}\n"
+"\n"
+"{failures}"
+msgstr ""
+"成功匯出的文件：{success_count}\n"
+"匯出失敗的文件：{failure_count}\n"
+"\n"
+"{failures}"
 
 #: documents/formats.py:22
 msgid "All Supported Files"
@@ -1764,23 +1793,6 @@ msgstr "設定"
 #~ "儲存時自動轉換失敗。文件已以空白點字內容儲存。\n"
 #~ "\n"
 #~ "{error}"
-
-#~ msgid "Export Complete with Errors"
-#~ msgstr "匯出完成，但有錯誤"
-
-#~ msgid "All documents were exported successfully."
-#~ msgstr "所有文件皆已成功匯出。"
-
-#~ msgid ""
-#~ "Exported documents: {success_count}\n"
-#~ "Failed documents: {failure_count}\n"
-#~ "\n"
-#~ "{failures}"
-#~ msgstr ""
-#~ "成功匯出的文件：{success_count}\n"
-#~ "匯出失敗的文件：{failure_count}\n"
-#~ "\n"
-#~ "{failures}"
 
 #~ msgid "Export All Issues"
 #~ msgstr "匯出全部問題"

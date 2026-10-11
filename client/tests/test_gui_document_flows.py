@@ -3815,16 +3815,16 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
             ),
             (ConversionStageError("translation", RuntimeError("boom")), gui._("Translation failed: {error}"), "boom"),
             (ConversionStageError("other", RuntimeError("odd")), gui._("Translation failed: {error}"), "odd"),
-            # KNOWN BUG (P1-4 spec, defect 4): the two public fallback texts are not msgids, so they stay English.
+            # The two public fallback texts are msgids since F-12 (D2; were English, P1-4 defect 4).
             (
                 ConversionStageError("translation", RuntimeError("")),
                 gui._("Translation failed: {error}"),
-                "An unknown error occurred.",
+                "發生不明的錯誤。",
             ),
             (
                 ConversionStageError("translation", RuntimeError("Can't translate: tables zh-tw.ctb inbuf=12")),
                 gui._("Translation failed: {error}"),
-                "The selected translation table could not translate this text.",
+                "選取的轉譯表無法轉譯這段文字。",
             ),
         )
         for error, template, error_text in cases:
@@ -4174,17 +4174,17 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         )
 
         self.calls.run_next()
-        # KNOWN BUG (P1-4 spec, defect 4): the partial-export summary is not translated.
+        # The Export All summary in zh_TW (F-12 D1; was English, P1-4 defect 4).
         summary = (
-            "Exported documents: 4\n"
-            "Failed documents: 2\n"
+            "成功匯出的文件：4\n"
+            "匯出失敗的文件：2\n"
             "\n"
             f"d4-write-fail: {write_reason}\n"
             f"d5-convert-fail: {gui._('Translation failed: {error}').format(error='t5 boom')}"
         )
         self.assertEqual(
             self._take(),
-            [self._box(frame, summary, "Export Complete with Errors", gui.wx.OK | gui.wx.ICON_WARNING)],
+            [self._box(frame, summary, "匯出完成，但有錯誤", gui.wx.OK | gui.wx.ICON_WARNING)],
         )
         self.assertEqual(self.calls.pending, [])
         self.assertEqual(
@@ -4205,10 +4205,10 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._take(), [("call_after",)])
         self.calls.run_next()
 
-        # KNOWN BUG (P1-4 spec, defect 4): the message is not a msgid; only the caption is translated.
+        # The Export All summary in zh_TW (F-12 D1; was English, P1-4 defect 4).
         self.assertEqual(
             self._take(),
-            [self._info(frame, "All documents were exported successfully.", gui._("Export Complete"))],
+            [self._info(frame, "所有文件皆已成功匯出。", "匯出完成")],
         )
         self.assertEqual(sorted(path.name for path in self.export_dir.iterdir()), ["alpha.brl", "beta.brl"])
 
@@ -4224,10 +4224,10 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._take(), [("call_after",)])
         self.calls.run_next()
 
-        summary = f"Exported documents: 0\nFailed documents: 2\n\np1: {message}\np2: {message}"
+        summary = f"成功匯出的文件：0\n匯出失敗的文件：2\n\np1: {message}\np2: {message}"
         self.assertEqual(
             self._take(),
-            [self._box(frame, summary, "Export Complete with Errors", gui.wx.OK | gui.wx.ICON_WARNING)],
+            [self._box(frame, summary, "匯出完成，但有錯誤", gui.wx.OK | gui.wx.ICON_WARNING)],
         )
         self.assertEqual(self.threads, [])
         self.assertEqual(list(self.export_dir.iterdir()), [])
@@ -4268,7 +4268,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
                 self._overwrite_question(frame),
                 ("call_after",),
                 ("call_after",),
-                self._info(frame, "All documents were exported successfully.", gui._("Export Complete")),
+                self._info(frame, "所有文件皆已成功匯出。", "匯出完成"),
             ],
         )
         self.assertEqual((self.export_dir / "alpha.brl").read_text(encoding="utf-8"), "⠁")
@@ -4355,7 +4355,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
 
         self.assertEqual(
             self._boxes(),
-            [self._exported_box(), ("All documents were exported successfully.", gui._("Export Complete"))],
+            [self._exported_box(), ("所有文件皆已成功匯出。", "匯出完成")],
         )
         self.assertEqual([request.raw_text for request in self.requests], ["t0", "t0", "t1", "t2"])
         self.assertEqual(self._written(), {"open.brl": "⠴", "p1.brl": "⠂", "p2.brl": "⠆"})
@@ -4621,7 +4621,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         self.calls.run_next()
         self.assertEqual(
             self._take(),
-            [self._info(frame, "All documents were exported successfully.", gui._("Export Complete"))],
+            [self._info(frame, "所有文件皆已成功匯出。", "匯出完成")],
         )
         self.assertEqual(frame.output_txt.value, "⠍")
         self.assertEqual((self.export_dir / "p1.brl").read_text(encoding="utf-8"), "⠃")

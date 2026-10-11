@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from i18n import N_
 
-EXPORT_COMPLETE_TITLE = "Export Complete"
-EXPORT_COMPLETE_WITH_ERRORS_TITLE = "Export Complete with Errors"
-EXPORT_ALL_SUCCESS_MESSAGE = "All documents were exported successfully."
-EXPORT_ALL_PARTIAL_MESSAGE = (
+# msgids, translated where the summary is shown (ExportCoordinator._show_batch_result; F-12 D1).
+EXPORT_COMPLETE_TITLE = N_("Export Complete")
+EXPORT_COMPLETE_WITH_ERRORS_TITLE = N_("Export Complete with Errors")
+EXPORT_ALL_SUCCESS_MESSAGE = N_("All documents were exported successfully.")
+EXPORT_ALL_PARTIAL_MESSAGE = N_(
     "Exported documents: {success_count}\n"
     "Failed documents: {failure_count}\n"
     "\n"

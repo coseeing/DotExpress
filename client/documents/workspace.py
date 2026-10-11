@@ -15,6 +15,8 @@ from collections.abc import Callable
 from typing import BinaryIO
 
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
+from documents.import_problems import ImportProblem, describe_import_problem
+from i18n import N_, _
 from log import get_logger
 from shared.atomic_write import ensure_writable, write_bytes_atomically, write_text_atomically
 from shared.name_validation import normalize_base_name
@@ -28,6 +30,9 @@ _LONE_SURROGATE = re.compile(r"[\ud800-\udfff]")
 # ".<name>.dep.<random>.tmp": a Save's temporary file (16 hex digits) or the staged or
 # moved-aside package of a Rename (8 characters of tempfile's alphabet).
 _INTERRUPTED_PACKAGE = re.compile(r"^\.(?P<stem>.+)\.(?i:dep)\.[A-Za-z0-9_]+\.tmp$")
+# The reasons of the import problems these loaders raise (F-12 D3).
+_INVALID_PACKAGE = N_("Imported file must be a valid DotExpress DEP package.")
+_WRONG_EXTENSION = N_("The file name extension does not match the selected file type.")
 
 
 @dataclass(frozen=True)
@@ -247,7 +252,7 @@ def move_document_package(
 def load_document_package(path: Path | str) -> Document:
     package_path = Path(path)
     if package_path.suffix.casefold() != DEP_EXTENSION:
-        raise ValueError("Document package must use the .dep extension.")
+        raise ImportProblem("Document package must use the .dep extension.", _INVALID_PACKAGE)
     return _read_package(package_path, normalize_document_name(package_path.stem))
 
 
@@ -258,13 +263,13 @@ def _read_package(package_path: Path, package_name: str) -> Document:
         txt_names = [name for name in names if name.endswith(".txt")]
         brl_names = [name for name in names if name.endswith(".brl")]
         if len(txt_names) != 1 or len(brl_names) != 1:
-            raise ValueError("Document package must contain one .txt and one .brl file.")
+            raise ImportProblem("Document package must contain one .txt and one .brl file.", _INVALID_PACKAGE)
         txt_name = txt_names[0]
         brl_name = brl_names[0]
         txt_base = normalize_document_name(Path(txt_name).stem)
         brl_base = normalize_document_name(Path(brl_name).stem)
         if txt_base != brl_base or txt_base != package_name:
-            raise ValueError("Document package names do not match.")
+            raise ImportProblem("Document package names do not match.", _INVALID_PACKAGE)
         text = archive.read(txt_name).decode("utf-8")
         braille = archive.read(brl_name).decode("utf-8")
         metadata_name = f"{package_name}{PENDING_METADATA_SUFFIX}"
@@ -278,7 +283,7 @@ def _read_package(package_path: Path, package_name: str) -> Document:
 def load_text_document(path: Path | str) -> Document:
     source_path = Path(path)
     if source_path.suffix.casefold() != TXT_EXTENSION:
-        raise ValueError("Text document must use the .txt extension.")
+        raise ImportProblem("Text document must use the .txt extension.", _WRONG_EXTENSION)
     return Document(
         name=normalize_document_name(source_path.stem),
         text=source_path.read_text(encoding="utf-8"),
@@ -434,17 +439,18 @@ def batch_import_documents(
     if normalized_format_key != ALL_SUPPORTED_FILTER_KEY and normalized_format_key not in get_supported_import_filter_keys():
         raise ValueError(f'Unsupported import format: "{format_key}".')
     for path in sorted((Path(path) for path in paths), key=lambda item: (item.stem.casefold(), item.stem)):
+        loader_key = path.suffix.lstrip(".").casefold() if normalized_format_key == ALL_SUPPORTED_FILTER_KEY else normalized_format_key
         try:
-            loader_key = path.suffix.lstrip(".").casefold() if normalized_format_key == ALL_SUPPORTED_FILTER_KEY else normalized_format_key
             loader = IMPORT_LOADERS.get(loader_key)
             if loader is None:
-                raise ValueError(f'Unsupported import file type: "{path.suffix}".')
+                raise ImportProblem(f'Unsupported import file type: "{path.suffix}".', N_("This file type cannot be imported."))
             document = loader(path)
         except Exception as exc:
-            issues.append(BatchIssue(path=path, reason=str(exc)))
+            # A reason the user can act on, in the UI language (F-12 D3).
+            issues.append(BatchIssue(path=path, reason=describe_import_problem(exc, loader_key)))
             continue
         if document.name.casefold() in seen_names:
-            issues.append(BatchIssue(path=path, reason=f'Document "{document.name}" already exists.'))
+            issues.append(BatchIssue(path=path, reason=_('Document "{name}" already exists.').format(name=document.name)))
             continue
         seen_names.add(document.name.casefold())
         documents.append(document)

@@ -184,6 +184,23 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
 
+    def test_import_problem_strings_are_translated(self) -> None:
+        # F-12 (D3): the reasons of the Import Issues dialog; the DEP one is revived from an
+        # obsolete catalog entry.
+        expected = {
+            "The file is not saved as UTF-8 text. Save it again as UTF-8, for example with Save As in Notepad.": (
+                "檔案不是以 UTF-8 文字儲存。請重新存成 UTF-8，例如在記事本中使用「另存新檔」。"
+            ),
+            "This file type cannot be imported.": "無法匯入這種類型的檔案。",
+            "The file name extension does not match the selected file type.": "副檔名與選取的檔案類型不符。",
+            "Imported file must be a valid DotExpress DEP package.": "匯入的檔案必須是有效的 DotExpress DEP 封裝檔。",
+            "This PDF file is encrypted and cannot be imported.": "這個 PDF 檔已加密，無法匯入。",
+            "The EPUB file is damaged or has no readable content.": "EPUB 檔已損壞，或沒有可讀取的內容。",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

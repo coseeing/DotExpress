@@ -3237,11 +3237,39 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(
             lines,
             [
-                'Alpha.txt: Document "Alpha" already exists.',
-                f"delta.dep: [Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}",
+                "Alpha.txt: 文件「Alpha」已存在。",
+                f"delta.dep: 儲存文件失敗：[Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}",
             ],
         )
         self.assertEqual(self._listing(), ["alpha.dep", "beta.dep"])
+
+    def test_import_issues_explain_each_skipped_file(self) -> None:
+        # F-12 (D3): a reason the user can act on, in zh_TW, on each line.
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        source_dir = self.root / "sources"
+        source_dir.mkdir()
+        (source_dir / "big5.txt").write_bytes("臺北".encode("cp950"))
+        (source_dir / "foo.xyz").write_text("F", encoding="utf-8")
+        self.import_paths = [str(source_dir / "big5.txt"), str(source_dir / "foo.xyz")]
+
+        frame.on_import_document(None)
+
+        self.assertEqual(
+            self.events[-1],
+            (
+                "FileIssuesDialog",
+                gui._("Import Issues"),
+                gui._("Some files were skipped during import."),
+                [
+                    "big5.txt: 檔案不是以 UTF-8 文字儲存。請重新存成 UTF-8，例如在記事本中使用「另存新檔」。",
+                    "foo.xyz: 無法匯入這種類型的檔案。",
+                ],
+            ),
+        )
+        self.assertEqual(self._listing(), ["alpha.dep"])
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
 
     # --- U+0000 (F-8 D12, D13) ---------------------------------------------
 
@@ -3331,7 +3359,7 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
                     "FileIssuesDialog",
                     gui._("Import Issues"),
                     gui._("Some files were skipped during import."),
-                    ['Alpha.txt: Document "Alpha" already exists.'],
+                    ["Alpha.txt: 文件「Alpha」已存在。"],
                 ),
             ],
         )

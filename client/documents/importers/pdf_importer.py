@@ -7,9 +7,13 @@ from typing import Any
 import pymupdf
 from pypdf import PdfReader
 
-from .base import ImportedDocument, source_name, validate_source
+from i18n import N_
+
+from .base import ImportedDocument, ImportProblem, source_name, validate_source
 from .markdown_ast import Block, BlockQuote, DocumentAst, Heading, HorizontalRule, ListBlock, ListItem, Paragraph, Table
 from .markdown_renderer import render_markdown
+
+_ENCRYPTED_PDF = N_("This PDF file is encrypted and cannot be imported.")
 
 SUPPORTED_ROLES = {
     "H1",
@@ -267,7 +271,7 @@ def _extract_plain_text_ast(path: Path) -> DocumentAst:
     paragraphs: list[Paragraph] = []
     with pymupdf.open(path) as document:
         if getattr(document, "needs_pass", False) is True or getattr(document, "is_encrypted", False) is True:
-            raise ValueError("Encrypted PDF cannot be imported.")
+            raise ImportProblem("Encrypted PDF cannot be imported.", _ENCRYPTED_PDF)
         for page in document:
             text = page.get_text("text").replace("\r\n", "\n").replace("\r", "\n")
             for part in text.split("\n\n"):
@@ -281,7 +285,7 @@ def import_pdf(path: Path | str) -> ImportedDocument:
     source = validate_source(path, ".pdf")
     reader = PdfReader(str(source))
     if getattr(reader, "is_encrypted", False) is True:
-        raise ValueError("Encrypted PDF cannot be imported.")
+        raise ImportProblem("Encrypted PDF cannot be imported.", _ENCRYPTED_PDF)
     catalog = _resolve(reader.trailer.get("/Root"))
     ast: DocumentAst | None = None
     if _has_tagged_structure(catalog):

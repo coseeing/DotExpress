@@ -218,11 +218,42 @@ class DocumentWorkspaceTest(unittest.TestCase):
         )
 
         self.assertEqual(documents, [Document(name="alpha", text="A", braille=None)])
+        # The reasons in zh_TW (F-12 D3; were English, P1-4 defect 4).
         self.assertEqual(
             issues,
             [
-                BatchIssue(path=source_dir / "alpha.dep", reason="Text document must use the .txt extension."),
-                BatchIssue(path=source_dir / "beta.txt", reason='Document "beta" already exists.'),
+                BatchIssue(path=source_dir / "alpha.dep", reason="副檔名與選取的檔案類型不符。"),
+                BatchIssue(path=source_dir / "beta.txt", reason="文件「beta」已存在。"),
+            ],
+        )
+
+    def test_batch_import_documents_explains_each_skipped_file(self) -> None:
+        # F-12 (D3): every reason is in zh_TW; they were English or raw Python texts (P1-4
+        # defect 4). Sorted by name, as the batch is.
+        source_dir = Path(self._tmpdir.name) / "incoming"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        long_stem = "x" * 40
+        (source_dir / "alpha.txt").write_text("A", encoding="utf-8")
+        (source_dir / "bad.docx").write_bytes(b"not a zip")
+        (source_dir / "big5.txt").write_bytes("臺北".encode("cp950"))
+        (source_dir / "broken.dep").write_bytes(b"not a zip")
+        (source_dir / "foo.xyz").write_text("F", encoding="utf-8")
+        (source_dir / f"{long_stem}.txt").write_text("L", encoding="utf-8")
+
+        documents, issues = batch_import_documents(
+            sorted(source_dir.iterdir()), format_key="all", existing_names={"alpha"}
+        )
+
+        self.assertEqual(documents, [])
+        self.assertEqual(
+            [(issue.path.name, issue.reason) for issue in issues],
+            [
+                ("alpha.txt", "文件「alpha」已存在。"),
+                ("bad.docx", "無法讀取檔案：File is not a zip file"),
+                ("big5.txt", "檔案不是以 UTF-8 文字儲存。請重新存成 UTF-8，例如在記事本中使用「另存新檔」。"),
+                ("broken.dep", "匯入的檔案必須是有效的 DotExpress DEP 封裝檔。"),
+                ("foo.xyz", "無法匯入這種類型的檔案。"),
+                (f"{long_stem}.txt", "文件名稱長度需為 1 到 32 個字元。"),
             ],
         )
 
@@ -360,6 +391,21 @@ class DocumentWorkspaceTest(unittest.TestCase):
 
         self.assertEqual(kept, Document("alpha", "x�", "�⠁"))
         self.assertEqual(pending, Document("alpha", "x�", None))
+
+    def test_load_workspace_documents_counts_a_package_the_loader_refuses_as_invalid(self) -> None:
+        # F-12 (D3): the loader's ImportProblem is a ValueError, so such a package is still
+        # an invalid one.
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(self.workspace_dir / "mismatch.dep", "w") as archive:
+            archive.writestr("other.txt", "a")
+            archive.writestr("other.brl", "b")
+        with zipfile.ZipFile(self.workspace_dir / "half.dep", "w") as archive:
+            archive.writestr("half.txt", "a")
+
+        documents, invalid_paths = load_workspace_documents(self.workspace_dir)
+
+        self.assertEqual(documents, [])
+        self.assertEqual([path.name for path in invalid_paths], ["half.dep", "mismatch.dep"])
 
     def test_load_workspace_documents_sorts_valid_documents_and_collects_invalid_paths(self) -> None:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)

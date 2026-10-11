@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from documents.import_problems import ImportProblem
+from i18n import N_
 from shared.name_validation import normalize_base_name
 
 
@@ -15,7 +17,10 @@ class ImportedDocument:
 def validate_source(path: Path | str, extension: str) -> Path:
     source = Path(path)
     if source.suffix.casefold() != extension.casefold():
-        raise ValueError(f"Source document must use the {extension} extension.")
+        raise ImportProblem(
+            f"Source document must use the {extension} extension.",
+            N_("The file name extension does not match the selected file type."),
+        )
     return source
 
 

@@ -52,6 +52,7 @@ from documents.workspace import (
     recover_interrupted_packages,
     save_document_package,
 )
+from i18n import _
 
 
 @dataclass(frozen=True)
@@ -238,7 +239,7 @@ class DocumentWorkspaceService:
                     raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(package_path))
                 save_document_package(package_path, document)
             except Exception as exc:
-                save_issues.append(BatchIssue(path=package_path, reason=str(exc)))
+                save_issues.append(BatchIssue(path=package_path, reason=_("Failed to save document: {error}").format(error=exc)))
                 continue
             self._remember(document)
             saved.append(document)

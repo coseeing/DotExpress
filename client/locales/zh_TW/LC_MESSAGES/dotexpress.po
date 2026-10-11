@@ -987,11 +987,11 @@ msgstr "字典名稱"
 msgid "Please enter the document name."
 msgstr "請輸入文件名稱。"
 
-#: dialog.py:260
+#: dialog.py:260 documents/import_problems.py:42
 msgid "Document name must be 1 to 32 characters."
 msgstr "文件名稱長度需為 1 到 32 個字元。"
 
-#: dialog.py:261
+#: dialog.py:261 documents/import_problems.py:43
 msgid "Document name is not a valid Windows file name."
 msgstr "文件名稱不是有效的 Windows 檔名。"
 
@@ -1234,7 +1234,7 @@ msgstr ""
 "檔案不是以 UTF-8 儲存。請重新存成「CSV UTF-8 (逗號分隔)」格式，例如在 Excel "
 "中使用「另存新檔」。"
 
-#: dictionaries/read_problems.py:50
+#: dictionaries/read_problems.py:50 documents/import_problems.py:36
 msgid ""
 "The file cannot be opened. It may be in use by another program, or you may "
 "not have permission to read it. Close the other program and try again."
@@ -1249,7 +1249,7 @@ msgid ""
 "closed. Details: {error}"
 msgstr "檔案不是有效的 CSV 檔案。請檢查是否有未成對的引號。詳細資訊：{error}"
 
-#: dictionaries/read_problems.py:57
+#: dictionaries/read_problems.py:57 documents/import_problems.py:49
 #, python-brace-format
 msgid "The file cannot be read: {error}"
 msgstr "無法讀取檔案：{error}"
@@ -1341,6 +1341,43 @@ msgstr "點字檔 BRL"
 msgid "Dual View HTML"
 msgstr "雙視檔 HTML"
 
+#: documents/import_problems.py:46 documents/workspace.py:34
+msgid "Imported file must be a valid DotExpress DEP package."
+msgstr "匯入的檔案必須是有效的 DotExpress DEP 封裝檔。"
+
+#: documents/import_problems.py:48
+msgid ""
+"The file is not saved as UTF-8 text. Save it again as UTF-8, for example "
+"with Save As in Notepad."
+msgstr ""
+"檔案不是以 UTF-8 文字儲存。請重新存成 UTF-8，例如在記事本中使用「另存新檔」。"
+
+#: documents/importers/base.py:22 documents/workspace.py:35
+msgid "The file name extension does not match the selected file type."
+msgstr "副檔名與選取的檔案類型不符。"
+
+#: documents/importers/epub_importer.py:15
+msgid "The EPUB file is damaged or has no readable content."
+msgstr "EPUB 檔已損壞，或沒有可讀取的內容。"
+
+#: documents/importers/pdf_importer.py:16
+msgid "This PDF file is encrypted and cannot be imported."
+msgstr "這個 PDF 檔已加密，無法匯入。"
+
+#: documents/workspace.py:446
+msgid "This file type cannot be imported."
+msgstr "無法匯入這種類型的檔案。"
+
+#: documents/workspace.py:453 gui.py:729
+#, python-brace-format
+msgid "Document \"{name}\" already exists."
+msgstr "文件「{name}」已存在。"
+
+#: documents/workspace_service.py:242 gui.py:473 gui.py:483
+#, python-brace-format
+msgid "Failed to save document: {error}"
+msgstr "儲存文件失敗：{error}"
+
 #: gui.py:181
 msgid "Documents"
 msgstr "文件"
@@ -1389,11 +1426,6 @@ msgstr "此文件沒有可顯示的轉換資料。"
 #, python-brace-format
 msgid "Failed to open dual view: {error}"
 msgstr "無法開啟雙視檢視：{error}"
-
-#: gui.py:473 gui.py:483
-#, python-brace-format
-msgid "Failed to save document: {error}"
-msgstr "儲存文件失敗：{error}"
 
 #: gui.py:484
 msgid "Cannot Save Document"
@@ -1455,11 +1487,6 @@ msgstr "已取代字元"
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr "刪除無效工作區文件失敗：{error}"
-
-#: gui.py:729
-#, python-brace-format
-msgid "Document \"{name}\" already exists."
-msgstr "文件「{name}」已存在。"
 
 #: gui.py:764
 #, python-brace-format
@@ -1810,9 +1837,6 @@ msgstr "設定"
 
 #~ msgid "At least one document is required."
 #~ msgstr "至少需要一份文件。"
-
-#~ msgid "Imported file must be a valid DotExpress DEP package."
-#~ msgstr "匯入的檔案必須是有效的 DotExpress DEP 封裝檔。"
 
 #, python-brace-format
 #~ msgid "Failed to import document: {error}"

@@ -26,6 +26,8 @@ def setUpModule() -> None:
 
 
 NO_SPACE = f"[Errno {errno.ENOSPC}] {os.strerror(errno.ENOSPC)}"
+# The lead of a failed write of an imported package (F-12 D3; the raw error came alone).
+SAVE_FAILED = "儲存文件失敗："
 
 SERVICE_PATH = Path(__file__).resolve().parents[1] / "documents" / "workspace_service.py"
 
@@ -368,7 +370,7 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
             result,
             ImportResult(
                 saved=[Document("ok", "o", None)],
-                issues=[BatchIssue(path=sources[0], reason='Document "bad" already exists.')],
+                issues=[BatchIssue(path=sources[0], reason="文件「bad」已存在。")],
             ),
         )
         self.assertEqual(self.controller.document_names, ["alpha", "ok"])
@@ -393,7 +395,7 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(result.saved, [Document("delta", "d", None)])
         self.assertEqual(
             result.issues,
-            [BatchIssue(path=self.workspace / "beta.dep", reason=self._exists_error("beta.dep"))],
+            [BatchIssue(path=self.workspace / "beta.dep", reason=SAVE_FAILED + self._exists_error("beta.dep"))],
         )
         self.assertEqual(self.controller.document_names, ["zoo", "delta"])
         self.assertEqual(self._listing(), ["beta.dep", "delta.dep"])
@@ -467,8 +469,8 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         self.assertEqual(result.saved, [Document("beta", "b", None)])
         self.assertEqual(self.controller.document_names, ["alpha", "beta"])
         self.assertEqual(len(result.issues), 2)
-        self.assertEqual(result.issues[0], BatchIssue(path=sources[0], reason='Document "Alpha" already exists.'))
-        self.assertEqual(result.issues[1], BatchIssue(path=self.workspace / "delta.dep", reason=NO_SPACE))
+        self.assertEqual(result.issues[0], BatchIssue(path=sources[0], reason="文件「Alpha」已存在。"))
+        self.assertEqual(result.issues[1], BatchIssue(path=self.workspace / "delta.dep", reason=SAVE_FAILED + NO_SPACE))
         self.assertEqual(self._listing(), ["beta.dep"])
 
     def test_import_files_reports_any_save_error_as_an_issue(self) -> None:
@@ -487,7 +489,7 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
             result = service.import_files(self._sources(beta="b", delta="d"), format_key="all")
 
         self.assertEqual(result.saved, [Document("beta", "b", None)])
-        self.assertEqual(result.issues, [BatchIssue(path=self.workspace / "delta.dep", reason=str(error))])
+        self.assertEqual(result.issues, [BatchIssue(path=self.workspace / "delta.dep", reason=SAVE_FAILED + str(error))])
         self.assertEqual(self.controller.document_names, ["zoo", "beta"])
         self.assertEqual(self._listing(), ["beta.dep"])
 
@@ -501,7 +503,7 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
 
         expected = [Document("delta", "d", None), Document("epsilon", "e", None)]
         self.assertEqual(result.saved, expected)
-        self.assertEqual(result.issues, [BatchIssue(path=self.workspace / "beta.dep", reason=NO_SPACE)])
+        self.assertEqual(result.issues, [BatchIssue(path=self.workspace / "beta.dep", reason=SAVE_FAILED + NO_SPACE)])
         self.assertEqual(self.controller.document_names, ["zoo", "delta", "epsilon"])
         self.assertEqual(self._package("delta"), expected[0])
         self.assertEqual(self._package("epsilon"), expected[1])
@@ -1319,7 +1321,7 @@ class ReplacedNulCharactersTest(unittest.TestCase):
             result = self.service.import_files(sorted(sources.iterdir()), format_key="all")
 
         self.assertEqual(result.saved, [Document("gamma", "g\ufffd\ufffd", None)])
-        self.assertEqual(result.issues, [BatchIssue(path=self._path("beta"), reason=NO_SPACE)])
+        self.assertEqual(result.issues, [BatchIssue(path=self._path("beta"), reason=SAVE_FAILED + NO_SPACE)])
         self.assertEqual(self._counts("beta", "gamma"), [0, 2])
 
     def test_pending_count_follows_rename_and_is_dropped_by_delete(self) -> None:

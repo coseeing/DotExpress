@@ -30,6 +30,7 @@ from documents.workspace import (
     create_default_document,
     normalize_document_name,
     replace_lone_surrogates,
+    unlisted_entry_reason,
 )
 from documents.workspace_service import DocumentWorkspaceService
 from ui.action_menu import get_document_menu_enabled_state
@@ -721,19 +722,24 @@ class BrailleFrame(wx.Frame):
 				if dialog.ShowModal() != wx.ID_OK:
 					return None
 				document_name = normalize_document_name(dialog.get_document_name())
-			# A package on disk that is not listed (kept invalid at startup) counts too (F-8).
-			if self._document_controller.document_name_exists(
-				document_name, exclude_name=exclude_name
-			) or self._workspace_service.package_name_taken(document_name, exclude_name=exclude_name):
-				message_box(
-					_('Document "{name}" already exists.').format(name=document_name),
-					_("Error"),
-					wx.OK | wx.ICON_ERROR,
-					parent=self,
+			if self._document_controller.document_name_exists(document_name, exclude_name=exclude_name):
+				message = _('Document "{name}" already exists.').format(name=document_name)
+			else:
+				# An entry on disk that is not listed (an invalid package kept at startup) holds
+				# the name too (F-8); the box names it and the workspace folder (F-12 D5).
+				entry = self._workspace_service.unlisted_package_entry(document_name, exclude_name=exclude_name)
+				if entry is None:
+					return document_name
+				message = "\n\n".join(
+					(
+						unlisted_entry_reason(document_name, entry),
+						_("Choose another name, or move or delete that file. Workspace folder:\n{folder}").format(
+							folder=self._workspace_service.workspace_dir
+						),
+					)
 				)
-				prefill_name = document_name
-				continue
-			return document_name
+			message_box(message, _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
+			prefill_name = document_name
 
 	def _create_default_document(self) -> bool:
 		default_document = create_default_document()

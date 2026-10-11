@@ -11,7 +11,7 @@ import shutil
 import stat
 import tempfile
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import BinaryIO
 
 from documents.formats import ALL_SUPPORTED_FILTER_KEY, get_importable_formats, get_supported_import_filter_keys
@@ -431,10 +431,18 @@ def batch_import_documents(
     *,
     format_key: str,
     existing_names: set[str],
+    unlisted_entries: Mapping[str, str] | None = None,
 ) -> tuple[list[Document], list[BatchIssue]]:
+    """Load ``paths``; skip each file that cannot be loaded or whose name is taken, with a reason.
+
+    ``existing_names`` are the listed documents; ``unlisted_entries`` maps each name that an
+    entry on disk which is not listed holds to that entry's file name (F-12 D5). Names are
+    compared ignoring case, and a listed name is reported as a duplicate first.
+    """
     documents: list[Document] = []
     issues: list[BatchIssue] = []
     seen_names = {name.casefold() for name in existing_names}
+    unlisted = {name.casefold(): entry for name, entry in (unlisted_entries or {}).items()}
     normalized_format_key = format_key.casefold()
     if normalized_format_key != ALL_SUPPORTED_FILTER_KEY and normalized_format_key not in get_supported_import_filter_keys():
         raise ValueError(f'Unsupported import format: "{format_key}".')
@@ -452,9 +460,19 @@ def batch_import_documents(
         if document.name.casefold() in seen_names:
             issues.append(BatchIssue(path=path, reason=_('Document "{name}" already exists.').format(name=document.name)))
             continue
+        if document.name.casefold() in unlisted:
+            issues.append(BatchIssue(path=path, reason=unlisted_entry_reason(document.name, unlisted[document.name.casefold()])))
+            continue
         seen_names.add(document.name.casefold())
         documents.append(document)
     return documents, issues
+
+
+def unlisted_entry_reason(name: str, entry: str) -> str:
+    """Why ``name`` cannot be used: ``entry``, in the workspace folder, is not a listed document (F-12 D5)."""
+    return _(
+        'The name "{name}" is used by "{file}" in the workspace folder, but that file is not in the document list.'
+    ).format(name=name, file=entry)
 
 
 def choose_selection_after_delete(names: list[str], deleted_name: str) -> str | None:

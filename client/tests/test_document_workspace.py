@@ -257,6 +257,32 @@ class DocumentWorkspaceTest(unittest.TestCase):
             ],
         )
 
+    def test_batch_import_documents_names_the_file_that_holds_a_name_on_disk(self) -> None:
+        # F-12 (D5): a name held by a package on disk that is not listed gets its own reason;
+        # a listed name keeps the duplicate message, also when an unlisted entry holds another
+        # case of it (a case-sensitive file system).
+        source_dir = Path(self._tmpdir.name) / "incoming"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "alpha.txt").write_text("A", encoding="utf-8")
+        (source_dir / "BAD.txt").write_text("B", encoding="utf-8")
+        (source_dir / "ok.txt").write_text("O", encoding="utf-8")
+
+        documents, issues = batch_import_documents(
+            sorted(source_dir.iterdir()),
+            format_key="txt",
+            existing_names={"alpha"},
+            unlisted_entries={"ALPHA": "ALPHA.dep", "bad": "bad.dep"},
+        )
+
+        self.assertEqual(documents, [Document("ok", "O", None)])
+        self.assertEqual(
+            [(issue.path.name, issue.reason) for issue in issues],
+            [
+                ("alpha.txt", "文件「alpha」已存在。"),
+                ("BAD.txt", "名稱「BAD」已被工作區資料夾中的「bad.dep」使用，但這個檔案不在文件清單中。"),
+            ],
+        )
+
     def test_batch_import_documents_dispatches_semantic_importer(self) -> None:
         source = Path(self._tmpdir.name) / "lesson.docx"
         calls = []

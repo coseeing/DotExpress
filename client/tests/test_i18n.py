@@ -214,6 +214,20 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
 
+    def test_unlisted_entry_strings_are_translated(self) -> None:
+        # F-12 (D5): a document name held by a file in the workspace folder that is not listed.
+        expected = {
+            'The name "{name}" is used by "{file}" in the workspace folder, but that file is not in the document list.': (
+                "名稱「{name}」已被工作區資料夾中的「{file}」使用，但這個檔案不在文件清單中。"
+            ),
+            "Choose another name, or move or delete that file. Workspace folder:\n{folder}": (
+                "請改用其他名稱，或將這個檔案移走或刪除。工作區資料夾：\n{folder}"
+            ),
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

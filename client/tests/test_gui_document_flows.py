@@ -272,6 +272,8 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         frame._workspace_service.workspace_dir = self.workspace
         # F-8 (D1, D2): a bare Mock would answer "taken" and loop the name prompt.
         frame._workspace_service.package_name_taken.return_value = False
+        # F-12 (D5): the same for the entry that holds a name on disk.
+        frame._workspace_service.unlisted_package_entry.return_value = None
         frame._workspace_service.free_document_name.side_effect = lambda base: base
         # F-8 (D4): a bare Mock would be a truthy list of recovered names.
         frame._workspace_service.take_recovered_document_names.return_value = []
@@ -2975,6 +2977,18 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         self.assertEqual(self._package("beta"), beta)
         self.assertEqual(self._state(frame), before)
 
+    def _unlisted_name_events(self, title: str, initial_name: str, typed_name: str, entry: str, frame) -> list:
+        # F-12 (D5): the box names the entry on disk and shows the workspace folder.
+        message = (
+            f"名稱「{typed_name}」已被工作區資料夾中的「{entry}」使用，但這個檔案不在文件清單中。\n\n"
+            f"請改用其他名稱，或將這個檔案移走或刪除。工作區資料夾：\n{self.workspace}"
+        )
+        return [
+            ("DocumentNameDialog", gui._(title), initial_name),
+            ("MessageBox", message, gui._("Error"), gui.wx.OK | gui.wx.ICON_ERROR, frame),
+            ("DocumentNameDialog", gui._(title), typed_name),
+        ]
+
     def _frame_with_a_kept_invalid_bad_package(self):
         """alpha listed and open, bad.dep invalid and kept at startup (F-8, M-1)."""
         alpha = Document("alpha", "a", "1")
@@ -2990,7 +3004,7 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
         frame.on_add_document(None)
 
-        self.assertEqual(self.events, self._duplicate_name_events("Add Document", "", "bad", frame))
+        self.assertEqual(self.events, self._unlisted_name_events("Add Document", "", "bad", "bad.dep", frame))
         self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
         self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
         self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
@@ -3004,11 +3018,70 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
 
         frame.on_rename_document(None)
 
-        self.assertEqual(self.events, self._duplicate_name_events("Rename Document", "alpha", "bad", frame))
+        self.assertEqual(self.events, self._unlisted_name_events("Rename Document", "alpha", "bad", "bad.dep", frame))
         self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
         self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
         self.assertEqual((self.workspace / "alpha.dep").read_bytes(), alpha_bytes)
         self.assertEqual(self._state(frame), before)
+
+    def test_add_of_another_case_of_an_unlisted_name_names_the_entry_on_disk(self) -> None:
+        # F-12 (D5): the box names bad.dep, as it is spelled on disk, not the typed BAD.
+        frame = self._frame_with_a_kept_invalid_bad_package()
+        if not os.path.lexists(self.workspace / "BAD.dep"):
+            self.skipTest("case-sensitive file system: BAD is a free name")
+        self.names = ["BAD", None]
+
+        frame.on_add_document(None)
+
+        self.assertEqual(self.events, self._unlisted_name_events("Add Document", "", "BAD", "bad.dep", frame))
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+
+    def test_add_of_a_name_held_by_a_folder_names_the_folder(self) -> None:
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        self._block("folder")
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.names = ["folder", None]
+
+        frame.on_add_document(None)
+
+        self.assertEqual(self.events, self._unlisted_name_events("Add Document", "", "folder", "folder.dep", frame))
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+
+    def test_a_listed_duplicate_keeps_its_message_before_any_entry_on_disk(self) -> None:
+        # F-12 (D5): the document list is checked first (an unlisted ALPHA.dep can exist next
+        # to the listed alpha on a case-sensitive file system).
+        alpha = Document("alpha", "a", "1")
+        self._write_packages(alpha)
+        frame = self._make_workspace_frame([alpha], open_name="alpha", selected_name="alpha")
+        self.names = ["alpha", None]
+
+        with patch.object(DocumentWorkspaceService, "unlisted_package_entry", return_value="ALPHA.dep", create=True) as entry:
+            frame.on_add_document(None)
+
+        self.assertEqual(self.events, self._duplicate_name_events("Add Document", "", "alpha", frame))
+        entry.assert_not_called()
+
+    def test_import_of_a_name_held_by_an_unlisted_package_names_the_file(self) -> None:
+        # F-12 (D5): without the folder line, which would repeat on every line.
+        frame = self._frame_with_a_kept_invalid_bad_package()
+        source_dir = self.root / "sources"
+        source_dir.mkdir()
+        (source_dir / "bad.txt").write_text("b", encoding="utf-8")
+        self.import_paths = [str(source_dir / "bad.txt")]
+
+        frame.on_import_document(None)
+
+        self.assertEqual(
+            self.events[-1],
+            (
+                "FileIssuesDialog",
+                gui._("Import Issues"),
+                gui._("Some files were skipped during import."),
+                ["bad.txt: 名稱「bad」已被工作區資料夾中的「bad.dep」使用，但這個檔案不在文件清單中。"],
+            ),
+        )
+        self.assertEqual((self.workspace / "bad.dep").read_bytes(), b"not a zip")
 
     # --- delete ------------------------------------------------------------
 

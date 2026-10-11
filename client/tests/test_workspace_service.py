@@ -366,11 +366,17 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
 
         result = service.import_files(sources, format_key="all")
 
+        # F-12 (D5): the reason names the file on disk, as it is spelled there.
         self.assertEqual(
             result,
             ImportResult(
                 saved=[Document("ok", "o", None)],
-                issues=[BatchIssue(path=sources[0], reason="文件「bad」已存在。")],
+                issues=[
+                    BatchIssue(
+                        path=sources[0],
+                        reason="名稱「bad」已被工作區資料夾中的「Bad.dep」使用，但這個檔案不在文件清單中。",
+                    )
+                ],
             ),
         )
         self.assertEqual(self.controller.document_names, ["alpha", "ok"])
@@ -417,6 +423,29 @@ class DocumentWorkspaceServiceTest(unittest.TestCase):
         for label, name, exclude_name, expected in cases:
             with self.subTest(label):
                 self.assertIs(service.package_name_taken(name, exclude_name=exclude_name), expected)
+
+    def test_unlisted_package_entry_names_what_holds_a_name_on_disk(self) -> None:
+        # F-12 (D5): the entry as the workspace folder lists it.
+        service = self._start_with_a_kept_invalid_package()
+        self._block("folder")
+        cases = [
+            ("free", "gamma", None, None),
+            ("an invalid package kept at startup", "bad", None, "bad.dep"),
+            ("a folder", "folder", None, "folder.dep"),
+            ("its own package, any case", "Alpha", "alpha", None),
+        ]
+        if os.name == "nt":
+            cases.append(("another case on NTFS: the spelling on disk", "BAD", None, "bad.dep"))
+        for label, name, exclude_name, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(service.unlisted_package_entry(name, exclude_name=exclude_name), expected)
+
+    def test_unlisted_package_entry_falls_back_to_the_package_name(self) -> None:
+        # The path is taken, but the listing does not show it (it went away in between).
+        service = self._start_with_a_kept_invalid_package()
+
+        with patch.object(workspace_service.os, "scandir", side_effect=PermissionError(13, "denied")):
+            self.assertEqual(service.unlisted_package_entry("bad"), "bad.dep")
 
     def test_free_document_name(self) -> None:
         cases = (

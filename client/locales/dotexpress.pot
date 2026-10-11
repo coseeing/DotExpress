@@ -894,7 +894,7 @@ msgstr ""
 msgid "Source text \"{identifier}\" already exists."
 msgstr ""
 
-#: dialog.py:78 dialog.py:566 dialog.py:857 documents/export_coordinator.py:103
+#: dialog.py:78 dialog.py:590 dialog.py:881 documents/export_coordinator.py:103
 #: documents/export_coordinator.py:113 documents/export_coordinator.py:135
 #: gui.py:455 gui.py:730 gui.py:1047 gui.py:1059 ui/conversion_presenter.py:277
 msgid "Error"
@@ -920,7 +920,7 @@ msgstr ""
 msgid "Type"
 msgstr ""
 
-#: dialog.py:181 dialog.py:207 dialog.py:345 dialog.py:854
+#: dialog.py:181 dialog.py:207 dialog.py:345 dialog.py:878
 #: ui/conversion_presenter.py:174 ui/conversion_presenter.py:293
 #: ui/conversion_presenter.py:310
 msgid "Info"
@@ -1001,29 +1001,46 @@ msgstr ""
 msgid "Dictionary entries"
 msgstr ""
 
-#: dialog.py:435 dialog.py:660 ui/action_menu.py:29
+#: dialog.py:435 dialog.py:684 ui/action_menu.py:29
 msgid "Add"
 msgstr ""
 
-#: dialog.py:436 dialog.py:663
+#: dialog.py:436 dialog.py:687
 msgid "Edit"
 msgstr ""
 
-#: dialog.py:437 dialog.py:661 ui/action_menu.py:27
+#: dialog.py:437 dialog.py:685 ui/action_menu.py:27
 msgid "Delete"
 msgstr ""
 
-#: dialog.py:566
+#: dialog.py:576
+#, python-brace-format
+msgid "Do you want to discard the changes you made to dictionary \"{name}\"?"
+msgstr ""
+
+#: dialog.py:577
+msgid "Unsaved Changes"
+msgstr ""
+
+#: dialog.py:578
+msgid "&Discard Changes"
+msgstr ""
+
+#: dialog.py:579 dialog.py:607
+msgid "&Back to Editing"
+msgstr ""
+
+#: dialog.py:590
 #, python-brace-format
 msgid "Failed to save: {error}"
 msgstr ""
 
-#: dialog.py:574
+#: dialog.py:598
 #, python-brace-format
 msgid "Other rows not listed: {count}"
 msgstr ""
 
-#: dialog.py:576
+#: dialog.py:600
 #, python-brace-format
 msgid ""
 "Some rows of dictionary \"{name}\" cannot be shown in the editor. Saving "
@@ -1034,57 +1051,53 @@ msgid ""
 "Do you want to remove these rows and save the dictionary?"
 msgstr ""
 
-#: dialog.py:581
+#: dialog.py:605
 msgid "Remove Rows That Cannot Be Shown"
 msgstr ""
 
-#: dialog.py:582
+#: dialog.py:606
 msgid "Remove and &Save"
 msgstr ""
 
-#: dialog.py:583
-msgid "&Back to Editing"
-msgstr ""
-
-#: dialog.py:590
+#: dialog.py:614
 #, python-brace-format
 msgid "Row {line}: no source text"
 msgstr ""
 
-#: dialog.py:591
+#: dialog.py:615
 #, python-brace-format
 msgid "Row {line}: \"{text}\", Bopomofo \"{bopomofo}\" is not valid"
 msgstr ""
 
-#: dialog.py:615
+#: dialog.py:639
 msgid "Dictionary Management"
 msgstr ""
 
-#: dialog.py:635 settings/dialogs.py:386
+#: dialog.py:659 settings/dialogs.py:386
 msgid "Dictionary"
 msgstr ""
 
-#: dialog.py:636 dialog.py:762
+#: dialog.py:660 dialog.py:786
 msgid "Entries"
 msgstr ""
 
-#: dialog.py:647
+#: dialog.py:671
 msgid "Why this dictionary cannot be read:"
 msgstr ""
 
-#: dialog.py:662 ui/action_menu.py:30
+#: dialog.py:686 ui/action_menu.py:30
 msgid "Rename"
 msgstr ""
 
-#: dialog.py:664 ui/action_menu.py:31
+#: dialog.py:688 ui/action_menu.py:31
 msgid "Import"
 msgstr ""
 
-#: dialog.py:665 ui/action_menu.py:34
+#: dialog.py:689 ui/action_menu.py:34
 msgid "Export"
 msgstr ""
 
-#: dialog.py:699 dialog.py:762
+#: dialog.py:723 dialog.py:786
 msgid "Unreadable"
 msgstr ""
 

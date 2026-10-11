@@ -507,6 +507,56 @@ class PreservedRowsTest(_ModelTestCase):
 
 
 
+class HasChangesTest(_ModelTestCase):
+	"""Whether the entries, in order, differ by value from the loaded ones (F-11 D3)."""
+
+	def setUp(self) -> None:
+		self.alpha = _entry("Alpha", "\u2801")
+		self.beta = _entry("Beta", "\u2803")
+		self.model = DictionaryEntryListModel([self.alpha, PreservedDictionaryRow("", "\u2803", "General"), self.beta])
+
+	def test_no_change_after_load_a_filter_an_add_undone_or_an_edit_to_the_same_values(self) -> None:
+		self.assertFalse(self.model.has_changes())
+		self.model.apply_filter("alp")
+		self.assertFalse(self.model.has_changes())
+		self.model.apply_filter("")
+		self.model.add(_entry("Gamma", "\u281b"))
+		self.model.remove(2)
+		self.assertFalse(self.model.has_changes())
+		self.model.replace(0, _entry("Alpha", "\u2801"))
+
+		self.assertFalse(self.model.has_changes())
+
+	def test_a_changed_value_a_removal_and_a_new_order_are_changes(self) -> None:
+		changes = {
+			"text": lambda model: model.replace(0, _entry("alpha", "\u2801")),
+			"braille": lambda model: model.replace(0, _entry("Alpha", "\u2801\u2801")),
+			"type": lambda model: model.replace(0, _entry("Alpha", "\u2801", "Braille")),
+			"removal": lambda model: model.remove(1),
+			"order": lambda model: (model.remove(0), model.add(_entry("Alpha", "\u2801"))),
+		}
+		for name, change in changes.items():
+			with self.subTest(name):
+				model = DictionaryEntryListModel([_entry("Alpha", "\u2801"), _entry("Beta", "\u2803")])
+
+				change(model)
+
+				self.assertTrue(model.has_changes())
+
+	def test_the_loaded_values_are_copies(self) -> None:
+		# A later in-place change of an entry object cannot hide a change.
+		self.alpha.text = "Changed"
+
+		self.assertTrue(self.model.has_changes())
+
+	def test_a_saved_model_has_no_changes(self) -> None:
+		self.model.add(_entry("Gamma", "\u281b"))
+		with tempfile.TemporaryDirectory() as temp_dir:
+			self.model.save(Path(temp_dir) / "dictionary.csv")
+
+		self.assertFalse(self.model.has_changes())
+
+
 class LoadSaveTest(unittest.TestCase):
 	def setUp(self) -> None:
 		temp_dir = tempfile.TemporaryDirectory()

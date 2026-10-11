@@ -159,6 +159,11 @@ def _hidden_rows_box(name: str, *lines: str) -> list:
     return ["ConfirmBox", _hidden_rows_message(name, *lines), REMOVE_ROWS_TITLE, REMOVE_AND_SAVE, BACK_TO_EDITING]
 
 
+def _discard_box(name: str) -> list:
+    """The box Cancel, Esc and the close box show after a change (F-11 D7)."""
+    return ["ConfirmBox", "\u8981\u653e\u68c4\u5c0d\u5b57\u5178\u300c" + name + "\u300d\u6240\u505a\u7684\u8b8a\u66f4\u55ce\uff1f", "\u5c1a\u672a\u5132\u5b58\u7684\u8b8a\u66f4", "\u653e\u68c4\u8b8a\u66f4(&D)", BACK_TO_EDITING]
+
+
 def _entry_fields(entry: DictionaryEntry | None) -> list[str] | None:
     if entry is None:
         return None
@@ -518,6 +523,10 @@ class _EditorHarness:
     def press_ok(self) -> bool:
         return self.ok_button.fire("EVT_BUTTON")
 
+    def press_cancel(self) -> bool:
+        """Cancel; wx turns Esc and the close box into this click as well."""
+        return self.cancel_button.fire("EVT_BUTTON")
+
     # observations
 
     def cell(self, row: int, column: int) -> str:
@@ -868,6 +877,7 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
                 ["SetLabel", "ok", "\u78ba\u5b9a"],
                 ["SetLabel", "cancel", "\u53d6\u6d88"],
                 ["Bind", "ok", "EVT_BUTTON"],
+                ["Bind", "cancel", "EVT_BUTTON"],
                 ["SetSizerAndFit"],
                 ["CentreOnParent"],
                 ["SetItemCount", 2],
@@ -987,13 +997,13 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
             "text,note,braille,type\r\nAlpha,first,\u2801,General\r\nBeta,second,\u2803\u2803,General\r\nGamma,,\u281b,Braille\r\n",
         )
 
-    def test_only_ok_gets_a_handler_and_both_standard_buttons_are_localized(self) -> None:
+    def test_ok_and_cancel_get_handlers_and_both_standard_buttons_are_localized(self) -> None:
+        # Was the P2-2 Q5 KNOWN BUG: Cancel had no handler of its own, so it discarded every
+        # edit without asking. F-11 (D7) asks after a change.
         harness = self.open_editor([ALPHA])
 
         self.assertEqual([event for event, _handler in harness.ok_button.bindings], ["EVT_BUTTON"])
-        # KNOWN BUG (P2-2 spec, Q5), pinned as it is today, NOT desired: Cancel has no
-        # handler of its own, so it discards every edit without asking.
-        self.assertEqual(harness.cancel_button.bindings, [])
+        self.assertEqual([event for event, _handler in harness.cancel_button.bindings], ["EVT_BUTTON"])
         self.assertEqual(harness.ok_button.label, "\u78ba\u5b9a")
         self.assertEqual(harness.cancel_button.label, "\u53d6\u6d88")
 
@@ -1422,7 +1432,7 @@ class DictionaryEntriesDialogDeleteTest(_EditorTestCase):
 
         harness.click("Delete")
 
-        # KNOWN BUG (P2-2 spec, Q5), pinned as it is today, NOT desired: no confirmation.
+        # No confirmation: a wrong delete is undone with Cancel and Discard Changes (F-11, U3.2).
         self.assertEqual(
             harness.take_log(),
             [
@@ -1484,6 +1494,102 @@ class DictionaryEntriesDialogDeleteTest(_EditorTestCase):
             harness.saved_csv(),
             "text,braille,type,note\r\na,\u2801,General,first\r\nBeta,\u2803,General,\r\na,\u2801,Braille,\r\n",
         )
+
+
+class DictionaryEntriesDialogChangesTest(_EditorTestCase):
+    """OK writes only after a change; Cancel, Esc and the close box ask only after one
+    (F-11 D3, D4, D7; P2-2 Q2, Q5)."""
+
+    def test_ok_without_a_change_writes_nothing(self) -> None:
+        # Was the P2-2 Q2 KNOWN BUG: OK always rewrote the file (no BOM, extra columns lost).
+        data = b"\xef\xbb\xbftext,note,braille,type\r\n Alpha ,first,\xe2\xa0\x81,Custom\r\n"
+        harness = self.open_editor(data=data)
+        before = os.stat(harness.path).st_mtime_ns
+        harness.type_filter("alp")
+        harness.take_log()
+
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [["Skip"]])
+        self.assertEqual(harness.path.read_bytes(), data)
+        self.assertEqual(os.stat(harness.path).st_mtime_ns, before)
+
+    def test_ok_without_a_change_does_not_create_a_missing_file(self) -> None:
+        # O11: OK used to create a dictionary deleted after Dictionary Management listed it.
+        harness = self.open_editor(None)
+
+        self.assertTrue(harness.press_ok())
+
+        self.assertFalse(harness.path.exists())
+
+    def test_an_add_undone_by_a_delete_is_no_change(self) -> None:
+        harness = self.open_editor([ALPHA])
+        original = harness.path.read_bytes()
+        harness.script_entry(*BETA)
+        harness.click("Add")
+        harness.click("Delete")
+        harness.take_log()
+
+        self.assertTrue(harness.press_cancel())
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [["Skip"], ["Skip"]])
+        self.assertEqual(harness.path.read_bytes(), original)
+
+    def test_cancel_without_a_change_closes_without_asking(self) -> None:
+        # Hidden rows are not unsaved changes (U3.1).
+        for name, data in (("plain", "text,braille,type\r\nAlpha,\u2801,General\r\n".encode("utf-8")), ("hidden rows", DICT_BADBOPO)):
+            with self.subTest(name):
+                harness = self.open_editor(data=data)
+                harness.type_filter("x")
+                harness.take_log()
+
+                self.assertTrue(harness.press_cancel())
+
+                self.assertEqual(harness.take_log(), [["Skip"]])
+                self.assertEqual(harness.path.read_bytes(), data)
+
+    def test_cancel_after_a_change_asks_and_discard_closes_without_writing(self) -> None:
+        harness = self.open_editor([ALPHA])
+        original = harness.path.read_bytes()
+        harness.script_entry(*BETA)
+        harness.click("Add")
+        harness.take_log()
+        harness.script_confirm(True)
+
+        self.assertTrue(harness.press_cancel())
+
+        self.assertEqual(harness.take_log(), [_discard_box("dictionary"), ["Skip"]])
+        self.assertEqual(harness.confirm_parents, [harness.dialog])
+        self.assertEqual(harness.path.read_bytes(), original)
+
+    def test_back_to_editing_keeps_the_editor_and_the_change_and_puts_the_focus_back(self) -> None:
+        harness = self.open_editor([ALPHA])
+        harness.select(0)
+        harness.click("Delete")
+        harness.focus = harness.list
+        harness.take_log()
+        harness.script_confirm(False)
+
+        self.assertFalse(harness.press_cancel())
+
+        self.assertEqual(harness.take_log(), [_discard_box("dictionary"), ["SetFocus", "ListCtrl"]])
+        self.assertEqual(harness.rows(), [])
+        harness.script_confirm(True)
+        self.assertTrue(harness.press_cancel())
+
+    def test_ok_after_back_to_editing_writes_the_change(self) -> None:
+        harness = self.open_editor([ALPHA])
+        harness.script_entry(*BETA)
+        harness.click("Add")
+        harness.script_confirm(False)
+        harness.press_cancel()
+        harness.take_log()
+
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [["Skip"]])
+        self.assertEqual(harness.saved_csv(), HEADER + "Alpha,\u2801,General\r\nBeta,\u2803,General\r\n")
 
 
 class DictionaryEntriesDialogOkTest(_EditorTestCase):
@@ -1960,6 +2066,10 @@ class DictionaryEntriesTraceTest(unittest.TestCase):
                         _hidden_rows_box(f"trace{seed}", _no_source_text(5), _invalid_bopomofo(8, "zz", "ab")),
                     )
                     actual[-1]["log"] = ok_log[1:]
+                    # F-11 (D7): the editor binds its Cancel button as well (the whole
+                    # construction log is pinned by test_construction_log_is_exact).
+                    if ["Bind", "cancel", "EVT_BUTTON"] in actual[0]["log"]:
+                        actual[0]["log"].remove(["Bind", "cancel", "EVT_BUTTON"])
                     # Line by line, not by substring: an entry row such as "ab,\u2803,General"
                     # ends with the first hidden row.
                     lines = actual[-1]["csv"].split("\r\n")

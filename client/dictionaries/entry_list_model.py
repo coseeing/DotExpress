@@ -16,6 +16,10 @@ F-4 wrote them back). ``entries`` and the visible list hold the entries only.
 replaced entry takes over the fields of the row it replaces, so its extra
 columns are kept (F-11 D5).
 
+``has_changes`` compares the entries, in order and by value, with those loaded
+or last saved; hidden rows and the filter do not count, and an add undone by a
+delete is no change (F-11 D3). The dialog writes and asks only after a change.
+
 Comparison rules (a file may hold identical rows):
 
 * ``replace`` and ``remove`` act on the full-list item that *is* the visible
@@ -71,6 +75,7 @@ class DictionaryEntryListModel:
 		self._layout = layout
 		self._filter_text = ""
 		self._visible: list[DictionaryEntry] = list(self._entries)
+		self._loaded_entries = self._copy_of_entries()
 
 	@classmethod
 	def load(cls, path: Path) -> DictionaryEntryListModel:
@@ -87,6 +92,15 @@ class DictionaryEntryListModel:
 		entries = self._entries
 		save_dictionary_entries(path, entries, self._layout)
 		self._rows = list(entries)
+		self._loaded_entries = self._copy_of_entries()
+
+	def has_changes(self) -> bool:
+		"""Whether the entries, in order, differ by value from those loaded or last saved (F-11 D3)."""
+		return self._entries != self._loaded_entries
+
+	def _copy_of_entries(self) -> list[DictionaryEntry]:
+		# Copies, so that an entry changed in place later cannot hide a change.
+		return [DictionaryEntry(entry.text, entry.braille, entry.entry_type) for entry in self._entries]
 
 	@property
 	def hidden_rows(self) -> tuple[PreservedDictionaryRow, ...]:

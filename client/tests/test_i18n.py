@@ -144,6 +144,17 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
 
+    def test_discard_changes_box_strings_are_translated(self) -> None:
+        # F-11 (D7): Cancel, Esc or the close box after a change in the dictionary editor.
+        expected = {
+            "Unsaved Changes": "尚未儲存的變更",
+            'Do you want to discard the changes you made to dictionary "{name}"?': "要放棄對字典「{name}」所做的變更嗎？",
+            "&Discard Changes": "放棄變更(&D)",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

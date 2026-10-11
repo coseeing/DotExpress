@@ -451,6 +451,10 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 			ok_button = self.FindWindow(wx.ID_OK)
 			if ok_button:
 				ok_button.Bind(wx.EVT_BUTTON, self._on_ok)
+			cancel_button = self.FindWindow(wx.ID_CANCEL)
+			if cancel_button:
+				# wx turns Esc and the close box into a click on this button (F-11 D7).
+				cancel_button.Bind(wx.EVT_BUTTON, self._on_cancel)
 
 		finalize_dialog_layout(self, main_sizer)
 
@@ -550,11 +554,31 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
 		focused = wx.Window.FindFocus()
-		# Rows the editor cannot show are listed, and removed only once the user agrees (F-11 D1).
-		if self._model.hidden_rows and not self._confirm_hidden_rows():
-			self._restore_focus(focused)
+		if self._model.hidden_rows:
+			# Rows the editor cannot show are listed, and removed only once the user agrees,
+			# even without another change (F-11 D1).
+			if not self._confirm_hidden_rows():
+				self._restore_focus(focused)
+				return
+		elif not self._model.has_changes():
+			# Nothing to write: the file keeps its bytes (F-11 D4).
+			event.Skip()
 			return
 		if not self._save():
+			self._restore_focus(focused)
+			return
+		event.Skip()
+
+	def _on_cancel(self, event: wx.CommandEvent) -> None:
+		focused = wx.Window.FindFocus()
+		# Ask only after a change; hidden rows are not one (F-11 D7).
+		if self._model.has_changes() and not confirm_box(
+			_('Do you want to discard the changes you made to dictionary "{name}"?').format(name=self.dictionary_path.stem),
+			_("Unsaved Changes"),
+			_("&Discard Changes"),
+			_("&Back to Editing"),
+			parent=self,
+		):
 			self._restore_focus(focused)
 			return
 		event.Skip()

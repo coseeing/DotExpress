@@ -648,6 +648,56 @@ class PresenterImportTest(PresenterTestCase):
 		self.assertEqual(view.calls, [self.choose_call(), self.prompt_call("long"), self.read_error_call(source)])
 		self.assertEqual(self.files(), ["default"])
 
+	def test_import_source_that_cannot_be_opened_shows_the_cannot_open_reason(self):
+		# F-11 (D11, F-6 review M-4): the raw "[Errno 13] Permission denied: ..." was shown.
+		source = self.write_source("locked")
+		presenter = self.make_presenter()
+		view = FakeView(names=["locked"], import_path=source)
+		denied = PermissionError(13, "Permission denied", str(source))
+		real_open = Path.open
+
+		def open_except_the_source(path, *args, **kwargs):
+			if path == source:
+				raise denied
+			return real_open(path, *args, **kwargs)
+
+		with patch.object(Path, "open", open_except_the_source):
+			result = presenter.import_from_file(view)
+
+		reason = describe_dictionary_read_error(denied)
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[
+				self.choose_call(),
+				self.prompt_call("locked"),
+				("error", _("Failed to import dictionary: {error}").format(error=reason)),
+			],
+		)
+		self.assertTrue(reason.startswith("\u7121\u6cd5\u958b\u555f\u6a94\u6848\u3002"), reason)
+		self.assertEqual(self.files(), ["default"])
+
+	def test_import_copy_that_cannot_be_installed_shows_the_error(self):
+		# The copy into the dictionary folder keeps today's message with the raw error (O7).
+		source = self.write_source("words")
+		presenter = self.make_presenter()
+		view = FakeView(names=["words"], import_path=source)
+		denied = PermissionError(13, "Permission denied")
+
+		with patch("os.replace", side_effect=denied):
+			result = presenter.import_from_file(view)
+
+		self.assertIsNone(result)
+		self.assertEqual(
+			view.calls,
+			[
+				self.choose_call(),
+				self.prompt_call("words"),
+				("error", _("Failed to import dictionary: {error}").format(error=denied)),
+			],
+		)
+		self.assertEqual(self.files(), ["default"])
+
 	def test_import_cancelled_name_prompt_imports_nothing(self):
 		source = self.write_source("words")
 		presenter = self.make_presenter()

@@ -104,10 +104,22 @@ def rename_dictionary(dictionary_dir: Path, source_name: str, new_name: str) -> 
     destination_normalized = normalize_dictionary_name(new_name)
     source_path = dictionary_path_for_name(source_normalized, dictionary_dir)
     destination_path = dictionary_path_for_name(destination_normalized, dictionary_dir)
-    if destination_path.exists():
+    if destination_path.exists() and not _is_same_file(source_path, destination_path):
         raise FileExistsError(f"Dictionary '{destination_normalized}' already exists.")
     source_path.rename(destination_path)
     return destination_path
+
+
+def _is_same_file(source: Path, destination: Path) -> bool:
+    """Whether ``destination`` names ``source`` itself: a case-only rename on a
+    case-insensitive file system, such as ``alpha`` to ``Alpha`` on Windows (F-W6, F-11 D10).
+
+    Another file that only differs in case (a case-sensitive file system) is not the same file.
+    """
+    try:
+        return os.path.samefile(source, destination)
+    except OSError:
+        return False
 
 
 def export_dictionary(dictionary_dir: Path, name: str, destination_path: Path | str) -> Path:

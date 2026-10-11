@@ -399,9 +399,9 @@ class PresenterRenameTest(PresenterTestCase):
 		self.set_active_name.assert_not_called()
 
 	def test_rename_case_only_change_renames_file(self):
+		# Was skipped on a case-insensitive file system, where the rename was reported as a
+		# duplicate (F-W6); F-11 (D10) renames it there too.
 		presenter = self.make_presenter("alpha")
-		if (self.dictionary_dir / "ALPHA.csv").exists():
-			self.skipTest("case-insensitive file system: a case-only rename is reported as a duplicate")
 		view = FakeView(names=["Alpha"])
 
 		result = presenter.rename(view, "alpha")
@@ -409,6 +409,21 @@ class PresenterRenameTest(PresenterTestCase):
 		self.assertEqual(result, "Alpha")
 		self.assertEqual(view.calls, [self.prompt_call("alpha")])
 		self.assertEqual(self.files(), ["Alpha", "default"])
+		self.assertEqual(presenter.dictionary_names, ["Alpha", "default"])
+		self.set_active_name.assert_not_called()
+
+	def test_rename_case_only_change_of_the_active_dictionary_activates_the_new_name(self):
+		# F-11 (D10): config.json follows through set_active_name, as for any other rename.
+		presenter = self.make_presenter("alpha", active="alpha")
+		view = FakeView(names=["Alpha"])
+
+		result = presenter.rename(view, "alpha")
+
+		self.assertEqual(result, "Alpha")
+		self.assertEqual(view.calls, [self.prompt_call("alpha")])
+		self.assertEqual(self.files(), ["Alpha", "default"])
+		self.set_active_name.assert_called_once_with("Alpha")
+		self.assertEqual(self.active, ["Alpha"])
 
 	def test_rename_duplicate_shows_error_and_prompts_again_with_typed_name(self):
 		presenter = self.make_presenter("alpha", "beta")

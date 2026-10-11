@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from dictionaries.manager import DEFAULT_HEADER, create_dictionary, ensure_default_dictionary
 from dictionaries.name_prompt import prompt_dictionary_name_until_success
@@ -93,7 +94,30 @@ class DictionaryNamePromptTest(unittest.TestCase):
 
 			self.assertEqual(result, directory / "Alpha.csv")
 			self.assertTrue(result.exists())
-			self.assertFalse((directory / "alpha.csv").exists())
+			# F-W6, fixed by F-11 (D10). The listing, not exists(): on a case-insensitive file
+			# system "alpha.csv" still exists after the rename, as the same file.
+			self.assertEqual(sorted(path.name for path in directory.iterdir()), ["Alpha.csv", "default.csv"])
+
+	def test_rename_onto_another_file_under_another_case_is_refused(self) -> None:
+		# F-11 (D10): only the same file may be renamed under another case. On a case-sensitive
+		# file system "Alpha.csv" can be another dictionary; os.path.samefile tells them apart.
+		from tempfile import TemporaryDirectory
+
+		from dictionaries.name_prompt import rename_dictionary_after_name_prompt
+
+		with TemporaryDirectory() as td:
+			directory = Path(td)
+			ensure_default_dictionary(directory)
+			source_path = create_dictionary(directory, "alpha")
+			source_path.write_text(",".join(DEFAULT_HEADER) + "\nterm,braille,General\n", encoding="utf-8")
+			if not (directory / "Alpha.csv").exists():
+				create_dictionary(directory, "Alpha")
+			original_content = source_path.read_bytes()
+
+			with patch("os.path.samefile", return_value=False), self.assertRaises(FileExistsError):
+				rename_dictionary_after_name_prompt(directory, "alpha", "Alpha")
+
+			self.assertEqual(source_path.read_bytes(), original_content)
 
 
 if __name__ == "__main__":

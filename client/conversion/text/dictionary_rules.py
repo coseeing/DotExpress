@@ -80,23 +80,6 @@ def _replace_with_trie(text: str, replacements: Iterable[tuple[str, str]]) -> st
     return _scan_trie(text, _build_trie(replacements))
 
 
-def _editor_shows_bopomofo(target: str, processing: Callable[[str], object]) -> bool:
-    """Whether the dictionary editor shows a Bopomofo row with this sequence (F-11 D13).
-
-    The editor's test (``dictionaries.entries.canonical_bopomofo``) with ``processing`` as
-    the parser: the stripped sequence parses, or it does once a final first-tone syllable
-    has its tone space (D14). This module imports nothing from ``dictionaries``.
-    """
-    sequence = target.strip()
-    for candidate in (sequence, sequence + " "):
-        try:
-            processing(candidate)
-        except Exception:
-            continue
-        return True
-    return False
-
-
 def _wrap_atomic_parts(parts: list[str]) -> str:
     return (
         DICTIONARY_MARKER_OPEN
@@ -162,8 +145,10 @@ class LoadedDictionaryRules:
 
         A missing dictionary gives empty rules without opening the Bopomofo file.
         A leading UTF-8 BOM is ignored. A row the dictionary editor hides is not a rule:
-        a source text that is empty once stripped, or a Bopomofo sequence the editor
-        rejects (F-11 D13). Every other row converts as before, from its raw values.
+        a source text that is empty once stripped, or a Bopomofo sequence that does not
+        parse as it is once its leading whitespace is gone (F-11 D13, D14). A Bopomofo
+        row converts from that sequence, which is what the editor shows; every other row
+        converts as before, from its raw values.
         """
         dictionary_path = Path(dictionary_path)
         if not dictionary_path.exists():
@@ -202,12 +187,12 @@ class LoadedDictionaryRules:
 
                 type_ = (row.get("type") or "")
                 if type_ == "Bopomofo":
+                    # The editor's rule (dictionaries.entries.canonical_bopomofo); this module
+                    # imports nothing from dictionaries.
                     try:
-                        target = processing(target)
+                        target = processing(target.lstrip())
                     except Exception:
-                        # The raw sequence is scanned as it is, unless the editor hides the row.
-                        if not _editor_shows_bopomofo(target, processing):
-                            continue
+                        continue
                     if isinstance(target, str):
                         target_parts = [target]
                     else:

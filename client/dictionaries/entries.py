@@ -93,18 +93,16 @@ def normalize_entry_type(entry_type: str | None) -> str:
 def canonical_bopomofo(braille: str) -> str | None:
 	"""The Bopomofo sequence the editor shows and saves for ``braille``; None if it does not parse.
 
-	Surrounding whitespace is stripped, as from every field, except the tone space of a
-	final first-tone syllable: the parser marks a first tone with a space, so a sequence
-	that only parses with that space gets it back (F-11 D14).
+	Only leading whitespace is stripped: the parser marks a first tone with a trailing
+	space, so trailing whitespace is part of the sequence and must parse as it is. Nothing
+	is appended (F-11 D14, decided by the user 2026-10-11).
 	"""
-	sequence = braille.strip()
-	for candidate in (sequence, sequence + " "):
-		try:
-			normalize_zhuyin_sequence(candidate)
-		except Exception:
-			continue
-		return candidate
-	return None
+	sequence = braille.lstrip()
+	try:
+		normalize_zhuyin_sequence(sequence)
+	except Exception:
+		return None
+	return sequence
 
 
 def validate_dictionary_entry(entry: DictionaryEntry) -> None:
@@ -164,22 +162,22 @@ def _read_row(header: list[str], record: list[str], line: int) -> DictionaryRow:
 		record[index] if index is not None and index < len(record) else ""
 		for index in (_column(header, name) for name in REQUIRED_COLUMNS)
 	)
+	normalized_type = normalize_entry_type(entry_type)
 	entry = DictionaryEntry(
 		text=text.strip(),
-		braille=braille.strip(),
-		entry_type=normalize_entry_type(entry_type),
+		# A Bopomofo sequence keeps its trailing whitespace (F-11 D14).
+		braille=braille.lstrip() if normalized_type == "Bopomofo" else braille.strip(),
+		entry_type=normalized_type,
 		fields=tuple(record),
 	)
 	if not _is_editable(entry):
 		return PreservedDictionaryRow(text=text, braille=braille, entry_type=entry_type, line=line, fields=tuple(record))
-	if entry.entry_type == "Bopomofo":
-		entry.braille = canonical_bopomofo(entry.braille)
 	return entry
 
 
 def _is_editable(entry: DictionaryEntry) -> bool:
 	"""The editor shows a row with a source text whose Bopomofo sequence, if any, parses
-	(once a final first-tone syllable has its tone space back, F-11 D14)."""
+	as it is once its leading whitespace is gone (F-11 D14)."""
 	if not entry.text:
 		return False
 	return entry.entry_type != "Bopomofo" or canonical_bopomofo(entry.braille) is not None

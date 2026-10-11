@@ -890,190 +890,190 @@ msgid ""
 "main must define exactly one positional parameter and no other parameters."
 msgstr "main 必須恰好定義一個位置參數，且不得有其他參數。"
 
-#: dialog.py:34
+#: dialog.py:33
 msgid "CSV files (*.csv)|*.csv"
 msgstr "CSV 檔案 (*.csv)|*.csv"
 
-#: dialog.py:58 dialog.py:123 settings/dialogs.py:143 settings/dialogs.py:293
+#: dialog.py:57 dialog.py:122 settings/dialogs.py:143 settings/dialogs.py:293
 #: ui/message_box.py:29 ui/message_box.py:31
 msgid "OK"
 msgstr "確定"
 
-#: dialog.py:59 dialog.py:124 gui.py:490 settings/dialogs.py:144
+#: dialog.py:58 dialog.py:123 gui.py:490 settings/dialogs.py:144
 #: settings/dialogs.py:295 ui/message_box.py:29
 msgid "Cancel"
 msgstr "取消"
 
-#: dialog.py:60 settings/dialogs.py:145 settings/dialogs.py:297
+#: dialog.py:59 settings/dialogs.py:145 settings/dialogs.py:297
 msgid "Apply"
 msgstr "套用"
 
-#: dialog.py:61
+#: dialog.py:60
 msgid "Close"
 msgstr "關閉"
 
-#: dialog.py:77
+#: dialog.py:76
 #, python-brace-format
 msgid "Source text \"{identifier}\" already exists."
 msgstr "來源文字「{identifier}」已存在。"
 
-#: dialog.py:78 dialog.py:565 dialog.py:604 dialog.py:895
+#: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:896
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
 #: documents/export_coordinator.py:135 gui.py:455 gui.py:730 gui.py:1047
 #: gui.py:1059 ui/conversion_presenter.py:277
 msgid "Error"
 msgstr "錯誤"
 
-#: dialog.py:98
+#: dialog.py:97
 msgid "Edit Dictionary Entry"
 msgstr "編輯字典項目"
 
-#: dialog.py:98
+#: dialog.py:97
 msgid "Add Dictionary Entry"
 msgstr "新增字典項目"
 
-#: dialog.py:106 dialog.py:426 gui.py:197
+#: dialog.py:105 dialog.py:427 gui.py:197
 msgid "Source Text"
 msgstr "來源文字"
 
-#: dialog.py:108 dialog.py:427
+#: dialog.py:107 dialog.py:428
 msgid "Braille"
 msgstr "點字"
 
-#: dialog.py:110 dialog.py:428
+#: dialog.py:109 dialog.py:429
 msgid "Type"
 msgstr "類型"
 
-#: dialog.py:181 dialog.py:207 dialog.py:345 dialog.py:892
+#: dialog.py:182 dialog.py:208 dialog.py:346 dialog.py:893
 #: ui/conversion_presenter.py:174 ui/conversion_presenter.py:293
 #: ui/conversion_presenter.py:310
 msgid "Info"
 msgstr "資訊"
 
-#: dialog.py:215
+#: dialog.py:216
 msgid "Please enter the dictionary name."
 msgstr "請輸入字典名稱。"
 
-#: dialog.py:216
+#: dialog.py:217
 msgid "Dictionary name must be 1 to 32 characters."
 msgstr "字典名稱長度需為 1 到 32 個字元。"
 
-#: dialog.py:217
+#: dialog.py:218
 msgid "Dictionary name is not a valid Windows file name."
 msgstr "字典名稱不是有效的 Windows 檔名。"
 
-#: dialog.py:218
+#: dialog.py:219
 #, python-brace-format
 msgid "Dictionary name \"{name}\" is reserved."
 msgstr "字典名稱「{name}」為保留名稱。"
 
-#: dialog.py:223 dictionaries/presenter.py:104 dictionaries/presenter.py:175
+#: dialog.py:224 dictionaries/presenter.py:104 dictionaries/presenter.py:175
 msgid "Add Dictionary"
 msgstr "新增字典"
 
-#: dialog.py:229
+#: dialog.py:230
 msgid "Dictionary Name"
 msgstr "字典名稱"
 
-#: dialog.py:258
+#: dialog.py:259
 msgid "Please enter the document name."
 msgstr "請輸入文件名稱。"
 
-#: dialog.py:259
+#: dialog.py:260
 msgid "Document name must be 1 to 32 characters."
 msgstr "文件名稱長度需為 1 到 32 個字元。"
 
-#: dialog.py:260
+#: dialog.py:261
 msgid "Document name is not a valid Windows file name."
 msgstr "文件名稱不是有效的 Windows 檔名。"
 
-#: dialog.py:270 gui.py:183
+#: dialog.py:271 gui.py:183
 msgid "Document Name"
 msgstr "文件名稱"
 
-#: dialog.py:295
+#: dialog.py:296
 msgid "Invalid Workspace Files"
 msgstr "無效的工作區文件"
 
-#: dialog.py:298
+#: dialog.py:299
 msgid ""
 "The following workspace files are invalid. Do you want to delete them or "
 "keep them?"
 msgstr "下列在工作區中的文件無效。你要刪除這些檔案，還是保留它們？"
 
-#: dialog.py:303
+#: dialog.py:304
 msgid "Delete Invalid Files"
 msgstr "刪除無效的檔案"
 
-#: dialog.py:304
+#: dialog.py:305
 msgid "Keep Invalid Files"
 msgstr "保留無效檔案"
 
-#: dialog.py:347
+#: dialog.py:348
 msgid "converting"
 msgstr "轉換中"
 
-#: dialog.py:397
+#: dialog.py:398
 msgid "Custom Dictionary Manager"
 msgstr "自訂字典管理器"
 
-#: dialog.py:412
+#: dialog.py:413
 msgid "Filter by:"
 msgstr "篩選條件："
 
-#: dialog.py:418
+#: dialog.py:419
 msgid "Dictionary entries"
 msgstr "字典項目"
 
-#: dialog.py:435 dialog.py:698 ui/action_menu.py:29
+#: dialog.py:436 dialog.py:699 ui/action_menu.py:29
 msgid "Add"
 msgstr "新增"
 
-#: dialog.py:436 dialog.py:701
+#: dialog.py:437 dialog.py:702
 msgid "Edit"
 msgstr "編輯"
 
-#: dialog.py:437 dialog.py:699 ui/action_menu.py:27
+#: dialog.py:438 dialog.py:700 ui/action_menu.py:27
 msgid "Delete"
 msgstr "刪除"
 
-#: dialog.py:562
+#: dialog.py:563
 #, python-brace-format
 msgid ""
 "Dictionary \"{name}\" cannot be saved: its header is not recognized. The "
 "first line of the file must contain the text, braille, and type headers."
 msgstr ""
-"無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 "
-"type 表頭。"
+"無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、"
+"braille 與 type 表頭。"
 
-#: dialog.py:590
+#: dialog.py:591
 #, python-brace-format
 msgid "Do you want to discard the changes you made to dictionary \"{name}\"?"
 msgstr "要放棄對字典「{name}」所做的變更嗎？"
 
-#: dialog.py:591
+#: dialog.py:592
 msgid "Unsaved Changes"
 msgstr "尚未儲存的變更"
 
-#: dialog.py:592
+#: dialog.py:593
 msgid "&Discard Changes"
 msgstr "放棄變更(&D)"
 
-#: dialog.py:593 dialog.py:621
+#: dialog.py:594 dialog.py:622
 msgid "&Back to Editing"
 msgstr "返回編輯(&B)"
 
-#: dialog.py:604
+#: dialog.py:605
 #, python-brace-format
 msgid "Failed to save: {error}"
 msgstr "儲存失敗：{error}"
 
-#: dialog.py:612
+#: dialog.py:613
 #, python-brace-format
 msgid "Other rows not listed: {count}"
 msgstr "另有 {count} 列未列出"
 
-#: dialog.py:614
+#: dialog.py:615
 #, python-brace-format
 msgid ""
 "Some rows of dictionary \"{name}\" cannot be shown in the editor. Saving "
@@ -1089,53 +1089,53 @@ msgstr ""
 "\n"
 "要移除這些列並儲存字典嗎？"
 
-#: dialog.py:619
+#: dialog.py:620
 msgid "Remove Rows That Cannot Be Shown"
 msgstr "移除無法顯示的列"
 
-#: dialog.py:620
+#: dialog.py:621
 msgid "Remove and &Save"
 msgstr "移除並儲存(&S)"
 
-#: dialog.py:628
+#: dialog.py:629
 #, python-brace-format
 msgid "Row {line}: no source text"
 msgstr "第 {line} 列：沒有來源文字"
 
-#: dialog.py:629
+#: dialog.py:630
 #, python-brace-format
 msgid "Row {line}: \"{text}\", Bopomofo \"{bopomofo}\" is not valid"
 msgstr "第 {line} 列：「{text}」的注音「{bopomofo}」格式不正確"
 
-#: dialog.py:653
+#: dialog.py:654
 msgid "Dictionary Management"
 msgstr "字典管理"
 
-#: dialog.py:673 settings/dialogs.py:386
+#: dialog.py:674 settings/dialogs.py:386
 msgid "Dictionary"
 msgstr "字典"
 
-#: dialog.py:674 dialog.py:800
+#: dialog.py:675 dialog.py:801
 msgid "Entries"
 msgstr "條目數量"
 
-#: dialog.py:685
+#: dialog.py:686
 msgid "Why this dictionary cannot be read:"
 msgstr "無法讀取的原因："
 
-#: dialog.py:700 ui/action_menu.py:30
+#: dialog.py:701 ui/action_menu.py:30
 msgid "Rename"
 msgstr "重新命名"
 
-#: dialog.py:702 ui/action_menu.py:31
+#: dialog.py:703 ui/action_menu.py:31
 msgid "Import"
 msgstr "匯入"
 
-#: dialog.py:703 ui/action_menu.py:34
+#: dialog.py:704 ui/action_menu.py:34
 msgid "Export"
 msgstr "匯出"
 
-#: dialog.py:737 dialog.py:800
+#: dialog.py:738 dialog.py:801
 msgid "Unreadable"
 msgstr "無法讀取"
 
@@ -1151,15 +1151,15 @@ msgstr "注音"
 msgid "Unicode Braille"
 msgstr "Unicode 點字"
 
-#: dictionaries/entries.py:112
+#: dictionaries/entries.py:110
 msgid "Please enter the source text."
 msgstr "請輸入來源文字。"
 
-#: dictionaries/entries.py:115
+#: dictionaries/entries.py:113
 msgid "Please enter the a valid Bopomofo sequence."
 msgstr "請輸入有效的注音序列。"
 
-#: dictionaries/entries.py:119
+#: dictionaries/entries.py:117
 msgid "Please enter the a valid Unicode Braille sequence."
 msgstr "請輸入有效的 Unicode 點字序列。"
 

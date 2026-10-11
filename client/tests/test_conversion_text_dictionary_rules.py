@@ -141,15 +141,39 @@ DICTIONARY_CASES = (
         "肚子",
     ),
     DictionaryCase(
-        # Rows whose last syllable is first tone, which the editor shows since F-11 (D14),
-        # stay rules and convert as before, also without the tone space (the fallback).
-        "first-tone Bopomofo rows convert as before",
+        # Rows whose last syllable is first tone and that have their tone space, which the
+        # editor shows since F-11 (D14), convert as before. A row without the space was a
+        # rule through the fallback (r"\[媽\]", r"\[⠍⠜\]"); the editor hides it, so it is
+        # not a rule (decided by the user 2026-10-11).
+        "first-tone Bopomofo rows with their tone space convert as before, without it they are not rules",
         DICTIONARY_HEADER + "中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo\n媽,ㄇㄚ,Bopomofo\n",
         None,
         "zhuyin",
         "中心媽",
-        r"\[中\]\[心\]\[媽\]",
-        r"\[⠁⠯⠄\]\[⠑⠹⠄\]\[⠍⠜\]",
+        r"\[中\]\[心\]媽",
+        r"\[⠁⠯⠄\]\[⠑⠹⠄\]媽",
+    ),
+    DictionaryCase(
+        # F-11 (D14, decided by the user 2026-10-11): more whitespace after the last syllable
+        # makes the sequence invalid; before, these rows were rules through the fallback.
+        "Bopomofo rows with whitespace after the last syllable are not rules",
+        DICTIONARY_HEADER + "媽,ㄇㄚ  ,Bopomofo\n肚子,ㄉㄨˋㄗ˙ ,Bopomofo\n",
+        None,
+        "zhuyin",
+        "媽肚子",
+        "媽肚子",
+        "媽肚子",
+    ),
+    DictionaryCase(
+        # The editor shows the sequence without its leading whitespace, and conversion uses
+        # that sequence; the fallback gave r"\[⠄⠍⠜⠄\]" (F-11 D13, D14).
+        "Bopomofo row with leading whitespace converts from the sequence without it",
+        DICTIONARY_HEADER + "媽, ㄇㄚ ,Bopomofo\n",
+        None,
+        "zhuyin",
+        "媽",
+        r"\[媽\]",
+        r"\[⠍⠜⠄\]",
     ),
     DictionaryCase(
         "Bopomofo row with the real zhuyin parser and data file",
@@ -613,12 +637,20 @@ class EditorParityTest(DictionaryFilesTestCase):
         ("肚子", " ㄉㄨˋ|ㄗ˙ ", "Bopomofo", False),
         ("數學", "ㄕㄨˋ ㄒㄩㄝˊ", "Bopomofo", False),
         ("肚子", "ㄉㄨˋㄗ˙", "Bopomofo", True),
-        ("肚子", " ㄉㄨˋㄗ˙ ", "Bopomofo", True),
+        ("肚子", " ㄉㄨˋㄗ˙", "Bopomofo", True),
+        ("肚子", " ㄉㄨˋㄗ˙ ", "Bopomofo", False),
         ("媽", "ㄇㄚ ", "Bopomofo", True),
-        ("媽", "ㄇㄚ", "Bopomofo", True),
-        ("媽", " ㄇㄚ", "Bopomofo", True),
-        ("媽", "ㄇㄚ  ", "Bopomofo", True),
-        ("中心", "ㄓㄨㄥ ㄒㄧㄣ", "Bopomofo", True),
+        ("媽", " ㄇㄚ ", "Bopomofo", True),
+        ("媽", "\u3000ㄇㄚ ", "Bopomofo", True),
+        ("媽", "ㄇㄚ", "Bopomofo", False),
+        ("媽", " ㄇㄚ", "Bopomofo", False),
+        ("媽", "ㄇㄚ  ", "Bopomofo", False),
+        ("媽", "ㄇㄚ\t", "Bopomofo", False),
+        ("媽", "ㄇㄚ\u3000", "Bopomofo", False),
+        ("中心", "ㄓㄨㄥ ㄒㄧㄣ ", "Bopomofo", True),
+        ("中心", "ㄓㄨㄥˋㄒㄧㄣ ", "Bopomofo", True),
+        ("中心", "ㄓㄨㄥ ㄒㄧㄣ", "Bopomofo", False),
+        ("肚子", "ㄉㄨˋㄗ˙ ", "Bopomofo", False),
         ("媽", "ㄇㄚˉ", "Bopomofo", False),
         ("空", "", "Bopomofo", True),
         ("q", "invalid", "bopomofo", True),
@@ -643,20 +675,27 @@ class EditorParityTest(DictionaryFilesTestCase):
                 self.assertEqual(isinstance(load_dictionary_rows(self.dictionary_path)[0], DictionaryEntry), shown)
                 self.assertEqual(bool(rules.raw_rules), shown)
 
-    def test_the_parser_is_called_on_the_raw_sequence_first(self) -> None:
-        # A row that stays converts exactly as before: the raw value is parsed once, as today.
-        calls = []
+    def test_the_parser_is_called_once_on_the_sequence_without_its_leading_whitespace(self) -> None:
+        # The editor's rule (F-11 D14, decided by the user 2026-10-11): the trailing
+        # whitespace stays, and a sequence that does not parse is not tried again with a
+        # tone space or converted from its raw symbols.
+        for processing_raises in (False, True):
+            with self.subTest(processing_raises=processing_raises):
+                calls = []
 
-        def processing(text):
-            calls.append(text)
-            return text
+                def processing(text):
+                    calls.append(text)
+                    if processing_raises:
+                        raise ValueError(text)
+                    return text
 
-        self.dictionary_path.write_text(DICTIONARY_HEADER + "肚子, ㄉㄨˋ ,Bopomofo\n", encoding="utf-8")
-        self.bopomofo_path.write_text(TEST_BOPOMOFO, encoding="utf-8")
+                self.dictionary_path.write_text(DICTIONARY_HEADER + "肚子, ㄉㄨˋ ,Bopomofo\n", encoding="utf-8")
+                self.bopomofo_path.write_text(TEST_BOPOMOFO, encoding="utf-8")
 
-        LoadedDictionaryRules.from_paths(self.dictionary_path, self.bopomofo_path, processing=processing)
+                rules = LoadedDictionaryRules.from_paths(self.dictionary_path, self.bopomofo_path, processing=processing)
 
-        self.assertEqual(calls, [" ㄉㄨˋ "])
+                self.assertEqual(calls, ["ㄉㄨˋ "])
+                self.assertEqual(bool(rules.raw_rules), not processing_raises)
 
 
 class DictionaryRulesLoaderTest(DictionaryFilesTestCase):

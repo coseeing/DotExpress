@@ -11,7 +11,6 @@ from dictionaries.entries import (
 	ENTRY_TYPE_OPTIONS,
 	DictionaryEntry,
 	PreservedDictionaryRow,
-	canonical_bopomofo,
 	validate_dictionary_entry,
 )
 from dictionaries.entry_list_model import DictionaryEntryListModel, DuplicateEntryError, EntryListUpdate
@@ -136,7 +135,11 @@ class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
 		return self.identifier_ctrl.GetValue().strip()
 
 	def get_braille(self) -> str:
-		return self.braille_ctrl.GetValue().strip()
+		value = self.braille_ctrl.GetValue()
+		if self.get_entry_type() == "Bopomofo":
+			# A final first-tone syllable ends with its tone space; keep it as typed (F-11 D14).
+			return value.lstrip()
+		return value.strip()
 
 	def get_entry_type(self) -> str:
 		selection = self.type_choice.GetSelection()
@@ -146,13 +149,11 @@ class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
 		return key if key in ENTRY_TYPE_LABELS else DEFAULT_ENTRY_TYPE
 
 	def get_entry(self) -> DictionaryEntry:
-		text = self.get_identifier()
-		braille = self.get_braille()
-		entry_type = self.get_entry_type()
-		if entry_type == "Bopomofo":
-			# The strip took the tone space of a final first-tone syllable (F-11 D14).
-			braille = canonical_bopomofo(braille) or braille
-		return DictionaryEntry(text=text, braille=braille, entry_type=entry_type)
+		return DictionaryEntry(
+			text=self.get_identifier(),
+			braille=self.get_braille(),
+			entry_type=self.get_entry_type(),
+		)
 
 	def _apply_initial_values(self, entry: DictionaryEntry | None) -> None:
 		if entry:

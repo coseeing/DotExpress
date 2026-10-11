@@ -1989,7 +1989,23 @@ class DictionaryEntriesDialogUnrecognizedHeaderTest(_EditorTestCase):
 
 class DictionaryEntriesDialogFirstToneTest(_EditorTestCase):
     """Bopomofo rows whose last syllable is first tone are shown and saved with their tone
-    space (F-11 D14; before, the editor stripped the space and hid them)."""
+    space (F-11 D14; before, the editor stripped the space and hid them). A row without
+    the space is hidden like any invalid sequence (decided by the user 2026-10-11)."""
+
+    def test_a_row_without_its_tone_space_is_hidden_and_listed_on_ok(self) -> None:
+        data = "text,braille,type\r\n\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n\u62b9,\u3107\u311a,Bopomofo\r\n".encode("utf-8")
+        harness = self.open_editor(data=data)
+
+        self.assertEqual(harness.rows(), [["\u4e2d\u5fc3", "\u3113\u3128\u3125 \u3112\u3127\u3123 ", BOPOMOFO]])
+        harness.take_log()
+        harness.script_confirm(False)
+        self.assertFalse(harness.press_ok())
+        self.assertEqual(harness.take_log()[0], _hidden_rows_box("dictionary", _invalid_bopomofo(3, "\u62b9", "\u3107\u311a")))
+        self.assertEqual(harness.path.read_bytes(), data)
+
+        harness.script_confirm(True)
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(harness.saved_csv(), HEADER + "\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n")
 
     def test_a_first_tone_row_is_shown_and_an_added_one_is_saved_with_its_space(self) -> None:
         harness = self.open_editor(data="text,braille,type\r\n\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n".encode("utf-8"))

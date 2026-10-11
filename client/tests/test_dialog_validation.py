@@ -495,15 +495,39 @@ class AddSymbolDialogEntryTest(unittest.TestCase):
         with patch.object(dialog_module.wx, "NOT_FOUND", -1, create=True):
             return AddSymbolDialog.get_entry(self.make_dialog(text, braille, type_index))
 
-    def test_a_final_first_tone_syllable_keeps_its_tone_space(self) -> None:
-        # F-11 (D14): the stripped "ㄓㄨㄥ ㄒㄧㄣ" did not parse, so it could not be entered.
+    def test_a_bopomofo_sequence_loses_only_its_leading_whitespace(self) -> None:
+        # F-11 (D14, decided by the user 2026-10-11): the trailing tone space is kept as
+        # typed, and none is appended.
         self.assertEqual(self.entry(" 中心 ", " ㄓㄨㄥ ㄒㄧㄣ ", 1), DictionaryEntry("中心", "ㄓㄨㄥ ㄒㄧㄣ ", "Bopomofo"))
-        self.assertEqual(self.entry("媽", "ㄇㄚ", 1), DictionaryEntry("媽", "ㄇㄚ ", "Bopomofo"))
-        self.assertEqual(self.entry("肚子", "ㄉㄨˋㄗ˙ ", 1), DictionaryEntry("肚子", "ㄉㄨˋㄗ˙", "Bopomofo"))
+        self.assertEqual(self.entry("媽", "ㄇㄚ", 1), DictionaryEntry("媽", "ㄇㄚ", "Bopomofo"))
+        self.assertEqual(self.entry("媽", "\tㄇㄚ  ", 1), DictionaryEntry("媽", "ㄇㄚ  ", "Bopomofo"))
+        self.assertEqual(self.entry("肚子", "ㄉㄨˋㄗ˙ ", 1), DictionaryEntry("肚子", "ㄉㄨˋㄗ˙ ", "Bopomofo"))
 
-    def test_other_types_and_invalid_sequences_are_only_stripped(self) -> None:
+    def test_other_types_are_stripped_on_both_sides(self) -> None:
         self.assertEqual(self.entry("媽", " ㄇㄚ ", 0), DictionaryEntry("媽", "ㄇㄚ", "General"))
-        self.assertEqual(self.entry("媽", " ㄇㄚˉ ", 1), DictionaryEntry("媽", "ㄇㄚˉ", "Bopomofo"))
+        self.assertEqual(self.entry("點", " ⠁ ", 2), DictionaryEntry("點", "⠁", "Braille"))
+
+    def test_ok_rejects_a_missing_tone_space_and_accepts_the_typed_one(self) -> None:
+        for braille, accepted in (("ㄇㄚ", False), ("ㄇㄚ  ", False), ("ㄇㄚ ", True), (" ㄇㄚ ", True)):
+            with self.subTest(braille=braille):
+                dialog = self.make_dialog("媽", braille, 1)
+                dialog._is_duplicate = None
+                event = Mock()
+                with (
+                    patch.object(dialog_module, "message_box") as message_box,
+                    patch.object(dialog_module.wx, "NOT_FOUND", -1, create=True),
+                    patch.object(dialog_module.wx, "OK", 4, create=True),
+                    patch.object(dialog_module.wx, "ICON_INFORMATION", 128, create=True),
+                ):
+                    AddSymbolDialog._on_ok(dialog, event)
+
+                if accepted:
+                    message_box.assert_not_called()
+                    event.Skip.assert_called_once_with()
+                else:
+                    message_box.assert_called_once_with("請輸入有效的注音序列。", INFO_TITLE, 132, parent=dialog)
+                    self.assertTrue(dialog.braille_ctrl.focused)
+                    event.Skip.assert_not_called()
 
 
 class DialogContextManagerTest(unittest.TestCase):

@@ -397,6 +397,7 @@ class AddSymbolDialogOkTest(unittest.TestCase):
         dialog.identifier_ctrl = _TextCtrl()
         dialog.braille_ctrl = _TextCtrl()
         dialog.get_entry = lambda: DictionaryEntry("", "x", "General")
+        dialog._is_duplicate = None
         event = Mock()
 
         with (
@@ -410,6 +411,66 @@ class AddSymbolDialogOkTest(unittest.TestCase):
         self.assertTrue(dialog.identifier_ctrl.focused)
         self.assertFalse(dialog.braille_ctrl.focused)
         event.Skip.assert_not_called()
+
+
+class AddSymbolDialogDuplicateTest(unittest.TestCase):
+    """The duplicate check runs in the entry dialog's OK, after the format checks (F-11 D8)."""
+
+    ERROR_TITLE = "錯誤"
+
+    def make_dialog(self, entry: DictionaryEntry, is_duplicate):
+        dialog = object.__new__(AddSymbolDialog)
+        dialog.identifier_ctrl = _TextCtrl()
+        dialog.braille_ctrl = _TextCtrl()
+        dialog.get_entry = lambda: entry
+        dialog._is_duplicate = is_duplicate
+        return dialog
+
+    def press_ok(self, dialog):
+        event = Mock()
+        with (
+            patch.object(dialog_module, "message_box") as message_box,
+            patch.object(dialog_module.wx, "OK", 4, create=True),
+            patch.object(dialog_module.wx, "ICON_INFORMATION", 128, create=True),
+            patch.object(dialog_module.wx, "ICON_ERROR", 512, create=True),
+        ):
+            AddSymbolDialog._on_ok(dialog, event)
+        return message_box, event
+
+    def test_duplicate_shows_the_message_on_the_entry_dialog_keeps_it_open_and_selects_the_source_text(self) -> None:
+        # P2-2 Q6: the entry dialog closed first and the typed entry was lost.
+        is_duplicate = Mock(return_value=True)
+        dialog = self.make_dialog(DictionaryEntry("Alpha", "⠁", "General"), is_duplicate)
+
+        message_box, event = self.press_ok(dialog)
+
+        is_duplicate.assert_called_once_with("Alpha")
+        message_box.assert_called_once_with('來源文字「Alpha」已存在。', self.ERROR_TITLE, 4 | 512, parent=dialog)
+        self.assertTrue(dialog.identifier_ctrl.focused)
+        self.assertTrue(dialog.identifier_ctrl.selected_all)
+        self.assertFalse(dialog.braille_ctrl.focused)
+        event.Skip.assert_not_called()
+
+    def test_format_is_checked_before_the_duplicate(self) -> None:
+        is_duplicate = Mock(return_value=True)
+        dialog = self.make_dialog(DictionaryEntry("Alpha", "abc", "Braille"), is_duplicate)
+
+        message_box, event = self.press_ok(dialog)
+
+        is_duplicate.assert_not_called()
+        message_box.assert_called_once_with(_("Please enter the a valid Unicode Braille sequence."), INFO_TITLE, 4 | 128, parent=dialog)
+        self.assertTrue(dialog.braille_ctrl.focused)
+        event.Skip.assert_not_called()
+
+    def test_entry_that_is_not_a_duplicate_closes_the_dialog(self) -> None:
+        for is_duplicate in (Mock(return_value=False), None):
+            with self.subTest(check=is_duplicate is not None):
+                dialog = self.make_dialog(DictionaryEntry("Alpha", "⠁", "General"), is_duplicate)
+
+                message_box, event = self.press_ok(dialog)
+
+                message_box.assert_not_called()
+                event.Skip.assert_called_once_with()
 
 
 class DialogContextManagerTest(unittest.TestCase):

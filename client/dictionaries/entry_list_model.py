@@ -8,8 +8,9 @@ messages.
 
 Rows that are not a ``DictionaryEntry`` (``PreservedDictionaryRow``: a blank
 source text, or a Bopomofo sequence that does not parse) are never shown,
-filtered, edited or removed: they keep their place in the file and ``save``
-writes them back unchanged (F-4). ``entries`` and the visible list hold the
+filtered, edited or removed, and their source texts are not duplicates (F-11
+D2): they keep their place in the file and ``save`` writes them back unchanged
+(F-4). ``entries`` and the visible list hold the
 entries only. ``save`` writes with the layout of the loaded file (its BOM and
 header); a replaced entry takes over the fields of the row it replaces, so its
 extra columns are kept (F-11 D5).
@@ -23,9 +24,9 @@ Comparison rules (a file may hold identical rows):
   first visible entry equal to the previous one winning (as the golden trace
   records);
 * the duplicate check compares ``text`` exactly (case-sensitive) over every
-  row, entries hidden by the filter and preserved rows included, and excludes
-  the edited entry by identity; an edit that keeps the edited entry's own text
-  is never a duplicate (F-11 D9).
+  entry, entries hidden by the filter included, preserved rows not (F-11 D2),
+  and excludes the edited entry by identity; an edit that keeps the edited
+  entry's own text is never a duplicate (F-11 D9).
 """
 
 from __future__ import annotations
@@ -125,14 +126,11 @@ class DictionaryEntryListModel:
 		return normalized_filter in entry.text.casefold() or normalized_filter in entry.braille.casefold()
 
 	def source_text_exists(self, text: str, exclude_entry: DictionaryEntry | None = None) -> bool:
-		"""Whether a row other than ``exclude_entry`` has exactly this source text.
+		"""Whether an entry other than ``exclude_entry`` has exactly this source text.
 
-		Preserved rows compare their raw, unstripped text (the source R3 uses), so a
-		hidden ``"x "`` does not block ``"x"``. Callers pass a validated entry: an
-		empty ``text`` would match a preserved blank-text row, but the entry dialog
-		strips and requires a source text, so no UI path reaches that case.
+		Preserved rows do not count: OK lists them before removing them (F-11 D1, D2).
 		"""
-		return any(row.text == text and row is not exclude_entry for row in self._rows)
+		return any(entry.text == text and entry is not exclude_entry for entry in self._entries)
 
 	def is_duplicate(self, text: str, editing: DictionaryEntry | None = None) -> bool:
 		"""Whether adding (``editing`` None) or editing ``editing`` to ``text`` duplicates a row.

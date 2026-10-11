@@ -161,6 +161,7 @@ class SourceTextExistsTest(unittest.TestCase):
 		self.assertFalse(model.source_text_exists("Alpha", exclude_entry=alpha))
 		self.assertTrue(model.source_text_exists("Alpha", exclude_entry=twin))
 		self.assertTrue(model.source_text_exists("Beta", exclude_entry=alpha))
+		self.assertTrue(model.is_duplicate("Alpha"))
 
 	def test_is_duplicate_excludes_the_edited_entry_and_lets_it_keep_its_text(self) -> None:
 		# F-11 (D9, O6): with two identical rows, either one can be edited without changing
@@ -433,7 +434,8 @@ class RemoveTest(_ModelTestCase):
 
 
 class PreservedRowsTest(_ModelTestCase):
-	"""Rows the editor does not show stay hidden, keep their place and count as duplicates (F-4)."""
+	"""Rows the editor does not show stay hidden and keep their place (F-4); since F-11 (D2)
+	their source texts are not duplicates."""
 
 	def setUp(self) -> None:
 		self.alpha = _entry("Alpha", "\u2801")
@@ -467,16 +469,17 @@ class PreservedRowsTest(_ModelTestCase):
 
 		self.assertSameObjects(self.model.rows, [self.alpha, self.kept, delta, self.blank])
 
-	def test_add_or_replace_with_the_source_text_of_a_preserved_row_is_a_duplicate(self) -> None:
+	def test_the_source_text_of_a_preserved_row_is_not_a_duplicate(self) -> None:
+		# F-4 D5 refused it; F-11 (D2) accepts it: OK lists the hidden row, so the user sees
+		# which row the new entry replaces (D1).
+		self.assertFalse(self.model.source_text_exists(DUZI))
+		self.assertFalse(self.model.is_duplicate(DUZI))
+		self.assertFalse(self.model.is_duplicate("", editing=self.alpha))
 		valid = _entry(DUZI, VALID_DUZI, "Bopomofo")
-		changes = (("add", lambda: self.model.add(valid)), ("replace", lambda: self.model.replace(1, valid)))
-		for name, change in changes:
-			with self.subTest(change=name):
-				with self.assertRaises(DuplicateEntryError) as caught:
-					change()
 
-				self.assertEqual(caught.exception.identifier, DUZI)
-				self.assertSameObjects(self.model.rows, [self.alpha, self.kept, self.beta, self.blank])
+		self.assertEqual(self.model.add(valid), EntryListUpdate(2))
+
+		self.assertSameObjects(self.model.rows, [self.alpha, self.kept, self.beta, self.blank, valid])
 
 	def test_remove_of_an_entry_leaves_a_preserved_row_with_the_same_source_text(self) -> None:
 		# Only a file can hold both rows (D5); remove must not match the hidden row by its text.
@@ -487,14 +490,6 @@ class PreservedRowsTest(_ModelTestCase):
 
 		self.assertSameObjects(model.rows, [self.alpha, self.kept])
 
-	def test_a_preserved_row_blocks_only_its_raw_unstripped_source_text(self) -> None:
-		spaced = PreservedDictionaryRow(DUZI + " ", INVALID_DUZI, "Bopomofo")
-		valid = _entry(DUZI, VALID_DUZI, "Bopomofo")
-		model = DictionaryEntryListModel([self.alpha, spaced])
-
-		self.assertEqual(model.add(valid), EntryListUpdate(1))
-
-		self.assertSameObjects(model.rows, [self.alpha, spaced, valid])
 
 
 class LoadSaveTest(unittest.TestCase):

@@ -251,9 +251,18 @@ class _FakeSizer:
 
 
 class _ScriptedEntryDialog:
-    def __init__(self, result: int, entry: DictionaryEntry | None) -> None:
-        self._result = result
-        self._entry = entry
+    """The entry dialog: each OK takes the next scripted answer.
+
+    Like ``AddSymbolDialog._on_ok`` (F-11 D8), an answer whose source text the editor's
+    ``is_duplicate`` reports shows the duplicate message with the entry dialog as parent
+    and keeps the dialog open: the next scripted answer follows (the user fixes the text,
+    or cancels); with none left, the user cancels.
+    """
+
+    def __init__(self, harness: '_EditorHarness', is_duplicate) -> None:
+        self._harness = harness
+        self._is_duplicate = is_duplicate
+        self._entry = None
 
     def __enter__(self) -> '_ScriptedEntryDialog':
         return self
@@ -262,7 +271,15 @@ class _ScriptedEntryDialog:
         return None
 
     def ShowModal(self) -> int:
-        return self._result
+        harness = self._harness
+        while harness.script:
+            result, entry = harness.script.pop(0)
+            if result != ID_OK or self._is_duplicate is None or not self._is_duplicate(entry.text):
+                self._entry = entry
+                return result
+            harness.record("MessageBox", _duplicate_message(entry.text), ERROR_TITLE, ERROR_FLAGS)
+            harness.message_box_parents.append(self)
+        return ID_CANCEL
 
     def get_entry(self) -> DictionaryEntry | None:
         return self._entry
@@ -290,6 +307,7 @@ class _EditorHarness:
         self.other_dialog_buttons: dict[int, _FakeButton] = {}
         self.script: list[tuple[int, DictionaryEntry | None]] = []
         self.entry_dialog_parents: list[object] = []
+        self.entry_dialogs: list[_ScriptedEntryDialog] = []
         self.message_box_parents: list[object] = []
         self.dialog = None
         self._stack = ExitStack()
@@ -394,13 +412,14 @@ class _EditorHarness:
         self.message_box_parents.append(parent)
         return FLAGS.OK
 
-    def _entry_dialog(self, parent, entry: DictionaryEntry | None = None) -> _ScriptedEntryDialog:
+    def _entry_dialog(self, parent, entry: DictionaryEntry | None = None, *, is_duplicate=None) -> _ScriptedEntryDialog:
         self.record("AddSymbolDialog", _entry_fields(entry))
         self.entry_dialog_parents.append(parent)
         if not self.script:
             raise AssertionError("the entry dialog opened without a scripted result")
-        result, scripted = self.script.pop(0)
-        return _ScriptedEntryDialog(result, scripted)
+        entry_dialog = _ScriptedEntryDialog(self, is_duplicate)
+        self.entry_dialogs.append(entry_dialog)
+        return entry_dialog
 
     # recording
 
@@ -1046,12 +1065,15 @@ class DictionaryEntriesDialogAddTest(_EditorTestCase):
         self.assertEqual(harness.state(), before)
         self.assertEqual(harness.entry_dialog_parents, [harness.dialog])
 
-    def test_duplicate_of_a_hidden_entry_is_rejected_with_the_exact_message(self) -> None:
+    def test_duplicate_of_a_hidden_entry_is_reported_in_the_entry_dialog_which_stays_open(self) -> None:
+        # Was the P2-2 Q6 KNOWN BUG: the entry dialog closed, then the editor showed the
+        # message and the typed entry was lost. Fixed by F-11 (D8): the entry dialog shows
+        # it and stays open with the input, so the user can change the text.
         harness = self.open_editor([ALPHA, BETA])
         harness.type_filter("bet")
-        before = harness.state()
         harness.take_log()
         harness.script_entry("Alpha", "\u281b", "Braille")
+        harness.script_entry("Gamma", "\u281b", "Braille")
 
         harness.click("Add")
 
@@ -1060,13 +1082,35 @@ class DictionaryEntriesDialogAddTest(_EditorTestCase):
             [
                 ["AddSymbolDialog", None],
                 ["MessageBox", _duplicate_message("Alpha"), ERROR_TITLE, ERROR_FLAGS],
+                ["ChangeValue", ""],
+                ["SetItemCount", 3],
+                ["Refresh"],
+                ["Select", 0, False],
+                ["Select", 2, True],
+                ["Focus", 2],
+                ["Enable", EDIT, True],
+                ["Enable", DELETE, True],
             ],
         )
-        self.assertEqual(harness.message_box_parents, [harness.dialog])
-        # KNOWN BUG (P2-2 spec, Q6), pinned as it is today, NOT desired: the typed entry
-        # is discarded; the entry dialog is not opened again.
-        self.assertEqual(harness.state(), before)
+        self.assertEqual(harness.message_box_parents, harness.entry_dialogs)
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS, ["Gamma", "\u281b", UNICODE_BRAILLE]])
         self.assertEqual(harness.script, [])
+
+    def test_duplicate_then_cancel_in_the_entry_dialog_changes_nothing(self) -> None:
+        harness = self.open_editor([ALPHA, BETA])
+        harness.type_filter("bet")
+        before = harness.state()
+        harness.take_log()
+        harness.script_entry("Alpha", "\u281b", "Braille")
+        harness.script_cancel()
+
+        harness.click("Add")
+
+        self.assertEqual(
+            harness.take_log(),
+            [["AddSymbolDialog", None], ["MessageBox", _duplicate_message("Alpha"), ERROR_TITLE, ERROR_FLAGS]],
+        )
+        self.assertEqual(harness.state(), before)
 
     def test_case_different_source_text_is_accepted(self) -> None:
         harness = self.open_editor([ALPHA])
@@ -1137,6 +1181,19 @@ class DictionaryEntriesDialogAddTest(_EditorTestCase):
 
 
 class DictionaryEntriesDialogEditTest(_EditorTestCase):
+    def test_the_entry_dialog_gets_the_duplicate_check_of_the_model(self) -> None:
+        # F-11 (D8, D9): an Add checks every entry; an Edit excludes the edited one.
+        harness = self.open_editor([ALPHA, BETA])
+        harness.select(1)
+        harness.script_cancel()
+        harness.click("Edit")
+        harness.script_cancel()
+        harness.click("Add")
+
+        edit_check, add_check = (entry_dialog._is_duplicate for entry_dialog in harness.entry_dialogs)
+        self.assertEqual([edit_check(text) for text in ("Alpha", "Beta", "Gamma")], [True, False, False])
+        self.assertEqual([add_check(text) for text in ("Alpha", "Beta", "Gamma")], [True, True, False])
+
     def test_edit_button_opens_the_selected_entry(self) -> None:
         harness = self.open_editor([ALPHA, BETA])
         harness.select(1)
@@ -1201,25 +1258,26 @@ class DictionaryEntriesDialogEditTest(_EditorTestCase):
         self.assertEqual(harness.rows(), [["Alpha", "\u2801\u2801", UNICODE_BRAILLE], BETA_CELLS])
         self.assertEqual(harness.list.selected, 0)
 
-    def test_duplicate_is_rejected_with_the_exact_message_and_nothing_changes(self) -> None:
+    def test_duplicate_is_reported_in_the_entry_dialog_and_a_changed_text_is_accepted(self) -> None:
+        # Was the P2-2 Q6 KNOWN BUG (the typed entry was discarded); fixed by F-11 (D8).
         harness = self.open_editor([ALPHA, BETA])
         harness.select(1)
-        before = harness.state()
         harness.take_log()
         harness.script_entry("Alpha", "\u2803")
+        harness.script_entry("Bravo", "\u2803")
 
         harness.click("Edit")
 
         self.assertEqual(
-            harness.take_log(),
+            harness.take_log()[:2],
             [
                 ["AddSymbolDialog", BETA],
                 ["MessageBox", _duplicate_message("Alpha"), ERROR_TITLE, ERROR_FLAGS],
             ],
         )
-        self.assertEqual(harness.message_box_parents, [harness.dialog])
-        # KNOWN BUG (P2-2 spec, Q6), pinned as it is today, NOT desired: the typed entry is discarded.
-        self.assertEqual(harness.state(), before)
+        self.assertEqual(harness.message_box_parents, harness.entry_dialogs)
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, ["Bravo", "\u2803", GENERAL]])
+        self.assertEqual(harness.list.selected, 1)
 
     def test_identical_rows_edit_of_the_selected_row_can_keep_its_text(self) -> None:
         # Was the P2-2 Q4 KNOWN BUG (first half): the other identical row made its own text
@@ -1522,19 +1580,15 @@ class DictionaryEntriesDialogHiddenRowsTest(_EditorTestCase):
 
         self.assertEqual(harness.saved_csv(), HEADER + BADBOPO_HIDDEN_ROWS)
 
-    def test_adding_the_source_text_of_a_hidden_row_shows_the_duplicate_message(self) -> None:
+    def test_the_source_text_of_a_hidden_row_can_be_added(self) -> None:
+        # F-4 (D5) refused it with the duplicate message; F-11 (D2) checks the shown entries only.
         harness = self.open_editor(data=DICT_BADBOPO)
         harness.script_entry("\u809a\u5b50", "\u3109\u3128\u02cb\u3117\u02d9", "Bopomofo")
 
         harness.click("Add")
 
-        self.assertEqual(
-            harness.take_log(),
-            [["AddSymbolDialog", None], ["MessageBox", _duplicate_message("\u809a\u5b50"), ERROR_TITLE, ERROR_FLAGS]],
-        )
-        self.assertEqual(harness.rows(), [TAIPEI_CELLS])
-        self.assertTrue(harness.press_ok())
-        self.assertEqual(harness.path.read_bytes(), DICT_BADBOPO)
+        self.assertNotIn("MessageBox", [event[0] for event in harness.take_log()])
+        self.assertEqual(harness.rows(), [TAIPEI_CELLS, ["\u809a\u5b50", "\u3109\u3128\u02cb\u3117\u02d9", BOPOMOFO]])
 
 
 class DictionaryEntriesDialogModelTest(_EditorTestCase):

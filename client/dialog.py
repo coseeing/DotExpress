@@ -67,12 +67,33 @@ def localize_standard_buttons(
 				button.SetLabel(label)
 
 
-class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
-	"""Dialog to create or edit a dictionary entry."""
+def show_duplicate_source_text(identifier: str, parent: wx.Window | None) -> None:
+	"""Tell the user that another entry already has the source text ``identifier``."""
+	message_box(
+		_('Source text "{identifier}" already exists.').format(identifier=identifier),
+		_("Error"),
+		wx.OK | wx.ICON_ERROR,
+		parent=parent,
+	)
 
-	def __init__(self, parent: wx.Window | None, entry: DictionaryEntry | None = None):
+
+class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
+	"""Dialog to create or edit a dictionary entry.
+
+	``is_duplicate(text)`` (optional) runs in OK after the format checks: a duplicate
+	source text is reported here and the dialog stays open with the input (F-11 D8).
+	"""
+
+	def __init__(
+		self,
+		parent: wx.Window | None,
+		entry: DictionaryEntry | None = None,
+		*,
+		is_duplicate: Callable[[str], bool] | None = None,
+	):
 		title = _("Edit Dictionary Entry") if entry else _("Add Dictionary Entry")
 		super().__init__(parent, title=title)
+		self._is_duplicate = is_duplicate
 
 		main_sizer = wx.BoxSizer(wx.VERTICAL)
 		grid = wx.FlexGridSizer(0, 2, 8, 8)
@@ -157,6 +178,15 @@ class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
 					self.identifier_ctrl.SetFocus()
 				else:
 					self.braille_ctrl.SetFocus()
+			except RuntimeError:
+				pass
+			return
+
+		if self._is_duplicate is not None and self._is_duplicate(entry.text):
+			show_duplicate_source_text(entry.text, self)
+			try:
+				self.identifier_ctrl.SetFocus()
+				self.identifier_ctrl.SelectAll()
 			except RuntimeError:
 				pass
 			return
@@ -486,18 +516,15 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 		self._render(self._model.remove(visible_index))
 
 	def _open_entry_dialog(self, entry: DictionaryEntry | None = None) -> DictionaryEntry | None:
-		with AddSymbolDialog(self, entry) as dialog:
+		# The entry dialog checks for a duplicate itself and stays open on one (F-11 D8);
+		# the model's DuplicateEntryError stays as a backstop.
+		with AddSymbolDialog(self, entry, is_duplicate=lambda text: self._model.is_duplicate(text, editing=entry)) as dialog:
 			if dialog.ShowModal() != wx.ID_OK:
 				return None
 			return dialog.get_entry()
 
 	def _show_duplicate_error(self, identifier: str) -> None:
-		message_box(
-			_('Source text "{identifier}" already exists.').format(identifier=identifier),
-			_("Error"),
-			wx.OK | wx.ICON_ERROR,
-			parent=self,
-		)
+		show_duplicate_source_text(identifier, self)
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
 		try:

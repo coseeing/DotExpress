@@ -13,6 +13,7 @@ from conversion.text.dictionary_rules import (
     apply_dictionary,
     split_bracket_segments,
 )
+from dictionaries.entries import DictionaryEntry, load_dictionary_rows
 from text.zhuyin import normalize_zhuyin_sequence
 
 
@@ -109,13 +110,46 @@ DICTIONARY_CASES = (
         r"\[⠙⠨\]\[⠗⠂\]",
     ),
     DictionaryCase(
-        "Bopomofo row with a processing that raises",
+        # Was a rule through the fallback (r"\[肚子\]", r"\[⠙⠨⠗⠂\]"); since F-11 (D13) a
+        # Bopomofo row the parser rejects is ignored, as the dictionary editor hides it.
+        "Bopomofo row with a processing that raises is not a rule",
         DICTIONARY_HEADER + "肚子,ㄉㄨˋㄗ˙,Bopomofo\n",
         TEST_BOPOMOFO,
         "raises",
         "肚子",
-        r"\[肚子\]",
-        r"\[⠙⠨⠗⠂\]",
+        "肚子",
+        "肚子",
+    ),
+    DictionaryCase(
+        # F-11 (D13): whitespace-only source texts replaced spaces before (r"\[x\]\[t\]\[y\]").
+        "whitespace-only source is not a rule",
+        DICTIONARY_HEADER + "  ,x,Braille\n　,y,Braille\n台,t,\n",
+        BOPOMOFO_HEADER,
+        "identity",
+        "  台　",
+        r"  \[台\]　",
+        r"  \[t\]　",
+    ),
+    DictionaryCase(
+        # F-11 (D13): was the fallback rule r"\[⠙⠌⠐|⠓⠁\]".
+        "Bopomofo row the real parser rejects is not a rule",
+        DICTIONARY_HEADER + "肚子,ㄉㄨˋ|ㄗ˙,Bopomofo\n",
+        None,
+        "zhuyin",
+        "肚子",
+        "肚子",
+        "肚子",
+    ),
+    DictionaryCase(
+        # Rows whose last syllable is first tone, which the editor shows since F-11 (D14),
+        # stay rules and convert as before, also without the tone space (the fallback).
+        "first-tone Bopomofo rows convert as before",
+        DICTIONARY_HEADER + "中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo\n媽,ㄇㄚ,Bopomofo\n",
+        None,
+        "zhuyin",
+        "中心媽",
+        r"\[中\]\[心\]\[媽\]",
+        r"\[⠁⠯⠄\]\[⠑⠹⠄\]\[⠍⠜\]",
     ),
     DictionaryCase(
         "Bopomofo row with the real zhuyin parser and data file",
@@ -561,6 +595,68 @@ class LoadedDictionaryRulesTest(DictionaryFilesTestCase):
     def test_empty_rules_return_the_text_unchanged(self) -> None:
         self.assertEqual(LoadedDictionaryRules().apply("台灣"), {"raw": "台灣", "replacement": "台灣"})
         self.assertEqual(LoadedDictionaryRules().apply(""), {"raw": "", "replacement": ""})
+
+
+class EditorParityTest(DictionaryFilesTestCase):
+    """Conversion ignores exactly the rows the dictionary editor hides (F-11 D13, U6)."""
+
+    # (text, braille, type, whether the editor shows the row): the F-4 cases, the rows of
+    # dict_badbopo.csv, whitespace variants, other types, and the first-tone cases of D14.
+    ROWS = (
+        ("Alpha", "⠁", "General", True),
+        ("", "⠃", "General", False),
+        ("  ", "⠃", "General", False),
+        ("　", "⠃", "Braille", False),
+        ("\t", "x", "General", False),
+        ("臺北", "⠞⠺", "Braille", True),
+        ("肚子", "ㄉㄨˋ|ㄗ˙", "Bopomofo", False),
+        ("肚子", " ㄉㄨˋ|ㄗ˙ ", "Bopomofo", False),
+        ("數學", "ㄕㄨˋ ㄒㄩㄝˊ", "Bopomofo", False),
+        ("肚子", "ㄉㄨˋㄗ˙", "Bopomofo", True),
+        ("肚子", " ㄉㄨˋㄗ˙ ", "Bopomofo", True),
+        ("媽", "ㄇㄚ ", "Bopomofo", True),
+        ("媽", "ㄇㄚ", "Bopomofo", True),
+        ("媽", " ㄇㄚ", "Bopomofo", True),
+        ("媽", "ㄇㄚ  ", "Bopomofo", True),
+        ("中心", "ㄓㄨㄥ ㄒㄧㄣ", "Bopomofo", True),
+        ("媽", "ㄇㄚˉ", "Bopomofo", False),
+        ("空", "", "Bopomofo", True),
+        ("q", "invalid", "bopomofo", True),
+        ("q", "invalid", " Bopomofo", True),
+        ("q", "invalid", "Unknown", True),
+        ("q", "invalid", "", True),
+        ('q,"x"', "a\r\nb", "Bopomofo", False),
+    )
+
+    def test_a_row_is_a_rule_exactly_when_the_editor_shows_it(self) -> None:
+        for text, braille, type_, shown in self.ROWS:
+            with self.subTest(text=text, braille=braille, type=type_):
+                with self.dictionary_path.open("w", newline="", encoding="utf-8") as stream:
+                    writer = csv.writer(stream)
+                    writer.writerow(["text", "braille", "type"])
+                    writer.writerow([text, braille, type_])
+
+                rules = LoadedDictionaryRules.from_paths(
+                    self.dictionary_path, DATA_DIR / "Bopomofo2Braille.csv", processing=normalize_zhuyin_sequence
+                )
+
+                self.assertEqual(isinstance(load_dictionary_rows(self.dictionary_path)[0], DictionaryEntry), shown)
+                self.assertEqual(bool(rules.raw_rules), shown)
+
+    def test_the_parser_is_called_on_the_raw_sequence_first(self) -> None:
+        # A row that stays converts exactly as before: the raw value is parsed once, as today.
+        calls = []
+
+        def processing(text):
+            calls.append(text)
+            return text
+
+        self.dictionary_path.write_text(DICTIONARY_HEADER + "肚子, ㄉㄨˋ ,Bopomofo\n", encoding="utf-8")
+        self.bopomofo_path.write_text(TEST_BOPOMOFO, encoding="utf-8")
+
+        LoadedDictionaryRules.from_paths(self.dictionary_path, self.bopomofo_path, processing=processing)
+
+        self.assertEqual(calls, [" ㄉㄨˋ "])
 
 
 class DictionaryRulesLoaderTest(DictionaryFilesTestCase):

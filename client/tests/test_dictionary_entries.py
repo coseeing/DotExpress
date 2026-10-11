@@ -324,8 +324,8 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 		self.assertEqual(data, "text,braille,type\r\n\u809a\u5b50,\u3109,Bopomofo\r\n".encode("utf-8"))
 
 	def test_round_trip_keeps_the_conversion_rules(self) -> None:
-		# Conversion also uses the rows the editor hides (an invalid Bopomofo sequence
-		# falls back to its raw symbols), so a load/save round trip must not change them.
+		# A load/save round trip must not change the conversion rules. Since F-11 (D13)
+		# conversion ignores the rows the editor hides, as the hidden invalid sequence.
 		with tempfile.TemporaryDirectory() as temp_dir:
 			path = Path(temp_dir) / "sample.csv"
 			path.write_bytes(MIXED_CSV)
@@ -336,7 +336,7 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 			after = LoadedDictionaryRules.from_paths(path, BOPOMOFO_DATA, processing=normalize_zhuyin_sequence)
 
 		self.assertEqual(after, before)
-		self.assertIn("\u809a\u5b50", [source for source, _replacement in before.replacement_rules])
+		self.assertEqual([source for source, _replacement in before.replacement_rules], ["Alpha", "\u5abd", "Beta"])
 
 	def test_rows_carry_their_record_and_entries_still_compare_by_value(self) -> None:
 		# F-11 (D6): the record's fields and the start line are kept, outside equality.

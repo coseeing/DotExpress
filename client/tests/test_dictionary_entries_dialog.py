@@ -164,6 +164,11 @@ def _discard_box(name: str) -> list:
     return ["ConfirmBox", "\u8981\u653e\u68c4\u5c0d\u5b57\u5178\u300c" + name + "\u300d\u6240\u505a\u7684\u8b8a\u66f4\u55ce\uff1f", "\u5c1a\u672a\u5132\u5b58\u7684\u8b8a\u66f4", "\u653e\u68c4\u8b8a\u66f4(&D)", BACK_TO_EDITING]
 
 
+def _unrecognized_header_box(name: str) -> list:
+    """The error OK shows for a file whose header names no text column (F-11 review M-1)."""
+    return ["MessageBox", "\u7121\u6cd5\u5132\u5b58\u5b57\u5178\u300c" + name + "\u300d\uff1a\u7121\u6cd5\u8fa8\u8b58\u6a94\u6848\u7684\u8868\u982d\u3002\u6a94\u6848\u7684\u7b2c\u4e00\u5217\u5fc5\u9808\u5305\u542b text\u3001braille \u8207 type \u8868\u982d\u3002", ERROR_TITLE, ERROR_FLAGS]
+
+
 def _entry_fields(entry: DictionaryEntry | None) -> list[str] | None:
     if entry is None:
         return None
@@ -1925,6 +1930,61 @@ class DictionaryEntriesDialogHiddenRowsTest(_EditorTestCase):
 
         self.assertNotIn("MessageBox", [event[0] for event in harness.take_log()])
         self.assertEqual(harness.rows(), [TAIPEI_CELLS, ["\u809a\u5b50", "\u3109\u3128\u02cb\u3117\u02d9", BOPOMOFO]])
+
+
+class DictionaryEntriesDialogUnrecognizedHeaderTest(_EditorTestCase):
+    """A file whose header names no text column reads as rows without a source text. OK
+    never offers to remove them: it says that the header is not recognized and writes
+    nothing (F-11 review M-1)."""
+
+    FILES = (
+        ("capitalized header", "Text,Braille,Type\r\nAlpha,\u2801,General\r\nBeta,\u2803,General\r\n".encode("utf-8")),
+        ("blank first line", "\r\ntext,braille,type\r\nAlpha,\u2801,General\r\n".encode("utf-8")),
+        ("no text column", "source,braille,type\r\nAlpha,\u2801,General\r\n".encode("utf-8")),
+    )
+
+    def test_ok_shows_that_the_header_is_not_recognized_and_writes_nothing(self) -> None:
+        for name, data in self.FILES:
+            with self.subTest(name):
+                harness = self.open_editor(data=data)
+                before = os.stat(harness.path).st_mtime_ns
+                self.assertEqual(harness.rows(), [])
+                harness.focus = harness.ok_button
+
+                self.assertFalse(harness.press_ok())
+
+                self.assertEqual(harness.take_log(), [_unrecognized_header_box("dictionary"), ["SetFocus", "ok"]])
+                self.assertEqual(harness.message_box_parents, [harness.dialog])
+                self.assertEqual(harness.path.read_bytes(), data)
+                self.assertEqual(os.stat(harness.path).st_mtime_ns, before)
+
+    def test_an_added_entry_is_not_saved_and_cancel_can_discard_it(self) -> None:
+        data = self.FILES[0][1]
+        harness = self.open_editor(data=data)
+        harness.script_entry(*BETA)
+        harness.click("Add")
+        harness.take_log()
+
+        self.assertFalse(harness.press_ok())
+        self.assertEqual(harness.take_log(), [_unrecognized_header_box("dictionary")])
+        self.assertEqual(harness.path.read_bytes(), data)
+        harness.script_confirm(True)
+        self.assertTrue(harness.press_cancel())
+
+        self.assertEqual(harness.take_log(), [_discard_box("dictionary"), ["Skip"]])
+        self.assertEqual(harness.path.read_bytes(), data)
+
+    def test_a_header_without_rows_loses_nothing_and_is_completed_on_save(self) -> None:
+        # No row to lose: the header gets the required columns, the new row empty Text, Braille, Type (D5).
+        harness = self.open_editor(data=b"Text,Braille,Type\r\n")
+        harness.script_entry(*ALPHA)
+        harness.click("Add")
+        harness.take_log()
+
+        self.assertTrue(harness.press_ok())
+
+        self.assertEqual(harness.take_log(), [["Skip"]])
+        self.assertEqual(harness.saved_csv(), "Text,Braille,Type,text,braille,type\r\n,,,Alpha,\u2801,General\r\n")
 
 
 class DictionaryEntriesDialogFirstToneTest(_EditorTestCase):

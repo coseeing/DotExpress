@@ -14,7 +14,9 @@ D2). ``hidden_rows`` lists them for the dialog, which asks before saving;
 F-4 wrote them back). ``entries`` and the visible list hold the entries only.
 ``save`` writes with the layout of the loaded file (its BOM and header); a
 replaced entry takes over the fields of the row it replaces, so its extra
-columns are kept (F-11 D5).
+columns are kept (F-11 D5). Under a header that names no ``text`` column every
+row is hidden; ``header_recognized`` is then False and ``save`` refuses, so such
+rows are never removed (F-11 review M-1).
 
 ``has_changes`` compares the entries, in order and by value, with those loaded
 or last saved; hidden rows and the filter do not count, and an add undone by a
@@ -70,9 +72,16 @@ class EntryListUpdate:
 class DictionaryEntryListModel:
 	"""Full list, filter and visible list of one dictionary CSV."""
 
-	def __init__(self, rows: Iterable[DictionaryRow] = (), layout: DictionaryLayout = DictionaryLayout()) -> None:
+	def __init__(
+		self,
+		rows: Iterable[DictionaryRow] = (),
+		layout: DictionaryLayout = DictionaryLayout(),
+		*,
+		header_recognized: bool = True,
+	) -> None:
 		self._rows: list[DictionaryRow] = list(rows)
 		self._layout = layout
+		self._header_recognized = header_recognized
 		self._filter_text = ""
 		self._visible: list[DictionaryEntry] = list(self._entries)
 		self._loaded_entries = self._copy_of_entries()
@@ -81,14 +90,17 @@ class DictionaryEntryListModel:
 	def load(cls, path: Path) -> DictionaryEntryListModel:
 		"""Read every row of ``path`` and its layout with ``load_dictionary_file``; errors propagate."""
 		loaded = load_dictionary_file(path)
-		return cls(loaded.rows, loaded.layout)
+		return cls(loaded.rows, loaded.layout, header_recognized=loaded.header_recognized)
 
 	def save(self, path: Path) -> None:
 		"""Write the entries with the layout of the loaded file; errors propagate.
 
 		The hidden rows are not written (F-11 D1); after a successful write the model
-		holds the entries only. After an error the hidden rows are still there.
+		holds the entries only. After an error the hidden rows are still there. Raises
+		``ValueError`` without writing when the header is not recognized (F-11 review M-1).
 		"""
+		if not self._header_recognized:
+			raise ValueError("the header of the dictionary names no text column")
 		entries = self._entries
 		save_dictionary_entries(path, entries, self._layout)
 		self._rows = list(entries)
@@ -101,6 +113,12 @@ class DictionaryEntryListModel:
 	def _copy_of_entries(self) -> list[DictionaryEntry]:
 		# Copies, so that an entry changed in place later cannot hide a change.
 		return [DictionaryEntry(entry.text, entry.braille, entry.entry_type) for entry in self._entries]
+
+	@property
+	def header_recognized(self) -> bool:
+		"""Whether the loaded file's header names a ``text`` column, or no row is hidden
+		(``LoadedDictionary.header_recognized``); True for a model built from rows."""
+		return self._header_recognized
 
 	@property
 	def hidden_rows(self) -> tuple[PreservedDictionaryRow, ...]:

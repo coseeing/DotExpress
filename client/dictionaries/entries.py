@@ -73,6 +73,16 @@ class LoadedDictionary:
 	rows: tuple[DictionaryRow, ...]
 	layout: DictionaryLayout
 
+	@property
+	def header_recognized(self) -> bool:
+		"""Whether the header names a ``text`` column, or no row is hidden.
+
+		Under a header without one (``Text,Braille,Type``, a blank first line) every row
+		reads as having no source text; such rows must never be removed as hidden rows
+		(F-11 review M-1).
+		"""
+		return "text" in self.layout.header or not any(isinstance(row, PreservedDictionaryRow) for row in self.rows)
+
 
 def normalize_entry_type(entry_type: str | None) -> str:
 	if entry_type in ENTRY_TYPE_LABELS:

@@ -155,6 +155,19 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
 
+    def test_unrecognized_dictionary_header_string_is_translated(self) -> None:
+        # F-11 review M-1: OK in the dictionary editor on a file whose header names no text column.
+        message = (
+            'Dictionary "{name}" cannot be saved: its header is not recognized. '
+            "The first line of the file must contain the text, braille, and type headers."
+        )
+        translation = i18n.load_translation()
+
+        self.assertEqual(
+            translation.gettext(message),
+            "無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。",
+        )
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

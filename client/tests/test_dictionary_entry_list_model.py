@@ -621,6 +621,50 @@ class LoadSaveTest(unittest.TestCase):
 		)
 
 
+class HeaderRecognizedTest(unittest.TestCase):
+	"""A file whose header names no text column reads as rows without a source text; the
+	model never removes them (F-11 review M-1)."""
+
+	def setUp(self) -> None:
+		temp_dir = tempfile.TemporaryDirectory()
+		self.addCleanup(temp_dir.cleanup)
+		self.directory = Path(temp_dir.name)
+
+	def load(self, data: bytes | None) -> DictionaryEntryListModel:
+		path = self.directory / "sample.csv"
+		if data is not None:
+			path.write_bytes(data)
+		return DictionaryEntryListModel.load(path)
+
+	def test_the_header_is_recognized_when_it_names_a_text_column_or_no_row_is_hidden(self) -> None:
+		cases = (
+			("text column, hidden rows", b"text,braille,type\r\nAlpha,x,General\r\n,x,General\r\n", True),
+			("capitalized header", b"Text,Braille,Type\r\nAlpha,x,General\r\n", False),
+			("blank first line", b"\r\ntext,braille,type\r\nAlpha,x,General\r\n", False),
+			("no text column", b"source,braille,type\r\nAlpha,x,General\r\n", False),
+			("capitalized header, no rows", b"Text,Braille,Type\r\n", True),
+			("empty file", b"", True),
+			("missing file", None, True),
+		)
+		for name, data, recognized in cases:
+			with self.subTest(name):
+				self.assertIs(self.load(data).header_recognized, recognized)
+
+	def test_a_model_built_from_rows_has_a_recognized_header(self) -> None:
+		self.assertTrue(DictionaryEntryListModel([PreservedDictionaryRow("", "\u2803", "General")]).header_recognized)
+
+	def test_save_refuses_a_file_whose_header_is_not_recognized(self) -> None:
+		data = b"Text,Braille,Type\r\nAlpha,x,General\r\n"
+		model = self.load(data)
+		model.add(_entry("Beta", "\u2803"))
+
+		with self.assertRaises(ValueError):
+			model.save(self.directory / "sample.csv")
+
+		self.assertEqual((self.directory / "sample.csv").read_bytes(), data)
+		self.assertEqual(len(model.hidden_rows), 1)
+
+
 class ImportGuardTest(unittest.TestCase):
 	def test_model_imports_no_ui_or_translation_module(self) -> None:
 		tree = ast.parse(MODULE_PATH.read_text(encoding="utf-8"))

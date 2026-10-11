@@ -917,9 +917,10 @@ msgstr "關閉"
 msgid "Source text \"{identifier}\" already exists."
 msgstr "來源文字「{identifier}」已存在。"
 
-#: dialog.py:78 dialog.py:590 dialog.py:881 documents/export_coordinator.py:103
-#: documents/export_coordinator.py:113 documents/export_coordinator.py:135
-#: gui.py:455 gui.py:730 gui.py:1047 gui.py:1059 ui/conversion_presenter.py:277
+#: dialog.py:78 dialog.py:565 dialog.py:604 dialog.py:895
+#: documents/export_coordinator.py:103 documents/export_coordinator.py:113
+#: documents/export_coordinator.py:135 gui.py:455 gui.py:730 gui.py:1047
+#: gui.py:1059 ui/conversion_presenter.py:277
 msgid "Error"
 msgstr "錯誤"
 
@@ -943,7 +944,7 @@ msgstr "點字"
 msgid "Type"
 msgstr "類型"
 
-#: dialog.py:181 dialog.py:207 dialog.py:345 dialog.py:878
+#: dialog.py:181 dialog.py:207 dialog.py:345 dialog.py:892
 #: ui/conversion_presenter.py:174 ui/conversion_presenter.py:293
 #: ui/conversion_presenter.py:310
 msgid "Info"
@@ -1024,46 +1025,55 @@ msgstr "篩選條件："
 msgid "Dictionary entries"
 msgstr "字典項目"
 
-#: dialog.py:435 dialog.py:684 ui/action_menu.py:29
+#: dialog.py:435 dialog.py:698 ui/action_menu.py:29
 msgid "Add"
 msgstr "新增"
 
-#: dialog.py:436 dialog.py:687
+#: dialog.py:436 dialog.py:701
 msgid "Edit"
 msgstr "編輯"
 
-#: dialog.py:437 dialog.py:685 ui/action_menu.py:27
+#: dialog.py:437 dialog.py:699 ui/action_menu.py:27
 msgid "Delete"
 msgstr "刪除"
 
-#: dialog.py:576
+#: dialog.py:562
+#, python-brace-format
+msgid ""
+"Dictionary \"{name}\" cannot be saved: its header is not recognized. The "
+"first line of the file must contain the text, braille, and type headers."
+msgstr ""
+"無法儲存字典「{name}」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 "
+"type 表頭。"
+
+#: dialog.py:590
 #, python-brace-format
 msgid "Do you want to discard the changes you made to dictionary \"{name}\"?"
 msgstr "要放棄對字典「{name}」所做的變更嗎？"
 
-#: dialog.py:577
+#: dialog.py:591
 msgid "Unsaved Changes"
 msgstr "尚未儲存的變更"
 
-#: dialog.py:578
+#: dialog.py:592
 msgid "&Discard Changes"
 msgstr "放棄變更(&D)"
 
-#: dialog.py:579 dialog.py:607
+#: dialog.py:593 dialog.py:621
 msgid "&Back to Editing"
 msgstr "返回編輯(&B)"
 
-#: dialog.py:590
+#: dialog.py:604
 #, python-brace-format
 msgid "Failed to save: {error}"
 msgstr "儲存失敗：{error}"
 
-#: dialog.py:598
+#: dialog.py:612
 #, python-brace-format
 msgid "Other rows not listed: {count}"
 msgstr "另有 {count} 列未列出"
 
-#: dialog.py:600
+#: dialog.py:614
 #, python-brace-format
 msgid ""
 "Some rows of dictionary \"{name}\" cannot be shown in the editor. Saving "
@@ -1079,53 +1089,53 @@ msgstr ""
 "\n"
 "要移除這些列並儲存字典嗎？"
 
-#: dialog.py:605
+#: dialog.py:619
 msgid "Remove Rows That Cannot Be Shown"
 msgstr "移除無法顯示的列"
 
-#: dialog.py:606
+#: dialog.py:620
 msgid "Remove and &Save"
 msgstr "移除並儲存(&S)"
 
-#: dialog.py:614
+#: dialog.py:628
 #, python-brace-format
 msgid "Row {line}: no source text"
 msgstr "第 {line} 列：沒有來源文字"
 
-#: dialog.py:615
+#: dialog.py:629
 #, python-brace-format
 msgid "Row {line}: \"{text}\", Bopomofo \"{bopomofo}\" is not valid"
 msgstr "第 {line} 列：「{text}」的注音「{bopomofo}」格式不正確"
 
-#: dialog.py:639
+#: dialog.py:653
 msgid "Dictionary Management"
 msgstr "字典管理"
 
-#: dialog.py:659 settings/dialogs.py:386
+#: dialog.py:673 settings/dialogs.py:386
 msgid "Dictionary"
 msgstr "字典"
 
-#: dialog.py:660 dialog.py:786
+#: dialog.py:674 dialog.py:800
 msgid "Entries"
 msgstr "條目數量"
 
-#: dialog.py:671
+#: dialog.py:685
 msgid "Why this dictionary cannot be read:"
 msgstr "無法讀取的原因："
 
-#: dialog.py:686 ui/action_menu.py:30
+#: dialog.py:700 ui/action_menu.py:30
 msgid "Rename"
 msgstr "重新命名"
 
-#: dialog.py:688 ui/action_menu.py:31
+#: dialog.py:702 ui/action_menu.py:31
 msgid "Import"
 msgstr "匯入"
 
-#: dialog.py:689 ui/action_menu.py:34
+#: dialog.py:703 ui/action_menu.py:34
 msgid "Export"
 msgstr "匯出"
 
-#: dialog.py:723 dialog.py:786
+#: dialog.py:737 dialog.py:800
 msgid "Unreadable"
 msgstr "無法讀取"
 
@@ -1141,15 +1151,15 @@ msgstr "注音"
 msgid "Unicode Braille"
 msgstr "Unicode 點字"
 
-#: dictionaries/entries.py:102
+#: dictionaries/entries.py:112
 msgid "Please enter the source text."
 msgstr "請輸入來源文字。"
 
-#: dictionaries/entries.py:105
+#: dictionaries/entries.py:115
 msgid "Please enter the a valid Bopomofo sequence."
 msgstr "請輸入有效的注音序列。"
 
-#: dictionaries/entries.py:109
+#: dictionaries/entries.py:119
 msgid "Please enter the a valid Unicode Braille sequence."
 msgstr "請輸入有效的 Unicode 點字序列。"
 

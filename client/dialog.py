@@ -554,6 +554,20 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
 		focused = wx.Window.FindFocus()
+		if not self._model.header_recognized:
+			# Every row reads as having no source text because the header names no text
+			# column; removing them would empty the file, so nothing is saved (F-11 review M-1).
+			message_box(
+				_(
+					'Dictionary "{name}" cannot be saved: its header is not recognized. '
+					"The first line of the file must contain the text, braille, and type headers."
+				).format(name=self.dictionary_path.stem),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
+			self._restore_focus(focused)
+			return
 		if self._model.hidden_rows:
 			# Rows the editor cannot show are listed, and removed only once the user agrees,
 			# even without another change (F-11 D1).

@@ -894,9 +894,10 @@ msgstr ""
 msgid "Source text \"{identifier}\" already exists."
 msgstr ""
 
-#: dialog.py:78 dialog.py:590 dialog.py:881 documents/export_coordinator.py:103
-#: documents/export_coordinator.py:113 documents/export_coordinator.py:135
-#: gui.py:455 gui.py:730 gui.py:1047 gui.py:1059 ui/conversion_presenter.py:277
+#: dialog.py:78 dialog.py:565 dialog.py:604 dialog.py:895
+#: documents/export_coordinator.py:103 documents/export_coordinator.py:113
+#: documents/export_coordinator.py:135 gui.py:455 gui.py:730 gui.py:1047
+#: gui.py:1059 ui/conversion_presenter.py:277
 msgid "Error"
 msgstr ""
 
@@ -920,7 +921,7 @@ msgstr ""
 msgid "Type"
 msgstr ""
 
-#: dialog.py:181 dialog.py:207 dialog.py:345 dialog.py:878
+#: dialog.py:181 dialog.py:207 dialog.py:345 dialog.py:892
 #: ui/conversion_presenter.py:174 ui/conversion_presenter.py:293
 #: ui/conversion_presenter.py:310
 msgid "Info"
@@ -1001,46 +1002,53 @@ msgstr ""
 msgid "Dictionary entries"
 msgstr ""
 
-#: dialog.py:435 dialog.py:684 ui/action_menu.py:29
+#: dialog.py:435 dialog.py:698 ui/action_menu.py:29
 msgid "Add"
 msgstr ""
 
-#: dialog.py:436 dialog.py:687
+#: dialog.py:436 dialog.py:701
 msgid "Edit"
 msgstr ""
 
-#: dialog.py:437 dialog.py:685 ui/action_menu.py:27
+#: dialog.py:437 dialog.py:699 ui/action_menu.py:27
 msgid "Delete"
 msgstr ""
 
-#: dialog.py:576
+#: dialog.py:562
 #, python-brace-format
-msgid "Do you want to discard the changes you made to dictionary \"{name}\"?"
-msgstr ""
-
-#: dialog.py:577
-msgid "Unsaved Changes"
-msgstr ""
-
-#: dialog.py:578
-msgid "&Discard Changes"
-msgstr ""
-
-#: dialog.py:579 dialog.py:607
-msgid "&Back to Editing"
+msgid ""
+"Dictionary \"{name}\" cannot be saved: its header is not recognized. The "
+"first line of the file must contain the text, braille, and type headers."
 msgstr ""
 
 #: dialog.py:590
 #, python-brace-format
+msgid "Do you want to discard the changes you made to dictionary \"{name}\"?"
+msgstr ""
+
+#: dialog.py:591
+msgid "Unsaved Changes"
+msgstr ""
+
+#: dialog.py:592
+msgid "&Discard Changes"
+msgstr ""
+
+#: dialog.py:593 dialog.py:621
+msgid "&Back to Editing"
+msgstr ""
+
+#: dialog.py:604
+#, python-brace-format
 msgid "Failed to save: {error}"
 msgstr ""
 
-#: dialog.py:598
+#: dialog.py:612
 #, python-brace-format
 msgid "Other rows not listed: {count}"
 msgstr ""
 
-#: dialog.py:600
+#: dialog.py:614
 #, python-brace-format
 msgid ""
 "Some rows of dictionary \"{name}\" cannot be shown in the editor. Saving "
@@ -1051,53 +1059,53 @@ msgid ""
 "Do you want to remove these rows and save the dictionary?"
 msgstr ""
 
-#: dialog.py:605
+#: dialog.py:619
 msgid "Remove Rows That Cannot Be Shown"
 msgstr ""
 
-#: dialog.py:606
+#: dialog.py:620
 msgid "Remove and &Save"
 msgstr ""
 
-#: dialog.py:614
+#: dialog.py:628
 #, python-brace-format
 msgid "Row {line}: no source text"
 msgstr ""
 
-#: dialog.py:615
+#: dialog.py:629
 #, python-brace-format
 msgid "Row {line}: \"{text}\", Bopomofo \"{bopomofo}\" is not valid"
 msgstr ""
 
-#: dialog.py:639
+#: dialog.py:653
 msgid "Dictionary Management"
 msgstr ""
 
-#: dialog.py:659 settings/dialogs.py:386
+#: dialog.py:673 settings/dialogs.py:386
 msgid "Dictionary"
 msgstr ""
 
-#: dialog.py:660 dialog.py:786
+#: dialog.py:674 dialog.py:800
 msgid "Entries"
 msgstr ""
 
-#: dialog.py:671
+#: dialog.py:685
 msgid "Why this dictionary cannot be read:"
 msgstr ""
 
-#: dialog.py:686 ui/action_menu.py:30
+#: dialog.py:700 ui/action_menu.py:30
 msgid "Rename"
 msgstr ""
 
-#: dialog.py:688 ui/action_menu.py:31
+#: dialog.py:702 ui/action_menu.py:31
 msgid "Import"
 msgstr ""
 
-#: dialog.py:689 ui/action_menu.py:34
+#: dialog.py:703 ui/action_menu.py:34
 msgid "Export"
 msgstr ""
 
-#: dialog.py:723 dialog.py:786
+#: dialog.py:737 dialog.py:800
 msgid "Unreadable"
 msgstr ""
 
@@ -1113,15 +1121,15 @@ msgstr ""
 msgid "Unicode Braille"
 msgstr ""
 
-#: dictionaries/entries.py:102
+#: dictionaries/entries.py:112
 msgid "Please enter the source text."
 msgstr ""
 
-#: dictionaries/entries.py:105
+#: dictionaries/entries.py:115
 msgid "Please enter the a valid Bopomofo sequence."
 msgstr ""
 
-#: dictionaries/entries.py:109
+#: dictionaries/entries.py:119
 msgid "Please enter the a valid Unicode Braille sequence."
 msgstr ""
 

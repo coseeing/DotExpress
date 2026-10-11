@@ -1,4 +1,4 @@
-# F-11 Windows 驗證：自動化執行結果（plan Task 12；項目 95–106，重跑 23–29、35、44、47）
+# F-11 Windows 驗證：自動化執行結果（plan Task 12；項目 95–106，重跑 23–29、35、44、47；審查修正階段：項目 108 與重跑）
 
 - 日期：2026-10-11，由 Claude 執行
 - 受測：`fix/f11-dictionary-editor-ux` 在 Task 10 之後（`5d5f2fd`，`HEAD:client` `0d0f93c8340a7ca86bcaf46775b7970ad90b4935`，與 plan Task 10 Step 4 的 tree id 相同）的 packaged build，以下稱 N-f11。十個 client commit 的 tree id 都與 plan 相同：Task 1 `a02fe0a` `18b797eb…`、Task 2 `d585aa4` `3c987c09…`、Task 3 `5dc8bfe` `eafdc94c…`、Task 4 `bc7368a` `8c7487cb…`、Task 5 `19fe19d` `b2cfda10…`、Task 6 `8b9804f` `6c3946d1…`、Task 7 `2f6e70d` `8dcde92c…`、Task 8 `1df105f` `b3da7431…`、Task 9 `f9e66d6` `239eaf1d…`、Task 10 `5d5f2fd` `0d0f93c8…`。
@@ -58,6 +58,27 @@ D1 對話框（`移除無法顯示的列`）的內容，下文稱「D1 框」：
 
 - **使用者同時使用桌面**：執行期間使用者在用其他程式（瀏覽器等）。`f11gui.keys` 只在受測程式是前景視窗時送出按鍵，所以沒有按鍵送到別的程式；但 pywinauto 的 `set_focus` 有兩次無法把受測程式帶到前景（`SetForegroundWindow` 失敗），一次等待視窗逾時，這三個項目都在新資料夾重跑。N-f9b 的 95 在編輯器關閉後讀到的焦點是其他程式的元素（改前的預期不包含焦點），log 中的那幾個元素名稱屬於使用者的其他程式，這裡不引用。
 - **28 的 `failures: 10`（改前）**：是腳本檢查 BOM 的結果；改前的每次存檔都成功但去掉了 BOM（與 plan 的預期相同）。
+
+## 審查修正階段（2026-10-11；審查 M-1、M-5）
+
+- 受測：審查修正後的 `fix/f11-dictionary-editor-ux`（`976440f`，`HEAD:client` `0281ca0a8cc5f45142c732ae9f48896649bc5680`）的 packaged build，以下稱 **N-f11b**：`D:/dxtest/N-f11b/DotExpress.exe`，48,779,506 bytes，sha256 `41E7575DC2E36E191202635AB692616CC7E9130A41BB30923C11818A4C9AF039`。建置方式與上面的 N-f11 相同（主 checkout 的 `client/.venv/Scripts` 放在 `PATH` 最前面，`scripts/build-dotexpress.bat`，log 有 `Build complete!`，七個模組與 `gui.py` 都來自 worktree；建置前確認可用記憶體至少 1 GB）。改前對照仍是 N-f9b（sha256 `B5AD9BFA…`，執行後不變）。
+- 改動的程式路徑：「確定」的處理（M-1：先檢查表頭），寫檔（M-5：補上的欄位放在超出表頭的欄位之前），以及模型讀檔時多帶一個 `header_recognized`。依分類規則，**fix 項目**是經過這些路徑、或預期結果不同的項目：95/96、97/98、101/102、103/106、35、23/24、25–29，以及新的 **108**（M-1），都在 N-f9b 與 N-f11b 上執行。**regression 項目**只在 N-f11b 執行：99/100（取消與 D7 框，經過讀檔）。104/105（改名、匯入）、44、47（開啟編輯器）經過的程式沒有改動（讀檔只多傳一個參數，每個項目開啟編輯器時都會經過），沒有重跑。
+- 方法與上面相同，另外每個腳本都經由新的 `auto/safe_run.py` 執行：所有 `send_keys` 先確認前景視窗屬於該項目資料夾下的 DotExpress，否則 5 秒後停止腳本、不送出按鍵（`f5gui.answer` 原本在十次無法帶到前景後仍會送出）；`f11gui.focused` 在前景不是受測程式時記成 `('<another program>', '')`，所以 log 中不會有其他程式的元素名稱。腳本本身未修改。每個項目開始前確認可用記憶體至少 1 GB；結束後只結束 exe 位於該項目資料夾的 DotExpress。沒有任何腳本讀寫剪貼簿。資料夾 `D:/dxtest/auto<N>-f11b`（N-f11b）、`D:/dxtest/auto<N>-f9b-f11b`（N-f9b），log 在同名的 `.log`。
+
+| # | 分類 | N-f11b（審查修正後） | N-f9b（改前） |
+| --- | --- | --- | --- |
+| 108 ✔（M-1，新項目，`auto/item108.py`） | fix | `auto108-f11b`：`caps.csv`（`Text,Braille,Type`、兩列）與 `blank1.csv`（第一行空白、`text,braille,type`、一列）字典管理都是 `0`，編輯器清單是空的。按「確定」：**`{'title': '錯誤', 'text': ['無法儲存字典「caps」：無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。'], 'buttons': ['確定'], 'focus': '確定', 'owner': '自訂字典管理器'}`**（`blank1` 相同，名稱為 `blank1`），沒有 D1 框；Enter 後編輯器仍開著，**`file {'bytes': True, 'time': True}`**，焦點 `('Button', '確定')`。新增 `戊己`／`⠑⠋` 後按「確定」：同一個錯誤框，檔案不變。「取消」→ D7 框（`caps`／`blank1`）；Alt+D：編輯器關閉，焦點 `('Edit', '來源文字')`。最後兩個檔案的位元組都與原檔相同（`'Text,Braille,Type\r\n甲乙,⠁⠃,Braille\r\n丙丁,⠉⠙,Braille\r\n'`、`'\r\ntext,braille,type\r\n甲乙,⠁⠃,Braille\r\n'`），字典管理 `0` | `auto108-f9b-f11b`：按「確定」沒有任何框，編輯器關閉，檔案被改寫（`{'bytes': False, 'time': False}`）；新增 `戊己` 再按「確定」後，兩個檔案都是 `'text,braille,type\r\n,,\r\n,,\r\n戊己,⠑⠋,General\r\n'`：原本各列的值都不見了（F-4 把隱藏列的空值寫回），字典管理 `1`。這是 F-11 之前就有的資料遺失；F-11 審查前的版本則會在 D1 框按「移除並儲存」後只留下表頭（審查 M-1） |
+| 95、96 ✔ | fix | `auto95-f11b.log` 與 `auto95-f11.log` 逐行相同（資料夾名稱除外） | `auto95-f9b-f11b.log` 與 `auto95-f9b-f11.log` 相同（焦點欄位不比較：編輯器關閉後讀到的焦點可能屬於其他程式，新的 log 記成 `<another program>`） |
+| 97、98 ✔ | fix | 與 `auto97-f11.log` 相同 | 與 `auto97b-f9b-f11.log` 相同 |
+| 101、102 ✔ | fix | 與 `auto101-f11.log` 相同 | 與 `auto101b-f9b-f11.log` 相同 |
+| 103、106 ✔ | fix | 與 `auto103-f11.log` 相同 | 與 `auto103-f9b-f11.log` 相同 |
+| 35 ✔ | fix | 第一次 `auto35-f11b` 在 35d（重新啟動後按「取消」）時 `SetForegroundWindow` 失敗（`pywintypes.error`；使用者正在使用桌面），之前的 20 行與 `auto35-f11.log` 相同；在新資料夾重跑為 **`auto35b-f11b`**，整個 log 與 `auto35-f11.log` 相同 | 與 `auto35-f9b-f11.log` 相同 |
+| 23、24 ✔ | fix | 與 `autorerun23-f11.log` 相同 | 與 `autorerun23-f9b-f11.log` 相同 |
+| 25–29 ✔ | fix | 與 `autorerun25-f11.log` 相同（28 `failures: 0`） | 與 `autorerun25-f9b-f11.log` 相同 |
+| 99、100 ✔ | regression | 與 `auto99-f11.log` 相同 | 未執行（regression 項目，結果符合預期） |
+
+- 結論：M-1 修正後，表頭無法辨識的字典按「確定」只顯示錯誤、不提供移除、不寫入，檔案逐位元組不變（108）。其他重跑的項目在兩個 build 上的 log 都與第一次執行相同，M-1 與 M-5 的改動沒有影響表頭正常的字典。M-5 的情況（表頭缺少必要欄位且有超出表頭的欄位）只由單元測試涵蓋，GUI 項目沒有這種資料。
+- 107（NVDA）仍是使用者的手動項目；可以用 N-f11b 進行（兩個確認框沒有改變）。
 
 ## 仍需人工（使用者）
 

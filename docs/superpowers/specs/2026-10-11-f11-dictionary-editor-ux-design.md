@@ -603,6 +603,7 @@ Scripts go to the history folder `auto/`. They reuse `2026-10-09-03-windows-veri
 | 104 | Select `alpha` in Settings; Dictionary Management, Rename to `Alpha` | no message; the list shows `Alpha` selected; `dictionary\Alpha.csv`; `config.json` `selected_dictionary` is `Alpha`; a conversion still uses it | 字典「Alpha」已存在。 |
 | 105 | Lock `src.csv` share-none (`lock.py`); Import it | `匯入字典失敗：無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。`; no new file in `dictionary\` | `[Errno 13] Permission denied: ...` |
 | 106 | (D14; the plan's data: "Corrected after planning (F-11)" 12) `tone1.csv` with `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo`; open; Add `媽` / `ㄇㄚ`; OK | row shown; the Add is accepted; the file holds `中心,ㄓㄨㄥ ㄒㄧㄣ ,Bopomofo` and `媽,ㄇㄚ ,Bopomofo`; converting `中心媽` uses both | the row is hidden; the Add shows the format error |
+| 108 | (review M-1, added by the review fix) `caps.csv` (`Text,Braille,Type` / two rows) and `blank1.csv` (a blank first line, `text,braille,type`, a row): open each; OK; Add `戊己` / `⠑⠋`, OK; Cancel, 放棄變更 | the list is empty; each OK: the error box `無法儲存字典「caps」：無法辨識檔案的表頭。…` owned by the editor, no D1 box, the editor stays open, the file keeps its bytes and time, the focus back on 確定; Cancel after the Add: the D7 box; 放棄變更 closes; the file is unchanged, Dictionary Management `0` | OK closes the editor and rewrites the file as `text,braille,type` and one `,,` per row (the rows' values are lost); after the Add `,,` / `,,` / `戊己,⠑⠋,General`, count `1` |
 
 Re-run with new expectations (the scripts set a change first where a write is the point):
 

@@ -75,14 +75,29 @@ def normalize_entry_type(entry_type: str | None) -> str:
 	return DEFAULT_ENTRY_TYPE
 
 
+def canonical_bopomofo(braille: str) -> str | None:
+	"""The Bopomofo sequence the editor shows and saves for ``braille``; None if it does not parse.
+
+	Surrounding whitespace is stripped, as from every field, except the tone space of a
+	final first-tone syllable: the parser marks a first tone with a space, so a sequence
+	that only parses with that space gets it back (F-11 D14).
+	"""
+	sequence = braille.strip()
+	for candidate in (sequence, sequence + " "):
+		try:
+			normalize_zhuyin_sequence(candidate)
+		except Exception:
+			continue
+		return candidate
+	return None
+
+
 def validate_dictionary_entry(entry: DictionaryEntry) -> None:
 	if not entry.text.strip():
 		raise ValueError(_("Please enter the source text."))
 	if normalize_entry_type(entry.entry_type) == "Bopomofo":
-		try:
-			normalize_zhuyin_sequence(entry.braille)
-		except Exception as exc:
-			raise ValueError(_("Please enter the a valid Bopomofo sequence.")) from exc
+		if canonical_bopomofo(entry.braille) is None:
+			raise ValueError(_("Please enter the a valid Bopomofo sequence."))
 	elif normalize_entry_type(entry.entry_type) == "Braille":
 		for braille_character in entry.braille:
 			if not BRAILLE_UNICODE_PATTERNS_START <= ord(braille_character) < BRAILLE_UNICODE_PATTERNS_START + 256:
@@ -140,21 +155,19 @@ def _read_row(header: list[str], record: list[str], line: int) -> DictionaryRow:
 		entry_type=normalize_entry_type(entry_type),
 		fields=tuple(record),
 	)
-	if _is_editable(entry):
-		return entry
-	return PreservedDictionaryRow(text=text, braille=braille, entry_type=entry_type, line=line, fields=tuple(record))
+	if not _is_editable(entry):
+		return PreservedDictionaryRow(text=text, braille=braille, entry_type=entry_type, line=line, fields=tuple(record))
+	if entry.entry_type == "Bopomofo":
+		entry.braille = canonical_bopomofo(entry.braille)
+	return entry
 
 
 def _is_editable(entry: DictionaryEntry) -> bool:
-	"""The editor shows a row with a source text whose Bopomofo sequence, if any, parses."""
+	"""The editor shows a row with a source text whose Bopomofo sequence, if any, parses
+	(once a final first-tone syllable has its tone space back, F-11 D14)."""
 	if not entry.text:
 		return False
-	if entry.entry_type == "Bopomofo":
-		try:
-			normalize_zhuyin_sequence(entry.braille)
-		except Exception:
-			return False
-	return True
+	return entry.entry_type != "Bopomofo" or canonical_bopomofo(entry.braille) is not None
 
 
 def load_dictionary_entries(dictionary_path: Path) -> list[DictionaryEntry]:

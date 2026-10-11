@@ -10,6 +10,7 @@ from dictionaries.entries import (
 	ENTRY_TYPE_LABELS,
 	ENTRY_TYPE_OPTIONS,
 	DictionaryEntry,
+	canonical_bopomofo,
 	validate_dictionary_entry,
 )
 from dictionaries.entry_list_model import DictionaryEntryListModel, DuplicateEntryError, EntryListUpdate
@@ -142,11 +143,13 @@ class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
 		return key if key in ENTRY_TYPE_LABELS else DEFAULT_ENTRY_TYPE
 
 	def get_entry(self) -> DictionaryEntry:
-		return DictionaryEntry(
-			text=self.get_identifier(),
-			braille=self.get_braille(),
-			entry_type=self.get_entry_type(),
-		)
+		text = self.get_identifier()
+		braille = self.get_braille()
+		entry_type = self.get_entry_type()
+		if entry_type == "Bopomofo":
+			# The strip took the tone space of a final first-tone syllable (F-11 D14).
+			braille = canonical_bopomofo(braille) or braille
+		return DictionaryEntry(text=text, braille=braille, entry_type=entry_type)
 
 	def _apply_initial_values(self, entry: DictionaryEntry | None) -> None:
 		if entry:

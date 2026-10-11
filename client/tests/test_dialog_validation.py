@@ -473,6 +473,39 @@ class AddSymbolDialogDuplicateTest(unittest.TestCase):
                 event.Skip.assert_called_once_with()
 
 
+class _Choice:
+    def __init__(self, selection: int) -> None:
+        self.selection = selection
+
+    def GetSelection(self) -> int:
+        return self.selection
+
+
+class AddSymbolDialogEntryTest(unittest.TestCase):
+    def make_dialog(self, text: str, braille: str, type_index: int):
+        dialog = object.__new__(AddSymbolDialog)
+        dialog.identifier_ctrl = _TextCtrl()
+        dialog.identifier_ctrl.SetValue(text)
+        dialog.braille_ctrl = _TextCtrl()
+        dialog.braille_ctrl.SetValue(braille)
+        dialog.type_choice = _Choice(type_index)
+        return dialog
+
+    def entry(self, text: str, braille: str, type_index: int) -> DictionaryEntry:
+        with patch.object(dialog_module.wx, "NOT_FOUND", -1, create=True):
+            return AddSymbolDialog.get_entry(self.make_dialog(text, braille, type_index))
+
+    def test_a_final_first_tone_syllable_keeps_its_tone_space(self) -> None:
+        # F-11 (D14): the stripped "ㄓㄨㄥ ㄒㄧㄣ" did not parse, so it could not be entered.
+        self.assertEqual(self.entry(" 中心 ", " ㄓㄨㄥ ㄒㄧㄣ ", 1), DictionaryEntry("中心", "ㄓㄨㄥ ㄒㄧㄣ ", "Bopomofo"))
+        self.assertEqual(self.entry("媽", "ㄇㄚ", 1), DictionaryEntry("媽", "ㄇㄚ ", "Bopomofo"))
+        self.assertEqual(self.entry("肚子", "ㄉㄨˋㄗ˙ ", 1), DictionaryEntry("肚子", "ㄉㄨˋㄗ˙", "Bopomofo"))
+
+    def test_other_types_and_invalid_sequences_are_only_stripped(self) -> None:
+        self.assertEqual(self.entry("媽", " ㄇㄚ ", 0), DictionaryEntry("媽", "ㄇㄚ", "General"))
+        self.assertEqual(self.entry("媽", " ㄇㄚˉ ", 1), DictionaryEntry("媽", "ㄇㄚˉ", "Bopomofo"))
+
+
 class DialogContextManagerTest(unittest.TestCase):
     def make_dialog(self, dialog_class):
         dialog = object.__new__(dialog_class)

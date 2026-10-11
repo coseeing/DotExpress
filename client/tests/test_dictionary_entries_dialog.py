@@ -1591,6 +1591,21 @@ class DictionaryEntriesDialogHiddenRowsTest(_EditorTestCase):
         self.assertEqual(harness.rows(), [TAIPEI_CELLS, ["\u809a\u5b50", "\u3109\u3128\u02cb\u3117\u02d9", BOPOMOFO]])
 
 
+class DictionaryEntriesDialogFirstToneTest(_EditorTestCase):
+    """Bopomofo rows whose last syllable is first tone are shown and saved with their tone
+    space (F-11 D14; before, the editor stripped the space and hid them)."""
+
+    def test_a_first_tone_row_is_shown_and_an_added_one_is_saved_with_its_space(self) -> None:
+        harness = self.open_editor(data="text,braille,type\r\n\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n".encode("utf-8"))
+
+        self.assertEqual(harness.rows(), [["\u4e2d\u5fc3", "\u3113\u3128\u3125 \u3112\u3127\u3123 ", BOPOMOFO]])
+        harness.script_entry("\u5abd", "\u3107\u311a ", "Bopomofo")
+        harness.click("Add")
+
+        self.assertTrue(harness.press_ok())
+        self.assertEqual(harness.saved_csv(), HEADER + "\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n\u5abd,\u3107\u311a ,Bopomofo\r\n")
+
+
 class DictionaryEntriesDialogModelTest(_EditorTestCase):
     def test_dictionary_path_is_required(self) -> None:
         parameter = inspect.signature(DictionaryEntriesDialog.__init__).parameters["dictionary_path"]

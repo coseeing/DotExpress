@@ -12,7 +12,7 @@ BOPOMOFO = "\u6ce8\u97f3"
 DUZI = "\u809a\u5b50"
 INVALID_DUZI = "\u3109\u3128\u02cb|\u3117\u02d9"  # "|" is not a Bopomofo symbol
 VALID_DUZI = "\u3109\u3128\u02cb\u3117\u02d9"
-# MIXED_CSV of test_dictionary_entries (F-4): two entries around every kind of row the
+# MIXED_CSV of test_dictionary_entries (F-4): entries around every kind of row the
 # editor does not show, and what saving it writes (the row with a missing field gets
 # its empty third field).
 MIXED_CSV = (

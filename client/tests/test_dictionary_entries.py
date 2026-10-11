@@ -31,9 +31,10 @@ DICT_BADBOPO = (
 DICT_BADBOPO_SHA256 = "c432457361b0997a2aa8441666a67c3cad4ff8220a42687aee4e35799bbc6eb4"
 
 # Every kind of row the editor does not show, between two entries (F-4): a blank and a
-# whitespace-only source text, an invalid Bopomofo sequence with spaces around it, a
-# first-tone sequence whose tone space the editor would strip, a row with a missing
-# field, and a quoted row whose fields hold a comma, quotes and a line break.
+# whitespace-only source text, an invalid Bopomofo sequence with spaces around it, a row
+# with a missing field, and a quoted row whose fields hold a comma, quotes and a line
+# break. The first-tone sequence was hidden too, because the editor stripped its tone
+# space; since F-11 (D14) it is an entry that keeps it.
 MIXED_CSV = (
 	"text,braille,type\r\n"
 	"Alpha,\u2801,General\r\n"
@@ -50,7 +51,7 @@ MIXED_ROWS = [
 	PreservedDictionaryRow("", "\u2803", "General"),
 	PreservedDictionaryRow("  ", "\u2803", "General"),
 	PreservedDictionaryRow("\u809a\u5b50", " \u3109\u3128\u02cb|\u3117\u02d9 ", "Bopomofo"),
-	PreservedDictionaryRow("\u5abd", "\u3107\u311a ", "Bopomofo"),
+	DictionaryEntry("\u5abd", "\u3107\u311a ", "Bopomofo"),
 	PreservedDictionaryRow("", "\u2803", ""),
 	PreservedDictionaryRow('q,"x"', "a\r\nb", "Bopomofo"),
 	DictionaryEntry("Beta", "\u2803", "General"),
@@ -100,6 +101,9 @@ def _dictreader_rows(path: Path) -> list:
 				entry_type=normalize_entry_type(row.get("type")),
 			)
 			if entries_module._is_editable(entry):
+				if entry.entry_type == "Bopomofo":
+					# F-11 (D14): a final first-tone syllable keeps its tone space.
+					entry.braille = entries_module.canonical_bopomofo(entry.braille)
 				rows.append(entry)
 			else:
 				rows.append(
@@ -132,6 +136,54 @@ class DictionaryEntryValidationTest(unittest.TestCase):
 
 	def test_valid_unicode_braille_is_accepted(self) -> None:
 		validate_dictionary_entry(DictionaryEntry("Alpha", "\u2801\u2803", "Braille"))
+
+	def test_bopomofo_with_a_final_first_tone_is_accepted_without_its_tone_space(self) -> None:
+		# F-11 (D14): the entry dialog strips the space; the sequence is valid with it.
+		rejected = []
+		for braille in ("\u3107\u311a", "\u3107\u311a ", "\u3113\u3128\u3125 \u3112\u3127\u3123", "\u3107\u311a\u02c9", "\u3109\u3128\u02cb|\u3117\u02d9"):
+			try:
+				validate_dictionary_entry(DictionaryEntry("\u5abd", braille, "Bopomofo"))
+			except ValueError as error:
+				rejected.append((braille, str(error)))
+
+		message = "\u8acb\u8f38\u5165\u6709\u6548\u7684\u6ce8\u97f3\u5e8f\u5217\u3002"
+		self.assertEqual(rejected, [("\u3107\u311a\u02c9", message), ("\u3109\u3128\u02cb|\u3117\u02d9", message)])
+
+
+class CanonicalBopomofoTest(unittest.TestCase):
+	"""The Bopomofo sequence the editor shows and saves (F-11 D14, spec O1 (b))."""
+
+	def test_a_final_first_tone_syllable_keeps_its_tone_space(self) -> None:
+		cases = (
+			("\u3107\u311a", "\u3107\u311a "),
+			("\u3107\u311a ", "\u3107\u311a "),
+			("  \u3107\u311a  ", "\u3107\u311a "),
+			("\u3107\u311a\u3000", "\u3107\u311a "),
+			("\u3113\u3128\u3125 \u3112\u3127\u3123", "\u3113\u3128\u3125 \u3112\u3127\u3123 "),
+			("\u3109\u3128\u02cb\u3117\u02d9", "\u3109\u3128\u02cb\u3117\u02d9"),
+			(" \u3109\u3128\u02cb\u3117\u02d9 ", "\u3109\u3128\u02cb\u3117\u02d9"),
+			("", ""),
+			("\u3109\u3128\u02cb|\u3117\u02d9", None),
+			("\u3107\u311a\u02c9", None),
+			("\u3107\u311a  \u3107\u311a", None),
+			("invalid", None),
+		)
+		for braille, expected in cases:
+			with self.subTest(braille=braille):
+				self.assertEqual(entries_module.canonical_bopomofo(braille), expected)
+
+	def test_loader_shows_a_row_whose_last_syllable_is_first_tone(self) -> None:
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "tone1.csv"
+			path.write_bytes("text,braille,type\r\n\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n\u5abd, \u3107\u311a,Bopomofo\r\n".encode("utf-8"))
+
+			rows = load_dictionary_rows(path)
+			loaded = entries_module.load_dictionary_file(path)
+			save_dictionary_entries(path, loaded.rows, loaded.layout)
+			saved = path.read_bytes()
+
+		self.assertEqual(rows, [DictionaryEntry("\u4e2d\u5fc3", "\u3113\u3128\u3125 \u3112\u3127\u3123 ", "Bopomofo"), DictionaryEntry("\u5abd", "\u3107\u311a ", "Bopomofo")])
+		self.assertEqual(saved, "text,braille,type\r\n\u4e2d\u5fc3,\u3113\u3128\u3125 \u3112\u3127\u3123 ,Bopomofo\r\n\u5abd,\u3107\u311a ,Bopomofo\r\n".encode("utf-8"))
 
 
 class DictionaryEntryStorageTest(unittest.TestCase):
@@ -298,7 +350,7 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 		self.assertEqual(rows[0].fields, ("Alpha", "\u2801", "General"))
 		self.assertEqual(rows[5].fields, ("", "\u2803"))
 		self.assertEqual(rows[6].fields, ('q,"x"', "a\r\nb", "Bopomofo"))
-		self.assertEqual([row.line for row in rows if isinstance(row, PreservedDictionaryRow)], [3, 4, 5, 6, 7, 8])
+		self.assertEqual([row.line for row in rows if isinstance(row, PreservedDictionaryRow)], [3, 4, 5, 7, 8])
 		self.assertEqual(DictionaryEntry("Alpha", "\u2801", "General", ("x",)), DictionaryEntry("Alpha", "\u2801", "General"))
 		self.assertNotIn("fields", repr(rows[0]))
 

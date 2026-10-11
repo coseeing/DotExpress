@@ -10,6 +10,7 @@ from dictionaries.entries import (
 	ENTRY_TYPE_LABELS,
 	ENTRY_TYPE_OPTIONS,
 	DictionaryEntry,
+	PreservedDictionaryRow,
 	canonical_bopomofo,
 	validate_dictionary_entry,
 )
@@ -28,9 +29,11 @@ from dictionaries.read_problems import (
 from documents.workspace import normalize_document_name
 from i18n import N_, _
 from ui.dialog_base import ContextManagedDialog, NameDialogBase, NameDialogMessages
-from ui.message_box import message_box
+from ui.message_box import confirm_box, message_box
 
 CSV_WILDCARD = N_("CSV files (*.csv)|*.csv")
+# The hidden rows the box on OK lists by line; a count stands for the rest (F-11 D1).
+HIDDEN_ROWS_LISTED = 10
 
 
 def finalize_dialog_layout(dialog: wx.Dialog, sizer: wx.Sizer) -> None:
@@ -546,12 +549,56 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 		show_duplicate_source_text(identifier, self)
 
 	def _on_ok(self, event: wx.CommandEvent) -> None:
+		focused = wx.Window.FindFocus()
+		# Rows the editor cannot show are listed, and removed only once the user agrees (F-11 D1).
+		if self._model.hidden_rows and not self._confirm_hidden_rows():
+			self._restore_focus(focused)
+			return
+		if not self._save():
+			self._restore_focus(focused)
+			return
+		event.Skip()
+
+	def _save(self) -> bool:
 		try:
 			self._model.save(self.dictionary_path)
 		except Exception as exc:
 			message_box(_("Failed to save: {error}").format(error=exc), _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
-			return
-		event.Skip()
+			return False
+		return True
+
+	def _confirm_hidden_rows(self) -> bool:
+		hidden_rows = self._model.hidden_rows
+		lines = [self._hidden_row_line(row) for row in hidden_rows[:HIDDEN_ROWS_LISTED]]
+		if len(hidden_rows) > HIDDEN_ROWS_LISTED:
+			lines.append(_("Other rows not listed: {count}").format(count=len(hidden_rows) - HIDDEN_ROWS_LISTED))
+		message = _(
+			'Some rows of dictionary "{name}" cannot be shown in the editor. Saving removes them from the file:'
+			"\n\n{rows}\n\nDo you want to remove these rows and save the dictionary?"
+		).format(name=self.dictionary_path.stem, rows="\n".join(lines))
+		return confirm_box(
+			message,
+			_("Remove Rows That Cannot Be Shown"),
+			_("Remove and &Save"),
+			_("&Back to Editing"),
+			parent=self,
+		)
+
+	@staticmethod
+	def _hidden_row_line(row: PreservedDictionaryRow) -> str:
+		if row.reason == "no_source_text":
+			return _("Row {line}: no source text").format(line=row.line)
+		return _('Row {line}: "{text}", Bopomofo "{bopomofo}" is not valid').format(
+			line=row.line,
+			text=row.text.strip(),
+			bopomofo=row.braille.strip(),
+		)
+
+	def _restore_focus(self, window: wx.Window | None) -> None:
+		"""Put the focus back where it was before a box, if that is still one of the editor's
+		controls; Windows usually does it alone, but not always (F-9 review M-6, F-11 D7)."""
+		if window is not None and self.IsDescendant(window):
+			window.SetFocus()
 
 
 class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):

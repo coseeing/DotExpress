@@ -354,6 +354,17 @@ class DictionaryEntryStorageTest(unittest.TestCase):
 		self.assertEqual(DictionaryEntry("Alpha", "\u2801", "General", ("x",)), DictionaryEntry("Alpha", "\u2801", "General"))
 		self.assertNotIn("fields", repr(rows[0]))
 
+	def test_a_preserved_row_tells_why_the_editor_hides_it(self) -> None:
+		# F-11 (D1): the box on OK gives the reason of each row.
+		cases = (
+			(PreservedDictionaryRow("", "\u2803", "General"), "no_source_text"),
+			(PreservedDictionaryRow(" \u3000", "\u2803", "General"), "no_source_text"),
+			(PreservedDictionaryRow("\u809a\u5b50", "\u3109\u3128\u02cb|\u3117\u02d9", "Bopomofo"), "invalid_bopomofo"),
+		)
+		for row, reason in cases:
+			with self.subTest(row=row):
+				self.assertEqual(row.reason, reason)
+
 	def test_a_preserved_row_is_never_equal_to_an_entry(self) -> None:
 		# The model removes and reselects entries by equality; a hidden row must never match.
 		preserved = PreservedDictionaryRow("Alpha", "\u2801", "General")

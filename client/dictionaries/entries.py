@@ -51,6 +51,11 @@ class PreservedDictionaryRow:
 	line: int = field(default=0, compare=False)
 	fields: tuple[str, ...] = field(default=(), compare=False, repr=False)
 
+	@property
+	def reason(self) -> str:
+		"""Why the editor hides the row: ``"no_source_text"`` or ``"invalid_bopomofo"`` (F-11 D1)."""
+		return "no_source_text" if not self.text.strip() else "invalid_bopomofo"
+
 
 DictionaryRow = DictionaryEntry | PreservedDictionaryRow
 

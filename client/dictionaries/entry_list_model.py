@@ -9,11 +9,12 @@ messages.
 Rows that are not a ``DictionaryEntry`` (``PreservedDictionaryRow``: a blank
 source text, or a Bopomofo sequence that does not parse) are never shown,
 filtered, edited or removed, and their source texts are not duplicates (F-11
-D2): they keep their place in the file and ``save`` writes them back unchanged
-(F-4). ``entries`` and the visible list hold the
-entries only. ``save`` writes with the layout of the loaded file (its BOM and
-header); a replaced entry takes over the fields of the row it replaces, so its
-extra columns are kept (F-11 D5).
+D2). ``hidden_rows`` lists them for the dialog, which asks before saving;
+``save`` writes the entries only, so it removes them from the file (F-11 D1;
+F-4 wrote them back). ``entries`` and the visible list hold the entries only.
+``save`` writes with the layout of the loaded file (its BOM and header); a
+replaced entry takes over the fields of the row it replaces, so its extra
+columns are kept (F-11 D5).
 
 Comparison rules (a file may hold identical rows):
 
@@ -40,6 +41,7 @@ from dictionaries.entries import (
 	DictionaryEntry,
 	DictionaryLayout,
 	DictionaryRow,
+	PreservedDictionaryRow,
 	load_dictionary_file,
 	save_dictionary_entries,
 )
@@ -77,8 +79,19 @@ class DictionaryEntryListModel:
 		return cls(loaded.rows, loaded.layout)
 
 	def save(self, path: Path) -> None:
-		"""Write every row (preserved rows unchanged, in place) with the layout; errors propagate."""
-		save_dictionary_entries(path, self._rows, self._layout)
+		"""Write the entries with the layout of the loaded file; errors propagate.
+
+		The hidden rows are not written (F-11 D1); after a successful write the model
+		holds the entries only. After an error the hidden rows are still there.
+		"""
+		entries = self._entries
+		save_dictionary_entries(path, entries, self._layout)
+		self._rows = list(entries)
+
+	@property
+	def hidden_rows(self) -> tuple[PreservedDictionaryRow, ...]:
+		"""The rows the editor does not show, in file order (F-11 D1)."""
+		return tuple(row for row in self._rows if isinstance(row, PreservedDictionaryRow))
 
 	@property
 	def _entries(self) -> list[DictionaryEntry]:

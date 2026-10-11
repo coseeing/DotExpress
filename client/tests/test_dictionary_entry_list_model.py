@@ -13,8 +13,7 @@ DUZI = "\u809a\u5b50"
 INVALID_DUZI = "\u3109\u3128\u02cb|\u3117\u02d9"  # "|" is not a Bopomofo symbol
 VALID_DUZI = "\u3109\u3128\u02cb\u3117\u02d9"
 # MIXED_CSV of test_dictionary_entries (F-4): entries around every kind of row the
-# editor does not show, and what saving it writes (the row with a missing field gets
-# its empty third field).
+# editor does not show.
 MIXED_CSV = (
 	"text,braille,type\r\n"
 	"Alpha,\u2801,General\r\n"
@@ -26,7 +25,6 @@ MIXED_CSV = (
 	'"q,""x""","a\r\nb",Bopomofo\r\n'
 	"Beta,\u2803,General\r\n"
 ).encode("utf-8")
-MIXED_CSV_SAVED = MIXED_CSV.replace(",\u2803\r\n".encode("utf-8"), ",\u2803,\r\n".encode("utf-8"))
 
 
 def _entry(text: str, braille: str = "\u2801", entry_type: str = "General") -> DictionaryEntry:
@@ -444,6 +442,23 @@ class PreservedRowsTest(_ModelTestCase):
 		self.blank = PreservedDictionaryRow("", "\u2803", "General")
 		self.model = DictionaryEntryListModel([self.alpha, self.kept, self.beta, self.blank])
 
+	def test_hidden_rows_are_the_preserved_rows_in_file_order(self) -> None:
+		self.assertSameObjects(self.model.hidden_rows, [self.kept, self.blank])
+		self.model.remove(0)
+
+		self.assertSameObjects(self.model.hidden_rows, [self.kept, self.blank])
+
+	def test_a_failed_save_keeps_the_hidden_rows(self) -> None:
+		# O4: OK asks again after a failed Remove and Save.
+		with tempfile.TemporaryDirectory() as temp_dir:
+			path = Path(temp_dir) / "dictionary.csv"
+			path.mkdir()
+
+			with self.assertRaises(OSError):
+				self.model.save(path)
+
+		self.assertSameObjects(self.model.hidden_rows, [self.kept, self.blank])
+
 	def test_preserved_rows_are_not_entries_and_never_visible(self) -> None:
 		self.assertUnchanged(self.model, [self.alpha, self.beta], [self.alpha, self.beta], "")
 		self.assertSameObjects(self.model.rows, [self.alpha, self.kept, self.beta, self.blank])
@@ -524,14 +539,22 @@ class LoadSaveTest(unittest.TestCase):
 		with self.assertRaises(UnicodeDecodeError):
 			DictionaryEntryListModel.load(path)
 
-	def test_save_of_an_unchanged_model_writes_preserved_rows_back_in_place(self) -> None:
+	def test_save_writes_the_entries_only_and_then_holds_no_hidden_rows(self) -> None:
+		# F-4 wrote the preserved rows back in place; since F-11 (D1) the editor removes them
+		# once the user agrees, so save writes the entries only.
 		source = self.directory / "source.csv"
 		source.write_bytes(MIXED_CSV)
 		target = self.directory / "target.csv"
+		model = DictionaryEntryListModel.load(source)
 
-		DictionaryEntryListModel.load(source).save(target)
+		model.save(target)
 
-		self.assertEqual(target.read_bytes(), MIXED_CSV_SAVED)
+		self.assertEqual(
+			target.read_bytes(),
+			"text,braille,type\r\nAlpha,\u2801,General\r\n\u5abd,\u3107\u311a ,Bopomofo\r\nBeta,\u2803,General\r\n".encode("utf-8"),
+		)
+		self.assertEqual(model.hidden_rows, ())
+		self.assertEqual(model.rows, model.entries)
 
 	def test_save_keeps_the_bom_header_and_extra_columns_of_the_loaded_file(self) -> None:
 		# F-11 (D5): the layout comes from the load; a new entry gets empty extra fields.

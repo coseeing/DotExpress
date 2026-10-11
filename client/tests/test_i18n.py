@@ -125,6 +125,25 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual(translation.gettext(message), "無法開啟字典編輯器：{error}")
 
+    def test_hidden_rows_box_strings_are_translated(self) -> None:
+        # F-11 (D1): the box that lists the rows the editor cannot show before removing them.
+        message = (
+            'Some rows of dictionary "{name}" cannot be shown in the editor. Saving removes them from the file:'
+            "\n\n{rows}\n\nDo you want to remove these rows and save the dictionary?"
+        )
+        expected = {
+            "Remove Rows That Cannot Be Shown": "移除無法顯示的列",
+            message: "字典「{name}」中有些列無法在編輯器中顯示，儲存時會從檔案中移除：\n\n{rows}\n\n要移除這些列並儲存字典嗎？",
+            "Row {line}: no source text": "第 {line} 列：沒有來源文字",
+            'Row {line}: "{text}", Bopomofo "{bopomofo}" is not valid': "第 {line} 列：「{text}」的注音「{bopomofo}」格式不正確",
+            "Other rows not listed: {count}": "另有 {count} 列未列出",
+            "Remove and &Save": "移除並儲存(&S)",
+            "&Back to Editing": "返回編輯(&B)",
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

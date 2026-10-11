@@ -249,13 +249,52 @@ class DocumentWorkspaceTest(unittest.TestCase):
             [(issue.path.name, issue.reason) for issue in issues],
             [
                 ("alpha.txt", "文件「alpha」已存在。"),
-                ("bad.docx", "無法讀取檔案：File is not a zip file"),
+                ("bad.docx", "檔案已損壞或格式不正確。"),
                 ("big5.txt", "檔案不是以 UTF-8 文字儲存。請重新存成 UTF-8，例如在記事本中使用「另存新檔」。"),
                 ("broken.dep", "匯入的檔案必須是有效的 DotExpress DEP 封裝檔。"),
                 ("foo.xyz", "無法匯入這種類型的檔案。"),
                 (f"{long_stem}.txt", "文件名稱長度需為 1 到 32 個字元。"),
             ],
         )
+
+    def test_batch_import_documents_logs_an_error_that_is_not_the_files_fault(self) -> None:
+        # F-12 review M-1, M-3: a bug in a loader looks like a bad file to the user, so the log
+        # keeps its traceback; a damaged file is logged with the library's text.
+        source_dir = Path(self._tmpdir.name) / "incoming"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        broken, damaged = source_dir / "broken.dep", source_dir / "damaged.docx"
+        broken.write_bytes(b"x")
+        damaged.write_bytes(b"x")
+
+        def buggy(path):
+            raise TypeError("loader bug")
+
+        def bad_zip(path):
+            raise zipfile.BadZipFile("File is not a zip file")
+
+        with patch.dict(workspace.IMPORT_LOADERS, {"dep": buggy, "docx": bad_zip}):
+            with self.assertLogs("dotexpress.gui", level="ERROR") as logs:
+                documents, issues = batch_import_documents([broken, damaged], format_key="all", existing_names=set())
+
+        self.assertEqual(documents, [])
+        self.assertEqual(
+            [issue.reason for issue in issues],
+            ["匯入的檔案必須是有效的 DotExpress DEP 封裝檔。", "檔案已損壞或格式不正確。"],
+        )
+        text = "\n".join(logs.output)
+        self.assertIn("broken.dep", text)
+        self.assertIn("TypeError: loader bug", text)
+        self.assertIn("damaged.docx", text)
+        self.assertIn("File is not a zip file", text)
+
+    def test_batch_import_documents_does_not_log_the_files_own_problems(self) -> None:
+        source_dir = Path(self._tmpdir.name) / "incoming"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "big5.txt").write_bytes("臺北".encode("cp950"))
+        (source_dir / "foo.xyz").write_text("F", encoding="utf-8")
+        with self.assertNoLogs("dotexpress.gui", level="ERROR"):
+            _documents, issues = batch_import_documents(sorted(source_dir.iterdir()), format_key="all", existing_names=set())
+        self.assertEqual(len(issues), 2)
 
     def test_batch_import_documents_names_the_file_that_holds_a_name_on_disk(self) -> None:
         # F-12 (D5): a name held by a package on disk that is not listed gets its own reason;

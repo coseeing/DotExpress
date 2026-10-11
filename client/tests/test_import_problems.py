@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from pypdf import PdfWriter
+from pypdf.errors import PdfReadError
 
 from documents.import_problems import ImportProblem, describe_import_problem
 from documents.importers import import_epub, import_pdf
@@ -31,6 +32,7 @@ WRONG_EXTENSION = "副檔名與選取的檔案類型不符。"
 INVALID_PACKAGE = "匯入的檔案必須是有效的 DotExpress DEP 封裝檔。"
 ENCRYPTED_PDF = "這個 PDF 檔已加密，無法匯入。"
 DAMAGED_EPUB = "EPUB 檔已損壞，或沒有可讀取的內容。"
+DAMAGED_FILE = "檔案已損壞或格式不正確。"
 
 
 def _raised(function, *args) -> Exception:
@@ -156,12 +158,38 @@ class ImportProblemTest(unittest.TestCase):
             with self.subTest(label):
                 self.assertEqual(describe_import_problem(error, "dep"), INVALID_PACKAGE)
 
+    def test_a_damaged_docx_epub_or_pdf_is_told_in_our_words(self) -> None:
+        # F-12 review M-3: the library's English text is for the log, not for the box.
+        cases = (
+            ("docx", zipfile.BadZipFile("File is not a zip file")),
+            ("epub", zipfile.BadZipFile("File is not a zip file")),
+            ("pdf", ValueError("Stream has ended unexpectedly")),
+            ("pdf", PdfReadError("EOF marker not found")),
+            ("PDF", KeyError("/Root")),
+        )
+        for format_key, error in cases:
+            with self.subTest(format_key=format_key, error=repr(error)):
+                self.assertEqual(describe_import_problem(error, format_key), DAMAGED_FILE)
+
+    def test_a_truncated_docx_and_pdf_from_the_real_libraries(self) -> None:
+        from documents.importers import import_docx
+
+        bad_docx = self.root / "bad.docx"
+        bad_docx.write_bytes(b"PK\x03\x04 truncated")
+        bad_pdf = self.root / "bad.pdf"
+        bad_pdf.write_bytes(b"%PDF-1.4\n1 0 obj\n<<")
+        for loader, path, key in ((import_docx, bad_docx, "docx"), (import_pdf, bad_pdf, "pdf")):
+            with self.subTest(key):
+                error = _raised(loader, path)
+                self.assertEqual(describe_import_problem(error, key), DAMAGED_FILE)
+
     def test_any_other_error_shows_its_own_text(self) -> None:
         missing = FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), "gone.dep")
         cases = (
-            ("docx", zipfile.BadZipFile("File is not a zip file")),
-            ("pdf", ValueError("Stream has ended unexpectedly")),
+            ("docx", FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), "gone.docx")),
+            ("pdf", OSError(errno.EIO, "I/O error")),
             ("dep", missing),
+            ("txt", ValueError("odd")),
         )
         for format_key, error in cases:
             with self.subTest(format_key=format_key):

@@ -11,6 +11,8 @@ from i18n import _
 from shared.name_validation import NameValidationError
 
 DEP_FORMAT_KEY = "dep"
+# Formats whose library raises its own English text for a damaged file (F-12 review M-3).
+LIBRARY_FORMAT_KEYS = ("docx", "epub", "pdf")
 
 
 class ImportProblem(ValueError):
@@ -44,6 +46,9 @@ def describe_import_problem(error: Exception, format_key: str) -> str:
     if format_key.casefold() == DEP_FORMAT_KEY and not isinstance(error, OSError):
         # A damaged archive, a missing member, metadata that is not JSON, text that is not UTF-8.
         return _("Imported file must be a valid DotExpress DEP package.")
+    if format_key.casefold() in LIBRARY_FORMAT_KEYS and not isinstance(error, OSError):
+        # The library's own text is in the log (workspace.batch_import_documents), not here.
+        return _("The file is damaged or is not in the expected format.")
     if isinstance(error, UnicodeDecodeError):
         return _("The file is not saved as UTF-8 text. Save it again as UTF-8, for example with Save As in Notepad.")
     return _("The file cannot be read: {error}").format(error=error)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
@@ -74,6 +75,19 @@ class ConfigSaveProblem:
     error: BaseException
     path: Path
     backup_path: Path | None = None  # BACKUP_FAILED only
+
+
+# Windows: access denied, sharing violation, lock violation.
+_ACCESS_WINERRORS = (5, 32, 33)
+
+
+def is_access_error(error: BaseException) -> bool:
+    """Whether ``error`` means the file is held by another program or may not be used (F-12 review M-2)."""
+    if isinstance(error, PermissionError):
+        return True
+    if not isinstance(error, OSError):
+        return False
+    return getattr(error, "winerror", None) in _ACCESS_WINERRORS or error.errno in (errno.EACCES, errno.EPERM)
 
 
 class _UnreadableConfig(dict):

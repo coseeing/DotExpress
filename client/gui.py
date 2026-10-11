@@ -38,7 +38,7 @@ from ui.conversion_presenter import ConversionPresenter
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
 from ui.menu_builder import apply_document_menu_state, build_document_menu
 from ui.message_box import message_box
-from config import ConfigSaveProblem, ConfigSaveProblemKind, ConfigStore, DEFAULT_TRANSLATION_TABLES
+from config import ConfigSaveProblem, ConfigSaveProblemKind, ConfigStore, DEFAULT_TRANSLATION_TABLES, is_access_error
 from settings.translation import (
 	TranslationSettings,
 	load_translation_settings,
@@ -464,16 +464,25 @@ class BrailleFrame(wx.Frame):
 			return
 		self._settings_save_problem_reported = True
 		if problem.kind is ConfigSaveProblemKind.UNREADABLE:
-			reason = _(
-				"The file cannot be opened. It may be in use by another program, or you may not have "
-				"permission to read it. Close the other program and try again."
-			)
+			if is_access_error(problem.error):
+				reason = _(
+					"The file cannot be opened. It may be in use by another program, or you may not have "
+					"permission to read it. Close the other program and try again."
+				)
+			else:
+				reason = _("The file cannot be read: {error}").format(error=problem.error)
 		elif problem.kind is ConfigSaveProblemKind.BACKUP_FAILED:
 			reason = _(
 				'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}'
 			).format(backup=problem.backup_path, error=problem.error)
+		elif is_access_error(problem.error):
+			reason = _(
+				"The file cannot be written. It may be in use by another program, or you may not have "
+				"permission to write to it. Close the other program and try again."
+			)
 		else:
-			reason = str(problem.error)
+			# Not the operating system's text: it holds the random name of the temporary file.
+			reason = _("The file cannot be written. Check that the disk has free space and that you can write to the folder.")
 		message_box(
 			_(
 				'DotExpress cannot save its settings to "{path}". Changes to the settings apply until DotExpress is closed, '

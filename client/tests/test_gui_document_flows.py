@@ -5277,6 +5277,9 @@ class SettingsSaveProblemFrameTest(unittest.TestCase):
         self.assertEqual(saved["conversion"]["output_mode"], "ascii")
         self.assertEqual(saved["view"]["font_size"], 20)
 
+    CANNOT_WRITE_ACCESS = "無法寫入檔案。檔案可能正被其他程式使用，或你沒有寫入權限。請關閉其他程式後再試一次。"
+    CANNOT_WRITE = "無法寫入檔案。請確認磁碟還有可用空間，且你有該資料夾的寫入權限。"
+
     def test_each_kind_of_problem_gives_its_reason(self) -> None:
         error = OSError(13, "Access denied")
         backup = self.root / "config.json.bak"
@@ -5287,7 +5290,7 @@ class SettingsSaveProblemFrameTest(unittest.TestCase):
                 backup,
                 f"檔案已損壞，而且在取代它之前無法先備份為「{backup}」。詳細資訊：{error}",
             ),
-            ("WRITE_FAILED", None, str(error)),
+            ("WRITE_FAILED", None, self.CANNOT_WRITE_ACCESS),
         )
         for kind, backup_path, reason in cases:
             with self.subTest(kind):
@@ -5300,6 +5303,42 @@ class SettingsSaveProblemFrameTest(unittest.TestCase):
                 frame._report_settings_save_problem(problem)
 
                 self.assertEqual(self.boxes, [self._box(frame, reason)])
+
+    def test_only_an_access_error_says_the_file_is_in_use_or_not_permitted(self) -> None:
+        # F-12 review M-2, M-5: the other errors get a reason that is true, and never show the
+        # operating system's text, which holds the random name of the temporary file.
+        temp_name = r"C:\data\.config.json.bak.k3j9x2.tmp"
+        sharing = OSError(32, "sharing violation")
+        sharing.winerror = 32
+        denied = OSError()
+        denied.winerror = 5
+        by_errno = OSError(errno.EACCES, "Access denied")
+        io_error = OSError(errno.EIO, "I/O error")
+        disk_full = OSError(errno.ENOSPC, "No space left on device", temp_name)
+        folder = IsADirectoryError(errno.EISDIR, "Is a directory", "config.json")
+        cases = (
+            ("UNREADABLE", PermissionError(errno.EACCES, "denied"), self.CANNOT_OPEN),
+            ("UNREADABLE", sharing, self.CANNOT_OPEN),
+            ("UNREADABLE", denied, self.CANNOT_OPEN),
+            ("UNREADABLE", by_errno, self.CANNOT_OPEN),
+            ("UNREADABLE", io_error, f"無法讀取檔案：{io_error}"),
+            ("UNREADABLE", folder, f"無法讀取檔案：{folder}"),
+            ("WRITE_FAILED", PermissionError(errno.EACCES, "denied", temp_name), self.CANNOT_WRITE_ACCESS),
+            ("WRITE_FAILED", sharing, self.CANNOT_WRITE_ACCESS),
+            ("WRITE_FAILED", denied, self.CANNOT_WRITE_ACCESS),
+            ("WRITE_FAILED", disk_full, self.CANNOT_WRITE),
+            ("WRITE_FAILED", RuntimeError(temp_name), self.CANNOT_WRITE),
+        )
+        for kind, error, reason in cases:
+            with self.subTest(kind=kind, error=repr(error)):
+                self.boxes.clear()
+                frame = self._frame()
+                problem = config.ConfigSaveProblem(getattr(config.ConfigSaveProblemKind, kind), error, self.config_path)
+
+                frame._report_settings_save_problem(problem)
+
+                self.assertEqual(self.boxes, [self._box(frame, reason)])
+                self.assertNotIn("k3j9x2", self.boxes[0][0][0])
 
     def test_the_box_belongs_to_the_active_window(self) -> None:
         # The settings dialog after Apply, Dictionary Management after a rename.

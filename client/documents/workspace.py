@@ -19,7 +19,7 @@ from documents.import_problems import ImportProblem, describe_import_problem
 from i18n import N_, _
 from log import get_logger
 from shared.atomic_write import ensure_writable, write_bytes_atomically, write_text_atomically
-from shared.name_validation import normalize_base_name
+from shared.name_validation import NameValidationError, normalize_base_name
 
 DEP_EXTENSION = ".dep"
 TXT_EXTENSION = ".txt"
@@ -454,6 +454,11 @@ def batch_import_documents(
                 raise ImportProblem(f'Unsupported import file type: "{path.suffix}".', N_("This file type cannot be imported."))
             document = loader(path)
         except Exception as exc:
+            if not isinstance(exc, (ImportProblem, OSError, UnicodeDecodeError, NameValidationError)):
+                # The user is told the file is bad; a bug in a loader would look the same (F-12 review M-1).
+                get_logger("dotexpress.gui", "gui.log").error(
+                    'Cannot import "%s" as %s: %s: %s', path.name, loader_key, type(exc).__name__, exc, exc_info=exc
+                )
             # A reason the user can act on, in the UI language (F-12 D3).
             issues.append(BatchIssue(path=path, reason=describe_import_problem(exc, loader_key)))
             continue

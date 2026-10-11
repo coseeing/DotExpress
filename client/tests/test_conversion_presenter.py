@@ -562,6 +562,47 @@ class ConversionPresenterTest(unittest.TestCase):
 
         self.assertEqual(self._take(), self._end() + [("show_error", BIG5_DICTIONARY_FAILED, "錯誤")])
 
+    def _failed_after(self, switch) -> list:
+        """Convert alpha, run ``switch`` while the job runs, deliver a failure; the events after it."""
+        self.outputs["source"] = ConversionStageError("translation", RuntimeError("boom"))
+        presenter = self._presenter()
+        presenter.convert()
+        switch()
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        return self._take()
+
+    def test_a_failure_after_switching_names_the_document(self) -> None:
+        # F-12 (D7, F-9 review M-9): the box would otherwise seem to be about the open document.
+        events = self._failed_after(lambda: self._switch_to("beta"))
+
+        self.assertEqual(
+            events,
+            self._end() + [("show_error", "無法轉換文件「alpha」。\n\n轉譯失敗：boom", "錯誤")],
+        )
+
+    def _not_named(self) -> list:
+        return self._end() + [("show_error", _("Translation failed: {error}").format(error="boom"), _("Error"))]
+
+    def test_a_failure_of_the_open_document_is_not_named(self) -> None:
+        self.assertEqual(self._failed_after(lambda: None), self._not_named())
+
+    def test_a_failure_after_switching_away_and_back_is_not_named(self) -> None:
+        events = self._failed_after(lambda: (self._switch_to("beta"), self._switch_to("alpha")))
+
+        self.assertEqual(events, self._not_named())
+
+    def test_a_failure_without_a_starting_document_is_not_named(self) -> None:
+        # No document to name, also when one was opened during the conversion.
+        self.documents.open_name = None
+
+        events = self._failed_after(lambda: self.documents.open_document("alpha"))
+
+        self.assertEqual(events, self._not_named())
+
     # --- export completion ----------------------------------------------------
 
     def test_convert_for_export_converts_given_text_without_checks(self) -> None:

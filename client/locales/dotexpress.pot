@@ -904,8 +904,8 @@ msgstr ""
 
 #: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:896
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
-#: documents/export_coordinator.py:135 gui.py:492 gui.py:777 gui.py:1089
-#: gui.py:1101 ui/conversion_presenter.py:297
+#: documents/export_coordinator.py:145 gui.py:492 gui.py:777 gui.py:1089
+#: gui.py:1101 ui/conversion_presenter.py:298
 msgid "Error"
 msgstr ""
 
@@ -930,8 +930,8 @@ msgid "Type"
 msgstr ""
 
 #: dialog.py:182 dialog.py:208 dialog.py:346 dialog.py:893
-#: ui/conversion_presenter.py:194 ui/conversion_presenter.py:313
-#: ui/conversion_presenter.py:330
+#: ui/conversion_presenter.py:195 ui/conversion_presenter.py:320
+#: ui/conversion_presenter.py:337
 msgid "Info"
 msgstr ""
 
@@ -1225,16 +1225,24 @@ msgstr ""
 msgid "Dictionary \"{name}\" cannot be read."
 msgstr ""
 
-#: documents/export_coordinator.py:135
+#: documents/export_coordinator.py:126 ui/conversion_presenter.py:306
+#, python-brace-format
+msgid ""
+"Document \"{name}\" could not be converted.\n"
+"\n"
+"{error}"
+msgstr ""
+
+#: documents/export_coordinator.py:145
 #, python-brace-format
 msgid "Failed to export document: {error}"
 msgstr ""
 
-#: documents/export_coordinator.py:137
+#: documents/export_coordinator.py:147
 msgid "The document was exported successfully."
 msgstr ""
 
-#: documents/export_coordinator.py:137 documents/export_results.py:8
+#: documents/export_coordinator.py:147 documents/export_results.py:8
 msgid "Export Complete"
 msgstr ""
 
@@ -1707,41 +1715,41 @@ msgstr ""
 msgid "Export All"
 msgstr ""
 
-#: ui/conversion_presenter.py:117
+#: ui/conversion_presenter.py:118
 msgid "Please select a translation table first."
 msgstr ""
 
-#: ui/conversion_presenter.py:128
+#: ui/conversion_presenter.py:129
 msgid ""
 "Its header is not recognized. The first line of the file must contain the "
 "text, braille, and type headers."
 msgstr ""
 
-#: ui/conversion_presenter.py:132
+#: ui/conversion_presenter.py:133
 #, python-brace-format
 msgid "Dictionary \"{name}\" cannot be read. {reason}"
 msgstr ""
 
-#: ui/conversion_presenter.py:137
+#: ui/conversion_presenter.py:138
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:138
+#: ui/conversion_presenter.py:139
 #, python-brace-format
 msgid "Text processing failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:140
+#: ui/conversion_presenter.py:141
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:313
+#: ui/conversion_presenter.py:320
 msgid "Conversion completed."
 msgstr ""
 
-#: ui/conversion_presenter.py:329
+#: ui/conversion_presenter.py:336
 #, python-brace-format
 msgid "Conversion completed. The result was saved to document \"{name}\"."
 msgstr ""

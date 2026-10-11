@@ -247,6 +247,15 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
 
+    def test_failed_conversion_of_a_document_that_is_not_open_string_is_translated(self) -> None:
+        # F-12 (D7): a failed conversion of a document that is not the open one names it.
+        translation = i18n.load_translation()
+
+        self.assertEqual(
+            translation.gettext('Document "{name}" could not be converted.\n\n{error}'),
+            "無法轉換文件「{name}」。\n\n{error}",
+        )
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

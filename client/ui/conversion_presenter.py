@@ -15,7 +15,8 @@ ignored, and no view method runs after that (F-9).
 A manual conversion's result goes to the document that was open when it started. If
 another document is open when it completes, the result is saved to the starting
 document and the open one is left alone; if the starting document is gone or holds
-another text, the result is discarded and logged (F-9).
+another text, the result is discarded and logged (F-9). A failure names the starting
+document when another one is open (F-12).
 """
 
 from __future__ import annotations
@@ -294,9 +295,15 @@ class ConversionPresenter:
             if active.job.export is not None:
                 active.job.export.on_error(message)
             else:
-                self._view.show_error(message, _("Error"))
+                self._view.show_error(self._name_unopened_document(active.job.manual, message), _("Error"))
         finally:
             self._finish_completion()
+
+    def _name_unopened_document(self, target: _ManualTarget, message: str) -> str:
+        """``message``, led by the name of the job's document if another one is open now (F-12 D7)."""
+        if target.document_name is None or target.document_name == self._documents.open_document_name:
+            return message
+        return _('Document "{name}" could not be converted.\n\n{error}').format(name=target.document_name, error=message)
 
     def _complete_manual(self, target: _ManualTarget, output: ConversionOutput) -> None:
         braille = output.display_text

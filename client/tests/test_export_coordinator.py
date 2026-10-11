@@ -390,6 +390,8 @@ class ExportCoordinatorTest(unittest.TestCase):
         self.assertEqual(self.documents.get_document("beta"), Document("beta", "b", None))
 
     def test_export_document_pending_conversion_error_shows_it(self) -> None:
+        # The exported document is the open one: the message is not named (F-12 D7).
+        self.documents.open_document("beta")
         self.view.paths.append(self.root / "beta.brl")
         self.coordinator.export_document(Document("beta", "b", None), "brl")
         self._take()
@@ -399,6 +401,29 @@ class ExportCoordinatorTest(unittest.TestCase):
 
         self.assertEqual(self._take(), [("show_error", "boom", _("Error"))])
         self.assertEqual(self._written(), {})
+
+    def test_a_failed_export_of_a_document_that_is_not_open_names_it(self) -> None:
+        # F-12 (D7): the open document at delivery decides, not the one at the request.
+        cases = (
+            ("another document open", "alpha", "alpha", True),
+            ("opened during the conversion", "alpha", "beta", False),
+            ("switched away during the conversion", "beta", "alpha", True),
+        )
+        for label, open_at_request, open_at_delivery, named in cases:
+            with self.subTest(label):
+                self.events.clear()
+                self.conversions.started.clear()
+                self.documents.open_document(open_at_request)
+                self.view.paths.append(self.root / "beta.brl")
+                self.coordinator.export_document(Document("beta", "b", None), "brl")
+                self._take()
+                self.documents.open_document(open_at_delivery)
+
+                _on_success, on_error = self.conversions.started[0]
+                on_error("轉譯失敗：boom")
+
+                message = "無法轉換文件「beta」。\n\n轉譯失敗：boom" if named else "轉譯失敗：boom"
+                self.assertEqual(self._take(), [("show_error", message, _("Error"))])
 
     def test_export_document_pending_without_table_shows_error_only(self) -> None:
         self.conversions.missing_message = MISSING_TABLE

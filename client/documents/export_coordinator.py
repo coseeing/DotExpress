@@ -110,10 +110,20 @@ class ExportCoordinator:
                     format_key,
                     dual_view_results=output.dual_view_segments,
                 ),
-                on_error=lambda message: self._view.show_error(message, _("Error")),
+                on_error=lambda message: self._view.show_error(self._name_unopened_document(document.name, message), _("Error")),
             )
             return
         self._write_single(document, destination_path, format_key)
+
+    def _name_unopened_document(self, name: str, message: str) -> str:
+        """``message``, led by ``name`` if that document is not the open one now (F-12 D7).
+
+        The box does not otherwise say which export failed. Export All names each document
+        in its summary instead.
+        """
+        if name == self._documents.open_document_name:
+            return message
+        return _('Document "{name}" could not be converted.\n\n{error}').format(name=name, error=message)
 
     def _log_unexpected_export_error(self, error: Exception) -> None:
         """Log the traceback of a failed export if it is not an ``OSError`` (F-7).

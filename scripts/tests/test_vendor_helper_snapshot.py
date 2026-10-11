@@ -21,10 +21,14 @@ def _load_sync_nvda():
 class VendorHelperSnapshotTests(unittest.TestCase):
     def test_runtime_helper_snapshot_is_the_adapted_nvda_helper(self):
         expected = _load_sync_nvda()._adapt_helper(NVDA_HELPER.read_text(encoding="utf-8"))
+        # Compared with LF line ends: the snapshot is LF in the repository, and core.autocrlf
+        # checks it out with CRLF on Windows (F-W5, fixed in F-12). The vendored file is not
+        # changed.
+        actual = RUNTIME_HELPER.read_bytes().decode("utf-8").replace("\r\n", "\n")
 
         self.assertEqual(
             expected,
-            RUNTIME_HELPER.read_bytes().decode("utf-8"),
+            actual,
             "regenerate vendor/nvda/liblouis/runtime/louis_helper.py with _adapt_helper",
         )
 

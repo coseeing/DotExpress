@@ -292,10 +292,11 @@ def _skip_fsync(_descriptor: int) -> None:
 class _EditorHarness:
     """Build the real editor against fake widgets and drive it like a user."""
 
-    def __init__(self, path: Path, on_base_init=None) -> None:
+    def __init__(self, path: Path, on_base_init=None, model=None) -> None:
         self.path = path
         self.parent = object()
         self.on_base_init = on_base_init
+        self.model = model
         self.base_parent = None
         self.log: list[list] = []
         self.buttons: dict[str, _FakeButton] = {}
@@ -355,7 +356,10 @@ class _EditorHarness:
             editor.Centre = lambda: self.record("Centre")
             editor.Destroy = lambda: self.record("Destroy")
             self.dialog = editor
-            editor.__init__(self.parent, dictionary_path=self.path)
+            if self.model is None:
+                editor.__init__(self.parent, dictionary_path=self.path)
+            else:
+                editor.__init__(self.parent, dictionary_path=self.path, model=self.model)
         except BaseException:
             stack.close()
             raise
@@ -507,11 +511,11 @@ class _EditorTestCase(unittest.TestCase):
         self.addCleanup(temp_dir.cleanup)
         return Path(temp_dir.name) / name
 
-    def open_editor(self, rows=(), *, path=None, data=None, on_base_init=None, keep_log=False) -> _EditorHarness:
+    def open_editor(self, rows=(), *, path=None, data=None, on_base_init=None, keep_log=False, model=None) -> _EditorHarness:
         """Write ``rows`` (or the raw ``data``) to a new CSV and open the editor on it.
 
         ``rows=None`` leaves the file missing. The construction log is dropped
-        unless ``keep_log`` is set.
+        unless ``keep_log`` is set. ``model`` is passed to the editor (F-11 D12).
         """
         if path is None:
             path = self.make_path()
@@ -519,7 +523,7 @@ class _EditorTestCase(unittest.TestCase):
                 path.write_bytes(data)
             elif rows is not None:
                 _write_rows(path, rows)
-        harness = _EditorHarness(path, on_base_init=on_base_init)
+        harness = _EditorHarness(path, on_base_init=on_base_init, model=model)
         harness.open()
         self.addCleanup(harness.close)
         if not keep_log:
@@ -825,12 +829,46 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
         )
         self.assertIs(harness.base_parent, harness.parent)
 
-    def test_native_dialog_exists_before_the_dictionary_is_read(self) -> None:
+    def test_the_dictionary_is_read_before_the_native_dialog_exists(self) -> None:
+        # F-11 (D12, F-6 review M-5): the native dialog was created first. The rows written
+        # while it is created are not read now; the file was read before.
         path = self.make_path()
 
         harness = self.open_editor(path=path, on_base_init=lambda: _write_rows(path, [ALPHA]))
 
-        self.assertEqual(harness.rows(), [ALPHA_CELLS])
+        self.assertEqual(harness.rows(), [])
+
+    def test_a_given_model_is_shown_without_reading_the_file(self) -> None:
+        # The frame reads the file itself and passes the model (F-11 D12).
+        path = self.make_path()
+        path.write_bytes(b"text,braille,type\r\n\xff\xfe,x,General\r\n")
+        model = DictionaryEntryListModel([DictionaryEntry(*ALPHA), DictionaryEntry(*BETA)])
+
+        harness = self.open_editor(path=path, model=model)
+
+        self.assertEqual(harness.rows(), [ALPHA_CELLS, BETA_CELLS])
+        self.assertIs(harness.dialog._model, model)
+
+    def test_a_failure_while_building_destroys_the_dialog_and_propagates(self) -> None:
+        # F-6 review M-5: a half-built dialog stayed behind as a hidden child of the frame.
+        path = self.make_path()
+        _write_rows(path, [ALPHA])
+        harness = _EditorHarness(path)
+        error = RuntimeError("injected")
+
+        def failing_list_ctrl(*_args, **_kwargs):
+            raise error
+
+        harness._list_ctrl = failing_list_ctrl
+
+        with self.assertRaises(RuntimeError) as raised:
+            harness.open()
+
+        log = harness.take_log()
+        self.assertIs(raised.exception, error)
+        self.assertEqual(log[0], ["Dialog.__init__", TITLE, DIALOG_STYLE])
+        self.assertEqual([event for event in log if event == ["Destroy"]], [["Destroy"]])
+        self.assertEqual(log[-1], ["Destroy"])
 
     def test_empty_dictionary_shows_no_rows_and_disables_edit_and_delete(self) -> None:
         harness = self.open_editor([], keep_log=True)
@@ -856,9 +894,9 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
         self.assertEqual(harness.rows(), [])
         self.assertFalse(harness.path.exists())
 
-    def test_invalid_utf8_raises_from_the_constructor_after_the_native_dialog(self) -> None:
-        # KNOWN BUG (P2-2 spec, Q8), pinned as it is today, NOT desired: the load error
-        # escapes the constructor after the native dialog was created; nothing destroys it.
+    def test_invalid_utf8_raises_from_the_constructor_before_the_native_dialog(self) -> None:
+        # Was the P2-2 Q8 KNOWN BUG: the load error escaped the constructor after the native
+        # dialog was created, and nothing destroyed it. Fixed by F-11 (D12).
         path = self.make_path()
         path.write_bytes(b"text,braille,type\r\n\xff\xfe,x,General\r\n")
         harness = _EditorHarness(path)
@@ -866,7 +904,7 @@ class DictionaryEntriesDialogConstructionTest(_EditorTestCase):
         with self.assertRaises(UnicodeDecodeError):
             harness.open()
 
-        self.assertEqual(harness.take_log(), [["Dialog.__init__", TITLE, DIALOG_STYLE]])
+        self.assertEqual(harness.take_log(), [])
 
     def test_bom_dictionary_opens_with_its_rows_and_ok_after_a_change_keeps_the_bom(self) -> None:
         # Was the P2-2 Q1 KNOWN BUG (data loss), fixed by F-2: the BOM made the header

@@ -376,16 +376,32 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 
 	Supervising controller: the widgets and the selected row live here, the
 	entries and the filter in ``DictionaryEntryListModel``.
+
+	The file is read before the native dialog exists (``model`` when the caller read
+	it, as the frame does), so a read error leaves no dialog behind; an error while
+	building the dialog destroys it before it propagates (F-11 D12).
 	"""
 
-	def __init__(self, parent: wx.Window | None, dictionary_path: Path):
+	def __init__(
+		self,
+		parent: wx.Window | None,
+		dictionary_path: Path,
+		model: DictionaryEntryListModel | None = None,
+	):
+		dictionary_path = Path(dictionary_path)
+		if model is None:
+			model = DictionaryEntryListModel.load(dictionary_path)
 		super().__init__(parent, title=_("Custom Dictionary Manager"), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
 
-		self.dictionary_path = Path(dictionary_path)
-		self._model = DictionaryEntryListModel.load(self.dictionary_path)
-		self._build_ui()
-		self._render(self._model.apply_filter(self.filter_ctrl.GetValue(), self._get_selected_index()))
-		self._update_button_states()
+		self.dictionary_path = dictionary_path
+		self._model = model
+		try:
+			self._build_ui()
+			self._render(self._model.apply_filter(self.filter_ctrl.GetValue(), self._get_selected_index()))
+			self._update_button_states()
+		except BaseException:
+			self.Destroy()
+			raise
 
 	def _build_ui(self) -> None:
 		main_sizer = wx.BoxSizer(wx.VERTICAL)

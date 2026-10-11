@@ -118,6 +118,13 @@ class TranslationTest(unittest.TestCase):
         self.assertEqual(translation.gettext(message), "轉換完成。結果已儲存到文件「{name}」。")
         self.assertEqual(translation.gettext(message).format(name="alpha"), "轉換完成。結果已儲存到文件「alpha」。")
 
+    def test_dictionary_editor_failure_string_is_translated(self) -> None:
+        # F-11 (D12): building the dictionary editor failed for a reason other than its file.
+        message = "Failed to open the dictionary editor: {error}"
+        translation = i18n.load_translation()
+
+        self.assertEqual(translation.gettext(message), "無法開啟字典編輯器：{error}")
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

@@ -13,6 +13,7 @@ from adapters.translation.provider import build_default_translation_runtime
 from conversion.math_service import latex_to_mathml
 from conversion.service import ConversionRequest
 from conversion.preprocessing.user_script import preprocessing_script_path
+from dictionaries.entry_list_model import DictionaryEntryListModel
 from dictionaries.manager import dictionary_path_for_name
 from dictionaries.presenter import DictionaryManagementPresenter
 from dictionaries.read_problems import describe_unreadable_dictionary, log_dictionary_read_error
@@ -1036,12 +1037,25 @@ class BrailleFrame(wx.Frame):
 			return
 		dictionary_path = self._dictionary_presenter.dictionary_path(edit_name)
 		try:
-			editor = DictionaryEntriesDialog(self, dictionary_path=dictionary_path)
+			# Read before the editor exists (F-11 D12).
+			model = DictionaryEntryListModel.load(dictionary_path)
 		except Exception as error:
 			# F-6 (D6): the file could not be read after Dictionary Management checked it.
 			log_dictionary_read_error(dictionary_path, error)
 			message_box(
 				describe_unreadable_dictionary(edit_name, error),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
+			return
+		try:
+			editor = DictionaryEntriesDialog(self, dictionary_path=dictionary_path, model=model)
+		except Exception as error:
+			# The editor destroyed what it had built (F-11 D12); this is not about the file.
+			logger.error("Unexpected error while opening the dictionary editor", exc_info=error)
+			message_box(
+				_("Failed to open the dictionary editor: {error}").format(error=error),
 				_("Error"),
 				wx.OK | wx.ICON_ERROR,
 				parent=self,

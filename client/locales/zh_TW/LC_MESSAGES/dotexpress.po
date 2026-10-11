@@ -890,264 +890,264 @@ msgid ""
 "main must define exactly one positional parameter and no other parameters."
 msgstr "main 必須恰好定義一個位置參數，且不得有其他參數。"
 
-#: dialog.py:32
+#: dialog.py:33
 msgid "CSV files (*.csv)|*.csv"
 msgstr "CSV 檔案 (*.csv)|*.csv"
 
-#: dialog.py:54 dialog.py:98 settings/dialogs.py:143 settings/dialogs.py:293
+#: dialog.py:55 dialog.py:120 settings/dialogs.py:143 settings/dialogs.py:293
 #: ui/message_box.py:29 ui/message_box.py:31
 msgid "OK"
 msgstr "確定"
 
-#: dialog.py:55 dialog.py:99 gui.py:489 settings/dialogs.py:144
+#: dialog.py:56 dialog.py:121 gui.py:490 settings/dialogs.py:144
 #: settings/dialogs.py:295 ui/message_box.py:29
 msgid "Cancel"
 msgstr "取消"
 
-#: dialog.py:56 settings/dialogs.py:145 settings/dialogs.py:297
+#: dialog.py:57 settings/dialogs.py:145 settings/dialogs.py:297
 msgid "Apply"
 msgstr "套用"
 
-#: dialog.py:57
+#: dialog.py:58
 msgid "Close"
 msgstr "關閉"
 
 #: dialog.py:74
+#, python-brace-format
+msgid "Source text \"{identifier}\" already exists."
+msgstr "來源文字「{identifier}」已存在。"
+
+#: dialog.py:75 dialog.py:552 dialog.py:810 documents/export_coordinator.py:103
+#: documents/export_coordinator.py:113 documents/export_coordinator.py:135
+#: gui.py:455 gui.py:730 gui.py:1047 gui.py:1059 ui/conversion_presenter.py:277
+msgid "Error"
+msgstr "錯誤"
+
+#: dialog.py:95
 msgid "Edit Dictionary Entry"
 msgstr "編輯字典項目"
 
-#: dialog.py:74
+#: dialog.py:95
 msgid "Add Dictionary Entry"
 msgstr "新增字典項目"
 
-#: dialog.py:81 dialog.py:374 gui.py:196
+#: dialog.py:103 dialog.py:423 gui.py:197
 msgid "Source Text"
 msgstr "來源文字"
 
-#: dialog.py:83 dialog.py:375
+#: dialog.py:105 dialog.py:424
 msgid "Braille"
 msgstr "點字"
 
-#: dialog.py:85 dialog.py:376
+#: dialog.py:107 dialog.py:425
 msgid "Type"
 msgstr "類型"
 
-#: dialog.py:154 dialog.py:171 dialog.py:309 dialog.py:761
+#: dialog.py:178 dialog.py:204 dialog.py:342 dialog.py:807
 #: ui/conversion_presenter.py:174 ui/conversion_presenter.py:293
 #: ui/conversion_presenter.py:310
 msgid "Info"
 msgstr "資訊"
 
-#: dialog.py:179
+#: dialog.py:212
 msgid "Please enter the dictionary name."
 msgstr "請輸入字典名稱。"
 
-#: dialog.py:180
+#: dialog.py:213
 msgid "Dictionary name must be 1 to 32 characters."
 msgstr "字典名稱長度需為 1 到 32 個字元。"
 
-#: dialog.py:181
+#: dialog.py:214
 msgid "Dictionary name is not a valid Windows file name."
 msgstr "字典名稱不是有效的 Windows 檔名。"
 
-#: dialog.py:182
+#: dialog.py:215
 #, python-brace-format
 msgid "Dictionary name \"{name}\" is reserved."
 msgstr "字典名稱「{name}」為保留名稱。"
 
-#: dialog.py:187 dictionaries/presenter.py:103 dictionaries/presenter.py:174
+#: dialog.py:220 dictionaries/presenter.py:104 dictionaries/presenter.py:175
 msgid "Add Dictionary"
 msgstr "新增字典"
 
-#: dialog.py:193
+#: dialog.py:226
 msgid "Dictionary Name"
 msgstr "字典名稱"
 
-#: dialog.py:222
+#: dialog.py:255
 msgid "Please enter the document name."
 msgstr "請輸入文件名稱。"
 
-#: dialog.py:223
+#: dialog.py:256
 msgid "Document name must be 1 to 32 characters."
 msgstr "文件名稱長度需為 1 到 32 個字元。"
 
-#: dialog.py:224
+#: dialog.py:257
 msgid "Document name is not a valid Windows file name."
 msgstr "文件名稱不是有效的 Windows 檔名。"
 
-#: dialog.py:234 gui.py:182
+#: dialog.py:267 gui.py:183
 msgid "Document Name"
 msgstr "文件名稱"
 
-#: dialog.py:259
+#: dialog.py:292
 msgid "Invalid Workspace Files"
 msgstr "無效的工作區文件"
 
-#: dialog.py:262
+#: dialog.py:295
 msgid ""
 "The following workspace files are invalid. Do you want to delete them or "
 "keep them?"
 msgstr "下列在工作區中的文件無效。你要刪除這些檔案，還是保留它們？"
 
-#: dialog.py:267
+#: dialog.py:300
 msgid "Delete Invalid Files"
 msgstr "刪除無效的檔案"
 
-#: dialog.py:268
+#: dialog.py:301
 msgid "Keep Invalid Files"
 msgstr "保留無效檔案"
 
-#: dialog.py:311
+#: dialog.py:344
 msgid "converting"
 msgstr "轉換中"
 
-#: dialog.py:349
+#: dialog.py:394
 msgid "Custom Dictionary Manager"
 msgstr "自訂字典管理器"
 
-#: dialog.py:360
+#: dialog.py:409
 msgid "Filter by:"
 msgstr "篩選條件："
 
-#: dialog.py:366
+#: dialog.py:415
 msgid "Dictionary entries"
 msgstr "字典項目"
 
-#: dialog.py:383 dialog.py:567 ui/action_menu.py:29
+#: dialog.py:432 dialog.py:613 ui/action_menu.py:29
 msgid "Add"
 msgstr "新增"
 
-#: dialog.py:384 dialog.py:570
+#: dialog.py:433 dialog.py:616
 msgid "Edit"
 msgstr "編輯"
 
-#: dialog.py:385 dialog.py:568 ui/action_menu.py:27
+#: dialog.py:434 dialog.py:614 ui/action_menu.py:27
 msgid "Delete"
 msgstr "刪除"
 
-#: dialog.py:496
-#, python-brace-format
-msgid "Source text \"{identifier}\" already exists."
-msgstr "來源文字「{identifier}」已存在。"
-
-#: dialog.py:497 dialog.py:506 dialog.py:764
-#: documents/export_coordinator.py:103 documents/export_coordinator.py:113
-#: documents/export_coordinator.py:135 gui.py:454 gui.py:729 gui.py:1045
-#: ui/conversion_presenter.py:277
-msgid "Error"
-msgstr "錯誤"
-
-#: dialog.py:506
+#: dialog.py:552
 #, python-brace-format
 msgid "Failed to save: {error}"
 msgstr "儲存失敗：{error}"
 
-#: dialog.py:522
+#: dialog.py:568
 msgid "Dictionary Management"
 msgstr "字典管理"
 
-#: dialog.py:542 settings/dialogs.py:386
+#: dialog.py:588 settings/dialogs.py:386
 msgid "Dictionary"
 msgstr "字典"
 
-#: dialog.py:543 dialog.py:669
+#: dialog.py:589 dialog.py:715
 msgid "Entries"
 msgstr "條目數量"
 
-#: dialog.py:554
+#: dialog.py:600
 msgid "Why this dictionary cannot be read:"
 msgstr "無法讀取的原因："
 
-#: dialog.py:569 ui/action_menu.py:30
+#: dialog.py:615 ui/action_menu.py:30
 msgid "Rename"
 msgstr "重新命名"
 
-#: dialog.py:571 ui/action_menu.py:31
+#: dialog.py:617 ui/action_menu.py:31
 msgid "Import"
 msgstr "匯入"
 
-#: dialog.py:572 ui/action_menu.py:34
+#: dialog.py:618 ui/action_menu.py:34
 msgid "Export"
 msgstr "匯出"
 
-#: dialog.py:606 dialog.py:669
+#: dialog.py:652 dialog.py:715
 msgid "Unreadable"
 msgstr "無法讀取"
 
-#: dictionaries/entries.py:14
+#: dictionaries/entries.py:15
 msgid "General"
 msgstr "一般"
 
-#: dictionaries/entries.py:15
+#: dictionaries/entries.py:16
 msgid "Bopomofo"
 msgstr "注音"
 
-#: dictionaries/entries.py:16
+#: dictionaries/entries.py:17
 msgid "Unicode Braille"
 msgstr "Unicode 點字"
 
-#: dictionaries/entries.py:56
+#: dictionaries/entries.py:97
 msgid "Please enter the source text."
 msgstr "請輸入來源文字。"
 
-#: dictionaries/entries.py:61
+#: dictionaries/entries.py:100
 msgid "Please enter the a valid Bopomofo sequence."
 msgstr "請輸入有效的注音序列。"
 
-#: dictionaries/entries.py:65
+#: dictionaries/entries.py:104
 msgid "Please enter the a valid Unicode Braille sequence."
 msgstr "請輸入有效的 Unicode 點字序列。"
 
-#: dictionaries/presenter.py:116
+#: dictionaries/presenter.py:117
 msgid "The default dictionary cannot be deleted."
 msgstr "預設字典無法刪除。"
 
-#: dictionaries/presenter.py:119
+#: dictionaries/presenter.py:120
 #, python-brace-format
 msgid "Do you want to delete dictionary \"{name}\"?"
 msgstr "要刪除字典「{name}」嗎？"
 
-#: dictionaries/presenter.py:120
+#: dictionaries/presenter.py:121
 msgid "Confirm Delete Dictionary"
 msgstr "確認刪除字典"
 
-#: dictionaries/presenter.py:129
+#: dictionaries/presenter.py:130
 #, python-brace-format
 msgid "Failed to delete dictionary: {error}"
 msgstr "無法刪除字典：{error}"
 
-#: dictionaries/presenter.py:143
+#: dictionaries/presenter.py:144
 msgid "Rename Dictionary"
 msgstr "重新命名字典"
 
-#: dictionaries/presenter.py:155
+#: dictionaries/presenter.py:156
 #, python-brace-format
 msgid "Failed to save dictionary: {error}"
 msgstr "儲存字典失敗：{error}"
 
-#: dictionaries/presenter.py:168
+#: dictionaries/presenter.py:169
 msgid "Import Dictionary"
 msgstr "匯入字典"
 
-#: dictionaries/presenter.py:180 dictionaries/presenter.py:186
+#: dictionaries/presenter.py:181 dictionaries/presenter.py:185
+#: dictionaries/presenter.py:191
 #, python-brace-format
 msgid "Failed to import dictionary: {error}"
 msgstr "匯入字典失敗：{error}"
 
-#: dictionaries/presenter.py:183
+#: dictionaries/presenter.py:188
 msgid "Imported file must contain text, braille, and type headers."
 msgstr "匯入的檔案必須包含 text、braille 與 type 表頭。"
 
-#: dictionaries/presenter.py:195
+#: dictionaries/presenter.py:200
 msgid "Export Dictionary"
 msgstr "匯出字典"
 
-#: dictionaries/presenter.py:201
+#: dictionaries/presenter.py:206
 #, python-brace-format
 msgid "Failed to export dictionary: {error}"
 msgstr "匯出字典失敗：{error}"
 
-#: dictionaries/presenter.py:216
+#: dictionaries/presenter.py:221
 #, python-brace-format
 msgid "Dictionary \"{name}\" already exists."
 msgstr "字典「{name}」已存在。"
@@ -1246,98 +1246,98 @@ msgstr "點字檔 BRL"
 msgid "Dual View HTML"
 msgstr "雙視檔 HTML"
 
-#: gui.py:180
+#: gui.py:181
 msgid "Documents"
 msgstr "文件"
 
-#: gui.py:186
+#: gui.py:187
 msgid "Document List"
 msgstr "文件列表"
 
-#: gui.py:187
+#: gui.py:188
 msgid "Press the Applications key to open the menu."
 msgstr "可按快顯鍵開啟選單。"
 
-#: gui.py:201
+#: gui.py:202
 msgid "Braille Result"
 msgstr "點字結果"
 
-#: gui.py:249 gui.py:1111
+#: gui.py:250 gui.py:1125
 msgid "File"
 msgstr "檔案"
 
-#: gui.py:262 gui.py:1111 settings/dialogs.py:357
+#: gui.py:263 gui.py:1125 settings/dialogs.py:357
 msgid "Translation"
 msgstr "轉譯"
 
-#: gui.py:266
+#: gui.py:267
 msgid "Coseeing Website"
 msgstr "Coseeing 網站"
 
-#: gui.py:269
+#: gui.py:270
 msgid "About"
 msgstr "關於"
 
-#: gui.py:272
+#: gui.py:273
 msgid "Help"
 msgstr "說明"
 
-#: gui.py:318 ui/translation_menu.py:9
+#: gui.py:319 ui/translation_menu.py:9
 msgid "Dual View"
 msgstr "雙視檢視"
 
-#: gui.py:329
+#: gui.py:330
 msgid "No conversion data is available for this document."
 msgstr "此文件沒有可顯示的轉換資料。"
 
-#: gui.py:352
+#: gui.py:353
 #, python-brace-format
 msgid "Failed to open dual view: {error}"
 msgstr "無法開啟雙視檢視：{error}"
 
-#: gui.py:472 gui.py:482
+#: gui.py:473 gui.py:483
 #, python-brace-format
 msgid "Failed to save document: {error}"
 msgstr "儲存文件失敗：{error}"
 
-#: gui.py:483
+#: gui.py:484
 msgid "Cannot Save Document"
 msgstr "無法儲存文件"
 
-#: gui.py:487
+#: gui.py:488
 msgid ""
 "Changes made since the last successful save have not been saved. If you "
 "close without saving, these changes will be lost."
 msgstr "上次成功儲存之後的修改尚未儲存。如果不儲存就關閉，這些修改將會遺失。"
 
-#: gui.py:489
+#: gui.py:490
 msgid "&Retry"
 msgstr "重試(&R)"
 
-#: gui.py:489
+#: gui.py:490
 msgid "Close &Without Saving"
 msgstr "不儲存就關閉(&W)"
 
-#: gui.py:496
+#: gui.py:497
 #, python-brace-format
 msgid "Failed to open website: {error}"
 msgstr "開啟網站失敗：{error}"
 
-#: gui.py:499
+#: gui.py:500
 msgid "About DotExpress"
 msgstr "關於 DotExpress"
 
-#: gui.py:512
+#: gui.py:513
 #, python-brace-format
 msgid "Unable to open text processing script: {error}"
 msgstr "無法開啟文字處理程式：{error}"
 
-#: gui.py:513 settings/dialogs.py:123 settings/dialogs.py:163
+#: gui.py:514 settings/dialogs.py:123 settings/dialogs.py:163
 #: ui/translation_menu.py:10
 msgid "Text Processing"
 msgstr "文字處理"
 
-#: gui.py:619
+#: gui.py:620
 #, python-brace-format
 msgid ""
 "Some characters in document \"{name}\" cannot be shown ({count} in all). "
@@ -1352,21 +1352,21 @@ msgstr ""
 "\n"
 "轉換前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。"
 
-#: gui.py:624
+#: gui.py:625
 msgid "Characters Replaced"
 msgstr "已取代字元"
 
-#: gui.py:688
+#: gui.py:689
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr "刪除無效工作區文件失敗：{error}"
 
-#: gui.py:728
+#: gui.py:729
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr "文件「{name}」已存在。"
 
-#: gui.py:763
+#: gui.py:764
 #, python-brace-format
 msgid ""
 "DotExpress was interrupted while saving or renaming a document. These "
@@ -1382,71 +1382,76 @@ msgstr ""
 "\n"
 "請確認內容是否正確。"
 
-#: gui.py:766
+#: gui.py:767
 msgid "Documents Recovered"
 msgstr "已復原文件"
 
-#: gui.py:824
+#: gui.py:825
 msgid "Add Document"
 msgstr "新增文件"
 
-#: gui.py:840
+#: gui.py:841
 msgid "Rename Document"
 msgstr "重新命名文件"
 
-#: gui.py:864
+#: gui.py:865
 #, python-brace-format
 msgid "Do you want to delete document \"{name}\"?"
 msgstr "要刪除文件「{name}」嗎？"
 
-#: gui.py:865
+#: gui.py:866
 msgid "Confirm Delete Document"
 msgstr "確認刪除文件"
 
-#: gui.py:874 gui.py:901
+#: gui.py:875 gui.py:902
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr "刪除文件失敗：{error}"
 
-#: gui.py:893
+#: gui.py:894
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr "刪除全部會移除所有文件。要繼續嗎？"
 
-#: gui.py:894
+#: gui.py:895
 msgid "Confirm Delete All"
 msgstr "確認刪除全部"
 
-#: gui.py:923
+#: gui.py:924
 msgid "Import Document"
 msgstr "匯入文件"
 
-#: gui.py:943
+#: gui.py:944
 msgid "Import Issues"
 msgstr "匯入問題"
 
-#: gui.py:944
+#: gui.py:945
 msgid "Some files were skipped during import."
 msgstr "匯入時有部分檔案被略過。"
 
-#: gui.py:1169
+#: gui.py:1058
+#, python-brace-format
+msgid "Failed to open the dictionary editor: {error}"
+msgstr "無法開啟字典編輯器：{error}"
+
+#: gui.py:1183
 msgid "Export Document"
 msgstr "匯出文件"
 
-#: gui.py:1179
+#: gui.py:1193
 msgid "Export All Documents"
 msgstr "匯出全部文件"
 
-#: gui.py:1188
+#: gui.py:1202
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr "目的資料夾中已有一個或多個檔案會被覆蓋。要全部覆蓋嗎？"
 
-#: gui.py:1191
+#: gui.py:1205
 msgid "Confirm Overwrite"
 msgstr "確認覆蓋"
 
-#: gui.py:1197
+#: gui.py:1211
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1463,7 +1468,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: gui.py:1200
+#: gui.py:1214
 msgid "Startup Error"
 msgstr "啟動錯誤"
 

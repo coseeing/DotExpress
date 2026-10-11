@@ -570,6 +570,7 @@ build 與 process 規則同 F-9：
 - exe 放在 `D:\dxtest\N-f11\`；「改前」是 `D:\dxtest\N-f9b`；
 - 每個項目在新的 `D:\dxtest\auto<項目>-f11` 資料夾執行，使用 exe 的複本；
 - 只結束這些資料夾底下的 process（`taskkill /T`）。
+- 改前的 build `N-f9b` 只執行 fix 項目（兩個 build 的預期結果不同，或項目經過的程式碼有改動）；regression 項目只在 `N-f11` 執行，只有結果不符預期時才也在 `N-f9b` 執行（使用者，2026-10-11）。F-11 的每個項目（95–106，以及重跑的 23–29、35、44、47）都是 fix 項目，所以全部在兩個 build 上執行。
 
 腳本放在 history 資料夾的 `auto/`。不修改、直接沿用 `2026-10-09-03-windows-verification/auto/`（`dx.py`、`dicts.py`、`lock.py`）與 `2026-10-10-01-f5-save-failure-handling/auto/f5gui.py`。task dialog 以 UIA 讀取。**任何腳本都不讀寫剪貼簿**；文字以 `set_edit_text` 或按鍵輸入。每個項目在前後記錄每個字典檔的 sha256、大小與 `st_mtime_ns`。
 

@@ -570,6 +570,7 @@ Build and process rules as in F-9:
 - the exe goes to `D:\dxtest\N-f11\`; "Before" is `D:\dxtest\N-f9b`;
 - each item runs in a new `D:\dxtest\auto<item>-f11` folder with a copy of the exe;
 - only processes under those folders are ended (`taskkill /T`).
+- the before build `N-f9b` runs only the fix items (the expected result differs between the builds, or the item's code path is touched); a regression item runs on `N-f11` only, and on `N-f9b` too only when it misses its expectation (user, 2026-10-11). Every F-11 item (95-106 and the re-runs of 23-29, 35, 44 and 47) is a fix item, so all of them run on both builds.
 
 Scripts go to the history folder `auto/`. They reuse `2026-10-09-03-windows-verification/auto/` (`dx.py`, `dicts.py`, `lock.py`) and `2026-10-10-01-f5-save-failure-handling/auto/f5gui.py` without editing. Task dialogs are read through UIA. **No script reads or writes the clipboard**; text goes in with `set_edit_text` or typed keys. Each item records the sha256, size and `st_mtime_ns` of every dictionary file before and after.
 

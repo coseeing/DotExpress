@@ -10,12 +10,31 @@ from ui.conversion_presenter import (
     format_conversion_error,
     missing_default_table_message,
 )
+import csv
+
 from conversion.service import ConversionOutput, ConversionRequest, ConversionStageError
+from conversion.text import dictionary_rules
 from documents.controller import DocumentController
 from documents.workspace import Document
 from i18n import _
 from tests.conversion_harness import DeferredCalls, FakeTimers, make_thread_factory
 from tests.file_log_isolation import isolate_file_logs
+from tests.unreadable_dictionary_files import big5_decode_error
+
+# F-12 (D4): a conversion that cannot read the selected dictionary, as the user sees it.
+NOT_UTF8 = "檔案不是以 UTF-8 儲存。請重新存成「CSV UTF-8 (逗號分隔)」格式，例如在 Excel 中使用「另存新檔」。"
+CANNOT_OPEN = "無法開啟檔案。檔案可能正被其他程式使用，或你沒有讀取權限。請關閉其他程式後再試一次。"
+HEADER_NOT_RECOGNIZED = "無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。"
+BIG5_DICTIONARY_FAILED = f"轉譯失敗：無法讀取字典「big5dict」。{NOT_UTF8}"
+
+
+def _read_error(*args, **kwargs) -> Exception:
+    """A DictionaryRulesReadError, looked up when the test runs."""
+    return dictionary_rules.DictionaryRulesReadError(*args, **kwargs)
+
+
+def _big5_dictionary_failure() -> ConversionStageError:
+    return ConversionStageError("translation", _read_error(Path("dictionary/big5dict.csv"), big5_decode_error()))
 
 PRESENTER_PATH = Path(__file__).resolve().parents[1] / "ui" / "conversion_presenter.py"
 LOGGER = "dotexpress.gui"
@@ -195,6 +214,33 @@ class ConversionPresenterTest(unittest.TestCase):
                     format_conversion_error(ConversionStageError("translation", RuntimeError(raw))),
                     _("Translation failed: {error}").format(error=public),
                 )
+
+    def test_format_conversion_error_names_a_dictionary_that_cannot_be_read(self) -> None:
+        # F-12 (D4): one line, as it is also a line of the Export All summary.
+        path = Path("dictionary/d.csv")
+        field_error = csv.Error("field larger than field limit (131072)")
+        missing = FileNotFoundError(2, "No such file or directory", str(path))
+        cases = (
+            ("not UTF-8", _read_error(path, big5_decode_error()), NOT_UTF8),
+            ("cannot be opened", _read_error(path, PermissionError(13, "Permission denied")), CANNOT_OPEN),
+            (
+                "not a valid CSV file",
+                _read_error(path, field_error),
+                f"檔案不是有效的 CSV 檔案。請檢查是否有未成對的引號。詳細資訊：{field_error}",
+            ),
+            ("another error", _read_error(path, missing), f"無法讀取檔案：{missing}"),
+            (
+                "a header that is not recognized",
+                _read_error(path, ValueError("CSV must contain header row."), header_not_recognized=True),
+                HEADER_NOT_RECOGNIZED,
+            ),
+        )
+        for label, error, reason in cases:
+            with self.subTest(label):
+                message = format_conversion_error(ConversionStageError("translation", error))
+
+                self.assertEqual(message, f"轉譯失敗：無法讀取字典「d」。{reason}")
+                self.assertNotIn("\n", message)
 
     # --- convert -------------------------------------------------------------
 
@@ -504,6 +550,18 @@ class ConversionPresenterTest(unittest.TestCase):
         self.assertEqual(self.documents.documents, [Document("alpha", "old", None), Document("beta", "b", "⠃")])
         self.assertEqual(self.documents.dual_view_results_by_document, {})
 
+    def test_manual_failure_names_a_dictionary_that_cannot_be_read(self) -> None:
+        # F-12 (D4).
+        self.outputs["source"] = _big5_dictionary_failure()
+        presenter = self._presenter()
+        presenter.convert()
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end() + [("show_error", BIG5_DICTIONARY_FAILED, "錯誤")])
+
     # --- export completion ----------------------------------------------------
 
     def test_convert_for_export_converts_given_text_without_checks(self) -> None:
@@ -565,6 +623,18 @@ class ConversionPresenterTest(unittest.TestCase):
             self._take(),
             self._end() + [("on_error", _("ASCII conversion failed: {error}").format(error="bad map"))],
         )
+
+    def test_export_failure_names_a_dictionary_that_cannot_be_read(self) -> None:
+        # F-12 (D4): a single export shows it, and Export All lists it after the document's name.
+        self.outputs["doc text"] = _big5_dictionary_failure()
+        presenter = self._presenter()
+        presenter.convert_for_export("doc text", **self._export_callbacks())
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(self._take(), self._end() + [("on_error", BIG5_DICTIONARY_FAILED)])
 
     def test_later_job_uses_its_own_completion(self) -> None:
         self.outputs.update({"doc text": ConversionOutput("first", ()), "source": ConversionOutput("second", ())})

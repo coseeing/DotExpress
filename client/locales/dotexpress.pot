@@ -905,7 +905,7 @@ msgstr ""
 #: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:896
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
 #: documents/export_coordinator.py:135 gui.py:455 gui.py:730 gui.py:1047
-#: gui.py:1059 ui/conversion_presenter.py:277
+#: gui.py:1059 ui/conversion_presenter.py:297
 msgid "Error"
 msgstr ""
 
@@ -930,8 +930,8 @@ msgid "Type"
 msgstr ""
 
 #: dialog.py:182 dialog.py:208 dialog.py:346 dialog.py:893
-#: ui/conversion_presenter.py:174 ui/conversion_presenter.py:293
-#: ui/conversion_presenter.py:310
+#: ui/conversion_presenter.py:194 ui/conversion_presenter.py:313
+#: ui/conversion_presenter.py:330
 msgid "Info"
 msgstr ""
 
@@ -1672,30 +1672,41 @@ msgstr ""
 msgid "Export All"
 msgstr ""
 
-#: ui/conversion_presenter.py:115
+#: ui/conversion_presenter.py:117
 msgid "Please select a translation table first."
 msgstr ""
 
-#: ui/conversion_presenter.py:120
+#: ui/conversion_presenter.py:128
+msgid ""
+"Its header is not recognized. The first line of the file must contain the "
+"text, braille, and type headers."
+msgstr ""
+
+#: ui/conversion_presenter.py:132
+#, python-brace-format
+msgid "Dictionary \"{name}\" cannot be read. {reason}"
+msgstr ""
+
+#: ui/conversion_presenter.py:137
 #, python-brace-format
 msgid "ASCII conversion failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:121
+#: ui/conversion_presenter.py:138
 #, python-brace-format
 msgid "Text processing failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:123
+#: ui/conversion_presenter.py:140
 #, python-brace-format
 msgid "Translation failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:293
+#: ui/conversion_presenter.py:313
 msgid "Conversion completed."
 msgstr ""
 
-#: ui/conversion_presenter.py:309
+#: ui/conversion_presenter.py:329
 #, python-brace-format
 msgid "Conversion completed. The result was saved to document \"{name}\"."
 msgstr ""

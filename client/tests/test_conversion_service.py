@@ -7,6 +7,7 @@ from adapters.translation.contracts import TranslationRuntime
 from adapters.translation.fallback import FallbackMathTranslator, FallbackTextTranslator
 from config import DEFAULT_CHARSET_MAPS
 from conversion.output import DualViewSegment
+from conversion.text import dictionary_rules
 from conversion.service import (
     ConversionOutput,
     ConversionRequest,
@@ -498,7 +499,10 @@ class DictionaryErrorTimingTest(DictionaryConversionTestCase):
             self._convert("abc", self._runtime())
 
         self.assertEqual(context.exception.stage, "translation")
-        self.assertIs(type(context.exception.error), ValueError)
+        # Reported as a dictionary that cannot be read since F-12 (D4).
+        self.assertIs(type(context.exception.error), dictionary_rules.DictionaryRulesReadError)
+        self.assertTrue(context.exception.error.header_not_recognized)
+        self.assertEqual(context.exception.error.path, self.dictionary_path)
         self.assertEqual(str(context.exception.error), "CSV must contain header row.")
 
     def test_headerless_dictionary_does_not_fail_math_only_or_empty_input(self) -> None:

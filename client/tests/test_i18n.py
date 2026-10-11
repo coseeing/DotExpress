@@ -201,6 +201,19 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
 
+    def test_unreadable_dictionary_conversion_strings_are_translated(self) -> None:
+        # F-12 (D4): a conversion that cannot read the selected dictionary; the header reason
+        # uses the words of F-11's message for the editor.
+        expected = {
+            'Dictionary "{name}" cannot be read. {reason}': "無法讀取字典「{name}」。{reason}",
+            "Its header is not recognized. The first line of the file must contain the text, braille, and type headers.": (
+                "無法辨識檔案的表頭。檔案的第一列必須包含 text、braille 與 type 表頭。"
+            ),
+        }
+        translation = i18n.load_translation()
+
+        self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 

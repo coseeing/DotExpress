@@ -40,6 +40,8 @@ from conversion.service import (
     convert_text_with_alignment,
     get_public_error_message,
 )
+from conversion.text.dictionary_rules import DictionaryRulesReadError
+from dictionaries.read_problems import describe_dictionary_read_error
 from documents.controller import DocumentController
 from documents.workspace import Document
 from i18n import _
@@ -115,13 +117,31 @@ def missing_default_table_message(translation_tables: Mapping[str, object]) -> s
     return _("Please select a translation table first.")
 
 
+def describe_dictionary_rules_read_error(error: DictionaryRulesReadError) -> str:
+    """Which dictionary cannot be read and why, in one line (F-12 D4).
+
+    One line, not F-6's headline and reason paragraphs: the text is also a line of the
+    Export All summary. The header reason uses the words of the editor's message (F-11).
+    """
+    if error.header_not_recognized:
+        reason = _(
+            "Its header is not recognized. The first line of the file must contain the text, braille, and type headers."
+        )
+    else:
+        reason = describe_dictionary_read_error(error.error)
+    return _('Dictionary "{name}" cannot be read. {reason}').format(name=error.path.stem, reason=reason)
+
+
 def format_conversion_error(error: ConversionStageError) -> str:
     message_templates = {
         "ascii": _("ASCII conversion failed: {error}"),
         "text_processing": _("Text processing failed: {error}"),
     }
     message_template = message_templates.get(error.stage, _("Translation failed: {error}"))
-    error_text = _(get_public_error_message(error.error))
+    if isinstance(error.error, DictionaryRulesReadError):
+        error_text = describe_dictionary_rules_read_error(error.error)
+    else:
+        error_text = _(get_public_error_message(error.error))
     return message_template.format(error=error_text)
 
 

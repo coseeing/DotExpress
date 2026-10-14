@@ -25,6 +25,20 @@ New user-visible strings: **none**. The catalogs change only in their `#:` refer
 
 Non-goals: F-14 (UI language groundwork, the HTML `lang`, the settings backup message); F-10; the deferred items the user declined on 2026-10-14 (export `.tmp` retry, case-insensitive headers, F-9 M-5, the damaged `config.json` notice, F-11 M-4).
 
+## Corrected after planning (F-13, 2026-10-14)
+
+Re-checked against the code of `main` `a147fed`: every decision D1-D6, the behaviour table, the probe and the test plan hold, with the refinements below. The plan's section "Spec Corrections and Refinements" holds the same list.
+
+1. **Baseline and counts.** On `a147fed` (`HEAD:client` `a967d8d4`) the suite gives `Ran 1632`, `OK (skipped=6)`; 407 msgids. F-13 adds 14 tests and changes 4: `Ran 1634` after step 1 (2 new, 1 flipped), `1638` after step 2 (4 new, 2 changed), `1645` after step 3 (7 new), `1646` after step 4 (1 new, 1 flipped and renamed).
+2. **Catalogs in every step.** Each of the four steps moves lines above msgids, so each regenerates the template and the `.po` and rebuilds the `.mo` (unchanged bytes); no `#:` reference is stale after any commit, and no separate `chore:` commit is needed. `msgmerge` also re-wraps one msgstr that F-12's fix commit wrote on one line (the "file cannot be written" reason): the same text in two lines. The `.mo` is byte-identical to `a147fed`'s.
+3. **D1 as built.** `_left_document(target)` is the naming condition of F-12 D7. `_on_job_failure` evaluates it once, before the box: true gives the named message and, after `show_error` returns, `focus_source_editor()`; false gives the reason alone and no focus call. `_name_unopened_document` now only formats the named message.
+4. **D2 as built.** The light last step of `__init__` is `_show_empty_startup_state`. The "runs once" flag is a class attribute `_startup_documents_loaded`. Test B2 records the post itself between `"show"` and `"client_init"`, so a post before `Show()` is caught. The tests' wx stub answers an unknown attribute with a no-op, so test B3 runs the same call with the window open (it loads) and closed (nothing), and test B5 uses one workspace with all three boxes (an invalid `bad.dep`, the interrupted rename of `alpha` whose text holds U+0000).
+5. **D3 as built.** `ConversionPresenter.worker_alive()`, `BrailleFrame.conversion_worker_check()` (returns the presenter's bound `worker_alive`), `BrailleApp._conversion_worker_alive` (a class attribute `None` until `OnInit` builds the frame; set before `Show()`), `BrailleApp._conversion_worker_is_alive()` (false without a check). Test C4 makes every attribute of the frame stand-in raise after `OnInit`. One test more than listed: the frame hands out the presenter's `worker_alive`.
+6. **D6 test values.** `ㄇㄚ␠␠`, `␠ㄇㄚ`, `ㄇㄚ` + tab and `ㄇㄚ` + U+3000 are all hidden on `a147fed`; one test with four subtests lists each unchanged.
+7. **Mutation check: 17 mutants**: the 15 above, plus the empty start state without its title update and the frame's check handing out `is_running`.
+8. **Commit subjects** end in `(F-13)`; `F-8b review M-8` and `F-9 review M-8` go into the commit bodies of steps 2 and 3.
+9. **Windows items.** Item 127 also writes a stale `dual_view\dual-view-f13probe.html` after the start: if it is gone after the process ended, `OnExit` ran on the `WM_ENDSESSION` path (the wx reading of "Current State", item 3). Item 125's workspace: an invalid `bad.dep`, the interrupted rename of `alpha` (to `gamma`) whose text holds U+0000, and a valid `beta.dep`; `alpha` is opened first.
+
 ## Relation to F-14
 
 F-14 (`D:/workspace/DotExpress-f14`) runs in parallel from the same `main` (`a147fed`). Both tasks touch these files:

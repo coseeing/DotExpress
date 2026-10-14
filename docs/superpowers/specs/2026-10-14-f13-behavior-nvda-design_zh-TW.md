@@ -25,6 +25,20 @@ F-13 處理 `task.md` 第五節「下一輪要修」的第 1、2、3、5、6 項
 
 不做的事：F-14（介面語言的準備、HTML `lang`、設定備份訊息）；F-10；使用者 2026-10-14 決定不修的延後項目（匯出 `.tmp` 重試、表頭不分大小寫、F-9 M-5、`config.json` 損壞的提示、F-11 M-4）。
 
+## 規劃後的修正（F-13，2026-10-14）
+
+依 `main` `a147fed` 的程式碼重新檢查：決定 D1–D6、改前改後表、探測結果與測試計畫都成立，另有以下細化。plan 的「Spec Corrections and Refinements」一節是同一份清單。
+
+1. **基準與數量。** 在 `a147fed`（`HEAD:client` `a967d8d4`）上完整測試為 `Ran 1632`、`OK (skipped=6)`；407 個 msgid。F-13 新增 14 個測試、修改 4 個：步驟 1 後 `Ran 1634`（新增 2、翻轉 1），步驟 2 後 `1638`（新增 4、修改 2），步驟 3 後 `1645`（新增 7），步驟 4 後 `1646`（新增 1、翻轉並改名 1）。
+2. **每一步都更新 catalog。** 四個步驟都會移動 msgid 上方的行數，所以每一步都重新產生範本與 `.po`，並重建 `.mo`（位元組不變）；任何一個 commit 之後都沒有過期的 `#:` 參照，不需要另外的 `chore:` commit。`msgmerge` 也會把 F-12 修正 commit 寫成一行的一個 msgstr（「無法寫入檔案」的原因）折成兩行，文字相同。`.mo` 與 `a147fed` 的位元組完全相同。
+3. **D1 的實作。** `_left_document(target)` 就是 F-12 D7 的具名條件。`_on_job_failure` 在訊息框之前只判斷一次：為真時顯示具名訊息，並在 `show_error` 返回後呼叫 `focus_source_editor()`；為假時只顯示原因，不移動焦點。`_name_unopened_document` 現在只負責組出具名訊息。
+4. **D2 的實作。** `__init__` 最後的輕量步驟叫 `_show_empty_startup_state`。「只執行一次」的旗標是類別屬性 `_startup_documents_loaded`。測試 B2 把 post 本身記在 `"show"` 與 `"client_init"` 之間，所以在 `Show()` 之前 post 會被抓到。測試用的 wx stub 對不存在的屬性回傳不做事的函式，所以測試 B3 用同一個呼叫分別測視窗未關閉（會載入）與已關閉（什麼都不做）；測試 B5 用一個同時有三種提示的工作區（無效的 `bad.dep`、`alpha` 被中斷的重新命名，其文字含 U+0000）。
+5. **D3 的實作。** `ConversionPresenter.worker_alive()`、`BrailleFrame.conversion_worker_check()`（回傳 presenter 的 bound method `worker_alive`）、`BrailleApp._conversion_worker_alive`（類別屬性，在 `OnInit` 建立 frame 之前是 `None`；在 `Show()` 之前設定）、`BrailleApp._conversion_worker_is_alive()`（沒有檢查函式時為假）。測試 C4 在 `OnInit` 之後讓 frame 替身的任何屬性都會丟出例外。比清單多一個測試：frame 交出的是 presenter 的 `worker_alive`。
+6. **D6 的測試值。** `ㄇㄚ␠␠`、`␠ㄇㄚ`、`ㄇㄚ` 加 tab、`ㄇㄚ` 加 U+3000 在 `a147fed` 上都會被隱藏；一個測試用四個 subTest 確認每個值都原樣列出。
+7. **變異檢查：17 個 mutant**：上面 15 個，加上空白啟動狀態不更新標題，以及 frame 的檢查函式交出 `is_running`。
+8. **commit 主旨**以 `(F-13)` 結尾；`F-8b review M-8` 與 `F-9 review M-8` 寫在步驟 2、3 的 commit 內文。
+9. **Windows 項目。** 項目 127 在啟動後另外寫入一個過期的 `dual_view\dual-view-f13probe.html`：程序結束後若它已被刪除，表示在 `WM_ENDSESSION` 的路徑上 `OnExit` 有執行（「現況」第 3 項對 wx 原始碼的解讀）。項目 125 的工作區：無效的 `bad.dep`、`alpha` 被中斷的重新命名（改為 `gamma`），其文字含 U+0000，以及有效的 `beta.dep`；先開啟的是 `alpha`。
+
 ## 與 F-14 的關係
 
 F-14（`D:/workspace/DotExpress-f14`）從同一個 `main`（`a147fed`）平行進行。兩個任務都會動到下列檔案：

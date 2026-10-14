@@ -5,7 +5,7 @@ copyrightYears = "2025-2026"
 name = "DotExpress"
 url = "https://coseeing.org"
 version = "1.8"
-version_detailed = "1.2"
+version_detailed = "1.8"
 
 longName = _("DotExpress")
 description = _("A text-to-braille translation tool that converts plain text into fixed-width braille, producing output that can be used directly for printed braille.")

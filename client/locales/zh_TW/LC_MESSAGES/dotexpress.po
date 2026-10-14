@@ -934,7 +934,7 @@ msgstr "關閉"
 msgid "Source text \"{identifier}\" already exists."
 msgstr "來源文字「{identifier}」已存在。"
 
-#: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:896
+#: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:898
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
 #: documents/export_coordinator.py:145 gui.py:519 gui.py:804 gui.py:1120
 #: gui.py:1132 ui/conversion_presenter.py:308
@@ -961,7 +961,7 @@ msgstr "點字"
 msgid "Type"
 msgstr "類型"
 
-#: dialog.py:182 dialog.py:208 dialog.py:346 dialog.py:893
+#: dialog.py:182 dialog.py:208 dialog.py:346 dialog.py:895
 #: ui/conversion_presenter.py:203 ui/conversion_presenter.py:340
 #: ui/conversion_presenter.py:357
 msgid "Info"
@@ -1042,15 +1042,15 @@ msgstr "篩選條件："
 msgid "Dictionary entries"
 msgstr "字典項目"
 
-#: dialog.py:436 dialog.py:699 ui/action_menu.py:29
+#: dialog.py:436 dialog.py:701 ui/action_menu.py:29
 msgid "Add"
 msgstr "新增"
 
-#: dialog.py:437 dialog.py:702
+#: dialog.py:437 dialog.py:704
 msgid "Edit"
 msgstr "編輯"
 
-#: dialog.py:438 dialog.py:700 ui/action_menu.py:27
+#: dialog.py:438 dialog.py:702 ui/action_menu.py:27
 msgid "Delete"
 msgstr "刪除"
 
@@ -1119,40 +1119,40 @@ msgstr "移除並儲存(&S)"
 msgid "Row {line}: no source text"
 msgstr "第 {line} 列：沒有來源文字"
 
-#: dialog.py:630
+#: dialog.py:632
 #, python-brace-format
 msgid "Row {line}: \"{text}\", Bopomofo \"{bopomofo}\" is not valid"
 msgstr "第 {line} 列：「{text}」的注音「{bopomofo}」格式不正確"
 
-#: dialog.py:654
+#: dialog.py:656
 msgid "Dictionary Management"
 msgstr "字典管理"
 
-#: dialog.py:674 settings/dialogs.py:386
+#: dialog.py:676 settings/dialogs.py:386
 msgid "Dictionary"
 msgstr "字典"
 
-#: dialog.py:675 dialog.py:801
+#: dialog.py:677 dialog.py:803
 msgid "Entries"
 msgstr "條目數量"
 
-#: dialog.py:686
+#: dialog.py:688
 msgid "Why this dictionary cannot be read:"
 msgstr "無法讀取的原因："
 
-#: dialog.py:701 ui/action_menu.py:30
+#: dialog.py:703 ui/action_menu.py:30
 msgid "Rename"
 msgstr "重新命名"
 
-#: dialog.py:703 ui/action_menu.py:31
+#: dialog.py:705 ui/action_menu.py:31
 msgid "Import"
 msgstr "匯入"
 
-#: dialog.py:704 ui/action_menu.py:34
+#: dialog.py:706 ui/action_menu.py:34
 msgid "Export"
 msgstr "匯出"
 
-#: dialog.py:738 dialog.py:801
+#: dialog.py:740 dialog.py:803
 msgid "Unreadable"
 msgstr "無法讀取"
 

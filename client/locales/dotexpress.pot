@@ -911,7 +911,7 @@ msgstr ""
 msgid "Source text \"{identifier}\" already exists."
 msgstr ""
 
-#: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:896
+#: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:898
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
 #: documents/export_coordinator.py:145 gui.py:519 gui.py:804 gui.py:1120
 #: gui.py:1132 ui/conversion_presenter.py:308
@@ -938,7 +938,7 @@ msgstr ""
 msgid "Type"
 msgstr ""
 
-#: dialog.py:182 dialog.py:208 dialog.py:346 dialog.py:893
+#: dialog.py:182 dialog.py:208 dialog.py:346 dialog.py:895
 #: ui/conversion_presenter.py:203 ui/conversion_presenter.py:340
 #: ui/conversion_presenter.py:357
 msgid "Info"
@@ -1019,15 +1019,15 @@ msgstr ""
 msgid "Dictionary entries"
 msgstr ""
 
-#: dialog.py:436 dialog.py:699 ui/action_menu.py:29
+#: dialog.py:436 dialog.py:701 ui/action_menu.py:29
 msgid "Add"
 msgstr ""
 
-#: dialog.py:437 dialog.py:702
+#: dialog.py:437 dialog.py:704
 msgid "Edit"
 msgstr ""
 
-#: dialog.py:438 dialog.py:700 ui/action_menu.py:27
+#: dialog.py:438 dialog.py:702 ui/action_menu.py:27
 msgid "Delete"
 msgstr ""
 
@@ -1089,40 +1089,40 @@ msgstr ""
 msgid "Row {line}: no source text"
 msgstr ""
 
-#: dialog.py:630
+#: dialog.py:632
 #, python-brace-format
 msgid "Row {line}: \"{text}\", Bopomofo \"{bopomofo}\" is not valid"
 msgstr ""
 
-#: dialog.py:654
+#: dialog.py:656
 msgid "Dictionary Management"
 msgstr ""
 
-#: dialog.py:674 settings/dialogs.py:386
+#: dialog.py:676 settings/dialogs.py:386
 msgid "Dictionary"
 msgstr ""
 
-#: dialog.py:675 dialog.py:801
+#: dialog.py:677 dialog.py:803
 msgid "Entries"
 msgstr ""
 
-#: dialog.py:686
+#: dialog.py:688
 msgid "Why this dictionary cannot be read:"
 msgstr ""
 
-#: dialog.py:701 ui/action_menu.py:30
+#: dialog.py:703 ui/action_menu.py:30
 msgid "Rename"
 msgstr ""
 
-#: dialog.py:703 ui/action_menu.py:31
+#: dialog.py:705 ui/action_menu.py:31
 msgid "Import"
 msgstr ""
 
-#: dialog.py:704 ui/action_menu.py:34
+#: dialog.py:706 ui/action_menu.py:34
 msgid "Export"
 msgstr ""
 
-#: dialog.py:738 dialog.py:801
+#: dialog.py:740 dialog.py:803
 msgid "Unreadable"
 msgstr ""
 

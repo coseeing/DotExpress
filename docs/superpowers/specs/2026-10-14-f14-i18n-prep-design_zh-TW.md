@@ -35,7 +35,7 @@ F-14 是 `docs/superpowers/history/2026-10-14-01-handoff/HANDOFF.md` 第 1 節�
 
 1. **基準與數量。** 在 `a147fed`（`HEAD:client` `a967d8d4`）上完整測試為 `Ran 1632`、`OK (skipped=6)`；catalog 有 407 個 msgid、26 筆 obsolete。F-14 新增 20 個測試、修改 7 個：步驟 1 後 `Ran 1637`（新增 5），步驟 2 後 `1648`（新增 11；修改 2：About 測試、`test_uses_title_for_accessible_label`；以及 consumer 守門測試的集合），步驟 3 後 `1651`（新增 3；3 個匯出測試、`test_dual_view_html` 與 golden 測試的 render 呼叫），步驟 4 後 `1652`（新增 1；`test_each_kind_of_problem_gives_its_reason`、字串測試、`test_config` 的備份測試）。spec 估計約 30 個。
 2. **Catalog。** 步驟 1 不動 catalog（`i18n.py` 沒有 msgid）。步驟 2–4 會移動 msgid 上方的行數，所以每一步都重新產生範本與 `.po`；任何 commit 之後都沒有過期的 `#:` 參照，不需要另外的 `chore:` commit。步驟 2 的 `msgmerge` 也會把 F-12 修正 commit 寫成一行的一個 msgstr（「無法寫入檔案」的原因）折成兩行（F-13 也一樣）。步驟 2、3 之後 `.mo` 與 `a147fed` 的位元組完全相同。
-3. **D8 的實作。** `msgmerge` 把 N1 配對到 F-12 的「無法寫入檔案（權限）」字串、把 N2 配對到字串 22，兩者都是 `#, fuzzy`（修正前 406 個已翻譯、2 個 fuzzy）。一次性工具 `set_msgstr.py` 寫入表中的兩個 msgstr（各一行；`msgmerge` 會保持原樣，第二次 `msgmerge` 不再變動）並清掉 fuzzy：408 個已翻譯、0 fuzzy。字串 22 成為 N2 的 fuzzy 來源，所以它**不會**變成 obsolete，而是直接消失，obsolete 維持 **26** 筆（spec 寫 27）。msgid 集合等於 `a147fed` 的加上 N1、N2，減去字串 22。
+3. **D8 的實作。** `msgmerge` 把 N1 配對到 F-12 的「無法寫入檔案（權限）」字串、把 N2 配對到字串 22，兩者都是 `#, fuzzy`（修正前 406 個已翻譯、2 個 fuzzy）。一次性工具 `set_msgstr.py` 寫入表中的兩個 msgstr（各一行；第二次 `msgmerge --update` 因為沒有訊息改變而不寫檔，但任何會寫出檔案的 `msgmerge` 都會把兩者折成它的行寬，文字不變；見第 12 點）並清掉 fuzzy：408 個已翻譯、0 fuzzy。字串 22 成為 N2 的 fuzzy 來源，所以它**不會**變成 obsolete，而是直接消失，obsolete 維持 **26** 筆（spec 寫 27）。msgid 集合等於 `a147fed` 的加上 N1、N2，減去字串 22。
 4. **使用者的決定（2026-10-14）。** Q1：N1 採用表中較長的版本，一字不改（`檔案已損壞，而且在取代它之前無法先備份為「{backup}」。檔案或備份檔可能正被其他程式使用，或你沒有該資料夾的寫入權限。請關閉其他程式後再試一次。`），N2 照表。Q2：使用者已把 `about.py` 的版本號更新 commit 到 `main`（`7db6538`、`2053646`：`version` 與 `version_detailed` = `"1.8"`），「Merge 前提」不再需要 stash。F-14 不動 `about.py` 第 4–8 行（本分支上是 `"1.2"`）；本分支與 `main` `2053646` 的 `git merge-tree` 沒有衝突，與 F-13 分支只有兩個 catalog 衝突，依「與 F-13 的關係」重新產生，不手動合併。
 5. **B1 的實作。** About 測試的版本號從 `about.version` 與 `about.version_detailed` 讀取，而不是寫死 `1.2 (1.2)`，所以 merge `main` 的 1.8 之後仍是綠燈；其餘 zh_TW 文字是字面值。GUI 項目 143 (a) 在 `N-f14`（由本分支建置）上仍預期 `版本：1.2 (1.2)`。
 6. **D5 的實作。** AST 守門測試斷言「載入時有翻譯呼叫的檔案」正好是 `["braille/tables/__tables.py"]`（原因寫在常數旁邊），而不是經過允許清單過濾；掃描函式本身用一段程式碼測試每一種呼叫（模組層級、類別本體、預設參數、decorator、lambda 預設值；不含函式與 lambda 本體；`translations.gettext` 這類屬性呼叫也算）。它和 catalog 測試一樣跳過產生出來的 `braille/liblouis/`。保留 import 探測：一個子程序（`-B`）把 `i18n._` 換成記錄器後 import `main.py` 以外的所有 client 模組（約 5 秒）；沒有安裝 wx 的環境會略過。
@@ -44,6 +44,7 @@ F-14 是 `docs/superpowers/history/2026-10-14-01-handoff/HANDOFF.md` 第 1 節�
 9. **變異檢查：20 個 mutant**，即 spec 的清單，只改一項：第 20 個改為「守門測試跳過整個 `braille/`」（守門測試沒有可放寬的允許清單；跳過該資料夾會漏掉 `__tables.py`，而守門測試預期找到它）。
 10. **commit 主旨**以 `(F-14)` 結尾；步驟 2 的 commit 內文註明 F-12 review M-7。
 11. **Windows 項目。** 141、142 是修正項目（兩個版本都跑），143、144 是回歸項目（只跑 `N-f14`）。142 原封不動重跑 F-12 的 `item114.py` (b)。GUI 腳本放在 `docs/superpowers/history/2026-10-14-03-f14-i18n-prep/auto/`。
+12. **review 修正（F-14 review M-1～M-4，2026-10-14）。** (a) **H1 沒有路徑可達。** `gui._show_dual_view` 與 `_create_dual_view_frame`（`DualViewFrame`，`web_view.SetPage`）在 `a147fed` 就沒有任何呼叫者，只有 `tests/test_gui_document_flows.py` 的兩個單元測試直接呼叫。「轉譯 > 雙視檢視」執行 `on_open_dual_view` -> `_open_dual_view_in_browser`（H2）。`_render_dual_view_for_open_document` 是兩者共用的，所以 D6 不受影響。GUI 項目 144 (a) 因此在 `PATH` 最前面放替身瀏覽器，讀程式寫到 `<d>\dual_view` 的頁面檔（plan 的 Implementation Notes 5(a) 與 `auto-results.md` 偏離 1 已這樣寫）；H1、前後對照表與項目 145 都以此為準。移除 `_show_dual_view`、`_create_dual_view_frame` 與 `DualViewFrame` 列為後續項目，不在 F-14（範圍外）。項目 144 的腳本已移除會讓程式啟動使用者真實瀏覽器的 `window` 模式，替身瀏覽器一律安裝，沒有替身時 `f14gui.dual_view_page` 拒絕執行（M-1）。(b) **字串 22 與 obsolete 數量。** D7、D8、「使用者可見字串」與驗收條件 4 原本寫字串 22 會變成 obsolete（27 筆）；實作時它直接消失，obsolete 維持 26 筆（第 3 點）。(c) **msgmerge 與兩個新 msgstr。** plan 的「第二次 msgmerge 不再變動」只是因為 `msgmerge --update` 在沒有訊息改變時不重寫檔案；`msgmerge -o`，或參照移動後的 `--update`，都會把 N1、N2 折成它的行寬，文字不變。把 `main`（F-13）merge 進本分支時重新產生了 catalog，所以現在 N1、N2 已是折行的形式：`msgmerge` 不再改動任何位元組，`.mo` 不變（408 個 msgid、0 fuzzy、26 筆 obsolete）。(d) **`set_language`** 把 catalog 與語言當成一組，一次指派（M-4），其他執行緒不會讀到新 catalog 配舊語言。
 
 ## 與 F-13 的關係
 
@@ -57,7 +58,7 @@ F-13（行為與 NVDA，worktree `D:\workspace\DotExpress-f13`，branch `fix/f13
 | `client/dialog.py` | `_confirm_hidden_rows`、`_hidden_row_line`（`:609` 起）、F-11 的兩個確認框 | import `:9-11`；`AddSymbolDialog.__init__` 的類型選單（`:110`） |
 | `client/dictionaries/entry_list_model.py` | 可能改隱藏列的值（第 6 項） | import `:46`；`cell_text`（`:165`） |
 | `client/ui/message_box.py`、`client/ui/conversion_presenter.py` | 會改 | 不碰 |
-| `client/locales/dotexpress.pot`、`.po`、`.mo` | `#:` 參照隨 `gui.py`、`dialog.py` 移動；可能有字串 | `#:` 參照；新增 2 個字串、1 個變成 obsolete |
+| `client/locales/dotexpress.pot`、`.po`、`.mo` | `#:` 參照隨 `gui.py`、`dialog.py` 移動；可能有字串 | `#:` 參照；新增 2 個字串、移除 1 個（修正第 3 點） |
 | 測試：`test_gui_document_flows.py`、`test_i18n.py`、`test_dictionary_entries_dialog.py`、dialog 相關測試 | 新測試 | 新增與修改的測試 |
 
 - 共用檔案中改的是不同函式，文字衝突應該很少；兩邊在同一處附加的測試都保留。
@@ -117,7 +118,7 @@ F-13（行為與 NVDA，worktree `D:\workspace\DotExpress-f13`，branch `fix/f13
 
 | # | 路徑 | 呼叫 | 誰看到 |
 | --- | --- | --- | --- |
-| H1 | 雙視檢視視窗（檢視 > 雙視檢視） | `gui._render_dual_view_for_open_document`（`gui.py:329-335`）-> `_refresh_dual_view` -> `DualViewFrame.refresh_html` -> `web_view.SetPage`（`ui/dual_view.py:68-69`） | 程式內的網頁檢視 |
+| H1 | 雙視檢視視窗（檢視 > 雙視檢視） | `gui._render_dual_view_for_open_document`（`gui.py:329-335`）-> `_refresh_dual_view` -> `DualViewFrame.refresh_html` -> `web_view.SetPage`（`ui/dual_view.py:68-69`） | 程式內的網頁檢視。**沒有任何路徑會走到**（修正第 12 點）：在 `a147fed` 就已是 dead code |
 | H2 | 在瀏覽器開啟雙視檢視（`on_open_dual_view` -> `_open_dual_view_in_browser`，`gui.py:350`） | 同一次 render，由 `write_dual_view_html` 寫成程式雙視資料夾下的 `dual-view-*.html` | 系統瀏覽器 |
 | H3 | 檔案 > 匯出 > 雙視檢視 HTML，以及以此格式全部匯出 | `documents/formats._write_html`（`formats.py:104-113`，render 在 `:109`） | 匯出的檔案 |
 | H4 | 沒有轉換資料的頁面 | H1–H3 帶 `empty_message`（`gui.py:334`、`formats.py:112`） | 同上 |
@@ -191,13 +192,13 @@ F-13（行為與 NVDA，worktree `D:\workspace\DotExpress-f13`，branch `fix/f13
 
 - `_report_settings_save_problem` 的 `BACKUP_FAILED` 分支：`config.is_access_error(problem.error)` 為真時用字串 N1，否則用字串 N2。兩者都寫出備份路徑（`{backup}` = `problem.backup_path`，與現在相同），都不含錯誤文字，所以暫存檔名與作業系統的措辭從對話框中消失。
 - 不變：備份行為（`_backup_unreadable`，只寫不讀）、順序（第一次寫入前先備份；備份失敗就不寫）、每次執行只顯示一次的旗標、標題 `設定未儲存`、包住原因的字串 21、父視窗、`UNREADABLE` 與 `WRITE_FAILED` 分支，以及 log：`config.log` 仍以 ERROR 記錄 `Failed to save config file <path>` 與 traceback，其中有原始錯誤與暫存檔名。
-- F-12 的字串 22 不再使用；`msgmerge` 會把它移到 obsolete 條目。
+- F-12 的字串 22 不再使用。（實作時它沒有變成 obsolete：`msgmerge` 拿它當 N2 的 fuzzy 來源，所以直接消失；見修正第 3、12 點。）
 - 保留 `{backup}` 的理由：那是使用者可以查看或移除的檔案（F-12 的 GUI 項目用的就是名為 `config.json.bak` 的資料夾），而且以前就會顯示。暫存檔名只出現在錯誤文字裡。
 - 為了備份而**讀取** `config.json` 時發生的錯誤（在載入與存檔之間被鎖住）也是存取錯誤；所以 N1 寫「檔案或備份檔」。
 
 ### Catalog
 
-**D8.** 第 7、4 項不新增也不移除 msgid：plan 在步驟 1–3 之後重新產生範本，把排序後的 msgid 集合與 `a147fed` 比對（相同）；只有 `#:` 參照移動，`.mo` 位元組完全相同。步驟 4 新增 N1、N2：`scripts\generate-pot.bat`、`msgmerge`、填入下表的 msgstr、`msgfmt --check --statistics`（408 已翻譯、0 fuzzy、0 未翻譯）。`msgmerge` 很可能把 N1 或 N2 與字串 22 配成 fuzzy（第一句相同）；plan 要換成正確的 msgstr，並移除 `#, fuzzy` 與 previous-msgid 行。`POT-Creation-Date` 維持 `2026-10-10 12:00+0800`。obsolete 條目 26 -> 27。
+**D8.** 第 7、4 項不新增也不移除 msgid：plan 在步驟 1–3 之後重新產生範本，把排序後的 msgid 集合與 `a147fed` 比對（相同）；只有 `#:` 參照移動，`.mo` 位元組完全相同。步驟 4 新增 N1、N2：`scripts\generate-pot.bat`、`msgmerge`、填入下表的 msgstr、`msgfmt --check --statistics`（408 已翻譯、0 fuzzy、0 未翻譯）。`msgmerge` 很可能把 N1 或 N2 與字串 22 配成 fuzzy（第一句相同）；plan 要換成正確的 msgstr，並移除 `#, fuzzy` 與 previous-msgid 行。`POT-Creation-Date` 維持 `2026-10-10 12:00+0800`。obsolete 條目 26 -> 27（實作時維持 26，字串 22 直接消失；見修正第 3、12 點）。
 
 ## 各路徑的前後對照
 
@@ -206,7 +207,7 @@ F-13（行為與 NVDA，worktree `D:\workspace\DotExpress-f13`，branch `fix/f13
 | 說明 > 關於 | `DotExpress (DotExpress)\n版本：1.2 (1.2) ...` | 相同（D2） |
 | 設定對話框：標題、分類清單、面板的無障礙描述、驗證錯誤框標題 | `DotExpress 設定：轉譯`、`轉譯`／`轉譯表`／`檢視`、`轉譯輸出模式、寬度與字典選項`、`DotExpress 設定` | 相同（D4） |
 | 字典編輯器：類型欄、新增／編輯詞條的類型選單 | `一般`、`注音`、`Unicode 點字` | 相同（D3） |
-| 雙視檢視視窗、在瀏覽器開啟雙視檢視 | `<html lang="en">` | `<html lang="zh-TW">`（D6） |
+| 在瀏覽器開啟雙視檢視（雙視檢視視窗 H1 沒有路徑可達；修正第 12 點） | `<html lang="en">` | `<html lang="zh-TW">`（D6） |
 | 匯出雙視檢視 HTML（單一、全部匯出），有或沒有轉換資料 | `<html lang="en">` | `<html lang="zh-TW">`（D6） |
 | `config.json` 損壞、備份失敗時改設定（存取錯誤，例如名為 `config.json.bak` 的資料夾、被鎖住的 `.bak`） | `檔案已損壞，而且在取代它之前無法先備份為「<bak>」。詳細資訊：[WinError 5] ... .tmp' -> ...` | N1，帶 `<bak>`（D7） |
 | 同上，其他錯誤（磁碟已滿、I/O 錯誤、非 `OSError`） | `... 詳細資訊：<error>` | N2，帶 `<bak>`（D7） |
@@ -242,7 +243,7 @@ F-13（行為與 NVDA，worktree `D:\workspace\DotExpress-f13`，branch `fix/f13
 | N1 | `The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. The file or the backup copy may be in use by another program, or you may not have permission to write to the folder. Close the other program and try again.` | `檔案已損壞，而且在取代它之前無法先備份為「{backup}」。檔案或備份檔可能正被其他程式使用，或你沒有該資料夾的寫入權限。請關閉其他程式後再試一次。` | D7，存取錯誤 |
 | N2 | `The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Check that the disk has free space and that you can write to the folder.` | `檔案已損壞，而且在取代它之前無法先備份為「{backup}」。請確認磁碟還有可用空間，且你有該資料夾的寫入權限。` | D7，其他錯誤 |
 
-不再使用（變成 obsolete）：F-12 字串 22，`The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}`。
+不再使用（實作時直接消失，不是 obsolete；修正第 3 點）：F-12 字串 22，`The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}`。
 
 msgid：407 + 2 - 1 = **408**。用詞沿用 F-12 的句子：第一句是字串 22 去掉 `詳細資訊`，後面沿用 F-12 兩則寫入失敗的文字（`無法寫入檔案。檔案可能正被其他程式使用，或你沒有寫入權限。請關閉其他程式後再試一次。`、`...請確認磁碟還有可用空間，且你有該資料夾的寫入權限。`）；「備份檔」比照「點字檔」「文字檔」。
 
@@ -344,7 +345,7 @@ TDD，標明處先紅燈。縮排依各檔案。會切換 catalog 的測試以 `
 1. 完整測試：沒有 failure、沒有 error；`Ran` 與 plan 所寫一致。
 2. 重點測試：`$PY -B -X utf8 -m unittest tests.test_i18n tests.test_dual_view_html tests.test_document_formats tests.test_settings_dialogs tests.test_settings_options tests.test_dictionary_entries_dialog tests.test_config tests.test_translation_golden tests.test_gui_document_flows -v` 通過。
 3. D5 的 AST 掃描只列出 `braille/tables/__tables.py`；載入探針沒有記錄到呼叫。
-4. Catalog：408 個 msgid，全部已翻譯，0 fuzzy（`msgfmt --check --statistics`）；msgid 集合等於 `a147fed` 的集合加 N1、N2、減字串 22；`POT-Creation-Date` 不變；obsolete 條目 27。
+4. Catalog：408 個 msgid，全部已翻譯，0 fuzzy（`msgfmt --check --statistics`）；msgid 集合等於 `a147fed` 的集合加 N1、N2、減字串 22；`POT-Creation-Date` 不變；obsolete 條目 26（字串 22 直接消失，不是 obsolete；修正第 3、12 點）。
 5. 三個 fixture 的 sha256 不變。
 6. 程式資料未被動到（主 checkout 的 `client/dictionary/`、`client/workspace/`、`client/config.json`、`client/log/` 前後 sha256 相同）；worktree 中不出現這些。
 7. `git diff main --stat` 只動到「各檔案的設計」列出的檔案、測試，以及 spec、plan 與 history 檔；`client/braille/tables/__init__.py` 位元組完全相同（CRLF），`__tables.py` 未改。
@@ -362,9 +363,9 @@ TDD，標明處先紅燈。縮排依各檔案。會切換 catalog 的測試以 `
 | 141 | 修正 | (a) 文件 `alpha` 內容 `中文 abc`，轉換，檔案 > 匯出 > 雙視檢視 HTML 到空資料夾。(b) 預設文件 `new`（沒有轉換資料），匯出 > 雙視檢視 HTML。(c) 兩份已轉換文件，全部匯出，雙視檢視 HTML。讀每個檔案的前兩行。 | 每個檔案：`<!doctype html>`，接著 `<html lang="zh-TW">`；(b) 另含 `此文件沒有可顯示的轉換資料。` | `<html lang="en">` |
 | 142 | 修正 | 啟動前 `config.json` = `{` 且 `config.json.bak` 是資料夾（F-12 項目 114 (b)）；設定：改轉換寬度，按「套用」，再按「確定」 | 按「套用」後出現一個框，標題 `設定未儲存`，主文字是帶 `<d>\config.json` 的字串 21，內容是帶 `<d>\config.json.bak` 的 N1，不含 `WinError`、`存取被拒`、`.tmp` 或 `詳細資訊`；擁有者是設定對話框；按「確定」後沒有框；`config.json` 仍是 `{`；`log\config.log` 有一筆 ERROR `Failed to save config file`，traceback 含 `WinError 5` | 內容 `... 詳細資訊：[WinError 5] 存取被拒。: '...\.config.json.bak.<rnd>.tmp' -> ...` |
 | 143 | 回歸 | (a) 說明 > 關於：讀整段文字。(b) 設定：讀標題、分類清單，再按兩次 Ctrl+Tab，每次讀標題；讀每個面板的無障礙描述（UIA `LegacyIAccessible.Description`）。(c) 字典管理 > 編輯 `default`（含三種類型的列）：讀類型欄；新增：讀類型選單的項目；取消。 | (a) 開頭是 `DotExpress (DotExpress)`，接著 `版本：1.2 (1.2)`、`網址：https://coseeing.org`、`版權所有 (C) 2025-2026 DotExpress 貢獻者`；標題 `關於 DotExpress`。(b) `DotExpress 設定：轉譯`；`轉譯`、`轉譯表`、`檢視`；`DotExpress 設定：轉譯表`、`DotExpress 設定：檢視`；描述依序為 `轉譯輸出模式、寬度與字典選項`、`不同語言的轉譯表對應`、`主視窗輸入與輸出區的字型、字體大小與配色`。(c) 欄位與選單中都是 `一般`、`注音`、`Unicode 點字` | （結果不符時才跑） |
-| 144 | 回歸 | (a) 對已轉換文件與沒有資料的 `new` 開啟檢視 > 雙視檢視：經 UIA 讀網頁檢視的文字。(b) `config.json` 正常：設定中改寬度，按「確定」。 | (a) 儲存格的文字；`new` 顯示 `此文件沒有可顯示的轉換資料。`；沒有錯誤框。(b) 沒有框；`config.json` 已更新 | （結果不符時才跑） |
+| 144 | 回歸 | (a) 對已轉換文件與沒有資料的文件執行轉譯 > 雙視檢視，`PATH` 最前面放替身瀏覽器：讀程式寫到 `<d>\dual_view` 的頁面檔（修正第 12 點；原步驟的程式內網頁檢視沒有任何路徑會開啟）。(b) `config.json` 正常：設定中改寬度，按「確定」。 | (a) 儲存格的文字；`new` 顯示 `此文件沒有可顯示的轉換資料。`；沒有錯誤框。(b) 沒有框；`config.json` 已更新 | （結果不符時才跑） |
 
-**留給使用者的手動項目（項目 145，NVDA；agent 絕不代為勾選）：** 用 `N-f14`，開啟 NVDA 並啟用自動語言切換：對已轉換的中文文件開啟檢視 > 雙視檢視，用 NVDA 閱讀；再用瀏覽器開啟項目 141 匯出的雙視檢視 HTML 檔。中文是否用中文語音念（`N-f12b` 可能用英文語音）？接著打開項目 142 的對話框聆聽：是否念出完整文字，且沒有暫存檔名？
+**留給使用者的手動項目（項目 145，NVDA；agent 絕不代為勾選）：** 用 `N-f14`，開啟 NVDA 並啟用自動語言切換：對已轉換的中文文件執行轉譯 > 雙視檢視（會在瀏覽器開啟；修正第 12 點），用 NVDA 閱讀；再用瀏覽器開啟項目 141 匯出的雙視檢視 HTML 檔。中文是否用中文語音念（`N-f12b` 可能用英文語音）？接著打開項目 142 的對話框聆聽：是否念出完整文字，且沒有暫存檔名？
 
 ## 風險
 
@@ -409,3 +410,4 @@ TDD，標明處先紅燈。縮排依各檔案。會切換 catalog 的測試以 `
 - **F-13 的項目** 1、2、3、5、6。
 - 使用者延後（`task.md`「延後的項目」，2026-10-14，「不修」）：匯出 `.tmp` 重試、表頭不分大小寫、從別份文件關閉時遺失的 case (b) 存檔失敗結果（F-9 M-5）、損壞的 `config.json` 被靜默取代（F-12 Q2）、刪除兩筆相同詞條之一後的選取（F-11 M-4）。
 - F-10（UEB 斷行、`$`）。
+- **雙視檢視視窗的 dead code**（F-14 review M-2）：`gui._show_dual_view`、`_create_dual_view_frame`、`ui/dual_view.DualViewFrame` 與它們的兩個單元測試沒有任何路徑會呼叫；之後另開任務移除。

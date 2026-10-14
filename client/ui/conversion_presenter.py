@@ -295,14 +295,26 @@ class ConversionPresenter:
             if active.job.export is not None:
                 active.job.export.on_error(message)
             else:
-                self._view.show_error(self._name_unopened_document(active.job.manual, message), _("Error"))
+                target = active.job.manual
+                left = self._left_document(target)
+                self._view.show_error(self._name_unopened_document(target, message) if left else message, _("Error"))
+                if left:
+                    # The source editor was disabled during the job, so the focus is in the
+                    # read-only Braille Result editor; after the box it goes to the open
+                    # document's source editor, as after a case (b) result (F-13 D1).
+                    self._view.focus_source_editor()
         finally:
             self._finish_completion()
 
+    def _left_document(self, target: _ManualTarget) -> bool:
+        """Whether the job's document is no longer the open one (F-12 D7, F-13 D1).
+
+        Then the failure box names it, and the focus goes to the source editor after the box.
+        """
+        return target.document_name is not None and target.document_name != self._documents.open_document_name
+
     def _name_unopened_document(self, target: _ManualTarget, message: str) -> str:
-        """``message``, led by the name of the job's document if another one is open now (F-12 D7)."""
-        if target.document_name is None or target.document_name == self._documents.open_document_name:
-            return message
+        """``message``, led by the name of the job's document, which is not open (F-12 D7)."""
         return _('Document "{name}" could not be converted.\n\n{error}').format(name=target.document_name, error=message)
 
     def _complete_manual(self, target: _ManualTarget, output: ConversionOutput) -> None:

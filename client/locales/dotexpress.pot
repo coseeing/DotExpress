@@ -914,7 +914,7 @@ msgstr ""
 #: dialog.py:77 dialog.py:566 dialog.py:605 dialog.py:896
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
 #: documents/export_coordinator.py:145 gui.py:502 gui.py:787 gui.py:1103
-#: gui.py:1115 ui/conversion_presenter.py:298
+#: gui.py:1115 ui/conversion_presenter.py:300
 msgid "Error"
 msgstr ""
 
@@ -939,8 +939,8 @@ msgid "Type"
 msgstr ""
 
 #: dialog.py:182 dialog.py:208 dialog.py:346 dialog.py:893
-#: ui/conversion_presenter.py:195 ui/conversion_presenter.py:320
-#: ui/conversion_presenter.py:337
+#: ui/conversion_presenter.py:195 ui/conversion_presenter.py:332
+#: ui/conversion_presenter.py:349
 msgid "Info"
 msgstr ""
 
@@ -1234,7 +1234,7 @@ msgstr ""
 msgid "Dictionary \"{name}\" cannot be read."
 msgstr ""
 
-#: documents/export_coordinator.py:126 ui/conversion_presenter.py:306
+#: documents/export_coordinator.py:126 ui/conversion_presenter.py:318
 #, python-brace-format
 msgid ""
 "Document \"{name}\" could not be converted.\n"
@@ -1778,11 +1778,11 @@ msgstr ""
 msgid "Translation failed: {error}"
 msgstr ""
 
-#: ui/conversion_presenter.py:320
+#: ui/conversion_presenter.py:332
 msgid "Conversion completed."
 msgstr ""
 
-#: ui/conversion_presenter.py:336
+#: ui/conversion_presenter.py:348
 #, python-brace-format
 msgid "Conversion completed. The result was saved to document \"{name}\"."
 msgstr ""

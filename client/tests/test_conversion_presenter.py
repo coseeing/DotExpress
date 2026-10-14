@@ -577,11 +577,46 @@ class ConversionPresenterTest(unittest.TestCase):
 
     def test_a_failure_after_switching_names_the_document(self) -> None:
         # F-12 (D7, F-9 review M-9): the box would otherwise seem to be about the open document.
+        # F-13 (D1): after the box the focus goes to the open document's source editor.
         events = self._failed_after(lambda: self._switch_to("beta"))
 
         self.assertEqual(
             events,
-            self._end() + [("show_error", "無法轉換文件「alpha」。\n\n轉譯失敗：boom", "錯誤")],
+            self._end() + [("show_error", "無法轉換文件「alpha」。\n\n轉譯失敗：boom", "錯誤"), ("focus_source_editor",)],
+        )
+
+    def test_a_failure_after_an_import_opened_another_document_names_it_and_focuses(self) -> None:
+        # F-13 (D1): an import during the job opens the imported document, as a switch does.
+        def import_and_open() -> None:
+            self.documents.add_document(Document("imported", "i", None))
+            self._switch_to("imported")
+
+        events = self._failed_after(import_and_open)
+
+        self.assertEqual(
+            events,
+            self._end() + [("show_error", "無法轉換文件「alpha」。\n\n轉譯失敗：boom", "錯誤"), ("focus_source_editor",)],
+        )
+
+    def test_the_focus_after_a_failure_comes_before_the_queued_job_starts(self) -> None:
+        # F-13 (D1): the focus call is part of the completion; the queued export starts after it.
+        self.outputs.update(
+            {"source": ConversionStageError("translation", RuntimeError("boom")), "doc text": ConversionOutput("export", ())}
+        )
+        presenter = self._presenter()
+        presenter.convert()
+        self._switch_to("beta")
+        presenter.convert_for_export("doc text", **self._export_callbacks())
+        self.threads[0].run()
+        self._take()
+
+        self.calls.run_next()
+
+        self.assertEqual(
+            self._take(),
+            self._end()
+            + [("show_error", "無法轉換文件「alpha」。\n\n轉譯失敗：boom", "錯誤"), ("focus_source_editor",)]
+            + self._started(2),
         )
 
     def _not_named(self) -> list:

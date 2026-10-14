@@ -124,7 +124,21 @@ class SettingsPanelTest(unittest.TestCase):
 
         panel = TestPanel(None, Mock())
 
-        self.assertEqual(panel.label, "Translation")
+        # The title is a msgid, translated when the panel is built (F-14 D4).
+        self.assertEqual((panel.label, panel.name), ("轉譯", "轉譯"))
+
+    def test_a_panel_without_a_title_shows_no_catalog_header(self) -> None:
+        # F-14 (D1, D4): the base class's empty title and description stay empty.
+        from settings.dialogs import SettingsPanel
+
+        class UntitledPanel(SettingsPanel):
+            def make_settings(self) -> None:
+                return None
+
+        panel = UntitledPanel(None, Mock())
+
+        self.assertEqual((panel.label, panel.name), ("", ""))
+        self.assertEqual(SettingsPanelAccessible(panel).GetDescription(0), (wx.ACC_OK, ""))
 
 
 class TextProcessingDialogTest(unittest.TestCase):
@@ -551,6 +565,80 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
         dialog.title_template = "DotExpress 設定：{category}"
 
         self.assertEqual(dialog._format_title("轉譯"), "DotExpress 設定：轉譯")
+
+
+class SettingsTitlesFollowTheLanguageTest(unittest.TestCase):
+    """F-14 (D4): the panel and dialog titles are msgids, translated when they are shown."""
+
+    PANELS = {
+        "TranslationSettingsPanel": (
+            ("轉譯", "轉譯輸出模式、寬度與字典選項"),
+            ("Translation", "Translation output mode, width, and dictionary options"),
+        ),
+        "TranslationTablesPanel": (
+            ("轉譯表", "不同語言的轉譯表對應"),
+            ("Translation Tables", "Translation table mappings for different languages"),
+        ),
+        "ViewSettingsPanel": (
+            ("檢視", "主視窗輸入與輸出區的字型、字體大小與配色"),
+            ("View", "Font, font size, and color scheme for the main window input and output areas"),
+        ),
+    }
+    DIALOG = {
+        "zh_TW": (["轉譯", "轉譯表", "檢視"], "DotExpress 設定：轉譯", "DotExpress 設定：轉譯表", "DotExpress 設定"),
+        "en": (
+            ["Translation", "Translation Tables", "View"],
+            "DotExpress Settings: Translation",
+            "DotExpress Settings: Translation Tables",
+            "DotExpress Settings",
+        ),
+    }
+
+    def setUp(self) -> None:
+        self.addCleanup(i18n.set_language, i18n.current_language())
+
+    def test_each_panel_label_name_and_accessible_description(self) -> None:
+        for index, language in enumerate(("zh_TW", "en")):
+            i18n.set_language(language)
+            for panel_name, texts in self.PANELS.items():
+                with self.subTest(language=language, panel=panel_name):
+                    title, description = texts[index]
+                    panel = build_panel(panel_name)
+
+                    self.assertEqual((panel.label, panel.name), (title, title))
+                    self.assertEqual(SettingsPanelAccessible(panel).GetDescription(0), (wx.ACC_OK, description))
+
+    def _category_list_items(self) -> list[str]:
+        from settings.dialogs import DotExpressSettingsDialog
+
+        dialog = object.__new__(DotExpressSettingsDialog)
+        dialog.initial_category = None
+        dialog.Bind = Mock()
+        dialog.SetSizer = Mock()
+        dialog._change_category = Mock()
+        dialog._build_layout()
+        return [item for (item,) in dialog.category_list.items]
+
+    def test_the_category_list_the_titles_and_the_validation_caption(self) -> None:
+        from settings.dialogs import DotExpressSettingsDialog, TranslationSettingsPanel, TranslationTablesPanel
+
+        for language, (categories, first_title, tables_title, caption) in self.DIALOG.items():
+            with self.subTest(language):
+                i18n.set_language(language)
+                dialog = make_dialog_without_wx_constructor()
+                del dialog.base_title, dialog.title_template
+                dialog.SetTitle = Mock()
+                invalid = Mock(is_valid=Mock(return_value=False), validation_error=Mock(return_value=("message", None)))
+                dialog.panel_instances = {0: invalid}
+
+                self.assertEqual(self._category_list_items(), categories)
+                self.assertEqual(dialog._format_title(TranslationSettingsPanel.title), first_title)
+                dialog._after_category_change(SimpleNamespace(title=TranslationTablesPanel.title))
+                dialog.SetTitle.assert_called_once_with(tables_title)
+                with patch("settings.dialogs.message_box") as message_box:
+                    dialog.on_apply()
+                self.assertEqual(message_box.call_args.args[:2], ("message", caption))
+                self.assertIsInstance(dialog, DotExpressSettingsDialog)
 
 
 def dead_window_errors():

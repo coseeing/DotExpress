@@ -5018,7 +5018,7 @@ class FrameViewMethodsTest(unittest.TestCase):
             frame.on_about(None)
 
         message_box.assert_called_once_with(
-            gui.about.aboutMessage, gui._("About DotExpress"), gui.wx.OK | gui.wx.ICON_INFORMATION, parent=frame
+            gui.about.about_message(), gui._("About DotExpress"), gui.wx.OK | gui.wx.ICON_INFORMATION, parent=frame
         )
 
     def test_show_file_error_formats_the_error_for_the_frame(self) -> None:

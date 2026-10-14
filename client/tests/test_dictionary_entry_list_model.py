@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import i18n
 from dictionaries.entries import DictionaryEntry, PreservedDictionaryRow
 from dictionaries.entry_list_model import DictionaryEntryListModel, DuplicateEntryError, EntryListUpdate
 
@@ -137,6 +138,17 @@ class CellTextTest(unittest.TestCase):
 		model = DictionaryEntryListModel([_entry("Alpha", "\u2801", "Custom")])
 
 		self.assertEqual(model.cell_text(0, 2), "Custom")
+
+	def test_the_type_label_follows_the_interface_language(self) -> None:
+		# F-14 (D3): the list is virtual, so its cells are read when they are painted.
+		self.addCleanup(i18n.set_language, i18n.current_language())
+		model = DictionaryEntryListModel([_entry("Alpha", "\u2801", "Braille")])
+
+		self.assertEqual(model.cell_text(0, 2), "Unicode \u9ede\u5b57")
+
+		i18n.set_language("en")
+
+		self.assertEqual(model.cell_text(0, 2), "Unicode Braille")
 
 	def test_unknown_column_raises_value_error(self) -> None:
 		model = DictionaryEntryListModel([_entry("Alpha")])

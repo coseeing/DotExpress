@@ -1,4 +1,4 @@
-from i18n import _
+from i18n import N_, _
 
 
 copyrightYears = "2025-2026"
@@ -7,15 +7,22 @@ url = "https://coseeing.org"
 version = "1.2"
 version_detailed = "1.2"
 
-longName = _("DotExpress")
-description = _("A text-to-braille translation tool that converts plain text into fixed-width braille, producing output that can be used directly for printed braille.")
+longName = N_("DotExpress")
+description = N_("A text-to-braille translation tool that converts plain text into fixed-width braille, producing output that can be used directly for printed braille.")
 
-copyright = _("Copyright (C) {years} DotExpress Contributors").format(
-	years=copyrightYears,
-)
-aboutMessage = _(
-	# Translators: "About DotExpress" dialog box message
-	"""{longName} ({name})
+
+def copyright_text() -> str:
+	"""The translated copyright line (F-14 D2)."""
+	return _("Copyright (C) {years} DotExpress Contributors").format(
+		years=copyrightYears,
+	)
+
+
+def about_message() -> str:
+	"""The translated text of the About box, built when it is shown (F-14 D2)."""
+	return _(
+		# Translators: "About DotExpress" dialog box message
+		"""{longName} ({name})
 Version: {version} ({version_detailed})
 URL: {url}
 {copyright}
@@ -31,11 +38,11 @@ We also organize outreach and advocacy initiatives to help the broader public be
 Through diverse approaches and sustained action, we aim to create a world that everyone can see together—appreciating both its richness and each other’s uniqueness.
 
 If you find DotExpress useful and want it to continue to improve, please consider supporting Coseeing by visiting {url}.""",
-).format(
-	longName=longName,
-	name=name,
-	version=version,
-	version_detailed=version_detailed,
-	url=url,
-	copyright=copyright,
-)
+	).format(
+		longName=_(longName),
+		name=name,
+		version=version,
+		version_detailed=version_detailed,
+		url=url,
+		copyright=copyright_text(),
+	)

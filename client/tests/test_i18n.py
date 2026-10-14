@@ -1,5 +1,7 @@
 import ast
 import gettext
+import importlib.util
+import json
 import os
 import re
 import subprocess
@@ -15,11 +17,90 @@ import i18n
 CLIENT_ROOT = Path(__file__).resolve().parents[1]
 LEGACY_SETUP_FUNCTIONS = {"resource_path", "_resource_path"}
 LEGACY_SETUP_GLOBALS = {"LOCALE_DOMAIN", "LOCALE_LANGUAGES", "_translation", "_"}
+# F-14 (D5): the calls that translate a text.
+TRANSLATING_CALLS = {"_", "gettext", "ngettext", "pgettext"}
+# braille/tables/__tables.py is synced from NVDA by scripts/sync-nvda.py and must not be
+# edited: it builds its own catalog and translates its table names at import. A future
+# language switch has to handle those names without editing it (F-14 spec, O6).
+IMPORT_TIME_TRANSLATION_FILES = ["braille/tables/__tables.py"]
+# Imports every client module except main.py (it runs a demo) with i18n._ replaced by a
+# recorder, as the F-14 spec's import probe did; prints what was imported and recorded.
+IMPORT_PROBE = """
+import importlib, json, os, sys
+sys.path.insert(0, os.getcwd())
+import i18n
+calls = []
+i18n._ = lambda message: calls.append(message) or message
+skipped = {".venv", "tests", "__pycache__", "build", "dist", "liblouis", "locales", "data"}
+modules = []
+for dirpath, dirnames, filenames in os.walk("."):
+    dirnames[:] = sorted(name for name in dirnames if name not in skipped)
+    for filename in sorted(filenames):
+        if filename.endswith(".py") and filename != "main.py":
+            name = os.path.relpath(os.path.join(dirpath, filename))[:-3].replace(os.sep, ".")
+            modules.append(name.removesuffix(".__init__"))
+failed = []
+for name in modules:
+    try:
+        importlib.import_module(name)
+    except Exception as error:
+        failed.append(f"{name}: {type(error).__name__}: {error}")
+print(json.dumps({"modules": modules, "failed": failed, "calls": calls}))
+"""
+# The About text as Help > About showed it before F-14 (zh_TW), with the version left open.
+ABOUT_ZH = (
+    "DotExpress (DotExpress)\n"
+    "版本：{version}\n"
+    "網址：https://coseeing.org\n"
+    "版權所有 (C) 2025-2026 DotExpress 貢獻者\n"
+    "\n"
+    "DotExpress 採用 GNU 通用公共授權條款（第 2 版或更新版本）。\n"
+    "只要隨附授權條文，並將所有原始碼提供給任何有需要的人，你就可以自由分享或修改本軟體。\n"
+    "這同樣適用於本軟體的原始版本、修改版本，以及任何衍生作品。\n"
+    "如需進一步資訊，可線上查看授權條文：https://www.gnu.org/licenses/old-licenses/gpl-2.0.html 和 "
+    "https://www.gnu.org/licenses/gpl-3.0.en.html。\n"
+    "\n"
+    "DotExpress 由 Coseeing 開發。Coseeing 是一個致力於推動數位無障礙的社群。\n"
+    "我們透過開發工具，讓視障者看見更多資訊和可能。\n"
+    "透過舉辦推廣活動，讓大眾看見障礙者面臨的實際挑戰和需求。\n"
+    "希望以多元的形式與持續的行動，讓所有人都能共同看見這精采的世界以及獨特的彼此。\n"
+    "\n"
+    "如果你覺得 DotExpress 對你有幫助，並希望它持續改進，歡迎造訪 https://coseeing.org 支持 Coseeing。"
+)
 
 
 def _module_tree(relative_path: str) -> ast.Module:
     path = CLIENT_ROOT / relative_path
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def _import_time_translation_lines(tree: ast.Module) -> list[int]:
+    """Lines of the translating calls that run when the module is imported (F-14 D5).
+
+    That is every call outside a function body: at module level, in a class body, in a
+    default argument or in a decorator. Function and lambda bodies run later.
+    """
+    lines = []
+
+    def visit(node: ast.AST, in_body: bool) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            arguments = node.args
+            for expression in [*getattr(node, "decorator_list", []), *arguments.defaults, *arguments.kw_defaults]:
+                if expression is not None:
+                    visit(expression, in_body)
+            for statement in node.body if isinstance(node.body, list) else [node.body]:
+                visit(statement, True)
+            return
+        if isinstance(node, ast.Call) and not in_body:
+            function = node.func
+            name = function.id if isinstance(function, ast.Name) else getattr(function, "attr", None)
+            if name in TRANSLATING_CALLS:
+                lines.append(node.lineno)
+        for child in ast.iter_child_nodes(node):
+            visit(child, in_body)
+
+    visit(tree, False)
+    return sorted(lines)
 
 
 class ResourcePathTest(unittest.TestCase):
@@ -388,19 +469,144 @@ class SharedSetupConsumerTest(unittest.TestCase):
         self.assert_uses_shared_i18n("dialog.py", {"N_", "_"})
 
     def test_settings_dialogs_uses_shared_i18n(self) -> None:
-        self.assert_uses_shared_i18n("settings/dialogs.py", {"_"})
+        self.assert_uses_shared_i18n("settings/dialogs.py", {"N_", "_"})
 
     def test_settings_options_uses_shared_i18n(self) -> None:
         self.assert_uses_shared_i18n("settings/options.py", {"N_"})
 
     def test_dictionary_entries_uses_shared_i18n(self) -> None:
-        self.assert_uses_shared_i18n("dictionaries/entries.py", {"_"})
+        self.assert_uses_shared_i18n("dictionaries/entries.py", {"N_", "_"})
 
     def test_about_uses_shared_i18n(self) -> None:
-        self.assert_uses_shared_i18n("about.py", {"_"})
+        self.assert_uses_shared_i18n("about.py", {"N_", "_"})
 
     def test_gui_uses_shared_i18n(self) -> None:
         self.assert_uses_shared_i18n("gui.py", {"_", "resource_path"})
+
+
+class DisplayTimeTranslationTest(unittest.TestCase):
+    """F-14 (D2, D3, F-12 review M-7): texts once translated at import follow the active catalog."""
+
+    def setUp(self) -> None:
+        self.addCleanup(i18n.set_language, i18n.current_language())
+
+    def test_the_about_text_is_translated_when_shown(self) -> None:
+        import about
+
+        version = f"{about.version} ({about.version_detailed})"
+        self.assertEqual((about.longName, about.description[:31]), ("DotExpress", "A text-to-braille translation t"))
+        self.assertEqual(about.about_message(), ABOUT_ZH.format(version=version))
+        self.assertEqual(about.copyright_text(), "版權所有 (C) 2025-2026 DotExpress 貢獻者")
+
+        i18n.set_language("en")
+
+        self.assertTrue(
+            about.about_message().startswith(
+                f"DotExpress (DotExpress)\nVersion: {version}\nURL: https://coseeing.org\n"
+                "Copyright (C) 2025-2026 DotExpress Contributors\n\nDotExpress is covered by the GNU General Public License"
+            ),
+            about.about_message()[:200],
+        )
+        self.assertEqual(about.copyright_text(), "Copyright (C) 2025-2026 DotExpress Contributors")
+
+    def test_entry_type_labels_are_translated_when_shown(self) -> None:
+        from dictionaries.entries import ENTRY_TYPE_LABELS, entry_type_choices, entry_type_label
+
+        self.assertEqual(ENTRY_TYPE_LABELS, {"General": "General", "Bopomofo": "Bopomofo", "Braille": "Unicode Braille"})
+        expected = {"zh_TW": ["一般", "注音", "Unicode 點字"], "en": ["General", "Bopomofo", "Unicode Braille"]}
+        for language, labels in expected.items():
+            with self.subTest(language):
+                i18n.set_language(language)
+
+                self.assertEqual(entry_type_choices(), labels)
+                self.assertEqual([entry_type_label(key) for key in ("General", "Bopomofo", "Braille")], labels)
+                self.assertEqual(entry_type_label("Custom"), "Custom")
+
+
+class ImportTimeTranslationGuardTest(unittest.TestCase):
+    """F-14 (D5): no interface text is translated when a module is imported."""
+
+    def test_the_guard_finds_each_kind_of_import_time_call(self) -> None:
+        tree = ast.parse(
+            "a = _('module')\n"
+            "class C:\n"
+            "    b = gettext('class body')\n"
+            "    def f(self, c=ngettext('default', 'defaults', 2)):\n"
+            "        return _('function body')\n"
+            "@decorate(pgettext('context', 'decorator'))\n"
+            "def g(d=lambda e=_('lambda default'): _('lambda body')):\n"
+            "    return [_('comprehension') for _x in ()]\n"
+            "f = [N_('marker') for _x in ()]\n"
+            "h = translations.gettext('attribute')\n"
+        )
+
+        self.assertEqual(_import_time_translation_lines(tree), [1, 3, 4, 6, 7, 10])
+
+    def test_no_interface_text_is_translated_at_import(self) -> None:
+        found = {}
+        for dirpath, dirnames, filenames in os.walk(CLIENT_ROOT):
+            dirnames[:] = sorted(name for name in dirnames if name not in {"tests", ".venv", "__pycache__", "build", "dist"})
+            if Path(dirpath).relative_to(CLIENT_ROOT).parts[:2] == ("braille", "liblouis"):
+                continue
+            for filename in sorted(filenames):
+                if filename.endswith(".py"):
+                    path = Path(dirpath) / filename
+                    lines = _import_time_translation_lines(ast.parse(path.read_text(encoding="utf-8"), filename=str(path)))
+                    if lines:
+                        found[path.relative_to(CLIENT_ROOT).as_posix()] = lines
+
+        self.assertEqual(sorted(found), IMPORT_TIME_TRANSLATION_FILES, found)
+
+    def test_importing_the_client_translates_nothing(self) -> None:
+        # Catches an indirect call that the AST guard cannot see.
+        if importlib.util.find_spec("wx") is None:
+            self.skipTest("wxPython is not installed")
+        env = dict(os.environ, PYTHONIOENCODING="utf-8")
+        env.pop("PYTHONSAFEPATH", None)
+
+        result = subprocess.run(
+            [sys.executable, "-B", "-X", "utf8", "-c", IMPORT_PROBE],
+            cwd=CLIENT_ROOT,
+            env=env,
+            capture_output=True,
+            encoding="utf-8",
+            check=False,
+            timeout=300,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        probe = json.loads(result.stdout.strip().splitlines()[-1])
+        self.assertEqual(probe["failed"], [])
+        self.assertLessEqual({"about", "gui", "dialog", "dictionaries.entries", "settings.dialogs"}, set(probe["modules"]))
+        self.assertEqual(probe["calls"], [])
+
+    def test_texts_defined_at_import_are_n_markers(self) -> None:
+        def values(tree: ast.AST) -> dict:
+            assigned = {}
+            for node in tree.body:
+                if isinstance(node, ast.Assign):
+                    assigned.update({target.id: node.value for target in node.targets if isinstance(target, ast.Name)})
+                elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                    assigned[node.target.id] = node.value
+            return assigned
+
+        def marker(node: ast.AST) -> str:
+            return ast.unparse(node.func) if isinstance(node, ast.Call) else ast.unparse(node)
+
+        found = {}
+        about = values(_module_tree("about.py"))
+        found.update({f"about.{name}": marker(about[name]) for name in ("longName", "description")})
+        options = values(_module_tree("dictionaries/entries.py"))["ENTRY_TYPE_OPTIONS"]
+        found.update({f"ENTRY_TYPE_OPTIONS.{option.elts[0].value}": marker(option.elts[1]) for option in options.elts})
+        classes = {node.name: values(node) for node in _module_tree("settings/dialogs.py").body if isinstance(node, ast.ClassDef)}
+        for class_name in ("TranslationSettingsPanel", "TranslationTablesPanel", "ViewSettingsPanel"):
+            found.update({f"{class_name}.{name}": marker(classes[class_name][name]) for name in ("title", "panel_description")})
+        found.update(
+            {f"DotExpressSettingsDialog.{name}": marker(classes["DotExpressSettingsDialog"][name]) for name in ("base_title", "title_template")}
+        )
+
+        self.assertEqual(len(found), 13)
+        self.assertEqual(found, dict.fromkeys(found, "N_"))
 
 
 class DuplicateSetupGuardTest(unittest.TestCase):

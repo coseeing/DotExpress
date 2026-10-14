@@ -11,6 +11,7 @@ from dictionaries.entries import (
 	ENTRY_TYPE_OPTIONS,
 	DictionaryEntry,
 	PreservedDictionaryRow,
+	entry_type_choices,
 	validate_dictionary_entry,
 )
 from dictionaries.entry_list_model import DictionaryEntryListModel, DuplicateEntryError, EntryListUpdate
@@ -107,7 +108,7 @@ class AddSymbolDialog(ContextManagedDialog, wx.Dialog):
 		braille_label = wx.StaticText(self, label=_("Braille"))
 		self.braille_ctrl = wx.TextCtrl(self)
 		type_label = wx.StaticText(self, label=_("Type"))
-		self.type_choice = wx.Choice(self, choices=[label for _key, label in ENTRY_TYPE_OPTIONS])
+		self.type_choice = wx.Choice(self, choices=entry_type_choices())
 
 		grid.Add(source_label, 0, wx.ALIGN_CENTER_VERTICAL)
 		grid.Add(self.identifier_ctrl, 1, wx.EXPAND)

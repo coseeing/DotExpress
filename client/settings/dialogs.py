@@ -12,7 +12,7 @@ from conversion.preprocessing.user_script import (
     load_preprocessing_script,
     save_preprocessing_script,
 )
-from i18n import _
+from i18n import N_, _
 from ui.dialog_base import SingletonDialogMixin
 from ui.message_box import message_box
 from .options import (
@@ -40,10 +40,11 @@ class SettingsPanelAccessible(wx.Accessible):
         return (wx.ACC_OK, wx.ROLE_SYSTEM_PROPERTYPAGE)
 
     def GetDescription(self, child_id):
-        return (wx.ACC_OK, self.Window.panel_description)
+        return (wx.ACC_OK, _(self.Window.panel_description))
 
 
 class SettingsPanel(wx.Panel):
+    # msgids of the subclasses (N_), translated when they are shown (F-14 D4).
     title = ""
     panel_description = ""
 
@@ -51,8 +52,9 @@ class SettingsPanel(wx.Panel):
         super().__init__(parent)
         self.owner = owner
         self.make_settings()
-        self.SetLabel(self.title.replace("&", "&&"))
-        self.SetName(self.title.replace("&", ""))
+        title = _(self.title)
+        self.SetLabel(title.replace("&", "&&"))
+        self.SetName(title.replace("&", ""))
         self.SetAccessible(SettingsPanelAccessible(self))
 
     def make_settings(self) -> None:
@@ -267,7 +269,7 @@ class MultiCategorySettingsDialog(SettingsDialog):
         self.category_list.SetMinSize((150, 10))
         self.category_list.SetName(_("Categories"))
         for category_class in self.category_classes:
-            self.category_list.Append((category_class.title.replace("&", ""),))
+            self.category_list.Append((_(category_class.title).replace("&", ""),))
         sizer.Add(
             self.category_list,
             pos=(1, 0),
@@ -354,8 +356,8 @@ class TableOption:
 
 
 class TranslationSettingsPanel(SettingsPanel):
-    title = _("Translation")
-    panel_description = _(
+    title = N_("Translation")
+    panel_description = N_(
         "Translation output mode, width, and dictionary options"
     )
 
@@ -435,8 +437,8 @@ class TranslationSettingsPanel(SettingsPanel):
 
 
 class TranslationTablesPanel(SettingsPanel):
-    title = _("Translation Tables")
-    panel_description = _(
+    title = N_("Translation Tables")
+    panel_description = N_(
         "Translation table mappings for different languages"
     )
 
@@ -554,8 +556,8 @@ class TranslationTablesPanel(SettingsPanel):
 
 
 class ViewSettingsPanel(SettingsPanel):
-    title = _("View")
-    panel_description = _(
+    title = N_("View")
+    panel_description = N_(
         "Font, font size, and color scheme for the main window input and output areas"
     )
 
@@ -650,8 +652,9 @@ CommitSettings = Callable[
 
 
 class DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog):
-    base_title = _("DotExpress Settings")
-    title_template = _("DotExpress Settings: {category}")
+    # msgids, translated when they are shown (F-14 D4).
+    base_title = N_("DotExpress Settings")
+    title_template = N_("DotExpress Settings: {category}")
     category_classes = [
         TranslationSettingsPanel,
         TranslationTablesPanel,
@@ -679,7 +682,8 @@ class DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog
         )
 
     def _format_title(self, category: str) -> str:
-        return self.title_template.format(category=category)
+        """The dialog title for ``category``, the msgid of a panel title (F-14 D4)."""
+        return _(self.title_template).format(category=_(category))
 
     def _after_category_change(self, panel: SettingsPanel) -> None:
         self.SetTitle(self._format_title(panel.title))
@@ -695,7 +699,7 @@ class DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog
                     message, focus_target = message_and_focus
                     message_box(
                         message,
-                        self.base_title,
+                        _(self.base_title),
                         wx.OK | wx.ICON_ERROR,
                         self,
                     )

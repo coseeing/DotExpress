@@ -43,11 +43,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dictionaries.entries import (
-	ENTRY_TYPE_LABELS,
 	DictionaryEntry,
 	DictionaryLayout,
 	DictionaryRow,
 	PreservedDictionaryRow,
+	entry_type_label,
 	load_dictionary_file,
 	save_dictionary_entries,
 )
@@ -162,7 +162,7 @@ class DictionaryEntryListModel:
 		if column == 1:
 			return entry.braille
 		if column == 2:
-			return ENTRY_TYPE_LABELS.get(entry.entry_type, entry.entry_type)
+			return entry_type_label(entry.entry_type)
 		raise ValueError(f"Unknown column: {column}")
 
 	@staticmethod

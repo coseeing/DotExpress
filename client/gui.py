@@ -544,7 +544,7 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to open website: {error}"), exc)
 
 	def on_about(self, _evt: wx.CommandEvent) -> None:
-		message_box(about.aboutMessage, _("About DotExpress"), wx.OK | wx.ICON_INFORMATION, parent=self)
+		message_box(about.about_message(), _("About DotExpress"), wx.OK | wx.ICON_INFORMATION, parent=self)
 
 	def on_open_dual_view(self, _evt) -> None:
 		self._open_dual_view_in_browser()

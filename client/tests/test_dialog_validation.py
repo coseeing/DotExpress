@@ -4,7 +4,7 @@ import itertools
 import unittest
 from collections.abc import Callable
 from contextlib import contextmanager
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from tests import wx_stub
 
@@ -27,6 +27,7 @@ tearDownModule = _SCOPE.deactivate
 from dictionaries.entries import DictionaryEntry
 from dictionaries.manager import DEFAULT_DICTIONARY_NAME, MAX_DICTIONARY_NAME_LENGTH, normalize_dictionary_name
 from documents.workspace import normalize_document_name
+import i18n
 from i18n import _
 
 DICTIONARY_EMPTY = "請輸入字典名稱。"
@@ -528,6 +529,31 @@ class AddSymbolDialogEntryTest(unittest.TestCase):
                     message_box.assert_called_once_with("請輸入有效的注音序列。", INFO_TITLE, 132, parent=dialog)
                     self.assertTrue(dialog.braille_ctrl.focused)
                     event.Skip.assert_not_called()
+
+
+class AddSymbolDialogTypeChoiceTest(unittest.TestCase):
+    """F-14 (D3): the Type choice lists the entry types, translated when the dialog is built."""
+
+    def type_choice_items(self) -> list[str]:
+        dialog = object.__new__(AddSymbolDialog)
+        dialog.Bind = Mock()
+        fake_wx = MagicMock()
+        with (
+            patch.object(dialog_module.wx.Dialog, "__init__", lambda self, *args, **kwargs: None, create=True),
+            patch.object(dialog_module, "wx", fake_wx),
+            patch.object(dialog_module, "finalize_dialog_layout"),
+        ):
+            AddSymbolDialog.__init__(dialog, None)
+        return fake_wx.Choice.call_args.kwargs["choices"]
+
+    def test_the_type_choice_follows_the_interface_language(self) -> None:
+        self.addCleanup(i18n.set_language, i18n.current_language())
+
+        self.assertEqual(self.type_choice_items(), ["一般", "注音", "Unicode 點字"])
+
+        i18n.set_language("en")
+
+        self.assertEqual(self.type_choice_items(), ["General", "Bopomofo", "Unicode Braille"])
 
 
 class DialogContextManagerTest(unittest.TestCase):

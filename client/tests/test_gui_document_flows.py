@@ -2403,6 +2403,150 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
                 self.assertEqual(frame._document_controller.document_names, names)
                 self.assertEqual(self._listing(), ["alpha.dep"])
 
+    def _box_hook(self, box: int, hook) -> None:
+        """Run ``hook`` once, while startup box number ``box`` is open (F-13 review M-2, M-3).
+
+        Box 0 is the invalid files dialog; the message boxes follow in the order they are
+        shown. The box is counted before ``hook`` runs, so a box that ``hook`` itself shows
+        does not run it again.
+        """
+        test = self
+        shown = [0]
+
+        def opened() -> None:
+            shown[0] += 1
+            if shown[0] == box + 1:
+                hook()
+
+        class HookedInvalidFilesDialog(self._invalid_files_dialog_class()):
+            def ShowModal(self):
+                opened()
+                return super().ShowModal()
+
+        def message_box(message, caption, style, parent=None):
+            answer = test._message_box(message, caption, style, parent)
+            opened()
+            return answer
+
+        for patcher in (
+            patch.object(gui, "InvalidWorkspaceFilesDialog", HookedInvalidFilesDialog),
+            patch.object(gui, "message_box", message_box),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _startup_with_three_boxes(self):
+        """bad.dep, a recovered alpha holding U+0000: the invalid files dialog, the recovered
+        documents box, the replaced characters box; returns the frame and the events of a
+        full load."""
+        self._interrupted_rename("alpha", "gamma", "a\x00", 60)
+        (self.workspace / "bad.dep").write_bytes(b"not a zip")
+        frame = self._make_workspace_frame()
+        recovered = gui._(
+            "DotExpress was interrupted while saving or renaming a document. These documents were "
+            "recovered:\n\n{names}\n\nCheck that their content is what you expect."
+        ).format(names="alpha")
+        events = [
+            ("InvalidWorkspaceFilesDialog", [self.workspace / "bad.dep"]),
+            ("MessageBox", recovered, gui._("Documents Recovered"), gui.wx.OK | gui.wx.ICON_INFORMATION, frame),
+            ("title", "alpha - DotExpress"),
+            self._nul_notice("alpha", 1, frame),
+            ("title", "alpha - DotExpress"),
+            ("title", "alpha - DotExpress"),
+            ("focus", "input"),
+        ]
+        return frame, events
+
+    def test_startup_load_stops_when_the_window_closed_during_a_startup_box(self) -> None:
+        # F-13 review M-2: a logoff (WM_QUERYENDSESSION) closes the frame while a startup box
+        # is open; the load goes no further: no later box, no default document, no title, no focus.
+        for box, last_event, open_name in ((0, 0, None), (1, 1, None), (2, 3, "alpha")):
+            with self.subTest(box=box):
+                self.workspace = self.root / f"workspace-{box}"
+                self.events.clear()
+                frame, events = self._startup_with_three_boxes()
+                self._box_hook(box, lambda: setattr(frame, "_close_finished", True))
+
+                frame.load_startup_documents()
+
+                self.assertEqual(self.events, events[: last_event + 1])
+                self.assertEqual(frame._document_controller.open_name, open_name)
+                self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+
+    def test_startup_load_with_no_document_creates_none_after_the_window_closed(self) -> None:
+        # F-13 review M-2: closed during the invalid files dialog of a workspace with no valid
+        # document: the default document is not created.
+        self.workspace.mkdir()
+        (self.workspace / "bad.dep").write_bytes(b"not a zip")
+        frame = self._make_workspace_frame()
+        self._box_hook(0, lambda: setattr(frame, "_close_finished", True))
+
+        frame.load_startup_documents()
+
+        self.assertEqual(self.events, [("InvalidWorkspaceFilesDialog", [self.workspace / "bad.dep"])])
+        self.assertEqual(self._listing(), ["bad.dep"])
+        self.assertEqual(frame._document_controller.document_names, [])
+
+    def test_startup_load_called_again_during_a_startup_box_does_nothing(self) -> None:
+        # F-13 review M-3: the flag is set before the load, so a call made from the nested event
+        # loop of a startup box (here the recovered documents box) loads nothing a second time.
+        frame, events = self._startup_with_three_boxes()
+        self._box_hook(1, frame.load_startup_documents)
+
+        frame.load_startup_documents()
+
+        self.assertEqual(self.events, events)
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+
+    def test_startup_load_logs_an_unexpected_error_and_shows_it(self) -> None:
+        # F-13 review M-1: the load runs in a posted call, where an exception would only reach
+        # the missing stderr of the packaged build: it goes to gui.log with its traceback and
+        # is shown with an existing message; the window stays empty.
+        self._write_packages(Document("alpha", "a", "1"))
+        frame = self._make_workspace_frame()
+        error = OSError("injected")
+
+        with (
+            patch.object(frame._workspace_service, "load_documents", side_effect=error),
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
+            frame.load_startup_documents()
+
+        self._assert_logged_with_traceback(logs, OSError)
+        self.assertEqual(logs.records[0].getMessage(), "Failed to load the workspace at startup")
+        self.assertEqual(
+            self.events,
+            [
+                (
+                    "MessageBox",
+                    gui._("The file cannot be read: {error}").format(error=error),
+                    gui._("Error"),
+                    gui.wx.OK | gui.wx.ICON_ERROR,
+                    frame,
+                ),
+            ],
+        )
+        self.assertEqual(frame._document_controller.document_names, [])
+        self.assertTrue(frame._startup_documents_loaded)
+
+    def test_startup_load_error_after_the_window_closed_is_logged_without_a_box(self) -> None:
+        # F-13 review M-1, M-2: the frame is gone; the error is logged, no box is shown.
+        frame = self._make_workspace_frame()
+
+        def close_and_fail():
+            frame._close_finished = True
+            raise ValueError("injected")
+
+        with (
+            patch.object(frame._workspace_service, "load_documents", side_effect=close_and_fail),
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
+            frame.load_startup_documents()
+
+        self._assert_logged_with_traceback(logs, ValueError)
+        self.assertEqual(self.events, [])
+
     # --- save --------------------------------------------------------------
 
     def test_save_open_document_keeps_pending_document_pending(self) -> None:

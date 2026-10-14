@@ -253,14 +253,25 @@ class BrailleFrame(wx.Frame):
 		"""Load the workspace and show its startup boxes (F-13 D2, F-8b review M-8).
 
 		BrailleApp.OnInit posts this after Show, so that the boxes are owned by a visible
-		window. It runs once, and not after the window has closed (a close or a logoff
-		before the posted call ran).
+		window. It runs once, even when called again from the event loop of a startup box,
+		and not after the window has closed (a close or a logoff before the posted call ran,
+		or a logoff while a startup box was open).
 		"""
 		if self._startup_documents_loaded or self._close_finished:
 			return
 		self._startup_documents_loaded = True
 		self._clear_document_editors()
-		self._load_workspace_documents_at_startup()
+		try:
+			self._load_workspace_documents_at_startup()
+		except Exception as error:
+			# A posted call: the exception would reach only the missing stderr of the packaged
+			# build, and leave an empty window with no word (F-13 review M-1).
+			logger.exception("Failed to load the workspace at startup")
+			if not self._close_finished:
+				self._show_file_error(_("The file cannot be read: {error}"), error)
+			return
+		if self._close_finished:
+			return
 		self._update_window_title()
 		self.input_txt.SetFocus()
 
@@ -822,9 +833,16 @@ class BrailleFrame(wx.Frame):
 		self._create_default_document()
 
 	def _load_workspace_documents_at_startup(self) -> None:
+		"""Load the workspace and show the startup boxes.
+
+		A logoff (WM_QUERYENDSESSION) handled while a box is open can close the frame; the
+		load then goes no further (F-13 review M-2).
+		"""
 		invalid_paths = self._workspace_service.load_documents()
 		self._refresh_document_list()
 		self._review_invalid_workspace_files(invalid_paths)
+		if self._close_finished:
+			return
 		# Documents put back from the temporary files of an interrupted save or rename (F-8).
 		recovered_names = self._workspace_service.take_recovered_document_names()
 		if recovered_names:
@@ -835,7 +853,11 @@ class BrailleFrame(wx.Frame):
 				).format(names="\n".join(recovered_names)),
 				_("Documents Recovered"),
 			)
+			if self._close_finished:
+				return
 		self._ensure_open_document_exists()
+		if self._close_finished:
+			return
 		self._update_window_title()
 
 	def _get_selected_document_name(self) -> str | None:

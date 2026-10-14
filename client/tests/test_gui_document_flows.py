@@ -195,7 +195,7 @@ class DocumentControllerOwnershipTest(unittest.TestCase):
         "_initialize_conversion_state",
         "_apply_initial_settings",
         "_bind_events",
-        "_load_startup_documents",
+        "_show_empty_startup_state",
     )
 
     def test_frame_creates_its_controller_before_building_the_menu_bar(self) -> None:
@@ -214,6 +214,22 @@ class DocumentControllerOwnershipTest(unittest.TestCase):
         self.assertIsInstance(seen[0], gui.DocumentController)
         self.assertIs(frame._document_controller, seen[0])
         self.assertEqual(seen[0].documents, [])
+
+    def test_building_the_frame_does_not_load_the_workspace(self) -> None:
+        # F-13 (D2): BrailleApp.OnInit posts load_startup_documents after Show; the frame
+        # starts with empty editors and the title DotExpress.
+        steps = Mock()
+        with (
+            patch.object(gui.BrailleFrame, "_initialize_frame"),
+            patch.multiple(gui.BrailleFrame, **{name: DEFAULT for name in self.STARTUP_STEPS[:-1]}),
+            patch.object(gui.BrailleFrame, "_clear_document_editors", steps.clear_editors),
+            patch.object(gui.BrailleFrame, "_update_window_title", steps.update_title),
+            patch.object(gui.BrailleFrame, "_load_workspace_documents_at_startup", steps.load_workspace),
+            patch.object(gui.BrailleFrame, "load_startup_documents", steps.load_startup_documents, create=True),
+        ):
+            gui.BrailleFrame(None, runtime=Mock(), paths=make_paths(), config_store=Mock())
+
+        self.assertEqual(steps.mock_calls, [call.clear_editors(), call.update_title()])
 
     def test_initialize_state_keeps_the_frame_controller(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
@@ -673,6 +689,62 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         build_runtime.assert_not_called()
         self.assertIn(str(paths.dual_view), message_box.call_args.args[0])
 
+    def _exit_with_worker(self, alive: bool) -> tuple:
+        """OnExit of an app whose conversion worker check answers ``alive`` (F-13 D3)."""
+        runtime = Mock()
+        app = gui.BrailleApp()
+        app.paths = make_paths(Path("C:/DotExpress"))
+        app.translation_runtime = runtime
+        app._conversion_worker_alive = Mock(return_value=alive)
+
+        with patch.object(gui, "cleanup_dual_view_html") as cleanup:
+            result = app.OnExit()
+
+        cleanup.assert_called_once_with(Path("C:/DotExpress/dual_view"))
+        app._conversion_worker_alive.assert_called_once_with()
+        return result, runtime
+
+    def test_app_exit_keeps_the_runtime_while_a_conversion_thread_runs(self) -> None:
+        # F-13 (D3, F-9 review M-8): lou_free() under a running lou_translateString can end the
+        # process with 0xC0000374 at logoff; the process ends right after OnExit anyway.
+        result, runtime = self._exit_with_worker(True)
+
+        self.assertEqual(result, 0)
+        runtime.close.assert_not_called()
+
+    def test_app_exit_closes_the_runtime_when_no_conversion_thread_runs(self) -> None:
+        result, runtime = self._exit_with_worker(False)
+
+        self.assertEqual(result, 0)
+        runtime.close.assert_called_once_with()
+
+    def test_app_keeps_a_worker_check_that_does_not_use_the_frame(self) -> None:
+        # F-13 (D3): on wx's end-session path OnExit can run after the frame is destroyed, so
+        # the check OnInit keeps is the presenter's, not one that goes through the frame.
+        runtime = Mock()
+        frame = Mock()
+        worker_alive = Mock(return_value=True)
+        frame.conversion_worker_check.return_value = worker_alive
+        paths = make_paths(Path("C:/DotExpress"))
+        with (
+            patch.object(gui, "build_application_paths", return_value=paths),
+            patch.object(gui, "prepare_application_directories", return_value=paths),
+            patch.object(gui, "cleanup_dual_view_html"),
+            patch.object(gui, "build_default_translation_runtime", return_value=runtime),
+            patch.object(gui, "BrailleFrame", return_value=frame),
+            patch.object(gui, "start_client_init_background"),
+        ):
+            app = gui.BrailleApp()
+            self.assertTrue(app.OnInit())
+        # A destroyed frame: from now on every attribute of it raises.
+        frame.mock_add_spec([])
+
+        with patch.object(gui, "cleanup_dual_view_html"):
+            self.assertEqual(app.OnExit(), 0)
+
+        worker_alive.assert_called_once_with()
+        runtime.close.assert_not_called()
+
     def test_app_exit_logs_cleanup_failure_and_still_closes_runtime(self) -> None:
         runtime = Mock()
         app = gui.BrailleApp()
@@ -708,6 +780,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
         frame = Mock()
         frame.Show.side_effect = record("show")
+        frame.load_startup_documents.side_effect = record("load")
         return {
             "prepare_application_directories": prepare,
             "cleanup_dual_view_html": record("cleanup"),
@@ -718,15 +791,25 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_app_startup_runs_steps_in_contract_order(self) -> None:
         order: list[str] = []
+        posted = DeferredCalls()
+
+        def call_after(fn, *args, **kwargs) -> None:
+            order.append("post")
+            posted(fn, *args, **kwargs)
 
         with ExitStack() as stack:
             for name, fake in self._startup_recorders(order).items():
                 stack.enter_context(patch.object(gui, name, side_effect=fake))
+            stack.enter_context(patch.object(gui.wx, "CallAfter", call_after))
             message_box = stack.enter_context(patch.object(gui, "message_box"))
             result = gui.BrailleApp().OnInit()
 
         self.assertTrue(result)
-        self.assertEqual(order, ["prepare", "cleanup", "runtime", "frame", "show", "client_init"])
+        # F-13 (D2): the workspace load is posted after Show and runs in a later turn of the
+        # main loop, when the main window is visible; its boxes are owned by a shown window.
+        self.assertEqual(order, ["prepare", "cleanup", "runtime", "frame", "show", "post", "client_init"])
+        self.assertEqual(posted.run_all(), 1)
+        self.assertEqual(order[-1], "load")
         message_box.assert_not_called()
 
     def test_app_stops_before_cleanup_when_validation_fails(self) -> None:
@@ -2257,6 +2340,212 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         # Both staged twins duplicate a recovered document and are removed; the invalid
         # bad.dep is not a temporary file and stays.
         self.assertEqual(self._listing(), ["alpha.dep", "bad.dep", "beta.dep"])
+
+    def test_startup_load_shows_the_boxes_in_order_and_focuses_the_source_editor_last(self) -> None:
+        # F-13 (D2): load_startup_documents, posted after Show, keeps the order of the startup
+        # boxes: the invalid files, the recovered documents, then the replaced characters of
+        # the first document; the focus goes to the source editor at the end.
+        self._interrupted_rename("alpha", "gamma", "a\x00", 60)
+        (self.workspace / "bad.dep").write_bytes(b"not a zip")
+        frame = self._make_workspace_frame()
+
+        frame.load_startup_documents()
+
+        recovered = gui._(
+            "DotExpress was interrupted while saving or renaming a document. These documents were "
+            "recovered:\n\n{names}\n\nCheck that their content is what you expect."
+        ).format(names="alpha")
+        self.assertEqual(
+            self.events,
+            [
+                ("InvalidWorkspaceFilesDialog", [self.workspace / "bad.dep"]),
+                ("MessageBox", recovered, gui._("Documents Recovered"), gui.wx.OK | gui.wx.ICON_INFORMATION, frame),
+                ("title", "alpha - DotExpress"),
+                self._nul_notice("alpha", 1, frame),
+                ("title", "alpha - DotExpress"),
+                ("title", "alpha - DotExpress"),
+                ("focus", "input"),
+            ],
+        )
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+
+    def test_startup_load_runs_once(self) -> None:
+        # F-13 (D2): a second call (the posted call is made once) changes nothing.
+        self._write_packages(Document("alpha", "a", "1"))
+        frame = self._make_workspace_frame()
+        frame.load_startup_documents()
+        self.assertEqual(self.events, [("title", "alpha - DotExpress")] * 3 + [("focus", "input")])
+        self.events.clear()
+        frame.input_txt.value = "edited"
+
+        frame.load_startup_documents()
+
+        self.assertEqual(self.events, [])
+        self.assertEqual(frame.input_txt.value, "edited")
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+
+    def test_startup_load_after_the_window_closed_does_nothing(self) -> None:
+        # F-13 (D2): a close or a logoff before the posted load ran loads nothing and shows no box.
+        self._write_packages(Document("alpha", "a", "1"))
+        for closed, events, names in (
+            (False, [("title", "alpha - DotExpress")] * 3 + [("focus", "input")], ["alpha"]),
+            (True, [], []),
+        ):
+            with self.subTest(closed=closed):
+                self.events.clear()
+                frame = self._make_workspace_frame()
+                frame._close_finished = closed
+
+                frame.load_startup_documents()
+
+                self.assertEqual(self.events, events)
+                self.assertEqual(frame._document_controller.document_names, names)
+                self.assertEqual(self._listing(), ["alpha.dep"])
+
+    def _box_hook(self, box: int, hook) -> None:
+        """Run ``hook`` once, while startup box number ``box`` is open (F-13 review M-2, M-3).
+
+        Box 0 is the invalid files dialog; the message boxes follow in the order they are
+        shown. The box is counted before ``hook`` runs, so a box that ``hook`` itself shows
+        does not run it again.
+        """
+        test = self
+        shown = [0]
+
+        def opened() -> None:
+            shown[0] += 1
+            if shown[0] == box + 1:
+                hook()
+
+        class HookedInvalidFilesDialog(self._invalid_files_dialog_class()):
+            def ShowModal(self):
+                opened()
+                return super().ShowModal()
+
+        def message_box(message, caption, style, parent=None):
+            answer = test._message_box(message, caption, style, parent)
+            opened()
+            return answer
+
+        for patcher in (
+            patch.object(gui, "InvalidWorkspaceFilesDialog", HookedInvalidFilesDialog),
+            patch.object(gui, "message_box", message_box),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _startup_with_three_boxes(self):
+        """bad.dep, a recovered alpha holding U+0000: the invalid files dialog, the recovered
+        documents box, the replaced characters box; returns the frame and the events of a
+        full load."""
+        self._interrupted_rename("alpha", "gamma", "a\x00", 60)
+        (self.workspace / "bad.dep").write_bytes(b"not a zip")
+        frame = self._make_workspace_frame()
+        recovered = gui._(
+            "DotExpress was interrupted while saving or renaming a document. These documents were "
+            "recovered:\n\n{names}\n\nCheck that their content is what you expect."
+        ).format(names="alpha")
+        events = [
+            ("InvalidWorkspaceFilesDialog", [self.workspace / "bad.dep"]),
+            ("MessageBox", recovered, gui._("Documents Recovered"), gui.wx.OK | gui.wx.ICON_INFORMATION, frame),
+            ("title", "alpha - DotExpress"),
+            self._nul_notice("alpha", 1, frame),
+            ("title", "alpha - DotExpress"),
+            ("title", "alpha - DotExpress"),
+            ("focus", "input"),
+        ]
+        return frame, events
+
+    def test_startup_load_stops_when_the_window_closed_during_a_startup_box(self) -> None:
+        # F-13 review M-2: a logoff (WM_QUERYENDSESSION) closes the frame while a startup box
+        # is open; the load goes no further: no later box, no default document, no title, no focus.
+        for box, last_event, open_name in ((0, 0, None), (1, 1, None), (2, 3, "alpha")):
+            with self.subTest(box=box):
+                self.workspace = self.root / f"workspace-{box}"
+                self.events.clear()
+                frame, events = self._startup_with_three_boxes()
+                self._box_hook(box, lambda: setattr(frame, "_close_finished", True))
+
+                frame.load_startup_documents()
+
+                self.assertEqual(self.events, events[: last_event + 1])
+                self.assertEqual(frame._document_controller.open_name, open_name)
+                self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+
+    def test_startup_load_with_no_document_creates_none_after_the_window_closed(self) -> None:
+        # F-13 review M-2: closed during the invalid files dialog of a workspace with no valid
+        # document: the default document is not created.
+        self.workspace.mkdir()
+        (self.workspace / "bad.dep").write_bytes(b"not a zip")
+        frame = self._make_workspace_frame()
+        self._box_hook(0, lambda: setattr(frame, "_close_finished", True))
+
+        frame.load_startup_documents()
+
+        self.assertEqual(self.events, [("InvalidWorkspaceFilesDialog", [self.workspace / "bad.dep"])])
+        self.assertEqual(self._listing(), ["bad.dep"])
+        self.assertEqual(frame._document_controller.document_names, [])
+
+    def test_startup_load_called_again_during_a_startup_box_does_nothing(self) -> None:
+        # F-13 review M-3: the flag is set before the load, so a call made from the nested event
+        # loop of a startup box (here the recovered documents box) loads nothing a second time.
+        frame, events = self._startup_with_three_boxes()
+        self._box_hook(1, frame.load_startup_documents)
+
+        frame.load_startup_documents()
+
+        self.assertEqual(self.events, events)
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+
+    def test_startup_load_logs_an_unexpected_error_and_shows_it(self) -> None:
+        # F-13 review M-1: the load runs in a posted call, where an exception would only reach
+        # the missing stderr of the packaged build: it goes to gui.log with its traceback and
+        # is shown with an existing message; the window stays empty.
+        self._write_packages(Document("alpha", "a", "1"))
+        frame = self._make_workspace_frame()
+        error = OSError("injected")
+
+        with (
+            patch.object(frame._workspace_service, "load_documents", side_effect=error),
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
+            frame.load_startup_documents()
+
+        self._assert_logged_with_traceback(logs, OSError)
+        self.assertEqual(logs.records[0].getMessage(), "Failed to load the workspace at startup")
+        self.assertEqual(
+            self.events,
+            [
+                (
+                    "MessageBox",
+                    gui._("The file cannot be read: {error}").format(error=error),
+                    gui._("Error"),
+                    gui.wx.OK | gui.wx.ICON_ERROR,
+                    frame,
+                ),
+            ],
+        )
+        self.assertEqual(frame._document_controller.document_names, [])
+        self.assertTrue(frame._startup_documents_loaded)
+
+    def test_startup_load_error_after_the_window_closed_is_logged_without_a_box(self) -> None:
+        # F-13 review M-1, M-2: the frame is gone; the error is logged, no box is shown.
+        frame = self._make_workspace_frame()
+
+        def close_and_fail():
+            frame._close_finished = True
+            raise ValueError("injected")
+
+        with (
+            patch.object(frame._workspace_service, "load_documents", side_effect=close_and_fail),
+            self.assertLogs(gui.logger, level="ERROR") as logs,
+        ):
+            frame.load_startup_documents()
+
+        self._assert_logged_with_traceback(logs, ValueError)
+        self.assertEqual(self.events, [])
 
     # --- save --------------------------------------------------------------
 
@@ -4830,6 +5119,15 @@ class FrameConversionDelegationTest(unittest.TestCase):
 
         self.assertEqual(frame._conversion_presenter.mock_calls, [call.convert(), call.convert()])
         event.Skip.assert_not_called()
+
+    def test_conversion_worker_check_is_the_presenters_worker_alive(self) -> None:
+        # F-13 (D3): BrailleApp keeps it for OnExit; calling it does not touch the frame.
+        frame = self._make_frame()
+        frame._conversion_presenter = Mock(spec=gui.ConversionPresenter)
+
+        check = frame.conversion_worker_check()
+
+        self.assertEqual(check, frame._conversion_presenter.worker_alive)
 
     def test_close_asks_presenter_before_saving(self) -> None:
         frame = self._make_frame()

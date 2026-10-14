@@ -1856,8 +1856,9 @@ class DictionaryEntriesDialogHiddenRowsTest(_EditorTestCase):
 
         self.assertEqual(harness.take_log(), [_hidden_rows_box("dictionary", _no_source_text(4), _no_source_text(5))])
 
-    def test_a_row_line_shows_the_stripped_source_text_and_sequence(self) -> None:
-        # D1: spaces around the fields are not shown (review M-2 a; the S6 probe's row).
+    def test_a_row_line_shows_the_stripped_source_text_and_the_raw_sequence(self) -> None:
+        # D1: spaces around the source text are not shown (review M-2 a; the S6 probe's row).
+        # F-13 (D6, U5): the Bopomofo value is shown as it is in the file, with its spaces.
         data = (HEADER + " \u809a\u5b50 , \u3109\u3128\u02cb|\u3117\u02d9 ,Bopomofo\r\n").encode("utf-8")
         harness = self.open_editor(data=data)
         harness.take_log()
@@ -1867,8 +1868,22 @@ class DictionaryEntriesDialogHiddenRowsTest(_EditorTestCase):
 
         self.assertEqual(
             harness.take_log(),
-            [_hidden_rows_box("dictionary", _invalid_bopomofo(2, "\u809a\u5b50", "\u3109\u3128\u02cb|\u3117\u02d9"))],
+            [_hidden_rows_box("dictionary", _invalid_bopomofo(2, "\u809a\u5b50", " \u3109\u3128\u02cb|\u3117\u02d9 "))],
         )
+
+    def test_a_row_line_shows_whitespace_around_the_bopomofo_value(self) -> None:
+        # F-13 (D6, U5): whitespace that hides a row is listed as read (O5: tabs and ideographic
+        # spaces too). Only the leading whitespace is ignored when the row is checked (F-11 D14).
+        for value in ("\u3107\u311a  ", " \u3107\u311a", "\u3107\u311a\t", "\u3107\u311a\u3000"):
+            with self.subTest(value=value):
+                data = (HEADER + "\u62b9," + value + ",Bopomofo\r\n").encode("utf-8")
+                harness = self.open_editor(data=data)
+                harness.take_log()
+                harness.script_confirm(False)
+
+                harness.press_ok()
+
+                self.assertEqual(harness.take_log(), [_hidden_rows_box("dictionary", _invalid_bopomofo(2, "\u62b9", value))])
 
     def test_at_most_ten_hidden_rows_are_listed(self) -> None:
         for count, listed, other in ((10, 10, None), (11, 10, "\u53e6\u6709 1 \u5217\u672a\u5217\u51fa"), (13, 10, "\u53e6\u6709 3 \u5217\u672a\u5217\u51fa")):

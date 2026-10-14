@@ -135,8 +135,11 @@ def _duplicate_message(identifier: str) -> str:
 
 # zh_TW texts of the box that lists the hidden rows on OK (F-11 D1).
 REMOVE_ROWS_TITLE = "\u79fb\u9664\u7121\u6cd5\u986f\u793a\u7684\u5217"  # Remove Rows That Cannot Be Shown
-REMOVE_AND_SAVE = "\u79fb\u9664\u4e26\u5132\u5b58(&S)"  # Remove and &Save
-BACK_TO_EDITING = "\u8fd4\u56de\u7de8\u8f2f(&B)"  # &Back to Editing
+# The button labels have no access key: in the system Yes/No box an access key can be
+# pressed by some Alt+key (F-15).
+REMOVE_AND_SAVE = "\u79fb\u9664\u4e26\u5132\u5b58"  # Remove and Save
+BACK_TO_EDITING = "\u8fd4\u56de\u7de8\u8f2f"  # Back to Editing
+DISCARD_CHANGES = "\u653e\u68c4\u8b8a\u66f4"  # Discard Changes
 
 
 def _hidden_rows_message(name: str, *lines: str) -> str:
@@ -161,7 +164,7 @@ def _hidden_rows_box(name: str, *lines: str) -> list:
 
 def _discard_box(name: str) -> list:
     """The box Cancel, Esc and the close box show after a change (F-11 D7)."""
-    return ["ConfirmBox", "\u8981\u653e\u68c4\u5c0d\u5b57\u5178\u300c" + name + "\u300d\u6240\u505a\u7684\u8b8a\u66f4\u55ce\uff1f", "\u5c1a\u672a\u5132\u5b58\u7684\u8b8a\u66f4", "\u653e\u68c4\u8b8a\u66f4(&D)", BACK_TO_EDITING]
+    return ["ConfirmBox", "\u8981\u653e\u68c4\u5c0d\u5b57\u5178\u300c" + name + "\u300d\u6240\u505a\u7684\u8b8a\u66f4\u55ce\uff1f", "\u5c1a\u672a\u5132\u5b58\u7684\u8b8a\u66f4", DISCARD_CHANGES, BACK_TO_EDITING]
 
 
 def _unrecognized_header_box(name: str) -> list:

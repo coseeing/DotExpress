@@ -218,8 +218,8 @@ class TranslationTest(unittest.TestCase):
             "Row {line}: no source text": "第 {line} 列：沒有來源文字",
             'Row {line}: "{text}", Bopomofo "{bopomofo}" is not valid': "第 {line} 列：「{text}」的注音「{bopomofo}」格式不正確",
             "Other rows not listed: {count}": "另有 {count} 列未列出",
-            "Remove and &Save": "移除並儲存(&S)",
-            "&Back to Editing": "返回編輯(&B)",
+            "Remove and Save": "移除並儲存",
+            "Back to Editing": "返回編輯",
         }
         translation = i18n.load_translation()
 
@@ -230,11 +230,35 @@ class TranslationTest(unittest.TestCase):
         expected = {
             "Unsaved Changes": "尚未儲存的變更",
             'Do you want to discard the changes you made to dictionary "{name}"?': "要放棄對字典「{name}」所做的變更嗎？",
-            "&Discard Changes": "放棄變更(&D)",
+            "Discard Changes": "放棄變更",
         }
         translation = i18n.load_translation()
 
         self.assertEqual({msgid: translation.gettext(msgid) for msgid in expected}, expected)
+
+    def test_confirm_box_labels_have_no_access_key(self) -> None:
+        # F-15: the dictionary editor's two confirm boxes are system Yes/No boxes, where
+        # Alt+<key> presses the button whose access key has the key's code (Alt+F4 is "s").
+        # Every label dialog.py gives confirm_box, as written and in zh_TW, has no "&".
+        calls = [
+            node
+            for node in ast.walk(_module_tree("dialog.py"))
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "confirm_box"
+        ]
+        labels = []
+        for call in sorted(calls, key=lambda node: node.lineno):
+            for argument in call.args[2:4]:
+                self.assertIsInstance(argument, ast.Call, "a confirm_box label is not _(...)")
+                self.assertEqual(getattr(argument.func, "id", None), "_")
+                labels.append(argument.args[0].value)
+        translation = i18n.load_translation()
+        translated = [translation.gettext(label) for label in labels]
+
+        self.assertEqual(
+            translated,
+            ["放棄變更", "返回編輯", "移除並儲存", "返回編輯"],
+        )
+        self.assertEqual([label for label in labels + translated if "&" in label], [])
 
     def test_unrecognized_dictionary_header_string_is_translated(self) -> None:
         # F-11 review M-1: OK in the dictionary editor on a file whose header names no text column.

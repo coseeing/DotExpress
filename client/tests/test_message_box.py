@@ -18,14 +18,12 @@ def _fake_wx() -> types.ModuleType:
     wx = types.ModuleType("wx")
     wx.Window = type("Window", (), {})
     wx.MessageDialog = type("MessageDialog", (), {})
-    wx.GenericMessageDialog = type("GenericMessageDialog", (), {})
     wx.YES = 0x2
     wx.OK = 0x4
     wx.NO = 0x8
     wx.YES_NO = wx.YES | wx.NO
     wx.CANCEL = 0x10
     wx.NO_DEFAULT = 0x80
-    wx.CANCEL_DEFAULT = 0x80000000
     wx.ICON_WARNING = 0x100
     wx.ICON_ERROR = 0x200
     wx.ICON_INFORMATION = 0x800
@@ -45,7 +43,7 @@ tearDownModule = _SCOPE.deactivate
 
 message_box = message_box_module.message_box
 wx = message_box_module.wx
-CONFIRM_STYLE = 0x4 | 0x10 | 0x80000000 | 0x100  # OK | CANCEL | CANCEL_DEFAULT | ICON_WARNING
+CONFIRM_STYLE = 0x2 | 0x8 | 0x80 | 0x100  # YES_NO | NO_DEFAULT | ICON_WARNING
 
 
 class MessageBoxTest(unittest.TestCase):
@@ -155,36 +153,52 @@ class MessageBoxTest(unittest.TestCase):
             ],
         )
 
-    def test_confirm_box_is_a_generic_warning_whose_cancel_button_is_the_default(self) -> None:
-        # F-11 (D1, D7): Esc, Alt+F4, the close button and Enter all answer Cancel, which
-        # keeps the user's work. wx's generic dialog, not the native task dialog: shown from
-        # a modal dialog, a task dialog with its own labels answers Alt+F4 with its first
-        # button (measured while planning F-11), here the one that changes the user's work.
+    def test_confirm_box_is_a_system_yes_no_warning_whose_no_button_is_the_default(self) -> None:
+        # F-15: the system Yes/No box with the caller's labels, No (the one that keeps the
+        # user's work) the default, so Enter answers it. Esc, Alt+F4 and the close button
+        # do nothing in it, and without access keys no Alt+key presses a button.
         parent = object()
-        self.answers = [wx.ID_OK, wx.ID_CANCEL]
+        self.answers = [wx.ID_YES, wx.ID_NO]
 
-        with patch.object(wx, "GenericMessageDialog", self._dialog_class("GenericMessageDialog")):
-            first = message_box_module.confirm_box("message", "caption", "&Discard", "&Back", parent=parent)
-            second = message_box_module.confirm_box("message", "caption", "&Discard", "&Back")
+        first = message_box_module.confirm_box("message", "caption", "Discard", "Back", parent=parent)
+        second = message_box_module.confirm_box("message", "caption", "Discard", "Back")
 
         self.assertEqual((first, second), (True, False))
         self.assertEqual(
             self.calls[:5],
             [
-                ("GenericMessageDialog", parent, "message", "caption", CONFIRM_STYLE),
+                ("MessageDialog", parent, "message", "caption", CONFIRM_STYLE),
                 ("enter",),
-                ("SetOKCancelLabels", "&Discard", "&Back"),
+                ("SetYesNoLabels", "Discard", "Back"),
                 ("ShowModal",),
                 ("exit",),
             ],
         )
-        self.assertEqual(self.calls[5], ("GenericMessageDialog", None, "message", "caption", CONFIRM_STYLE))
+        self.assertEqual(self.calls[5], ("MessageDialog", None, "message", "caption", CONFIRM_STYLE))
 
-    def test_confirm_box_closed_any_other_way_is_cancel(self) -> None:
-        self.answers = [wx.ID_YES]
+    def test_confirm_box_any_other_answer_is_no(self) -> None:
+        for answer in (wx.ID_OK, wx.ID_CANCEL, 12345):
+            with self.subTest(answer=answer):
+                self.answers = [answer]
 
-        with patch.object(wx, "GenericMessageDialog", self._dialog_class("GenericMessageDialog")):
-            self.assertIs(message_box_module.confirm_box("message", "caption", "&Discard", "&Back"), False)
+                self.assertIs(message_box_module.confirm_box("message", "caption", "Discard", "Back"), False)
+
+    def test_confirm_box_drops_access_keys_from_its_labels(self) -> None:
+        # F-15: in the system Yes/No box Alt+<key> presses the button whose access key has
+        # the key's code (Alt+F4 is "s"), so no label may bring one back.
+        cases = [
+            (("Remove and &Save", "&Back to Editing"), ("Remove and Save", "Back to Editing")),
+            (("移除並儲存(&S)", "返回編輯(&B)"), ("移除並儲存", "返回編輯")),
+            (("放棄變更(&D)", "&&Back"), ("放棄變更", "Back")),
+        ]
+        for labels, expected in cases:
+            with self.subTest(labels=labels):
+                self.calls.clear()
+                self.answers = [wx.ID_NO]
+
+                message_box_module.confirm_box("message", "caption", *labels)
+
+                self.assertEqual(self.calls[2], ("SetYesNoLabels", *expected))
 
     def test_a_label_the_platform_refuses_still_shows_the_box(self) -> None:
         self.label_result = False

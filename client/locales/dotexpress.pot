@@ -889,12 +889,12 @@ msgid "CSV files (*.csv)|*.csv"
 msgstr ""
 
 #: dialog.py:58 dialog.py:123 settings/dialogs.py:145 settings/dialogs.py:295
-#: ui/message_box.py:29 ui/message_box.py:31
+#: ui/message_box.py:34 ui/message_box.py:36
 msgid "OK"
 msgstr ""
 
 #: dialog.py:59 dialog.py:124 gui.py:577 settings/dialogs.py:146
-#: settings/dialogs.py:297 ui/message_box.py:29
+#: settings/dialogs.py:297 ui/message_box.py:34
 msgid "Cancel"
 msgstr ""
 
@@ -1048,11 +1048,11 @@ msgid "Unsaved Changes"
 msgstr ""
 
 #: dialog.py:594
-msgid "&Discard Changes"
+msgid "Discard Changes"
 msgstr ""
 
 #: dialog.py:595 dialog.py:623
-msgid "&Back to Editing"
+msgid "Back to Editing"
 msgstr ""
 
 #: dialog.py:606
@@ -1081,7 +1081,7 @@ msgid "Remove Rows That Cannot Be Shown"
 msgstr ""
 
 #: dialog.py:622
-msgid "Remove and &Save"
+msgid "Remove and Save"
 msgstr ""
 
 #: dialog.py:630

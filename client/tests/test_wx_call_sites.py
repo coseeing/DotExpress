@@ -112,16 +112,21 @@ class WxCallSitesTest(unittest.TestCase):
         # reference counts, called or not (message_box = wx.MessageBox), under any alias.
         self.assertEqual(find_in_production(is_attribute("MessageBox")), [])
 
-    def test_message_dialogs_are_the_helper_or_set_every_label(self) -> None:
-        # F-5's close dialog sets all three of its labels itself.
+    def test_message_dialogs_are_the_helpers_or_set_every_label(self) -> None:
+        # F-5's close dialog sets all three of its labels itself; confirm_box sets both of
+        # its Yes/No labels (F-15).
         self.assertEqual(
             find_in_production(is_attribute("MessageDialog")),
-            ["gui.py:BrailleFrame._ask_after_close_save_failure", "ui/message_box.py:message_box"],
+            [
+                "gui.py:BrailleFrame._ask_after_close_save_failure",
+                "ui/message_box.py:message_box",
+                "ui/message_box.py:confirm_box",
+            ],
         )
 
-    def test_the_only_generic_message_dialog_is_the_confirmation_box(self) -> None:
-        # F-11: ui.message_box.confirm_box uses wx's generic dialog and sets both labels.
-        self.assertEqual(find_in_production(is_attribute("GenericMessageDialog")), ["ui/message_box.py:confirm_box"])
+    def test_no_production_code_uses_the_generic_message_dialog(self) -> None:
+        # F-15: confirm_box, F-11's only generic dialog, is a system Yes/No box now.
+        self.assertEqual(find_in_production(is_attribute("GenericMessageDialog")), [])
 
     def test_no_production_module_imports_wx_names_around_the_scans(self) -> None:
         # from wx import MessageBox, or import wx as _wx, would let a use slip past the

@@ -36,8 +36,14 @@ def _render_item(item: AlignmentItem) -> str:
 def render_dual_view_html(
 	model: DualViewModel,
 	*,
+	lang: str,
 	empty_message: str = "No conversion data is available for this document.",
 ) -> str:
+	"""The Dual View page; ``lang`` is the BCP 47 tag of the interface language (F-14 D6).
+
+	``lang`` has no default, so that no producer can forget it.
+	"""
+	language = html.escape(lang, quote=True)
 	if model.segments:
 		body = "".join(
 			_render_item(item)
@@ -48,7 +54,7 @@ def render_dual_view_html(
 		body = f'<p class="empty-state">{html.escape(empty_message, quote=True)}</p>'
 
 	return f"""<!doctype html>
-<html lang="en">
+<html lang="{language}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

@@ -6,7 +6,7 @@ import webbrowser
 import wx
 
 import about
-from i18n import _, resource_path
+from i18n import _, html_language_tag, resource_path
 from app_paths import ApplicationDataError, ApplicationPaths, build_application_paths, prepare_application_directories
 from conversion.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
@@ -331,6 +331,7 @@ class BrailleFrame(wx.Frame):
 		results = controller.get_dual_view_results(controller.open_document_name)
 		return render_dual_view_html(
 			build_dual_view_model(results, mathml_converter=latex_to_mathml),
+			lang=html_language_tag(),
 			empty_message=_("No conversion data is available for this document."),
 		)
 

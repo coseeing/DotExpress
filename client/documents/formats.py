@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from conversion.math_service import latex_to_mathml
 from dual_view.html import render_dual_view_html
 from dual_view.model import build_dual_view_model
-from i18n import N_, _
+from i18n import N_, _, html_language_tag
 
 if TYPE_CHECKING:
     from documents.importers import ImportedDocument
@@ -108,6 +108,8 @@ def _write_html(path: Path | str, document: Document, context: ExportContext) ->
     destination = Path(path)
     html = render_dual_view_html(
         build_dual_view_model(context.dual_view_results, mathml_converter=latex_to_mathml),
+        # The interface language, read at each export (F-14 D6).
+        lang=html_language_tag(),
         # As the in-app Dual View shows it (F-12 D8).
         empty_message=_("No conversion data is available for this document."),
     )

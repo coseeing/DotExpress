@@ -916,7 +916,7 @@ msgstr "CSV 檔案 (*.csv)|*.csv"
 msgid "OK"
 msgstr "確定"
 
-#: dialog.py:59 dialog.py:124 gui.py:537 settings/dialogs.py:146
+#: dialog.py:59 dialog.py:124 gui.py:538 settings/dialogs.py:146
 #: settings/dialogs.py:297 ui/message_box.py:29
 msgid "Cancel"
 msgstr "取消"
@@ -936,8 +936,8 @@ msgstr "來源文字「{identifier}」已存在。"
 
 #: dialog.py:78 dialog.py:567 dialog.py:606 dialog.py:897
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
-#: documents/export_coordinator.py:145 gui.py:502 gui.py:787 gui.py:1103
-#: gui.py:1115 ui/conversion_presenter.py:298
+#: documents/export_coordinator.py:145 gui.py:503 gui.py:788 gui.py:1104
+#: gui.py:1116 ui/conversion_presenter.py:298
 msgid "Error"
 msgstr "錯誤"
 
@@ -1243,7 +1243,7 @@ msgstr ""
 "檔案不是以 UTF-8 儲存。請重新存成「CSV UTF-8 (逗號分隔)」格式，例如在 Excel "
 "中使用「另存新檔」。"
 
-#: dictionaries/read_problems.py:50 documents/import_problems.py:38 gui.py:469
+#: dictionaries/read_problems.py:50 documents/import_problems.py:38 gui.py:470
 msgid ""
 "The file cannot be opened. It may be in use by another program, or you may "
 "not have permission to read it. Close the other program and try again."
@@ -1258,7 +1258,7 @@ msgid ""
 "closed. Details: {error}"
 msgstr "檔案不是有效的 CSV 檔案。請檢查是否有未成對的引號。詳細資訊：{error}"
 
-#: dictionaries/read_problems.py:57 documents/import_problems.py:54 gui.py:473
+#: dictionaries/read_problems.py:57 documents/import_problems.py:54 gui.py:474
 #, python-brace-format
 msgid "The file cannot be read: {error}"
 msgstr "無法讀取檔案：{error}"
@@ -1317,55 +1317,55 @@ msgstr ""
 msgid "All Supported Files"
 msgstr "所有支援的檔案"
 
-#: documents/formats.py:112 gui.py:334
+#: documents/formats.py:114 gui.py:335
 msgid "No conversion data is available for this document."
 msgstr "此文件沒有可顯示的轉換資料。"
 
-#: documents/formats.py:122
+#: documents/formats.py:124
 msgid "DEP"
 msgstr "DEP"
 
-#: documents/formats.py:128
+#: documents/formats.py:130
 msgid "DotExpress files (*.dep)|*.dep"
 msgstr "DotExpress 檔案 (*.dep)|*.dep"
 
-#: documents/formats.py:129
+#: documents/formats.py:131
 msgid "Package DEP"
 msgstr "封裝檔 DEP"
 
-#: documents/formats.py:134
+#: documents/formats.py:136
 msgid "DOCX"
 msgstr "DOCX"
 
-#: documents/formats.py:144
+#: documents/formats.py:146
 msgid "EPUB"
 msgstr "EPUB"
 
-#: documents/formats.py:154
+#: documents/formats.py:156
 msgid "PDF"
 msgstr "PDF"
 
-#: documents/formats.py:164
+#: documents/formats.py:166
 msgid "TXT"
 msgstr "TXT"
 
-#: documents/formats.py:174
+#: documents/formats.py:176
 msgid "BRL"
 msgstr "BRL"
 
-#: documents/formats.py:180
+#: documents/formats.py:182
 msgid "Braille files (*.brl)|*.brl"
 msgstr "點字檔 (*.brl)|*.brl"
 
-#: documents/formats.py:181
+#: documents/formats.py:183
 msgid "Braille BRL"
 msgstr "點字檔 BRL"
 
-#: documents/formats.py:193
+#: documents/formats.py:195
 msgid "HTML files (*.html)|*.html"
 msgstr "HTML 檔 (*.html)|*.html"
 
-#: documents/formats.py:194
+#: documents/formats.py:196
 msgid "Dual View HTML"
 msgstr "雙視檔 HTML"
 
@@ -1400,7 +1400,7 @@ msgstr "這個 PDF 檔已加密，無法匯入。"
 msgid "This file type cannot be imported."
 msgstr "無法匯入這種類型的檔案。"
 
-#: documents/workspace.py:466 gui.py:772
+#: documents/workspace.py:466 gui.py:773
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr "文件「{name}」已存在。"
@@ -1413,7 +1413,7 @@ msgid ""
 msgstr ""
 "名稱「{name}」已被工作區資料夾中的「{file}」使用，但這個檔案不在文件清單中。"
 
-#: documents/workspace_service.py:272 gui.py:520 gui.py:530
+#: documents/workspace_service.py:272 gui.py:521 gui.py:531
 #, python-brace-format
 msgid "Failed to save document: {error}"
 msgstr "儲存文件失敗：{error}"
@@ -1438,11 +1438,11 @@ msgstr "可按快顯鍵開啟選單。"
 msgid "Braille Result"
 msgstr "點字結果"
 
-#: gui.py:253 gui.py:1181
+#: gui.py:253 gui.py:1182
 msgid "File"
 msgstr "檔案"
 
-#: gui.py:266 gui.py:1181 settings/dialogs.py:359
+#: gui.py:266 gui.py:1182 settings/dialogs.py:359
 msgid "Translation"
 msgstr "轉譯"
 
@@ -1462,12 +1462,12 @@ msgstr "說明"
 msgid "Dual View"
 msgstr "雙視檢視"
 
-#: gui.py:357
+#: gui.py:358
 #, python-brace-format
 msgid "Failed to open dual view: {error}"
 msgstr "無法開啟雙視檢視：{error}"
 
-#: gui.py:476
+#: gui.py:477
 #, python-brace-format
 msgid ""
 "The file is damaged, and a backup copy could not be saved as \"{backup}\" "
@@ -1475,7 +1475,7 @@ msgid ""
 msgstr ""
 "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。詳細資訊：{error}"
 
-#: gui.py:480
+#: gui.py:481
 msgid ""
 "The file cannot be written. It may be in use by another program, or you may "
 "not have permission to write to it. Close the other program and try again."
@@ -1483,13 +1483,13 @@ msgstr ""
 "無法寫入檔案。檔案可能正被其他程式使用，或你沒有寫入權限。請關閉其他程式後再"
 "試一次。"
 
-#: gui.py:485
+#: gui.py:486
 msgid ""
 "The file cannot be written. Check that the disk has free space and that you "
 "can write to the folder."
 msgstr "無法寫入檔案。請確認磁碟還有可用空間，且你有該資料夾的寫入權限。"
 
-#: gui.py:488
+#: gui.py:489
 #, python-brace-format
 msgid ""
 "DotExpress cannot save its settings to \"{path}\". Changes to the settings "
@@ -1503,48 +1503,48 @@ msgstr ""
 "\n"
 "{reason}"
 
-#: gui.py:491
+#: gui.py:492
 msgid "Settings Not Saved"
 msgstr "設定未儲存"
 
-#: gui.py:531
+#: gui.py:532
 msgid "Cannot Save Document"
 msgstr "無法儲存文件"
 
-#: gui.py:535
+#: gui.py:536
 msgid ""
 "Changes made since the last successful save have not been saved. If you "
 "close without saving, these changes will be lost."
 msgstr "上次成功儲存之後的修改尚未儲存。如果不儲存就關閉，這些修改將會遺失。"
 
-#: gui.py:537
+#: gui.py:538
 msgid "&Retry"
 msgstr "重試(&R)"
 
-#: gui.py:537
+#: gui.py:538
 msgid "Close &Without Saving"
 msgstr "不儲存就關閉(&W)"
 
-#: gui.py:544
+#: gui.py:545
 #, python-brace-format
 msgid "Failed to open website: {error}"
 msgstr "開啟網站失敗：{error}"
 
-#: gui.py:547
+#: gui.py:548
 msgid "About DotExpress"
 msgstr "關於 DotExpress"
 
-#: gui.py:560
+#: gui.py:561
 #, python-brace-format
 msgid "Unable to open text processing script: {error}"
 msgstr "無法開啟文字處理程式：{error}"
 
-#: gui.py:561 settings/dialogs.py:125 settings/dialogs.py:165
+#: gui.py:562 settings/dialogs.py:125 settings/dialogs.py:165
 #: ui/translation_menu.py:10
 msgid "Text Processing"
 msgstr "文字處理"
 
-#: gui.py:667
+#: gui.py:668
 #, python-brace-format
 msgid ""
 "Some characters in document \"{name}\" cannot be shown ({count} in all). "
@@ -1559,16 +1559,16 @@ msgstr ""
 "\n"
 "轉換前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。"
 
-#: gui.py:672
+#: gui.py:673
 msgid "Characters Replaced"
 msgstr "已取代字元"
 
-#: gui.py:736
+#: gui.py:737
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr "刪除無效工作區文件失敗：{error}"
 
-#: gui.py:782
+#: gui.py:783
 #, python-brace-format
 msgid ""
 "Choose another name, or move or delete that file. Workspace folder:\n"
@@ -1577,7 +1577,7 @@ msgstr ""
 "請改用其他名稱，或將這個檔案移走或刪除。工作區資料夾：\n"
 "{folder}"
 
-#: gui.py:816
+#: gui.py:817
 #, python-brace-format
 msgid ""
 "DotExpress was interrupted while saving or renaming a document. These "
@@ -1593,76 +1593,76 @@ msgstr ""
 "\n"
 "請確認內容是否正確。"
 
-#: gui.py:819
+#: gui.py:820
 msgid "Documents Recovered"
 msgstr "已復原文件"
 
-#: gui.py:877
+#: gui.py:878
 msgid "Add Document"
 msgstr "新增文件"
 
-#: gui.py:893
+#: gui.py:894
 msgid "Rename Document"
 msgstr "重新命名文件"
 
-#: gui.py:917
+#: gui.py:918
 #, python-brace-format
 msgid "Do you want to delete document \"{name}\"?"
 msgstr "要刪除文件「{name}」嗎？"
 
-#: gui.py:918
+#: gui.py:919
 msgid "Confirm Delete Document"
 msgstr "確認刪除文件"
 
-#: gui.py:927 gui.py:954
+#: gui.py:928 gui.py:955
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr "刪除文件失敗：{error}"
 
-#: gui.py:946
+#: gui.py:947
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr "刪除全部會移除所有文件。要繼續嗎？"
 
-#: gui.py:947
+#: gui.py:948
 msgid "Confirm Delete All"
 msgstr "確認刪除全部"
 
-#: gui.py:980
+#: gui.py:981
 msgid "Import Document"
 msgstr "匯入文件"
 
-#: gui.py:1000
+#: gui.py:1001
 msgid "Import Issues"
 msgstr "匯入問題"
 
-#: gui.py:1001
+#: gui.py:1002
 msgid "Some files were skipped during import."
 msgstr "匯入時有部分檔案被略過。"
 
-#: gui.py:1114
+#: gui.py:1115
 #, python-brace-format
 msgid "Failed to open the dictionary editor: {error}"
 msgstr "無法開啟字典編輯器：{error}"
 
-#: gui.py:1239
+#: gui.py:1240
 msgid "Export Document"
 msgstr "匯出文件"
 
-#: gui.py:1249
+#: gui.py:1250
 msgid "Export All Documents"
 msgstr "匯出全部文件"
 
-#: gui.py:1258
+#: gui.py:1259
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr "目的資料夾中已有一個或多個檔案會被覆蓋。要全部覆蓋嗎？"
 
-#: gui.py:1261
+#: gui.py:1262
 msgid "Confirm Overwrite"
 msgstr "確認覆蓋"
 
-#: gui.py:1267
+#: gui.py:1268
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1679,7 +1679,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: gui.py:1270
+#: gui.py:1271
 msgid "Startup Error"
 msgstr "啟動錯誤"
 

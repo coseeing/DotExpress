@@ -171,7 +171,9 @@ def snapshot_run(text: str, output_mode: str, width: int, dictionary_path: Path)
         for segment in output.dual_view_segments
     ]
     model = build_dual_view_model(output.dual_view_segments, mathml_converter=fake_mathml)
-    dual_view_html = render_dual_view_html(model)
+    # The fixture was recorded with lang="en", before the page declared the interface language
+    # (F-14 D6); the explicit value keeps its bytes.
+    dual_view_html = render_dual_view_html(model, lang="en")
     run = {
         "display_text": output.display_text,
         "wrapped_braille": wrapped_braille,

@@ -481,7 +481,7 @@ class SharedSetupConsumerTest(unittest.TestCase):
         self.assert_uses_shared_i18n("about.py", {"N_", "_"})
 
     def test_gui_uses_shared_i18n(self) -> None:
-        self.assert_uses_shared_i18n("gui.py", {"_", "resource_path"})
+        self.assert_uses_shared_i18n("gui.py", {"_", "html_language_tag", "resource_path"})
 
 
 class DisplayTimeTranslationTest(unittest.TestCase):

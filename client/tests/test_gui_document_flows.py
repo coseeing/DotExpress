@@ -1619,13 +1619,15 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             self.assertEqual((root / "nested" / "alpha.brl").read_bytes(), "⠁⠃".encode("utf-8"))
 
             frame._export_coordinator.write_document(root / "alpha.html", Document("alpha", "text", "b"), "html")
-            cached_html = render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml))
+            cached_html = render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml), lang="zh-TW")
             self.assertEqual((root / "alpha.html").read_bytes(), text_file_bytes(cached_html))
             self.assertIn('<span class="source">a</span>', cached_html)
 
             frame._export_coordinator.write_document(root / "beta.html", Document("beta", "text", "b"), "html")
             # The page without conversion data says so in zh_TW (F-12 D8).
-            empty_html = render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml), empty_message=EMPTY_PAGE)
+            empty_html = render_dual_view_html(
+                build_dual_view_model((), mathml_converter=latex_to_mathml), lang="zh-TW", empty_message=EMPTY_PAGE
+            )
             self.assertEqual((root / "beta.html").read_bytes(), text_file_bytes(empty_html))
             self.assertNotEqual(cached_html, empty_html)
 
@@ -1644,6 +1646,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
         frame._document_controller.set_dual_view_results("alpha", results)
         expected = render_dual_view_html(
             build_dual_view_model(results, mathml_converter=latex_to_mathml),
+            lang="zh-TW",
             empty_message=gui._("No conversion data is available for this document."),
         )
 
@@ -1655,6 +1658,20 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             path = Path(directory) / "alpha.html"
             frame._export_coordinator.write_document(path, Document("alpha", "text", "b"), "html")
             self.assertEqual(path.read_bytes(), text_file_bytes(expected))
+
+    def test_the_dual_view_window_declares_the_interface_language(self) -> None:
+        # F-14 (D6): read at each render, for the window, its browser copy and the empty page.
+        self.addCleanup(i18n.set_language, i18n.current_language())
+        frame = self._make_export_frame()
+        cases = (("zh_TW", "zh-TW", EMPTY_PAGE), ("en", "en", "No conversion data is available for this document."))
+        for language, tag, empty in cases:
+            with self.subTest(language):
+                i18n.set_language(language)
+
+                page = frame._render_dual_view_for_open_document()
+
+                self.assertTrue(page.startswith(f'<!doctype html>\n<html lang="{tag}">\n'), page[:60])
+                self.assertIn(empty, page)
 
     def test_export_all_html_uses_each_document_cache(self) -> None:
         frame = self._make_export_frame()
@@ -1677,11 +1694,13 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
 
             self.assertEqual(
                 (root / "alpha.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml)),
+                render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml), lang="zh-TW"),
             )
             self.assertEqual(
                 (root / "beta.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml), empty_message=EMPTY_PAGE),
+                render_dual_view_html(
+                    build_dual_view_model((), mathml_converter=latex_to_mathml), lang="zh-TW", empty_message=EMPTY_PAGE
+                ),
             )
         frame.show_info.assert_called_once_with(
             gui._(ExportBatchResult().summary_template),

@@ -4,7 +4,7 @@ from i18n import _
 copyrightYears = "2025-2026"
 name = "DotExpress"
 url = "https://coseeing.org"
-version = "1.2"
+version = "1.8"
 version_detailed = "1.2"
 
 longName = _("DotExpress")

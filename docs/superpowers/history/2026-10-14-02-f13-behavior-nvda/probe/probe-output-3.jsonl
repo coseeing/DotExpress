@@ -1,0 +1,1 @@
+{"variant": "system", "action": "alt-f10", "box": {"class": "#32770", "buttons": ["是(Y)", "否(N)"], "focus": "否(N)", "owner": "F13 probe editor", "sysmenu": false, "close button": false}, "did": "sent alt-f10", "result": {"variant": "system", "answer": "ID_YES", "affirmative": true, "wx": "4.2.5 msw (phoenix) wxWidgets 3.2.9"}}

@@ -124,6 +124,11 @@ N1 `檔案已損壞，而且在取代它之前無法先備份為「{backup}」�
 
 驗證（本輪，`$PY -B -X utf8 -m unittest`，cwd 為 worktree 的 `client/`，每批執行前可用記憶體都 ≥ 600 MB，實際 611–679 MB）：`tests.test_i18n` 48 個 OK；`test_dual_view_html`、`test_document_formats`、`test_settings_dialogs`、`test_settings_options` 135 個 OK；`test_dialog_validation`、`test_dictionary_entry_list_model`、`test_config`、`test_translation_golden` 147 個 OK；`test_dictionary_entries_dialog` 99 個 OK；`test_gui_document_flows` 240 個 OK（含 About 與備份訊息的測試）；F-13 合併進來的 `test_conversion_presenter`、`test_client_init` 58 個 OK。合計 727 個，全部通過。About 測試（`test_the_about_text_is_translated_when_shown`、`test_about_box_uses_the_helper`）在 1.8 下通過；catalog 測試（`test_generate_pot_extracts_n_keyword` 等）在 `test_i18n` 內通過。三個 fixture 的 blob sha256 不變（`e67d95a1…`、`f493da52…`、`8dc8572e…`）；`client/braille/`、`task.md`、`client2/`、`preprocessing/`、`testdata/` 與使用者資料都沒有改動。M-4 的新測試沒有另做 mutant 執行。
 
-**尚未執行（由 orchestrator 之後排程）：** 完整測試、修正階段的 build，以及 GUI 項目重跑（至少 144 用新腳本；141–143 視需要）。本輪依記憶體限制沒有執行這些，也沒有補跑 review 第 2 節的 M6–M20。
+**完整測試、build 與 GUI（2026-10-15，於 `a477b39`，一次一項，每項開始前可用記憶體 ≥ 600 MB）：**
+
+- 完整測試：`$PY -B -X utf8 -m unittest discover -s tests`（cwd 為 worktree 的 `client/`）`Ran 1672 tests`、`OK (skipped=6)`（`main` 的 1651 + F-14 的 20 + M-4 的 1），一次通過，沒有 flaky 失敗。
+- Build：`scripts\build-dotexpress.bat`（PyInstaller 6.21.0、Python 3.13.15，`Build complete!`；`PYZ-00.toc`、`Analysis-00.toc` 確認模組與 `gui.py` 來自 worktree），`HEAD:client` `e4dc089f014011e1b8fd84e8bb31adb113c2eb39`。`D:\dxtest\N-f14b\DotExpress.exe`：48,796,663 bytes，sha256 `E7C0D234EF4FDD691025BF46E19C030FB0911337D352FDDD8ECA9D4AC38AE82D`；「關於」顯示版本 1.8。
+- GUI（N-f14b，見 `auto-results.md` 的「修正階段：N-f14b」）：141、142、143、144 全部 ✔。141、144（新腳本：替身瀏覽器在啟動前安裝，執行前確認替身會先被找到；沒有啟動真的瀏覽器）除了 F-13 啟動輔助多印的一行外與 N-f14 的 log 完全相同；143 只有「關於」的版本由 1.2 變成 1.8（合併 `main` 的預期結果）；142 的框、檔案與訊息相同，只有 `config.log` 的 ERROR 行數是 11（N-f14 原記錄 16），重跑 N-f14b 與在新資料夾重跑 N-f14 都是 11，判定為原 N-f14 那次執行多了一次儲存的偶發情況，不是 build 的差異。測試工具調整：`auto/run_item.sh` 新增 `newb`（資料夾 `D:\dxtest\auto<N>-f14b`），並改用 F-13 的 `mei_poll.ps1` 清理 `_MEI*`；`auto/safe_run.py` 對含 F-13 的 build 換上 `f13gui` 的啟動輔助。
+- 三個 fixture 的 blob sha256 仍不變（`e67d95a1…`、`f493da52…`、`8dc8572e…`）。review 第 2 節的 M6–M20 沒有補跑。
 
 仍留給使用者：項目 145（NVDA，未勾選）；spec「本 spec 引入的使用者可見預設」列出的未確認預設；移除雙視檢視視窗 dead code 的後續任務。

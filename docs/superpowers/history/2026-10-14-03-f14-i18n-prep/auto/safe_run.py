@@ -57,6 +57,14 @@ def safe_focused():
 
 
 f14gui.H11.focused = safe_focused
+if os.environ.get("F14_START") == "f13":
+	# A build that contains F-13 (N-f14b) shows its main window before the workspace is
+	# loaded: F-13's start helpers wait for the load (run_item.sh sets F14_START).
+	sys.path.insert(0, os.path.join(f14gui.HISTORY, "2026-10-14-02-f13-behavior-nvda", "auto"))
+	import f13gui  # noqa: E402
+
+	f13gui.FOLDER = FOLDER
+	f13gui.install()
 sys.path.insert(0, os.path.dirname(SCRIPT))
 sys.argv = [SCRIPT] + sys.argv[2:]
 runpy.run_path(SCRIPT, run_name="__main__")

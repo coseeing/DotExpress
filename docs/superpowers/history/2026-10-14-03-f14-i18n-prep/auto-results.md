@@ -29,6 +29,24 @@
 | 144 (a) | regression | （`auto144r3-f14`，替身瀏覽器）`alpha` 轉換後「轉譯 > 雙視檢視」：頁面 `<html lang="zh-TW">`，6 個 cell，沒有錯誤框；開啟 `beta`（未轉換）後再一次：`<html lang="zh-TW">`，0 個 cell，含 `此文件沒有可顯示的轉換資料。`，沒有錯誤框；程式結束後 `dual_view` 資料夾是空的 | — | ✔（作法見偏離 1） |
 | 144 (b) | regression | `config.json` 完好時改寬度為 30、按「確定」：沒有框；`config.json` 的 width 為 30 | — | ✔ |
 
+## 修正階段：N-f14b（2026-10-15）
+
+- 受測：`fix/f14-i18n-prep` 在 `a477b39` 的 packaged build（合併 `main` `da01418` 的 `180ba57`，含 F-13 與 `about.py` 1.8，加上 review 修正 `05b07ec`、`ee6d88f`），`HEAD:client` `e4dc089f014011e1b8fd84e8bb31adb113c2eb39`，以下稱 N-f14b。Build 方法同上（`scripts\build-dotexpress.bat`，主簽出的 `client\.venv\Scripts` 置於 `PATH` 最前面；PyInstaller 6.21.0、Python 3.13.15，`Build complete!`；`PYZ-00.toc` 確認 `i18n.py`、`about.py`、`dialog.py`、`ui\conversion_presenter.py`、`dual_view\html.py`、`settings\dialogs.py` 來自 worktree，`Analysis-00.toc` 確認 `gui.py` 來自 worktree；原始碼的 `about.py` 是 `version = "1.8"`，143 (a) 的「關於」框也顯示 1.8）。`D:\dxtest\N-f14b\DotExpress.exe`：48,796,663 bytes，sha256 `E7C0D234EF4FDD691025BF46E19C030FB0911337D352FDDD8ECA9D4AC38AE82D`。N-f14、N-f12b 與其他 build 沒有動。
+- 完整測試（build 之前，可用記憶體 1851 MB）：`$PY -B -X utf8 -m unittest discover -s tests`，cwd 為 worktree 的 `client/`：`Ran 1672 tests`、`OK (skipped=6)`（`main` 的 1651 + F-14 的 20 + M-4 的 1），沒有任何已知的 flaky 測試失敗，不需重跑。
+- 腳本調整（只改測試工具）：N-f14b 含 F-13 的啟動順序（主視窗先出現、再載入工作區），舊的 `f8bgui.start` 會太早返回，所以 `auto/run_item.sh` 新增 build 名稱 `newb`（`D:\dxtest\N-f14b\DotExpress.exe`，資料夾 `D:\dxtest\auto<N>-f14b`，資料夾檢查改為接受 `…-f14` 與 `…-f14b`，執行前印出展開後的資料夾與 exe），並設定 `F14_START=f13`；`auto/safe_run.py` 看到它時以 F-13 的 `f13gui.install()` 換上會等工作區載入完成的啟動輔助（log 多一行 `f13 start: []`，表示啟動時沒有框）。`_MEI*` 清理改用 F-13 的 `auto/mei_poll.ps1`：只刪除本項目程序載入的 `%TEMP%\_MEI<n>`。本輪 6 次執行共記錄並刪除 7 個；之前與之後 `%TEMP%\_MEI*` 都是 0 個。
+- 雙視檢視：執行 144 前在 scratchpad 以 worktree 的 `dual_view.browser.find_browser_executable("chrome")`（只查找、不啟動）確認替身 `chrome.exe` 放在 `PATH` 最前面時會先被找到；`item144.py` 在程式啟動前一律安裝替身，`dual_view_page` 在替身不在最前面時拒絕執行。這次沒有啟動真的瀏覽器。
+- 每個項目在新資料夾、一次一個，經 `auto/safe_run.py`；開始前可用記憶體 1432–1619 MB、C: 約 20.5 GB。沒有任何腳本讀寫剪貼簿；只結束 exe 位於該項目資料夾下的程序（結束後沒有殘留）。
+
+| # | N-f14b | 與 N-f14 的 log 比較 | 判定 |
+| --- | --- | --- | --- |
+| 141 | (a) `alpha.html` `<html lang="zh-TW">`、6 cell、CRLF；(c) 全部匯出 `alpha.html` 6 cell、`beta.html` 9 cell，都是 `zh-TW`，框 `所有文件皆已成功匯出。`；(b) 空工作區 `new.html` `zh-TW`、0 cell、含 `此文件沒有可顯示的轉換資料。` | 除了 `f13 start` 一行外完全相同（`auto141-f14`） | ✔ |
+| 142 | 「設定未儲存」框，content `檔案已損壞，而且在取代它之前無法先備份為「<d>\config.json.bak」。檔案或備份檔可能正被其他程式使用，或你沒有該資料夾的寫入權限。請關閉其他程式後再試一次。`，owner `DotExpress 設定：轉譯`；按「確定」後沒有框；`config.json` 仍是 `{`、`.bak` 仍是資料夾；`log\config.log` 的 ERROR 都是 `Failed to save config file <d>\config.json`，traceback 含 `WinError 5` | 框、檔案與訊息都相同；只有 `config.log` 的 ERROR 行數不同：N-f14b 11 行（`auto142-f14b`、重跑 `auto142r2-f14b` 都一樣），`auto142-f14` 16 行。見下方說明 | ✔ |
+| 143 | (a) 「關於」框與 N-f14 相同，只有 `版本：1.8 (1.8)`（N-f14 為 `1.2 (1.2)`）；(b) 設定的標題、分類與三個面板的描述相同；(c) `types` 的類型欄與「新增」的類型選項相同 | 只有版本一行不同，是合併 `main` 的 `about.py` 1.8 的預期結果，沒有重跑 | ✔ |
+| 144 | (a) `alpha` 的頁面 `zh-TW`、6 cell；開啟 `beta` 後 `zh-TW`、0 cell、含空頁面句子；都沒有錯誤框；結束後 `dual_view` 是空的；(b) 寬度 30、沒有框 | 除了 `f13 start` 一行外與 `auto144r3-f14` 完全相同 | ✔ |
+
+- **142 的 ERROR 行數：** 每次儲存設定（「套用」或「確定」）呼叫 5 個 setter，各記錄一行；這個腳本預期 1（啟動時）+ 5（套用）+ 5（確定）= 11 行。`auto142-f14` 的 16 行多了一組 5 行（時間在「確定」那組之後 4 秒，也就是結束時），是那一次執行多了一次儲存。為了判斷是否與 build 有關，在新資料夾 `auto142r2-f14` 以 N-f14 重跑一次（舊的啟動輔助，與原本相同）：11 行，與 N-f14b 相同，N-f12b 的 `auto142-f12b-f14` 也是 11 行。所以多出的一組是 `auto142-f14` 那次執行的偶發情況，不是 build 的差異；N-f14 先前記錄的判定（訊息內容）不受影響。
+- 這次沒有重跑 145（NVDA，仍留給使用者）；要用含 review 修正的 build 時，可執行 `python auto\manual145.py D:\dxtest\N-f14b\DotExpress.exe <新的資料夾>`（需 pywinauto 的 venv）。
+
 ## 仍需人工（使用者）
 
 - [ ] **145（NVDA）**：用 `D:\dxtest\manual145-f14`（`auto/manual145.py` 準備：N-f14 的 exe、待轉換的文件 `中文`、`config.json` = `{` 加上資料夾 `config.json.bak`、空的 `out\`）。開啟 NVDA 並打開自動切換語言，啟動 `D:\dxtest\manual145-f14\DotExpress.exe`：

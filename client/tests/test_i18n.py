@@ -272,6 +272,12 @@ class TranslationTest(unittest.TestCase):
     def test_unknown_msgid_is_returned_unchanged(self) -> None:
         self.assertEqual(i18n._("No such msgid in the DotExpress catalog"), "No such msgid in the DotExpress catalog")
 
+    def test_the_empty_string_is_not_the_catalog_header(self) -> None:
+        # F-14 (D1, O3): gettext("") gives the catalog header ("Project-Id-Version: ..."), which
+        # an empty title or error text would have shown; _("") gives "".
+        self.assertIn("Project-Id-Version", i18n.load_translation().gettext(""))
+        self.assertEqual(i18n._(""), "")
+
     def test_load_translation_falls_back_without_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as empty_dir:
             translation = i18n.load_translation(localedir=Path(empty_dir))
@@ -301,6 +307,52 @@ class TranslationTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "一般")
+
+
+class InterfaceLanguageTest(unittest.TestCase):
+    """F-14 (D1): _ translates through the active catalog, and i18n reports the interface language."""
+
+    def setUp(self) -> None:
+        # Each test that switches the catalog puts the language of its start back, so that no
+        # later test runs in English (the dictionary trace fixture holds zh_TW labels).
+        self.addCleanup(i18n.set_language, i18n.current_language())
+
+    def test_the_interface_language_is_zh_tw(self) -> None:
+        self.assertEqual(i18n.SOURCE_LANGUAGE, "en")
+        self.assertEqual(i18n.current_language(), "zh_TW")
+        self.assertEqual(i18n.html_language_tag(), "zh-TW")
+        self.assertEqual(i18n.html_language_tag("zh_TW"), "zh-TW")
+        self.assertEqual(i18n.html_language_tag("en"), "en")
+
+    def test_a_language_without_a_catalog_shows_the_msgids(self) -> None:
+        i18n.set_language("en")
+
+        self.assertEqual((i18n.current_language(), i18n.html_language_tag()), ("en", "en"))
+        self.assertEqual(i18n._("General"), "General")
+
+        i18n.set_language("zh_TW")
+
+        self.assertEqual((i18n.current_language(), i18n.html_language_tag()), ("zh_TW", "zh-TW"))
+        self.assertEqual(i18n._("General"), "一般")
+
+    def test_a_consumer_imported_before_the_switch_follows_it(self) -> None:
+        # dictionaries.entries has held "from i18n import _" since its import.
+        import dictionaries.entries as consumer
+
+        self.assertEqual(consumer._("General"), "一般")
+
+        i18n.set_language("en")
+
+        self.assertEqual(consumer._("General"), "General")
+        self.assertEqual(consumer._("Startup Error"), "Startup Error")
+
+    def test_a_missing_catalog_reports_the_source_language(self) -> None:
+        # O2: the user then sees the English msgids, so the HTML says lang="en".
+        with tempfile.TemporaryDirectory() as empty_dir:
+            i18n.set_language("zh_TW", localedir=Path(empty_dir))
+
+        self.assertEqual((i18n.current_language(), i18n.html_language_tag()), ("en", "en"))
+        self.assertEqual(i18n._("General"), "General")
 
 
 class SharedSetupConsumerTest(unittest.TestCase):

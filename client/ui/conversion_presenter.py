@@ -184,6 +184,14 @@ class ConversionPresenter:
         """Whether a job is active (its result not yet delivered) or queued (F-9 D5)."""
         return self._active is not None or bool(self._queue)
 
+    def worker_alive(self) -> bool:
+        """Whether the conversion thread is still running (F-13 D3).
+
+        Unlike ``is_running``, it stays true after ``shutdown`` while the thread runs: the
+        thread may be inside liblouis, which must not be freed under it at exit.
+        """
+        return self._runner.is_running()
+
     def missing_table_message(self) -> str | None:
         return missing_default_table_message(self._get_translation_tables())
 

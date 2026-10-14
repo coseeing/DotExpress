@@ -689,6 +689,62 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         build_runtime.assert_not_called()
         self.assertIn(str(paths.dual_view), message_box.call_args.args[0])
 
+    def _exit_with_worker(self, alive: bool) -> tuple:
+        """OnExit of an app whose conversion worker check answers ``alive`` (F-13 D3)."""
+        runtime = Mock()
+        app = gui.BrailleApp()
+        app.paths = make_paths(Path("C:/DotExpress"))
+        app.translation_runtime = runtime
+        app._conversion_worker_alive = Mock(return_value=alive)
+
+        with patch.object(gui, "cleanup_dual_view_html") as cleanup:
+            result = app.OnExit()
+
+        cleanup.assert_called_once_with(Path("C:/DotExpress/dual_view"))
+        app._conversion_worker_alive.assert_called_once_with()
+        return result, runtime
+
+    def test_app_exit_keeps_the_runtime_while_a_conversion_thread_runs(self) -> None:
+        # F-13 (D3, F-9 review M-8): lou_free() under a running lou_translateString can end the
+        # process with 0xC0000374 at logoff; the process ends right after OnExit anyway.
+        result, runtime = self._exit_with_worker(True)
+
+        self.assertEqual(result, 0)
+        runtime.close.assert_not_called()
+
+    def test_app_exit_closes_the_runtime_when_no_conversion_thread_runs(self) -> None:
+        result, runtime = self._exit_with_worker(False)
+
+        self.assertEqual(result, 0)
+        runtime.close.assert_called_once_with()
+
+    def test_app_keeps_a_worker_check_that_does_not_use_the_frame(self) -> None:
+        # F-13 (D3): on wx's end-session path OnExit can run after the frame is destroyed, so
+        # the check OnInit keeps is the presenter's, not one that goes through the frame.
+        runtime = Mock()
+        frame = Mock()
+        worker_alive = Mock(return_value=True)
+        frame.conversion_worker_check.return_value = worker_alive
+        paths = make_paths(Path("C:/DotExpress"))
+        with (
+            patch.object(gui, "build_application_paths", return_value=paths),
+            patch.object(gui, "prepare_application_directories", return_value=paths),
+            patch.object(gui, "cleanup_dual_view_html"),
+            patch.object(gui, "build_default_translation_runtime", return_value=runtime),
+            patch.object(gui, "BrailleFrame", return_value=frame),
+            patch.object(gui, "start_client_init_background"),
+        ):
+            app = gui.BrailleApp()
+            self.assertTrue(app.OnInit())
+        # A destroyed frame: from now on every attribute of it raises.
+        frame.mock_add_spec([])
+
+        with patch.object(gui, "cleanup_dual_view_html"):
+            self.assertEqual(app.OnExit(), 0)
+
+        worker_alive.assert_called_once_with()
+        runtime.close.assert_not_called()
+
     def test_app_exit_logs_cleanup_failure_and_still_closes_runtime(self) -> None:
         runtime = Mock()
         app = gui.BrailleApp()
@@ -4919,6 +4975,15 @@ class FrameConversionDelegationTest(unittest.TestCase):
 
         self.assertEqual(frame._conversion_presenter.mock_calls, [call.convert(), call.convert()])
         event.Skip.assert_not_called()
+
+    def test_conversion_worker_check_is_the_presenters_worker_alive(self) -> None:
+        # F-13 (D3): BrailleApp keeps it for OnExit; calling it does not touch the frame.
+        frame = self._make_frame()
+        frame._conversion_presenter = Mock(spec=gui.ConversionPresenter)
+
+        check = frame.conversion_worker_check()
+
+        self.assertEqual(check, frame._conversion_presenter.worker_alive)
 
     def test_close_asks_presenter_before_saving(self) -> None:
         frame = self._make_frame()

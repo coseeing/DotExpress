@@ -1015,6 +1015,37 @@ class ConversionPresenterTest(unittest.TestCase):
         self.assertEqual(len(self.threads), 1)
         self.assertFalse(presenter.is_running())
 
+    # --- the conversion thread at exit (F-13 D3) ------------------------------
+
+    def test_worker_alive_is_false_before_a_job(self) -> None:
+        self.assertFalse(self._presenter().worker_alive())
+
+    def test_worker_alive_while_the_thread_runs_also_after_shutdown(self) -> None:
+        # BrailleApp.OnExit does not free liblouis while the thread may be inside it. After the
+        # window closed (shutdown), is_running is false, but the thread still runs.
+        self.outputs["source"] = ConversionOutput("⠎", ())
+        presenter = self._presenter()
+        presenter.convert()
+
+        self.assertTrue(presenter.worker_alive())
+        presenter.shutdown()
+        self.assertFalse(presenter.is_running())
+        self.assertTrue(presenter.worker_alive())
+
+    def test_worker_alive_is_false_once_the_thread_has_ended(self) -> None:
+        # The result may not be delivered yet (its CallAfter is pending), or not at all after
+        # a shutdown: the thread has ended either way.
+        self.outputs["source"] = ConversionOutput("⠎", ())
+        presenter = self._presenter()
+        presenter.convert()
+        presenter.shutdown()
+
+        self.threads[0].run()
+
+        self.assertFalse(presenter.worker_alive())
+        self.calls.run_next()
+        self.assertFalse(presenter.worker_alive())
+
     def test_synchronous_call_after_with_a_manually_run_thread_completes(self) -> None:
         self.outputs["source"] = ConversionOutput("⠎", ())
         presenter = self._presenter(call_after=lambda fn, *args: fn(*args))

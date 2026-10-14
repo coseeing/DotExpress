@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 import sys
@@ -1188,6 +1189,14 @@ class BrailleFrame(wx.Frame):
 
 	# --- ConversionView (ui/conversion_presenter.py) ------------------------
 
+	def conversion_worker_check(self) -> Callable[[], bool]:
+		"""The presenter's ``worker_alive``, which BrailleApp.OnExit calls (F-13 D3).
+
+		OnExit can run after the frame is destroyed (wx's end-session path), so it keeps the
+		presenter's method and never calls the frame.
+		"""
+		return self._conversion_presenter.worker_alive
+
 	def get_source_text(self) -> str:
 		return self._editor_text(self.input_txt)
 
@@ -1289,6 +1298,9 @@ def _show_application_data_error(error: ApplicationDataError) -> None:
 
 
 class BrailleApp(wx.App):
+	# The conversion worker check of the frame (F-13 D3); None until a frame is built.
+	_conversion_worker_alive: Callable[[], bool] | None = None
+
 	def OnInit(self):
 		paths = build_application_paths()
 		self.paths = paths
@@ -1311,6 +1323,7 @@ class BrailleApp(wx.App):
 			paths=paths,
 			config_store=config_store,
 		)
+		self._conversion_worker_alive = self.frame.conversion_worker_check()
 		self.frame.Show()
 		# The workspace is loaded once the main window is visible, so that NVDA and Alt+Tab
 		# find the startup boxes (F-13 D2, F-8b review M-8).
@@ -1326,9 +1339,17 @@ class BrailleApp(wx.App):
 			except OSError:
 				logger.exception("Failed to clean up dual-view HTML")
 		runtime = getattr(self, "translation_runtime", None)
-		if runtime is not None:
+		if runtime is not None and not self._conversion_worker_is_alive():
 			runtime.close()
+		# Otherwise liblouis and MathCAT stay loaded: a conversion thread may be inside them
+		# (a logoff during a conversion, F-9 review M-8), and the process ends right after
+		# OnExit, so Windows frees them (F-13 D3).
 		return 0
+
+	def _conversion_worker_is_alive(self) -> bool:
+		"""Whether the conversion thread still runs; False when no frame was built (F-13 D3)."""
+		check = self._conversion_worker_alive
+		return check is not None and check()
 
 
 if __name__ == "__main__":

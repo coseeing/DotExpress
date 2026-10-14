@@ -628,10 +628,12 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 	def _hidden_row_line(row: PreservedDictionaryRow) -> str:
 		if row.reason == "no_source_text":
 			return _("Row {line}: no source text").format(line=row.line)
+		# The Bopomofo value as it is in the file: whitespace around it can be why the row
+		# is hidden (F-13 D6). The source text is shown without its spaces (F-11 D1).
 		return _('Row {line}: "{text}", Bopomofo "{bopomofo}" is not valid').format(
 			line=row.line,
 			text=row.text.strip(),
-			bopomofo=row.braille.strip(),
+			bopomofo=row.braille,
 		)
 
 	def _restore_focus(self, window: wx.Window | None) -> None:

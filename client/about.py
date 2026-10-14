@@ -4,8 +4,8 @@ from i18n import N_, _
 copyrightYears = "2025-2026"
 name = "DotExpress"
 url = "https://coseeing.org"
-version = "1.2"
-version_detailed = "1.2"
+version = "1.8"
+version_detailed = "1.8"
 
 longName = N_("DotExpress")
 description = N_("A text-to-braille translation tool that converts plain text into fixed-width braille, producing output that can be used directly for printed braille.")

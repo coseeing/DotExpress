@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 import sys
@@ -119,6 +120,8 @@ class BrailleFrame(wx.Frame):
 	# Class attributes, so that frames built without __init__ (tests) have them too (F-7, M-5).
 	_closing = False
 	_close_finished = False
+	# load_startup_documents has run (F-13 D2).
+	_startup_documents_loaded = False
 	# The first settings save problem of the session was shown (F-12 D6).
 	_settings_save_problem_reported = False
 
@@ -142,7 +145,7 @@ class BrailleFrame(wx.Frame):
 		self._initialize_conversion_state()
 		self._apply_initial_settings(initial_settings)
 		self._bind_events()
-		self._load_startup_documents()
+		self._show_empty_startup_state()
 
 	def _initialize_frame(self) -> None:
 		self.SetSize((900, 600))
@@ -241,9 +244,34 @@ class BrailleFrame(wx.Frame):
 		self.Bind(wx.EVT_ACTIVATE, self.on_frame_activate)
 		self.Bind(wx.EVT_CLOSE, self._on_close)
 
-	def _load_startup_documents(self) -> None:
+	def _show_empty_startup_state(self) -> None:
+		"""The window before the workspace is loaded: empty editors, the title DotExpress (F-13 D2)."""
 		self._clear_document_editors()
-		self._load_workspace_documents_at_startup()
+		self._update_window_title()
+
+	def load_startup_documents(self) -> None:
+		"""Load the workspace and show its startup boxes (F-13 D2, F-8b review M-8).
+
+		BrailleApp.OnInit posts this after Show, so that the boxes are owned by a visible
+		window. It runs once, even when called again from the event loop of a startup box,
+		and not after the window has closed (a close or a logoff before the posted call ran,
+		or a logoff while a startup box was open).
+		"""
+		if self._startup_documents_loaded or self._close_finished:
+			return
+		self._startup_documents_loaded = True
+		self._clear_document_editors()
+		try:
+			self._load_workspace_documents_at_startup()
+		except Exception as error:
+			# A posted call: the exception would reach only the missing stderr of the packaged
+			# build, and leave an empty window with no word (F-13 review M-1).
+			logger.exception("Failed to load the workspace at startup")
+			if not self._close_finished:
+				self._show_file_error(_("The file cannot be read: {error}"), error)
+			return
+		if self._close_finished:
+			return
 		self._update_window_title()
 		self.input_txt.SetFocus()
 
@@ -817,9 +845,16 @@ class BrailleFrame(wx.Frame):
 		self._create_default_document()
 
 	def _load_workspace_documents_at_startup(self) -> None:
+		"""Load the workspace and show the startup boxes.
+
+		A logoff (WM_QUERYENDSESSION) handled while a box is open can close the frame; the
+		load then goes no further (F-13 review M-2).
+		"""
 		invalid_paths = self._workspace_service.load_documents()
 		self._refresh_document_list()
 		self._review_invalid_workspace_files(invalid_paths)
+		if self._close_finished:
+			return
 		# Documents put back from the temporary files of an interrupted save or rename (F-8).
 		recovered_names = self._workspace_service.take_recovered_document_names()
 		if recovered_names:
@@ -830,7 +865,11 @@ class BrailleFrame(wx.Frame):
 				).format(names="\n".join(recovered_names)),
 				_("Documents Recovered"),
 			)
+			if self._close_finished:
+				return
 		self._ensure_open_document_exists()
+		if self._close_finished:
+			return
 		self._update_window_title()
 
 	def _get_selected_document_name(self) -> str | None:
@@ -1184,6 +1223,14 @@ class BrailleFrame(wx.Frame):
 
 	# --- ConversionView (ui/conversion_presenter.py) ------------------------
 
+	def conversion_worker_check(self) -> Callable[[], bool]:
+		"""The presenter's ``worker_alive``, which BrailleApp.OnExit calls (F-13 D3).
+
+		OnExit can run after the frame is destroyed (wx's end-session path), so it keeps the
+		presenter's method and never calls the frame.
+		"""
+		return self._conversion_presenter.worker_alive
+
 	def get_source_text(self) -> str:
 		return self._editor_text(self.input_txt)
 
@@ -1285,6 +1332,9 @@ def _show_application_data_error(error: ApplicationDataError) -> None:
 
 
 class BrailleApp(wx.App):
+	# The conversion worker check of the frame (F-13 D3); None until a frame is built.
+	_conversion_worker_alive: Callable[[], bool] | None = None
+
 	def OnInit(self):
 		paths = build_application_paths()
 		self.paths = paths
@@ -1307,7 +1357,11 @@ class BrailleApp(wx.App):
 			paths=paths,
 			config_store=config_store,
 		)
+		self._conversion_worker_alive = self.frame.conversion_worker_check()
 		self.frame.Show()
+		# The workspace is loaded once the main window is visible, so that NVDA and Alt+Tab
+		# find the startup boxes (F-13 D2, F-8b review M-8).
+		wx.CallAfter(self.frame.load_startup_documents)
 		start_client_init_background(config_store)
 		return True
 
@@ -1319,9 +1373,17 @@ class BrailleApp(wx.App):
 			except OSError:
 				logger.exception("Failed to clean up dual-view HTML")
 		runtime = getattr(self, "translation_runtime", None)
-		if runtime is not None:
+		if runtime is not None and not self._conversion_worker_is_alive():
 			runtime.close()
+		# Otherwise liblouis and MathCAT stay loaded: a conversion thread may be inside them
+		# (a logoff during a conversion, F-9 review M-8), and the process ends right after
+		# OnExit, so Windows frees them (F-13 D3).
 		return 0
+
+	def _conversion_worker_is_alive(self) -> bool:
+		"""Whether the conversion thread still runs; False when no frame was built (F-13 D3)."""
+		check = self._conversion_worker_alive
+		return check is not None and check()
 
 
 if __name__ == "__main__":

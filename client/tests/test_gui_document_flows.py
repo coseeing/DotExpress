@@ -1702,13 +1702,15 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             self.assertEqual((root / "nested" / "alpha.brl").read_bytes(), "⠁⠃".encode("utf-8"))
 
             frame._export_coordinator.write_document(root / "alpha.html", Document("alpha", "text", "b"), "html")
-            cached_html = render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml))
+            cached_html = render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml), lang="zh-TW")
             self.assertEqual((root / "alpha.html").read_bytes(), text_file_bytes(cached_html))
             self.assertIn('<span class="source">a</span>', cached_html)
 
             frame._export_coordinator.write_document(root / "beta.html", Document("beta", "text", "b"), "html")
             # The page without conversion data says so in zh_TW (F-12 D8).
-            empty_html = render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml), empty_message=EMPTY_PAGE)
+            empty_html = render_dual_view_html(
+                build_dual_view_model((), mathml_converter=latex_to_mathml), lang="zh-TW", empty_message=EMPTY_PAGE
+            )
             self.assertEqual((root / "beta.html").read_bytes(), text_file_bytes(empty_html))
             self.assertNotEqual(cached_html, empty_html)
 
@@ -1727,6 +1729,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
         frame._document_controller.set_dual_view_results("alpha", results)
         expected = render_dual_view_html(
             build_dual_view_model(results, mathml_converter=latex_to_mathml),
+            lang="zh-TW",
             empty_message=gui._("No conversion data is available for this document."),
         )
 
@@ -1738,6 +1741,20 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
             path = Path(directory) / "alpha.html"
             frame._export_coordinator.write_document(path, Document("alpha", "text", "b"), "html")
             self.assertEqual(path.read_bytes(), text_file_bytes(expected))
+
+    def test_the_dual_view_window_declares_the_interface_language(self) -> None:
+        # F-14 (D6): read at each render, for the window, its browser copy and the empty page.
+        self.addCleanup(i18n.set_language, i18n.current_language())
+        frame = self._make_export_frame()
+        cases = (("zh_TW", "zh-TW", EMPTY_PAGE), ("en", "en", "No conversion data is available for this document."))
+        for language, tag, empty in cases:
+            with self.subTest(language):
+                i18n.set_language(language)
+
+                page = frame._render_dual_view_for_open_document()
+
+                self.assertTrue(page.startswith(f'<!doctype html>\n<html lang="{tag}">\n'), page[:60])
+                self.assertIn(empty, page)
 
     def test_export_all_html_uses_each_document_cache(self) -> None:
         frame = self._make_export_frame()
@@ -1760,11 +1777,13 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
 
             self.assertEqual(
                 (root / "alpha.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml)),
+                render_dual_view_html(build_dual_view_model(results, mathml_converter=latex_to_mathml), lang="zh-TW"),
             )
             self.assertEqual(
                 (root / "beta.html").read_text(encoding="utf-8"),
-                render_dual_view_html(build_dual_view_model((), mathml_converter=latex_to_mathml), empty_message=EMPTY_PAGE),
+                render_dual_view_html(
+                    build_dual_view_model((), mathml_converter=latex_to_mathml), lang="zh-TW", empty_message=EMPTY_PAGE
+                ),
             )
         frame.show_info.assert_called_once_with(
             gui._(ExportBatchResult().summary_template),
@@ -5316,7 +5335,7 @@ class FrameViewMethodsTest(unittest.TestCase):
             frame.on_about(None)
 
         message_box.assert_called_once_with(
-            gui.about.aboutMessage, gui._("About DotExpress"), gui.wx.OK | gui.wx.ICON_INFORMATION, parent=frame
+            gui.about.about_message(), gui._("About DotExpress"), gui.wx.OK | gui.wx.ICON_INFORMATION, parent=frame
         )
 
     def test_show_file_error_formats_the_error_for_the_frame(self) -> None:
@@ -5577,17 +5596,19 @@ class SettingsSaveProblemFrameTest(unittest.TestCase):
 
     CANNOT_WRITE_ACCESS = "無法寫入檔案。檔案可能正被其他程式使用，或你沒有寫入權限。請關閉其他程式後再試一次。"
     CANNOT_WRITE = "無法寫入檔案。請確認磁碟還有可用空間，且你有該資料夾的寫入權限。"
+    # F-14 (D7): a failed backup copy before the first save of a damaged config.json.
+    CANNOT_BACK_UP_ACCESS = (
+        "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。檔案或備份檔可能正被其他程式使用，"
+        "或你沒有該資料夾的寫入權限。請關閉其他程式後再試一次。"
+    )
+    CANNOT_BACK_UP = "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。請確認磁碟還有可用空間，且你有該資料夾的寫入權限。"
 
     def test_each_kind_of_problem_gives_its_reason(self) -> None:
         error = OSError(13, "Access denied")
         backup = self.root / "config.json.bak"
         cases = (
             ("UNREADABLE", None, self.CANNOT_OPEN),
-            (
-                "BACKUP_FAILED",
-                backup,
-                f"檔案已損壞，而且在取代它之前無法先備份為「{backup}」。詳細資訊：{error}",
-            ),
+            ("BACKUP_FAILED", backup, self.CANNOT_BACK_UP_ACCESS.format(backup=backup)),
             ("WRITE_FAILED", None, self.CANNOT_WRITE_ACCESS),
         )
         for kind, backup_path, reason in cases:
@@ -5637,6 +5658,38 @@ class SettingsSaveProblemFrameTest(unittest.TestCase):
 
                 self.assertEqual(self.boxes, [self._box(frame, reason)])
                 self.assertNotIn("k3j9x2", self.boxes[0][0][0])
+
+    def test_a_failed_backup_is_explained_by_its_kind_of_error(self) -> None:
+        # F-14 (D7): an access error, or any other; never the operating system's text, which
+        # holds the random name of the temporary file (config.log keeps it).
+        temp_name = r"C:\data\.config.json.bak.k3j9x2.tmp"
+        backup = self.root / "config.json.bak"
+        replace_denied = OSError(errno.EACCES, "存取被拒。", temp_name, 5, str(backup))
+        denied = OSError()
+        denied.winerror = 5
+        cases = (
+            (PermissionError(errno.EACCES, "denied", temp_name), self.CANNOT_BACK_UP_ACCESS),
+            (replace_denied, self.CANNOT_BACK_UP_ACCESS),
+            (OSError(errno.EACCES, "sharing violation", temp_name, 32), self.CANNOT_BACK_UP_ACCESS),
+            (OSError(errno.EACCES, "lock violation", temp_name, 33), self.CANNOT_BACK_UP_ACCESS),
+            (denied, self.CANNOT_BACK_UP_ACCESS),
+            (OSError(errno.EACCES, "Access denied"), self.CANNOT_BACK_UP_ACCESS),
+            (OSError(errno.ENOSPC, "No space left on device", temp_name), self.CANNOT_BACK_UP),
+            (OSError(errno.EIO, "I/O error", temp_name), self.CANNOT_BACK_UP),
+            (IsADirectoryError(errno.EISDIR, "Is a directory", temp_name), self.CANNOT_BACK_UP),
+            (ValueError(temp_name), self.CANNOT_BACK_UP),
+        )
+        for error, reason in cases:
+            with self.subTest(error=repr(error)):
+                self.boxes.clear()
+                frame = self._frame()
+                problem = config.ConfigSaveProblem(config.ConfigSaveProblemKind.BACKUP_FAILED, error, self.config_path, backup)
+
+                frame._report_settings_save_problem(problem)
+
+                self.assertEqual(self.boxes, [self._box(frame, reason.format(backup=backup))])
+                for text in ("k3j9x2", ".tmp", "WinError", "Errno", "詳細資訊"):
+                    self.assertNotIn(text, self.boxes[0][0][0])
 
     def test_the_box_belongs_to_the_active_window(self) -> None:
         # The settings dialog after Apply, Dictionary Management after a rename.

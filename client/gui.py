@@ -7,7 +7,7 @@ import webbrowser
 import wx
 
 import about
-from i18n import _, resource_path
+from i18n import _, html_language_tag, resource_path
 from app_paths import ApplicationDataError, ApplicationPaths, build_application_paths, prepare_application_directories
 from conversion.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
@@ -359,6 +359,7 @@ class BrailleFrame(wx.Frame):
 		results = controller.get_dual_view_results(controller.open_document_name)
 		return render_dual_view_html(
 			build_dual_view_model(results, mathml_converter=latex_to_mathml),
+			lang=html_language_tag(),
 			empty_message=_("No conversion data is available for this document."),
 		)
 
@@ -500,9 +501,20 @@ class BrailleFrame(wx.Frame):
 			else:
 				reason = _("The file cannot be read: {error}").format(error=problem.error)
 		elif problem.kind is ConfigSaveProblemKind.BACKUP_FAILED:
-			reason = _(
-				'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}'
-			).format(backup=problem.backup_path, error=problem.error)
+			# Not the operating system's text: it holds the random name of the temporary file;
+			# config.log keeps it (F-14 D7). Reading config.json for the copy can fail too.
+			if is_access_error(problem.error):
+				reason = _(
+					'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. '
+					"The file or the backup copy may be in use by another program, or you may not have permission "
+					"to write to the folder. Close the other program and try again."
+				)
+			else:
+				reason = _(
+					'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. '
+					"Check that the disk has free space and that you can write to the folder."
+				)
+			reason = reason.format(backup=problem.backup_path)
 		elif is_access_error(problem.error):
 			reason = _(
 				"The file cannot be written. It may be in use by another program, or you may not have "
@@ -572,7 +584,7 @@ class BrailleFrame(wx.Frame):
 			self._show_file_error(_("Failed to open website: {error}"), exc)
 
 	def on_about(self, _evt: wx.CommandEvent) -> None:
-		message_box(about.aboutMessage, _("About DotExpress"), wx.OK | wx.ICON_INFORMATION, parent=self)
+		message_box(about.about_message(), _("About DotExpress"), wx.OK | wx.ICON_INFORMATION, parent=self)
 
 	def on_open_dual_view(self, _evt) -> None:
 		self._open_dual_view_in_browser()

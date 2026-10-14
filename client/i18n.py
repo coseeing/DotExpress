@@ -1,10 +1,15 @@
 """Shared gettext setup and bundled-resource lookup for the DotExpress client.
 
-Consumers import the names they use: ``from i18n import _`` (plus ``N_`` and
-``resource_path`` where needed). Each consumer then holds the same bound
-``gettext`` method in its own module global ``_``, so tests that replace
-translations patch the consumer's global (for example ``dialog._``).
-Patching ``i18n._`` does not reach modules that have already imported it.
+Consumers import the names they use: ``from i18n import _`` (plus ``N_``,
+``resource_path`` and ``html_language_tag`` where needed). ``_`` is a function
+of this module that looks up the active catalog at each call, so a catalog made
+active later by ``set_language`` reaches every consumer (F-14 D1). Tests that
+replace translations patch the consumer's global (for example ``dialog._``);
+patching ``i18n._`` does not reach modules that have already imported it.
+
+The interface language is fixed: ``set_language(LOCALE_LANGUAGES[0])`` runs at
+import, and only tests call it again (the seam for a future language switch).
+It is not the braille conversion language of ``config.py`` (``get_lang``).
 """
 
 import gettext
@@ -14,6 +19,8 @@ from pathlib import Path
 
 LOCALE_DOMAIN = "dotexpress"
 LOCALE_LANGUAGES = ("zh_TW",)
+# The language of the msgids: what the user sees when no catalog is found.
+SOURCE_LANGUAGE = "en"
 CLIENT_ROOT = Path(__file__).resolve().parent
 
 
@@ -41,10 +48,46 @@ def load_translation(
     )
 
 
-_translation = load_translation()
-_ = _translation.gettext
+# The active catalog and the interface language it gives, as one pair. set_language
+# replaces the pair in one assignment, so a reader on another thread (a conversion
+# worker calling _ or html_language_tag) never sees a new catalog with the old
+# language or the other way round (F-14 review M-4).
+_active: tuple[gettext.NullTranslations, str] = (gettext.NullTranslations(), SOURCE_LANGUAGE)
+
+
+def set_language(language: str, *, localedir: Path | None = None) -> None:
+    """Make the catalog of ``language`` the active one (F-14 D1).
+
+    The recorded interface language is ``language`` when its catalog was found, else
+    ``SOURCE_LANGUAGE``, because the user then sees the msgids. The catalog and the
+    language change together, in one assignment.
+    """
+    global _active
+    translation = load_translation(localedir, (language,))
+    recorded = language if isinstance(translation, gettext.GNUTranslations) else SOURCE_LANGUAGE
+    _active = (translation, recorded)
+
+
+def current_language() -> str:
+    """The gettext code of the interface language (``zh_TW`` in the app)."""
+    return _active[1]
+
+
+def html_language_tag(language: str | None = None) -> str:
+    """The BCP 47 tag of ``language`` (default: the interface language): ``zh_TW`` gives ``zh-TW``."""
+    return (current_language() if language is None else language).replace("_", "-")
+
+
+def _(message: str) -> str:
+    """Translate ``message`` with the active catalog; ``""`` stays ``""``, not the catalog header."""
+    if not message:
+        return message
+    return _active[0].gettext(message)
 
 
 def N_(message: str) -> str:
     """Mark a string for extraction without translating it."""
     return message
+
+
+set_language(LOCALE_LANGUAGES[0])

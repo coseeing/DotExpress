@@ -5,6 +5,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from conversion.output import DualViewSegment
@@ -20,6 +21,7 @@ from documents.formats import (
     get_importable_formats,
 )
 from documents.workspace import Document
+import i18n
 from i18n import _
 from tests.full_disk import full_disk
 
@@ -72,6 +74,35 @@ class DocumentFormatsTest(unittest.TestCase):
 
             self.assertEqual(destination.read_text(encoding="utf-8"), "雙視內容")
             render.assert_called_once()
+
+    def test_html_writer_declares_the_interface_language(self) -> None:
+        # F-14 (D6): read at each export, for a document with conversion data and one without.
+        self.addCleanup(i18n.set_language, i18n.current_language())
+        results = (
+            DualViewSegment(
+                result=SimpleNamespace(raw=["a"], braille=["⠁"], braille_to_raw_pos=[0], raw_to_braille_pos=[0]),
+                source_kind="text",
+            ),
+        )
+        expected = {
+            "zh_TW": ("zh-TW", "此文件沒有可顯示的轉換資料。"),
+            "en": ("en", "No conversion data is available for this document."),
+        }
+        with TemporaryDirectory() as directory:
+            for language, (tag, empty) in expected.items():
+                with self.subTest(language):
+                    i18n.set_language(language)
+                    with_data = Path(directory) / f"{language}-alpha.html"
+                    without_data = Path(directory) / f"{language}-new.html"
+
+                    get_format("html").writer(with_data, Document("alpha", "a", "b"), ExportContext(dual_view_results=results))
+                    get_format("html").writer(without_data, Document("new", "", None), ExportContext())
+
+                    pages = [path.read_text(encoding="utf-8") for path in (with_data, without_data)]
+                    for page in pages:
+                        self.assertTrue(page.startswith(f'<!doctype html>\n<html lang="{tag}">\n'), page[:60])
+                    self.assertIn('<span class="source">a</span>', pages[0])
+                    self.assertIn(empty, pages[1])
 
     def test_html_export_failure_keeps_the_existing_file(self) -> None:
         # F-8 (D8): the page is rendered first; a write that failed part way left the

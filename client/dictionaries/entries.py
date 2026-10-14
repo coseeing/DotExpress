@@ -6,15 +6,16 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from i18n import _
+from i18n import N_, _
 from shared.atomic_write import write_text_atomically
 from text.zhuyin import normalize_zhuyin_sequence
 
 
+# (key, msgid): the labels are translated when they are shown (F-14 D3).
 ENTRY_TYPE_OPTIONS: list[tuple[str, str]] = [
-	("General", _("General")),
-	("Bopomofo", _("Bopomofo")),
-	("Braille", _("Unicode Braille")),
+	("General", N_("General")),
+	("Bopomofo", N_("Bopomofo")),
+	("Braille", N_("Unicode Braille")),
 ]
 ENTRY_TYPE_LABELS = {key: label for key, label in ENTRY_TYPE_OPTIONS}
 DEFAULT_ENTRY_TYPE = ENTRY_TYPE_OPTIONS[0][0]
@@ -88,6 +89,17 @@ def normalize_entry_type(entry_type: str | None) -> str:
 	if entry_type in ENTRY_TYPE_LABELS:
 		return str(entry_type)
 	return DEFAULT_ENTRY_TYPE
+
+
+def entry_type_label(entry_type: str) -> str:
+	"""The translated label of a known entry type; any other value unchanged (F-14 D3)."""
+	label = ENTRY_TYPE_LABELS.get(entry_type)
+	return entry_type if label is None else _(label)
+
+
+def entry_type_choices() -> list[str]:
+	"""The translated labels of the entry types, in option order (F-14 D3)."""
+	return [_(label) for _key, label in ENTRY_TYPE_OPTIONS]
 
 
 def canonical_bopomofo(braille: str) -> str | None:

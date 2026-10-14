@@ -826,6 +826,9 @@ class ConfigSaveProblemTest(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), b"{")
         errors = [record.getMessage() for record in captured.records if record.levelno == logging.ERROR]
         self.assertEqual(errors, [f"Failed to save config file {self.path}"])
+        # The box gives a reason without the error's text (F-14 D7); the log keeps the error.
+        (error_record,) = [record for record in captured.records if record.levelno == logging.ERROR]
+        self.assertIs(error_record.exc_info[1], problem.error)
 
     def test_a_write_that_fails_is_write_failed(self) -> None:
         error = OSError(errno.ENOSPC, "injected")

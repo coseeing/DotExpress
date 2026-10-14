@@ -23,7 +23,16 @@ class DualViewHtmlTest(unittest.TestCase):
 		result = TranslationResult(list(raw), list(braille), [0] * len(braille), positions)
 		return render_dual_view_html(build_dual_view_model([
 			DualViewSegment(result=result, source_kind=source_kind),
-		], mathml_converter=reject_mathml))
+		], mathml_converter=reject_mathml), lang="zh-TW")
+
+	def test_the_page_declares_the_given_language(self):
+		# F-14 (D6): the producers pass the interface language; there is no default.
+		output = self.render("a", "⠁", [0])
+
+		self.assertTrue(output.startswith('<!doctype html>\n<html lang="zh-TW">\n<head>\n'), output[:60])
+		self.assertIn('<html lang="x&quot;y">', render_dual_view_html(build_dual_view_model([], mathml_converter=reject_mathml), lang='x"y'))
+		with self.assertRaises(TypeError):
+			render_dual_view_html(build_dual_view_model([], mathml_converter=reject_mathml))
 
 	def test_renders_source_text_from_raw_text(self):
 		output = self.render("a", "⠁", [0])
@@ -57,7 +66,7 @@ class DualViewHtmlTest(unittest.TestCase):
 		output = render_dual_view_html(build_dual_view_model(
 			[DualViewSegment(result=result, source_kind="math")],
 			mathml_converter=lambda _: fake_mathml,
-		))
+		), lang="zh-TW")
 
 		self.assertIn(fake_mathml, output)
 
@@ -67,7 +76,7 @@ class DualViewHtmlTest(unittest.TestCase):
 		output = render_dual_view_html(build_dual_view_model(
 			[DualViewSegment(result=result, source_kind="math")],
 			mathml_converter=lambda _: fake_mathml,
-		))
+		), lang="zh-TW")
 
 		self.assertIn(fake_mathml, output)
 		self.assertNotIn("&lt;math", output)
@@ -78,7 +87,7 @@ class DualViewHtmlTest(unittest.TestCase):
 		output = render_dual_view_html(build_dual_view_model([
 			DualViewSegment(result=first, source_kind="text"),
 			DualViewSegment(result=second, source_kind="text"),
-		], mathml_converter=reject_mathml))
+		], mathml_converter=reject_mathml), lang="zh-TW")
 
 		self.assertNotIn('<section class="segment">', output)
 		self.assertEqual(output.count('class="cell"'), 3)
@@ -98,6 +107,7 @@ class DualViewHtmlTest(unittest.TestCase):
 	def test_renders_empty_state(self):
 		output = render_dual_view_html(
 			build_dual_view_model([], mathml_converter=reject_mathml),
+			lang="zh-TW",
 			empty_message="此文件沒有可顯示的轉換資料。",
 		)
 

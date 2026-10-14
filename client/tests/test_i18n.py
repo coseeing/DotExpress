@@ -448,6 +448,39 @@ class InterfaceLanguageTest(unittest.TestCase):
         self.assertEqual((i18n.current_language(), i18n.html_language_tag()), ("en", "en"))
         self.assertEqual(i18n._("General"), "General")
 
+    def test_the_catalog_and_the_language_change_in_one_assignment(self) -> None:
+        # F-14 review M-4: a thread that reads the catalog and the language while the
+        # language changes sees either the old pair or the new one, never a mix. So
+        # set_language rebinds one module global, the (catalog, language) pair, once.
+        tree = ast.parse((CLIENT_ROOT / "i18n.py").read_text(encoding="utf-8"))
+        function = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "set_language"
+        )
+        declared = [name for node in ast.walk(function) if isinstance(node, ast.Global) for name in node.names]
+        stores = [
+            node
+            for node in ast.walk(function)
+            if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign))
+            and any(
+                isinstance(target, ast.Name) and target.id in declared
+                for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+            )
+        ]
+
+        self.assertEqual(declared, ["_active"])
+        self.assertEqual(len(stores), 1)
+        self.assertIsInstance(stores[0].value, ast.Tuple)
+        self.assertEqual(len(stores[0].value.elts), 2)
+
+        i18n.set_language("en")
+        catalog, language = i18n._active
+        self.assertEqual((type(catalog), language), (gettext.NullTranslations, "en"))
+
+        i18n.set_language("zh_TW")
+        catalog, language = i18n._active
+        self.assertEqual((type(catalog), language), (gettext.GNUTranslations, "zh_TW"))
+        self.assertEqual(catalog.gettext("General"), i18n._("General"))
+
 
 class SharedSetupConsumerTest(unittest.TestCase):
     def assert_uses_shared_i18n(self, relative_path: str, expected_names: set[str]) -> None:

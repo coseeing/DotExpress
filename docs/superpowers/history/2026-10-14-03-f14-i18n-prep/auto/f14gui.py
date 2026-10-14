@@ -30,12 +30,14 @@ sys.path.insert(0, os.path.join(HISTORY, "2026-10-11-01-f11-dictionary-editor-ux
 import f11gui as H11  # noqa: E402
 
 SETTINGS = H12.SETTINGS
-DUAL_VIEW = "雙視檢視"
 EMPTY_PAGE = "此文件沒有可顯示的轉換資料。"
 LEGACY_DESCRIPTION = 30094  # UIA_LegacyIAccessibleDescriptionPropertyId
 LANG = re.compile(r'<html lang="([^"]*)">')
 # The work folder of the item; safe_run.py sets it. Keys go only to windows of processes under it.
 FOLDER = None
+# The stand-in browser folder that fake_browser put first on PATH; dual_view_page refuses
+# to open the Dual View without it, so no helper here can start a real browser (F-14 review M-1).
+STAND_IN = None
 
 
 def foreground_is_app():
@@ -136,46 +138,6 @@ def editor_types(app, w, name):
 	return {"rows": rows, "choice items": choices, "choice selected": selected, "box after Cancel": left}
 
 
-def dual_view_window(app, w, timeout=20):
-	"""The Dual View window of the app (win32), or None."""
-	end = time.time() + timeout
-	while time.time() < end:
-		for title, window in X.windows(app, w).items():
-			if title == DUAL_VIEW:
-				return window
-		time.sleep(0.5)
-	return None
-
-
-def dual_view(app, w, d, settle=4):
-	"""Translation > Dual View: the window's text through UIA (non-empty names of its
-	Text and Document elements, in order), whether it shows the empty page, and the
-	boxes that opened. The window is closed again (WM_CLOSE)."""
-	import win32con
-
-	G.menu(w, "#1->#1", wait=1)
-	window = dual_view_window(app, w)
-	if window is None:
-		return {"window": None, "boxes": H12.boxes(app, d, timeout=3)}
-	time.sleep(settle)
-	texts = []
-	for element in uia(window).descendants():
-		if element.element_info.control_type in ("Text", "Document"):
-			name = element.window_text()
-			if name and name not in texts:
-				texts.append(name)
-	shown = {
-		"window": window.window_text(),
-		"texts": texts[:12],
-		"text count": len(texts),
-		"empty page (zh)": any(EMPTY_PAGE in text for text in texts),
-		"boxes": H12.boxes(app, d, timeout=2),
-	}
-	window.post_message(win32con.WM_CLOSE)
-	time.sleep(1)
-	return shown
-
-
 def fake_browser(d):
 	"""Put a stand-in chrome.exe (a copy of where.exe, which only prints an error for the
 	browser's arguments and ends) under <d>\\fakebrowser and that folder first on PATH, so
@@ -183,16 +145,22 @@ def fake_browser(d):
 	(dual_view.browser.find_browser_executable tries chrome first, through PATH first)."""
 	import shutil
 
+	global STAND_IN
 	folder = os.path.join(d, "fakebrowser")
 	os.makedirs(folder, exist_ok=True)
 	shutil.copy(os.path.join(os.environ["SystemRoot"], "System32", "where.exe"), os.path.join(folder, "chrome.exe"))
 	os.environ["PATH"] = folder + os.pathsep + os.environ["PATH"]
+	STAND_IN = folder
 	return folder
 
 
 def dual_view_page(app, w, d, timeout=20):
 	"""Translation > Dual View with the stand-in browser: the page the app wrote to
-	<d>\\dual_view (html_file), and the boxes that opened."""
+	<d>\\dual_view (html_file), and the boxes that opened. Refuses (RuntimeError) unless
+	fake_browser put its stand-in first on PATH: Translation > Dual View would otherwise
+	start the user's real browser."""
+	if STAND_IN is None or os.environ["PATH"].split(os.pathsep)[0] != STAND_IN:
+		raise RuntimeError("no stand-in browser first on PATH; call fake_browser(d) before the app starts")
 	folder = os.path.join(d, "dual_view")
 	before = set(os.listdir(folder)) if os.path.isdir(folder) else set()
 	G.menu(w, "#1->#1", wait=1)

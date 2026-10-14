@@ -48,25 +48,29 @@ def load_translation(
     )
 
 
-_translation: gettext.NullTranslations = gettext.NullTranslations()
-_language = SOURCE_LANGUAGE
+# The active catalog and the interface language it gives, as one pair. set_language
+# replaces the pair in one assignment, so a reader on another thread (a conversion
+# worker calling _ or html_language_tag) never sees a new catalog with the old
+# language or the other way round (F-14 review M-4).
+_active: tuple[gettext.NullTranslations, str] = (gettext.NullTranslations(), SOURCE_LANGUAGE)
 
 
 def set_language(language: str, *, localedir: Path | None = None) -> None:
     """Make the catalog of ``language`` the active one (F-14 D1).
 
     The recorded interface language is ``language`` when its catalog was found, else
-    ``SOURCE_LANGUAGE``, because the user then sees the msgids.
+    ``SOURCE_LANGUAGE``, because the user then sees the msgids. The catalog and the
+    language change together, in one assignment.
     """
-    global _translation, _language
+    global _active
     translation = load_translation(localedir, (language,))
-    _translation = translation
-    _language = language if isinstance(translation, gettext.GNUTranslations) else SOURCE_LANGUAGE
+    recorded = language if isinstance(translation, gettext.GNUTranslations) else SOURCE_LANGUAGE
+    _active = (translation, recorded)
 
 
 def current_language() -> str:
     """The gettext code of the interface language (``zh_TW`` in the app)."""
-    return _language
+    return _active[1]
 
 
 def html_language_tag(language: str | None = None) -> str:
@@ -78,7 +82,7 @@ def _(message: str) -> str:
     """Translate ``message`` with the active catalog; ``""`` stays ``""``, not the catalog header."""
     if not message:
         return message
-    return _translation.gettext(message)
+    return _active[0].gettext(message)
 
 
 def N_(message: str) -> str:

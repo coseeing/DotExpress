@@ -90,7 +90,7 @@ Written to `$T/tools/` in Task 0 by the block script: `brief.py`, `msgid_scan.py
 
 ### Task 0: Baseline (no commit)
 
-- [ ] **Step 1: Check the starting point.**
+- [x] **Step 1: Check the starting point.**
 
 ```bash
 git -C $REPO status --short -- client docs scripts
@@ -110,7 +110,7 @@ a147fedd2adbcacbdd9fad1a7ddeadc291af3c2d
 a967d8d4cea147cf25ccc0f490c8f94e41e711ce
 ```
 
-- [ ] **Step 2: The git-ignored runtime the tests load.** A worktree is made without the generated liblouis DLL and tables, `louis_helper.py`, MathCAT and the submodule's `configure.ac`; the guarded copies below bring them from the main checkout, as F-3's Task 0 did (in a worktree that has them already they do nothing). Never stage these files.
+- [x] **Step 2: The git-ignored runtime the tests load.** A worktree is made without the generated liblouis DLL and tables, `louis_helper.py`, MathCAT and the submodule's `configure.ac`; the guarded copies below bring them from the main checkout, as F-3's Task 0 did (in a worktree that has them already they do nothing). Never stage these files.
 
 ```bash
 test -e $REPO/client/braille/liblouis.dll || cp $MAIN/client/braille/liblouis.dll $REPO/client/braille/
@@ -138,7 +138,7 @@ present: include/liblouis/configure.ac
 louis_helper.py is the vendored file
 ```
 
-- [ ] **Step 3: Create the throwaway tools** in `$T/tools/` (outside the repo, never committed). `brief.py`, `msgid_scan.py`, `shuffle_harness.py` and `pin_pot_date.py` are F-12's, unchanged; `apply_blocks.py` is F-12's with its docstring naming this plan.
+- [x] **Step 3: Create the throwaway tools** in `$T/tools/` (outside the repo, never committed). `brief.py`, `msgid_scan.py`, `shuffle_harness.py` and `pin_pot_date.py` are F-12's, unchanged; `apply_blocks.py` is F-12's with its docstring naming this plan.
 
 File: `$T/tools/brief.py`
 
@@ -522,7 +522,7 @@ wrote $T/tools/apply_blocks.py
 
 From then on apply every step's blocks with `apply_blocks.py`, for example `$PY $T/tools/apply_blocks.py ../docs/superpowers/plans/2026-10-14-f13-behavior-nvda.md $REPO $T "Task 1" "Step 1"`; it prints `N blocks applied`.
 
-- [ ] **Step 4: Baseline: full suite, focused modules, fixtures, msgids, catalogs, tree, application data.**
+- [x] **Step 4: Baseline: full suite, focused modules, fixtures, msgids, catalogs, tree, application data.**
 
 ```bash
 $PY -B -X utf8 -m unittest discover -s tests 2>&1 | $PY $T/tools/brief.py
@@ -563,7 +563,7 @@ worktree application data checked
 
 ### Task 1: Focus the source editor after a failed conversion of a document that is no longer open (D1)
 
-- [ ] **Step 1: Red: Test Plan A.** `test_conversion_presenter.py` (4 spaces): `test_a_failure_after_switching_names_the_document` flips (the events end with `("focus_source_editor",)` after the box); new: a failure after an import opened another document (named, then the focus), and the focus before the queued job starts. The tests that pin "no focus call" (the open document, away and back, no starting document, `test_manual_failure_shows_error_after_busy_off`, `test_export_failure_calls_only_on_error`) stay as they are.
+- [x] **Step 1: Red: Test Plan A.** `test_conversion_presenter.py` (4 spaces): `test_a_failure_after_switching_names_the_document` flips (the events end with `("focus_source_editor",)` after the box); new: a failure after an import opened another document (named, then the focus), and the focus before the queued job starts. The tests that pin "no focus call" (the open document, away and back, no starting document, `test_manual_failure_shows_error_after_busy_off`, `test_export_failure_calls_only_on_error`) stay as they are.
 
 Edit: `client/tests/test_conversion_presenter.py`
 
@@ -646,7 +646,7 @@ Ran 45 tests
 FAILED (failures=3)
 ```
 
-- [ ] **Step 2: Green: `_left_document`, evaluated once; the focus call after the box** (`client/ui/conversion_presenter.py`, 4 spaces).
+- [x] **Step 2: Green: `_left_document`, evaluated once; the focus call after the box** (`client/ui/conversion_presenter.py`, 4 spaces).
 
 Edit: `client/ui/conversion_presenter.py`
 
@@ -696,7 +696,7 @@ Edit: `client/ui/conversion_presenter.py`
     def _complete_manual(self, target: _ManualTarget, output: ConversionOutput) -> None:
 ```
 
-- [ ] **Step 3: Regenerate the catalogs** (no new string; the `#:` references of `conversion_presenter.py` move; `msgmerge` re-wraps one msgstr, Spec Corrections 2; the `.mo` keeps its bytes).
+- [x] **Step 3: Regenerate the catalogs** (no new string; the `#:` references of `conversion_presenter.py` move; `msgmerge` re-wraps one msgstr, Spec Corrections 2; the `.mo` keeps its bytes).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -732,7 +732,7 @@ msgfmt exit 0
 source msgids: 407 sha256 5daf57d13375a21e9a36b7bf1782976a3d6f14ae9f7c290ae89602b6de943e88
 ```
 
-- [ ] **Step 4: Green: the changed tests, the module, the full suite.**
+- [x] **Step 4: Green: the changed tests, the module, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_conversion_presenter -v 2>&1 | grep -E "^test_a_failure|^test_the_focus_after|^test_manual_failure_shows|^test_export_failure_calls" | sed 's/ (.*) \.\.\. / /'
@@ -757,7 +757,7 @@ Ran 1634 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_conversion_presenter.py client/ui/conversion_presenter.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po
@@ -780,7 +780,7 @@ Expected:
 
 ### Task 2: Show the startup boxes after the main window (D2)
 
-- [ ] **Step 1: Red: Test Plan B.** `test_gui_document_flows.py` (4 spaces): the last of `STARTUP_STEPS` is `_show_empty_startup_state`; new: building the frame loads nothing (only the empty editors and the title); `test_app_startup_runs_steps_in_contract_order` records the post and the posted load; new: the order of the boxes and the final focus after `load_startup_documents`, the run-once guard and the closed-window guard.
+- [x] **Step 1: Red: Test Plan B.** `test_gui_document_flows.py` (4 spaces): the last of `STARTUP_STEPS` is `_show_empty_startup_state`; new: building the frame loads nothing (only the empty editors and the title); `test_app_startup_runs_steps_in_contract_order` records the post and the posted load; new: the order of the boxes and the final focus after `load_startup_documents`, the run-once guard and the closed-window guard.
 
 Edit: `client/tests/test_gui_document_flows.py`
 
@@ -1013,7 +1013,7 @@ Ran 229 tests
 FAILED (failures=4, errors=2)
 ```
 
-- [ ] **Step 2: Green: the empty start state, `load_startup_documents` with its two guards, the post after `Show()`** (`client/gui.py`, tabs).
+- [x] **Step 2: Green: the empty start state, `load_startup_documents` with its two guards, the post after `Show()`** (`client/gui.py`, tabs).
 
 Edit: `client/gui.py`
 
@@ -1118,7 +1118,7 @@ Edit: `client/gui.py`
 
 ```
 
-- [ ] **Step 3: Regenerate the catalogs** (`#:` lines of `gui.py` move).
+- [x] **Step 3: Regenerate the catalogs** (`#:` lines of `gui.py` move).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -1151,7 +1151,7 @@ msgfmt exit 0
 source msgids: 407 sha256 5daf57d13375a21e9a36b7bf1782976a3d6f14ae9f7c290ae89602b6de943e88
 ```
 
-- [ ] **Step 4: Green: the changed tests, the module, the full suite.**
+- [x] **Step 4: Green: the changed tests, the module, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_gui_document_flows -v 2>&1 | grep -E "^(test_building_the_frame_does_not_load_the_workspace|test_frame_creates_its_controller_before_building_the_menu_bar|test_app_startup_runs_steps_in_contract_order|test_app_builds_runtime_and_passes_it_to_frame|test_startup_load_[a-z_]*) " | sed 's/ (.*) \.\.\. / /'
@@ -1175,7 +1175,7 @@ Ran 1638 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_gui_document_flows.py client/gui.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po
@@ -1198,7 +1198,7 @@ d1509b937c40acb55efa98aa43594485a921e045
 
 ### Task 3: Keep liblouis loaded at exit while a conversion is still running (D3)
 
-- [ ] **Step 1: Red: Test Plan C.** `test_conversion_presenter.py`: `worker_alive` before a job, while the thread runs (also after `shutdown`), after the thread ended. `test_gui_document_flows.py`: `OnExit` with a check answering true (the runtime kept, the dual view folder cleaned, 0) and false (closed once); `OnInit` keeps a check that works when every attribute of the frame raises; the frame hands out the presenter's `worker_alive`. The four existing `OnExit` tests (no frame, so no check) stay as they are.
+- [x] **Step 1: Red: Test Plan C.** `test_conversion_presenter.py`: `worker_alive` before a job, while the thread runs (also after `shutdown`), after the thread ended. `test_gui_document_flows.py`: `OnExit` with a check answering true (the runtime kept, the dual view folder cleaned, 0) and false (closed once); `OnInit` keeps a check that works when every attribute of the frame raises; the frame hands out the presenter's `worker_alive`. The four existing `OnExit` tests (no frame, so no check) stay as they are.
 
 Edit: `client/tests/test_conversion_presenter.py`
 
@@ -1377,7 +1377,7 @@ Ran 281 tests
 FAILED (failures=3, errors=4)
 ```
 
-- [ ] **Step 2: Green: `worker_alive`, `conversion_worker_check`, the kept check and `OnExit`** (`client/ui/conversion_presenter.py`, 4 spaces; `client/gui.py`, tabs).
+- [x] **Step 2: Green: `worker_alive`, `conversion_worker_check`, the kept check and `OnExit`** (`client/ui/conversion_presenter.py`, 4 spaces; `client/gui.py`, tabs).
 
 Edit: `client/ui/conversion_presenter.py`
 
@@ -1528,7 +1528,7 @@ if __name__ == "__main__":
 if __name__ == "__main__":
 ```
 
-- [ ] **Step 3: Regenerate the catalogs** (`#:` lines of `gui.py` move).
+- [x] **Step 3: Regenerate the catalogs** (`#:` lines of `gui.py` move).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -1561,7 +1561,7 @@ msgfmt exit 0
 source msgids: 407 sha256 5daf57d13375a21e9a36b7bf1782976a3d6f14ae9f7c290ae89602b6de943e88
 ```
 
-- [ ] **Step 4: Green: the new tests, the modules, the full suite.**
+- [x] **Step 4: Green: the new tests, the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_conversion_presenter tests.test_gui_document_flows -v 2>&1 | grep -E "^(test_worker_alive_[a-z_]*|test_app_exit_[a-z_]*|test_app_keeps_a_worker_check_that_does_not_use_the_frame|test_conversion_worker_check_is_the_presenters_worker_alive) " | sed 's/ (.*) \.\.\. / /' | sort
@@ -1589,7 +1589,7 @@ Ran 1645 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_conversion_presenter.py client/tests/test_gui_document_flows.py client/ui/conversion_presenter.py client/gui.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po
@@ -1614,7 +1614,7 @@ Expected:
 
 ### Task 4: List the Bopomofo value of a hidden row as it is in the file (D6)
 
-- [ ] **Step 1: Red: Test Plan D.** `test_dictionary_entries_dialog.py` (4 spaces, ASCII with escapes): `test_a_row_line_shows_the_stripped_source_text_and_sequence` flips and is renamed `..._and_the_raw_sequence`; new: four values with whitespace around `ㄇㄚ` (two spaces after, one before, a tab after, U+3000 after), each listed unchanged. `test_a_row_without_its_tone_space_is_hidden_and_listed_on_ok`, the trace replay and every F-11 confirm-box test stay as they are.
+- [x] **Step 1: Red: Test Plan D.** `test_dictionary_entries_dialog.py` (4 spaces, ASCII with escapes): `test_a_row_line_shows_the_stripped_source_text_and_sequence` flips and is renamed `..._and_the_raw_sequence`; new: four values with whitespace around `ㄇㄚ` (two spaces after, one before, a tab after, U+3000 after), each listed unchanged. `test_a_row_without_its_tone_space_is_hidden_and_listed_on_ok`, the trace replay and every F-11 confirm-box test stay as they are.
 
 Edit: `client/tests/test_dictionary_entries_dialog.py`
 
@@ -1697,7 +1697,7 @@ Ran 99 tests
 FAILED (failures=5)
 ```
 
-- [ ] **Step 2: Green: the raw value** (`client/dialog.py`, tabs).
+- [x] **Step 2: Green: the raw value** (`client/dialog.py`, tabs).
 
 Edit: `client/dialog.py`
 
@@ -1729,7 +1729,7 @@ Edit: `client/dialog.py`
 	def _restore_focus(self, window: wx.Window | None) -> None:
 ```
 
-- [ ] **Step 3: Regenerate the catalogs** (`#:` lines of `dialog.py` move).
+- [x] **Step 3: Regenerate the catalogs** (`#:` lines of `dialog.py` move).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -1762,7 +1762,7 @@ msgfmt exit 0
 source msgids: 407 sha256 5daf57d13375a21e9a36b7bf1782976a3d6f14ae9f7c290ae89602b6de943e88
 ```
 
-- [ ] **Step 4: Green: the changed tests, the module, the full suite.**
+- [x] **Step 4: Green: the changed tests, the module, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_dictionary_entries_dialog -v 2>&1 | grep -E "^(test_a_row_line_[a-z_]*|test_a_row_without_its_tone_space_is_hidden_and_listed_on_ok) " | sed 's/ (.*) \.\.\. / /'
@@ -1782,7 +1782,7 @@ Ran 1646 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git -C $REPO add client/tests/test_dictionary_entries_dialog.py client/dialog.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po
@@ -1807,7 +1807,7 @@ Expected:
 
 `BASE` is `main` at `a147fed`.
 
-- [ ] **Step 1: Criterion 1, full suite.**
+- [x] **Step 1: Criterion 1, full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest discover -s tests 2>&1 | $PY $T/tools/brief.py
@@ -1820,7 +1820,7 @@ Ran 1646 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 2: Criterion 2, focused modules; two orders of three modules.**
+- [x] **Step 2: Criterion 2, focused modules; two orders of three modules.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_conversion_presenter tests.test_gui_document_flows tests.test_dictionary_entries_dialog tests.test_message_box tests.test_wx_call_sites tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -1839,7 +1839,7 @@ Ran 380 tests
 OK
 ```
 
-- [ ] **Step 3: The shuffled module order, three seeds** (one process each, about two minutes).
+- [x] **Step 3: The shuffled module order, three seeds** (one process each, about two minutes).
 
 ```bash
 for s in 0 1 2; do $PY -B $T/tools/shuffle_harness.py $s 2>/dev/null; done | sed 's/^seed [0-9]*: //' | sort | uniq -c
@@ -1851,7 +1851,7 @@ Expected:
       3 ran=1646 failures=0 errors=0 skipped=6 []
 ```
 
-- [ ] **Step 4: Criterion 3, catalogs.** A fresh template differs from the committed one only in `POT-Creation-Date`; 407 msgids, all translated, 0 fuzzy; the `.mo` equals `a147fed`'s; against `a147fed` the template changes only in `#:` lines and the `.po` in `#:` lines and the one re-wrapped msgstr.
+- [x] **Step 4: Criterion 3, catalogs.** A fresh template differs from the committed one only in `POT-Creation-Date`; 407 msgids, all translated, 0 fuzzy; the `.mo` equals `a147fed`'s; against `a147fed` the template changes only in `#:` lines and the `.po` in `#:` lines and the one re-wrapped msgstr.
 
 ```bash
 (cd $REPO && cmd //c "scripts\\generate-pot.bat $(cygpath -w $T/second.pot)"); echo "generate-pot exit $?"
@@ -1882,7 +1882,7 @@ dcf50a626cc5e80dbe0dbacbd07575f4fa8b9ea830b243c2ebaa608ff0f29e32 *-
 +"試一次。"
 ```
 
-- [ ] **Step 5: Criteria 4-6: fixtures, untouched modules, touched files, application data.**
+- [x] **Step 5: Criteria 4-6: fixtures, untouched modules, touched files, application data.**
 
 ```bash
 BASE=a147fed
@@ -1916,7 +1916,7 @@ application data unchanged
 worktree application data checked
 ```
 
-- [ ] **Step 6: Criterion 7, mutation check** (17 mutants, Spec Corrections 7; about one minute). Each mutant must be caught by at least one test.
+- [x] **Step 6: Criterion 7, mutation check** (17 mutants, Spec Corrections 7; about one minute). Each mutant must be caught by at least one test.
 
 ```bash
 $PY $T/tools/f13_mutants.py $REPO/client $T/mut; echo "exit $?"
@@ -1951,7 +1951,7 @@ Not part of the replay. Run everything from the repository root, one item at a t
 
 **Fix and regression items** (HANDOFF 2026-10-14-01 section 3). A **fix** item runs on both builds (`N-f12b`, the build of `main` `a147fed`'s code, then `N-f13`). A **regression** item runs on `N-f13` only, and on `N-f12b` too only when it misses its expectation. Items 121-125, 127 and 129 are fix items; 126, 128 and 130 regression items; 131 is manual (NVDA) and stays unchecked.
 
-- [ ] **Step 1: Build** (PowerShell, in the worktree). The main checkout's venv is put first on `PATH`; `scripts\build-dotexpress.bat` calls `pyinstaller` from `PATH`.
+- [x] **Step 1: Build** (PowerShell, in the worktree). The main checkout's venv is put first on `PATH`; `scripts\build-dotexpress.bat` calls `pyinstaller` from `PATH`.
 
 ```powershell
 Set-Location D:\workspace\DotExpress-f13
@@ -1970,11 +1970,11 @@ git status --short -- client scripts
 
 Expected: `D:\workspace\DotExpress\client\.venv\Scripts\pyinstaller.exe`, `build complete` (the batch file's exit code proves nothing; on failure read `%TEMP%\f13-build.log`), the two `bundled from the worktree` lines, `gui.py analyzed from the worktree`, a size near 48.8 MB, and no `git status` output. `New-Item` without `-Force` fails if `D:\dxtest\N-f13` exists: never overwrite a build.
 
-- [ ] **Step 2: Write the GUI scripts** into `docs/superpowers/history/2026-10-14-02-f13-behavior-nvda/auto/` (tabs): a helper `f13gui.py` that reuses, unchanged, `f12gui.py` of F-12 and through it the earlier helpers; `safe_run.py` (F-12's, importing `f13gui`; it also puts `f13gui.start_a`, `start_b` and `launch` in place of `f8agui.start`, `f8bgui.start` and `dx.launch`, so that rerun scripts of earlier items use the new start, and masks the focus that `f11gui.focused` reads, as F-11's did); `run_item.sh` (waits for 600 MB, names folder and log); one script per item. `f13gui.start(d)` is the spec's start helper: it starts the exe, answers the invalid-files dialog (Keep) and each message box (Enter) whether or not a main window exists yet, records for each `main_visible` (`IsWindowVisible` of the main window, `None` if there is none), `owner_is_main` (`GW_OWNER` is the main window) and the main window's title at that moment, and returns once the main window is enabled, no box of the process has been open for 1 s, and the title is not the bare `DotExpress` or the document list is non-empty. `start_b` returns the old `(app, w, shown)` with the entries of `f8bgui.start`, `start_a` the old `(app, w, invalid)` and `launch` the old `(app, w)`, so earlier scripts print comparable lines; each prints one more line, `f13 start: [(window, main_visible, owner_is_main, main_title), ...]`.
+- [x] **Step 2: Write the GUI scripts** into `docs/superpowers/history/2026-10-14-02-f13-behavior-nvda/auto/` (tabs): a helper `f13gui.py` that reuses, unchanged, `f12gui.py` of F-12 and through it the earlier helpers; `safe_run.py` (F-12's, importing `f13gui`; it also puts `f13gui.start_a`, `start_b` and `launch` in place of `f8agui.start`, `f8bgui.start` and `dx.launch`, so that rerun scripts of earlier items use the new start, and masks the focus that `f11gui.focused` reads, as F-11's did); `run_item.sh` (waits for 600 MB, names folder and log); one script per item. `f13gui.start(d)` is the spec's start helper: it starts the exe, answers the invalid-files dialog (Keep) and each message box (Enter) whether or not a main window exists yet, records for each `main_visible` (`IsWindowVisible` of the main window, `None` if there is none), `owner_is_main` (`GW_OWNER` is the main window) and the main window's title at that moment, and returns once the main window is enabled, no box of the process has been open for 1 s, and the title is not the bare `DotExpress` or the document list is non-empty. `start_b` returns the old `(app, w, shown)` with the entries of `f8bgui.start`, `start_a` the old `(app, w, invalid)` and `launch` the old `(app, w)`, so earlier scripts print comparable lines; each prints one more line, `f13 start: [(window, main_visible, owner_is_main, main_title), ...]`.
 
-- [ ] **Step 3: The items** (Git Bash, from the repository root): fix items on `D:\dxtest\N-f12b\DotExpress.exe` (folders `auto<N>-f12b-f13`) and on the new build (folders `auto<N>-f13`); regression items on the new build only. Read each log against Step 4 before the next run.
+- [x] **Step 3: The items** (Git Bash, from the repository root): fix items on `D:\dxtest\N-f12b\DotExpress.exe` (folders `auto<N>-f12b-f13`) and on the new build (folders `auto<N>-f13`); regression items on the new build only. Read each log against Step 4 before the next run.
 
-- [ ] **Step 4: Expected behaviour.**
+- [x] **Step 4: Expected behaviour.**
 
 | # | Class | Steps | Expected on `N-f13` | Expected on `N-f12b` |
 | --- | --- | --- | --- | --- |
@@ -1991,7 +1991,7 @@ Expected: `D:\workspace\DotExpress\client\.venv\Scripts\pyinstaller.exe`, `build
 
 Never trigger a real logoff or shutdown: items 127 and 128 send the session messages to DotExpress's main window only. If a key or a click goes to another window (a `RuntimeError` from `safe_run`, or a box that never opens), that is a tool problem: run the item again in a new folder and record it.
 
-- [ ] **Step 5: Record and commit the results.** Write `docs/superpowers/history/2026-10-14-02-f13-behavior-nvda/auto-results.md` in the style of F-12's (zh-TW): the build, the method, then one row per item (121-130) with ✔/△/✘, the new result and, for fix items, the old one. Any deviation from Step 4 is reported, not explained away. End with a section **「仍需人工（使用者）」** for item 131 (unchecked). Add **Implementation Notes** at the end of this plan, then:
+- [x] **Step 5: Record and commit the results.** Write `docs/superpowers/history/2026-10-14-02-f13-behavior-nvda/auto-results.md` in the style of F-12's (zh-TW): the build, the method, then one row per item (121-130) with ✔/△/✘, the new result and, for fix items, the old one. Any deviation from Step 4 is reported, not explained away. End with a section **「仍需人工（使用者）」** for item 131 (unchecked). Add **Implementation Notes** at the end of this plan, then:
 
 ```bash
 cd $REPO
@@ -2011,6 +2011,8 @@ Planning and implementation were one run (the user, 2026-10-11), by one agent.
 1. **Commits and trees** (`HEAD:client` of each, equal to the Expected Counts and to the dev clone's tags): plan `27efb2b` (this plan and both spec files); Task 1 `0fa4e3f` `697fddea6075594d525134b4213cdc6271911ed2` (`Ran 1634`); Task 2 `206fc11` `d1509b937c40acb55efa98aa43594485a921e045` (`1638`); Task 3 `266d89a` `8ffb2e1c26339f643d06f8bde1aa2bf6de2ea7b6` (`1645`); Task 4 `a1e699d` `6c352f0225a9167e33e2977b7ad34c7c2427f480` (`1646`). No commit has a `Co-Authored-By` line. The fixture sha256s of `HEAD` are unchanged. The full suite in the worktree after Task 4: `Ran 1646`, `OK (skipped=6)`; 407 msgids, the `.mo` byte-identical to `a147fed`'s.
 2. **Replays.** The code was written first on a dev clone (`$SP/f13plan/dev`, red then green tags per task). The fill replay (`r1`) recorded the 26 expected blocks; its Task 5 Step 1 block had caught a flaky `PermissionError` of `test_workspace_service` and was replaced by the clean result. The verify replay `r2` had one mismatch, a test error in one shuffled run (Task 5 Step 3, `test_save_replaces_lone_surrogates_with_the_replacement_character`); the Global Constraints sentence about flaky tests was widened (prose only). The final replay `r3` on a fresh clone matched all 26 blocks (0 mismatches), including the four red runs, the catalog steps, the four tree ids and the 17 mutants. Landing in the worktree ran the same harness on `D:\workspace\DotExpress-f13` after the plan commit (Task 0 Step 3's `apply_blocks.py` for every step, the plan's own commit commands); it had 2 mismatches, both flaky and outside F-13's code: a `PermissionError` of `test_workspace_service.ReplacedNulCharactersTest.test_first_save_after_load_writes_the_replaced_text` in Task 4 Step 4's full run, and the zip-timestamp test `test_add_of_a_name_whose_package_is_on_disk_asks_again` failing once under the mutant `load-posted-before-show` (the mutant was caught by its own test as expected). Every commit's tree id equals the plan's.
 3. **Build.** `D:\dxtest\N-f13\DotExpress.exe` from `a1e699d` (Task 6 Step 1; PyInstaller 6.21.0, `Build complete!`, `ui\conversion_presenter.py`, `dialog.py` and `gui.py` from the worktree), 48,793,062 bytes, sha256 `00DCE0055B93C80F95518188E37D14B56E6F3C33890347587D24E7C8D397708A`.
-4. **GUI items.** The record is `docs/superpowers/history/2026-10-14-02-f13-behavior-nvda/auto-results.md`. Fix items 121-125, 127, 129 on `N-f13` and `N-f12b`, regression items 126, 128, 130 on `N-f13` only; every result matched Step 4. Item 127: on `N-f13` 20 of 20 valid runs ended with exit code 0 (51 of 51 over all rounds), on `N-f12b` 1 of 20 with `-1073740940` (3 of 41 over all rounds); the probe file was removed in every run on both builds, so `OnExit` runs on the `WM_ENDSESSION` path. Item 131 (NVDA) is manual and stays unchecked; its folder `D:\dxtest\manual131-f13` is prepared by `auto/manual131.py`.
+4. **GUI items.** The record is `docs/superpowers/history/2026-10-14-02-f13-behavior-nvda/auto-results.md`. Fix items 121-125, 127, 129 on `N-f13` and `N-f12b`, regression items 126, 128, 130 on `N-f13` only; every result matched Step 4. Item 127: on `N-f13` 20 of 20 valid runs ended with exit code 0 (51 of 51 over all rounds), on `N-f12b` 1 of 20 with `-1073740940` (3 of 40 over all rounds; first written as 41, corrected in the fix phase, review M-5); the probe file was removed in every run on both builds, so `OnExit` runs on the `WM_ENDSESSION` path. Item 131 (NVDA) is manual and stays unchecked; its folder `D:\dxtest\manual131-f13` is prepared by `auto/manual131.py`.
 5. **Deviations.** (a) The first round of every item ran in `D:\dxtest${NAME}` (an unexpanded variable in `run_item.sh`), so all items were run again in their own `D:\dxtest\auto*-f13` folders; the stray folder could not be removed by the agent and is left for the user. (b) Item 127 counts a run only when the source editor is disabled (a conversion runs) when the messages are sent, and retries Ctrl+Enter when `SetForegroundWindow` fails: in a few runs Ctrl+Enter did not reach the app as Ctrl+Enter (a character was typed and the query answered 1), and after a crash Windows kept the foreground for a moment. (c) The onefile exe leaves a `%TEMP%\_MEI*` folder (about 100 MB) for every process that is ended; item 127's runs filled C: (0.45 GB free) and starts failed. The 95 folders made by this task's runs were removed (no DotExpress process was running), and `run_item.sh` now removes the ones an item made. 90 older `_MEI*` folders (2026-10-09 to 10-11, about 9 GB) are left for the user. (d) 121 (b) on `N-f12b` was run a second time (`auto121b-r2-f12b-f13`) because the first Ctrl+Enter did not arrive.
 6. **Left for the user.** GUI item 131 (NVDA), the orchestrator's merge of `fix/f13-behavior-nvda`, O1-O5 and Q1 (a) (decided by the orchestrator with the recommended defaults), Q2 (Alt+F10 in the existing Yes/No boxes, report only), and the clean-up of `D:\dxtest${NAME}` and the old `%TEMP%\_MEI*` folders.
+
+7. **Fix phase (the F-13 review of `fbca556`, 2026-10-14; Spec Corrections 10 in both spec files).** Red first: the new tests of M-1 and M-2 failed before the code (`test_gui_document_flows` 4 failures and 2 errors); the M-3 test passed (it pins the existing order) and catches the review's surviving mutant R1. One commit `68c6bf4` holds the code, the five tests and the catalogs (`#:` lines only; 407 msgids, the `.mo` byte-identical to `a147fed`'s, sha256 `dcf50a62...f29e32`; a second `msgmerge` changes nothing): `Ran 1651` (1646 + 5), `OK (skipped=6)`, `HEAD:client` `42826811dc2b5a6d5392098fbfddacba2f1cd1c1`; the three fixtures keep their sha256. Eight mutants of the fix on a scratch copy (R1, no `except`, no box after the error, a box after the window closed, and each of the four `_close_finished` checks removed) are all caught; on the scratch copy with `fbca556`'s `gui.py` the five tests give 4 failures and 2 errors, plus one flaky failure of `test_rename_to_a_name_whose_package_is_on_disk_asks_again` (review M-4, the zip timestamp). Build `D:\dxtest\N-f13b\DotExpress.exe` (48,794,200 bytes, sha256 `78CEA79B5C001CA605651F5B863419379034755E359A6BC003BF9105B460DE4E`) with more than 600 MB free and no F-14 job running; `N-f13` and `N-f12b` are untouched. GUI items 122-125 and 126 (plain start, F-8b 70, 73) re-run on `N-f13b` in fresh `D:\dxtest\auto*-f13b` folders (`auto/run_item.sh` has the build `newb`, refuses a folder outside `D:\dxtest\auto*`, and removes only the `_MEI*` folders that `auto/mei_poll.ps1` saw this item's processes load); all as on `N-f13`, after one re-run of 126 (73) for a start-helper timing problem (`auto-results.md`, "修正階段"). M-5: item 127's numbers in `auto-results.md` and in note 4 now cite only existing logs (the formal result `auto127r3-f13.log` 20 of 20 with exit code 0, `auto127r4-f12b-f13.log` 1 of 20 with `0xC0000374`, the probe file removed in all 40 runs); the earlier rounds' logs still exist, and the aggregate over them is marked as supplementary and corrected to 3 of 40 on `N-f12b` (first written as 41). M-4 (flaky tests that are not F-13's) is left as it is. The plan's 35 step boxes are ticked (all were done, see notes 1-5); manual item 131 stays unchecked for the user. The dispositions of the review are in `review_task.md`, section "修正記錄".

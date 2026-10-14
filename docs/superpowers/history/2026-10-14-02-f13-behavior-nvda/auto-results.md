@@ -12,7 +12,7 @@
 
 ## 與 plan 的偏離與重跑
 
-1. **第一輪的工作資料夾放錯位置（工具問題，全部重跑）。** `run_item.sh` 第一版在雙引號中寫了 `\${NAME}`，資料夾名稱沒有展開，所有項目都在 `D:\dxtest${NAME}`（`D:\dxtest` 的同層，不是 `D:\dxtest\auto*`）執行，而且彼此共用。結果與後來相同，但不符合「每個項目一個新的 `D:\dxtest\auto*` 資料夾」，所以修正後所有項目都在正確的資料夾重跑，舊 log 已刪除，本文只記錄重跑的結果。`D:\dxtest${NAME}` 這個資料夾無法由 agent 刪除（安全檢查擋下），**請使用者手動刪除**（裡面只有 exe 副本與測試資料）。
+1. **第一輪的工作資料夾放錯位置（工具問題，全部重跑）。** `run_item.sh` 第一版在雙引號中寫了 `\${NAME}`，資料夾名稱沒有展開，所有項目都在 `D:\dxtest${NAME}`（`D:\dxtest` 的同層，不是 `D:\dxtest\auto*`）執行，而且彼此共用。結果與後來相同，但不符合「每個項目一個新的 `D:\dxtest\auto*` 資料夾」，所以修正後所有項目都在正確的資料夾重跑，舊 log 已刪除，本文只記錄重跑的結果。（修正階段補註，review M-5：刪除的只有這一輪放錯資料夾的 log；第 3 點所說 127 的第一～四輪都是修正之後在 `D:\dxtest\auto127*` 執行的，它們的 log 都還在。）`D:\dxtest${NAME}` 這個資料夾無法由 agent 刪除（安全檢查擋下），**請使用者手動刪除**（裡面只有 exe 副本與測試資料）。
 2. **121 (b) 在 N-f12b 第一次：Ctrl+Enter 沒有送達**（`while converting` 時焦點仍在可用的原文編輯框，沒有框）。在新資料夾 `auto121b-r2-f12b-f13` 重跑，結果與預期一致；第一次的 log `auto121b-f12b-f13.log` 保留。
 3. **127 的重跑。**
    - 第一輪（`auto127-f13`、`auto127-f12b-f13`）：N-f13 有 3 次、N-f12b 有 1 次 Ctrl+Enter 沒有被程式當成 Ctrl+Enter（原文開頭多了一個字元 `⌂`，轉換沒有開始，所以 `WM_QUERYENDSESSION` 回答 1，程式關閉時把多了字元的原文存檔）。這幾次不是「轉換中登出」，不能算數。
@@ -32,7 +32,7 @@
 | 124 | fix | F-8a 66 的工作區：無效檔案對話框（`['bad.dep']`），`main_visible True`、`owner_is_main True`、標題 `DotExpress`；保留後 `docs ['alpha']`，焦點在原文編輯框；`files ['alpha.dep', 'bad.dep']` | 同一個對話框，找不到主視窗、沒有 owner；之後相同 | ✔ |
 | 125 | fix | `bad.dep`（無效）、`alpha` 中斷的改名（原文含一個 U+0000）、`beta.dep`：依序 **無效檔案對話框 → 「已復原文件」（`alpha`）→ 「已取代字元」（`alpha`、1 個）**，三者都 `main_visible True`、`owner_is_main True`（前兩個時標題 `DotExpress`，第三個時 `alpha - DotExpress`）；之後 `docs ['alpha', 'beta']`、標題 `alpha - DotExpress`、原文 `alpha<U+FFFD>body`、焦點在原文編輯框；`files ['alpha.dep', 'bad.dep', 'beta.dep']` | 同樣的順序與最後狀態；前兩個找不到主視窗，第三個 `main_visible False`，三者都沒有 owner | ✔ |
 | 126 | regression | 一般啟動（只有 `alpha`）：沒有框，`docs ['alpha']`、`alpha - DotExpress`、焦點在原文編輯框。空資料夾：`docs ['new']`、`new - DotExpress`、`files ['new.dep']`。F-8b 70、70b、71、72、73 以新的啟動重跑：每一行都與 F-8b2 的記錄相同（70：復原框 `alpha`，`files ['alpha.dep']`，重新啟動與修改後啟動都沒有框；70b：只有一行無法刪除被占住暫存檔的 `gui.log`，重新啟動後已刪除；71、72 不復原；73：取代框 2 個、原文全部保留、切換時寫入 U+FFFD、重新啟動沒有框），差別只在框出現時主視窗已顯示（`f13 start:` 行）。F-8a 66：保留後 `docs ['alpha']`，新增 `bad` 時的框是 F-12 D5 之後的文字（`名稱「bad」已被工作區資料夾中的「bad.dep」使用…`，與 F-12 項目 113 相同），名稱對話框再次出現，`bad.dep unchanged: True`；69：`docs ['new (2)']`、`new.dep unchanged: True`；79：`config.json` 為 `null` 時主視窗出現、`docs ['new']`、`.bak` 為 `b'null'`、`config.log` 一行警告、放大字型後寫入 `font_size 13`。F-12 113：三個訊息與 F-12 的記錄相同，`bad.dep unchanged: True` | 未執行 | ✔ |
-| 127 | fix | `auto127r3-f13`：20 次有效執行，每次 `WM_QUERYENDSESSION` 回答 0（2 秒內）、`WM_ENDSESSION` 後 **結束碼 0（20/20），沒有 `-1073740940`**；`dual-view-f13probe.html` 每次都被刪除（**`OnExit` 在 `WM_ENDSESSION` 的路徑上有執行**，證實 spec 對 wx 原始碼的解讀）；`alpha.dep` 仍是待轉換、`beta.dep` 不變，`gui.log []`。另外第一、二輪的有效執行（17 + 14 次）也都是 0 | `auto127r4-f12b-f13`：20 次有效執行中 **1 次結束碼 `-1073740940`（`0xC0000374`）**，其餘 0；`OnExit` 同樣每次執行；套件都可讀、`gui.log []`。第一輪 19 次有效執行中也有 1 次、第三輪的 2 次中有 1 次 `-1073740940` | ✔ |
+| 127 | fix | `auto127r3-f13`：20 次有效執行，每次 `WM_QUERYENDSESSION` 回答 0（2 秒內）、`WM_ENDSESSION` 後 **結束碼 0（20/20），沒有 `-1073740940`**；`dual-view-f13probe.html` 每次都被刪除（**`OnExit` 在 `WM_ENDSESSION` 的路徑上有執行**，證實 spec 對 wx 原始碼的解讀）；`alpha.dep` 仍是待轉換、`beta.dep` 不變，`gui.log []`。補充（非正式結果）：第一、二輪的有效執行（`auto127-f13.log` 17 次、`auto127r2-f13.log` 14 次）也都是 0 | `auto127r4-f12b-f13`：20 次有效執行中 **1 次結束碼 `-1073740940`（`0xC0000374`）**，其餘 0；`OnExit` 同樣每次執行；套件都可讀、`gui.log []`。補充（非正式結果）：第一輪（`auto127-f12b-f13.log`）18 次有效執行中也有 1 次（原記錄誤寫為 19 次，修正階段依 log 更正）、第三輪（`auto127r3-f12b-f13.log`）的 2 次中有 1 次 `-1073740940` | ✔ |
 | 128 | regression | (a) F-9 93：`WM_QUERYENDSESSION` 立即回答 0；`轉換完成。結果已儲存到文件「alpha」。`；回到 `alpha` 再轉換時 `WM_ENDSESSION`：結束碼 0；`files ['alpha.dep', 'beta.dep']`、`gui.log []`；與 F-9 的記錄相同。(b) F-7 59（沒有修改時 `WM_QUERYENDSESSION`）：`result 1`、結束碼 0、`alpha` 未改變、`gui.log []`、重新啟動後原文 `alpha body`。(c) 轉換完成（`轉換完成。`）後關閉：結束碼 0，`alpha.dep` 有點字 | 未執行 | ✔ |
 | 129 | fix | `raw.csv`：框 `移除無法顯示的列` 的兩行為 **`第 2 列：「抹」的注音「ㄇㄚ  」格式不正確`、`第 3 列：「媽」的注音「 ㄇㄚ」格式不正確`**（空白保留），按鈕 `移除並儲存(S)`、`返回編輯(B)`，焦點 `返回編輯(B)`，owner `自訂字典管理器`；Alt+B 後編輯器仍開著、檔案位元組與時間不變；再按「確定」、Alt+S：檔案為 `text,braille,type\r\n甲乙,⠁⠃,Braille\r\n` | 兩行都是 `「ㄇㄚ」`；其餘相同 | ✔ |
 | 130 | regression | F-11 95：框的三種關法（Esc、Enter、Alt+F4）都回到編輯器、檔案不變、焦點 `('Button', '確定')`；Alt+S 後檔案為 `text,braille,type\r\n臺北,⠞⠺,Braille\r\n`（列的文字與 F-11 相同，`dict_badbopo.csv` 的值前後沒有空白）。F-11 99、100：Esc、關閉鈕回到編輯器，Alt+D 放棄，焦點與檔案與 F-11 的記錄相同 | 未執行 | ✔ |
@@ -40,12 +40,32 @@
 ## 觀察
 
 - **舊版的啟動框沒有 owner。** N-f12b 在主視窗顯示前跳出的框與對話框都沒有 owner 視窗（`owner_visible None`），描述「已取代字元」框時前景甚至不是 DotExpress。N-f13 的框都屬於可見的主視窗。這是 F-8b review M-8 所說 NVDA 與 Alt+Tab 找不到它們的原因；NVDA 實際朗讀的情況仍待項目 131。
-- **`WM_ENDSESSION` 的當機確實存在，F-13 之後沒有再出現。** N-f12b 在 41 次有效的「轉換中登出」中有 3 次以 `0xC0000374` 結束（約 7%），N-f13 在 51 次中 0 次。這是統計上的證據，加上 Test Plan C 的單元測試。
+- **`WM_ENDSESSION` 的當機確實存在，F-13 之後沒有再出現。** 正式結果：N-f13 `auto127r3-f13.log` 20 次有效執行全部結束碼 0；N-f12b `auto127r4-f12b-f13.log` 20 次中 1 次以 `0xC0000374` 結束；這 40 次都刪除了 probe 檔（`probe left False`）。補充（非正式結果，修正階段依 log 重新計算，review M-5）：加上同樣仍在 `D:\dxtest` 的較早幾輪（`auto127-f13.log`、`auto127r2-f13.log`、`auto127-f12b-f13.log`、`auto127r3-f12b-f13.log`；不含第 1 點已刪除的、放錯資料夾的那一輪），N-f12b 在 40 次有效的「轉換中登出」中有 3 次（約 7.5%；原記錄誤寫為 41 次），N-f13 在 51 次中 0 次。這是統計上的證據，加上 Test Plan C 的單元測試。
 - **自動測試的資源問題（與程式無關）。** 被結束的 onefile 程序會在 `%TEMP%` 留下約 100 MB 的 `_MEI*`；大量重複啟動的項目（127）一次就會留下數 GB。見「與 plan 的偏離」第 3 點。
+
+## 修正階段（F-13 review M-1、M-2、M-3、M-5；2026-10-14）
+
+- 受測：`fix/f13-behavior-nvda` 在 `68c6bf4`（review 修正 commit）之後的 packaged build，以下稱 N-f13b。Build 方法同上（`scripts\build-dotexpress.bat`，主簽出的 `client\.venv\Scripts` 置於 `PATH` 最前面；PyInstaller 6.21.0、Python 3.13.15，`Build complete!`；`PYZ-00.toc` 確認 `ui\conversion_presenter.py`、`dialog.py` 來自 worktree，`Analysis-00.toc` 確認 `gui.py` 來自 worktree），`HEAD:client` `42826811dc2b5a6d5392098fbfddacba2f1cd1c1`。`D:\dxtest\N-f13b\DotExpress.exe`：48,794,200 bytes，sha256 `78CEA79B5C001CA605651F5B863419379034755E359A6BC003BF9105B460DE4E`。`git status --short -- client scripts` 無輸出。N-f13、N-f12b 與其他 build 沒有動。
+- 建置與每個項目開始前：可用記憶體至少 600 MB、F-14 的 agent 沒有在跑重的工作（測試、build、DotExpress）、C: 至少 2 GB；條件不符時等待（本輪多次等待，因同一台機器上其他程式占用記憶體）。
+- 重跑的項目：M-1、M-2 改的是啟動載入，所以只重跑啟動相關的 122–125 與 126（一般啟動、F-8b 70、73），只在 N-f13b 執行（改前的結果已在上表）。每個項目在新資料夾 `D:\dxtest\auto<N>-f13b`，一次一個，經 `auto/safe_run.py`。`auto/run_item.sh` 新增 build 名稱 `newb`，並在執行前檢查展開後的資料夾必須是 `D:\dxtest\auto*`（避免第一輪 `D:\dxtest${NAME}` 的問題；每個 log 前一行印出資料夾與 exe）。沒有任何腳本讀寫剪貼簿；只結束 exe 位於該項目資料夾下的程序。
+- `_MEI*` 清理改為只刪本項目程序載入的資料夾：新的 `auto/mei_poll.ps1` 在項目執行期間每 0.25 秒記錄 exe 位於該項目資料夾下的 DotExpress 程序所載入的 `%TEMP%\_MEI<n>`，項目結束後 `run_item.sh` 只刪除這些、且沒有任何 DotExpress 程序使用中的資料夾（不再以建立時間判斷，所以不會刪到其他 agent 或使用者的資料夾）。本輪 8 次執行共記錄並刪除 12 個；之前與之後的 `%TEMP%\_MEI*` 都是 90 個（2026-10-09～10-11 的舊資料夾，未動）。
+
+| # | N-f13b（review 修正後） | 與 N-f13 的 log 比較 | 判定 |
+| --- | --- | --- | --- |
+| 122 | 「已復原文件」框（`alpha`），`main_visible True`、`owner_is_main True`、標題 `DotExpress`、`owner_visible True`；之後 `docs ['alpha']`、`alpha - DotExpress`、原文 `alpha body`、焦點在原文編輯框（UIA `('Edit', '來源文字')`）；`files ['alpha.dep']`、`gui.log []` | 只有一處不同：描述框的那一刻前景還不是 DotExpress（`focus '<another program>'`，N-f13 為 `確定`）；`safe_run` 等到框取得前景才按 Enter（`presses 1`）。框的 owner 與可見性相同 | ✔ |
+| 123 | 「已取代字元」框（`alpha`、2 個），`main_visible True`、`owner_is_main True`、標題 `alpha - DotExpress`；內容符合預期；`docs ['alpha', 'beta']`，焦點在原文編輯框 | 相同 | ✔ |
+| 124 | 無效檔案對話框（`['bad.dep']`），`main_visible True`、`owner_is_main True`；保留後 `docs ['alpha']`，焦點在原文編輯框；`files ['alpha.dep', 'bad.dep']` | 相同 | ✔ |
+| 125 | 依序無效檔案對話框 → 「已復原文件」→「已取代字元」，三者都 `main_visible True`、`owner_is_main True`；`docs ['alpha', 'beta']`、`alpha - DotExpress`、原文 `alpha<U+FFFD>body`、焦點在原文編輯框；`files ['alpha.dep', 'bad.dep', 'beta.dep']`、`gui.log []` | 相同 | ✔ |
+| 126 一般啟動 | 沒有框；`docs ['alpha']`、`alpha - DotExpress`、焦點在原文編輯框 | 相同 | ✔ |
+| 126 F-8b 70 | 復原框 `alpha`（主視窗可見、屬於主視窗）；`files ['alpha.dep']`；重新啟動與修改後啟動都沒有框；`gui.log []` | 相同 | ✔ |
+| 126 F-8b 73 | `auto126-73-r2-f13b`：取代框 2 個（屬於可見的主視窗）、原文全部保留、切換時寫入 U+FFFD、重新啟動沒有框 | 相同 | ✔ |
+
+- **126 F-8b 73 第一次（`auto126-73-f13b`）：工具時序問題，在新資料夾重跑。** 啟動輔助在「已取代字元」框出現之前就返回（`f13 start: []`）：程式在顯示這個框之前已把標題設為 `alpha - DotExpress`，而輔助程式以「標題不是單獨的 `DotExpress`、1 秒內沒有框」判斷載入完成；開始時可用記憶體只有 625 MB，框比平常晚出現。腳本接著送出的 Ctrl+Tab 在框建立之前送達原文編輯框，所以在框開著的期間切換到 `beta`（`alpha.dep` 這時以 U+FFFD 存檔）；之後按 Enter 關閉框，載入以 `beta - DotExpress` 結束。最後的檔案與重新啟動的結果與預期相同，但與 N-f13 的 log 不同，所以依 plan 在 `auto126-73-r2-f13b` 重跑，重跑的 log 除了記憶體數字外與 N-f13 完全相同。這個情況（主視窗顯示後、啟動框出現前的瞬間按下的鍵作用在主視窗上）就是 spec 的預設 O2／風險「文件載入前視窗已可見」，與 review 修正無關；N-f13 也一樣。
+- M-1（載入時的未預期例外寫入 `gui.log` 並顯示「無法讀取檔案：…」）與 M-2（啟動框開著時登出）沒有在 GUI 重現：前者要在啟動檢查之後、載入之前讓工作區變得不可讀，後者要在啟動框開著時送 `WM_QUERYENDSESSION`／`WM_ENDSESSION`，都由單元測試涵蓋（`test_gui_document_flows` 的 5 個新測試；在 scratchpad 副本上跑的 8 個 mutant，含 review 存活的 R1，都被抓到）。
 
 ## 仍需人工（使用者）
 
-- [ ] **項目 131（NVDA）：** 以 `D:\dxtest\manual131-f13\DotExpress.exe`（N-f13 的副本，工作區已是項目 125 的內容；每次啟動都會復原 `alpha`，重試前請執行 `python auto\manual131.py D:\dxtest\N-f13\DotExpress.exe D:\dxtest\manual131-f13` 重建，需 pywinauto 的 venv）開啟 NVDA：
+- [ ] **項目 131（NVDA）：** 以 `D:\dxtest\manual131-f13\DotExpress.exe`（N-f13 的副本，工作區已是項目 125 的內容；每次啟動都會復原 `alpha`，重試前請執行 `python auto\manual131.py D:\dxtest\N-f13\DotExpress.exe D:\dxtest\manual131-f13` 重建，需 pywinauto 的 venv；也可以改用含 review 修正的 `D:\dxtest\N-f13b\DotExpress.exe`，把上面指令的 exe 換成它、資料夾換成新的資料夾，這三個啟動框與 N-f13 相同）開啟 NVDA：
   1. 啟動時 NVDA 是否先報讀主視窗，再完整讀出每個啟動框（無效檔案對話框、「已復原文件」、「已取代字元」）？框開著時 Alt+Tab 是否列出 DotExpress，選它是否回到框？
   2. 項目 121 (a)：轉換失敗的框按「確定」後，NVDA 是否報讀原文編輯框？
   3. 項目 129：`第 2 列：「抹」的注音「ㄇㄚ  」格式不正確` 這一行，NVDA 怎麼讀出空白？

@@ -38,6 +38,12 @@ F-13 處理 `task.md` 第五節「下一輪要修」的第 1、2、3、5、6 項
 7. **變異檢查：17 個 mutant**：上面 15 個，加上空白啟動狀態不更新標題，以及 frame 的檢查函式交出 `is_running`。
 8. **commit 主旨**以 `(F-13)` 結尾；`F-8b review M-8` 與 `F-9 review M-8` 寫在步驟 2、3 的 commit 內文。
 9. **Windows 項目。** 項目 127 在啟動後另外寫入一個過期的 `dual_view\dual-view-f13probe.html`：程序結束後若它已被刪除，表示在 `WM_ENDSESSION` 的路徑上 `OnExit` 有執行（「現況」第 3 項對 wx 原始碼的解讀）。項目 125 的工作區：無效的 `bad.dep`、`alpha` 被中斷的重新命名（改為 `gamma`），其文字含 U+0000，以及有效的 `beta.dep`；先開啟的是 `alpha`。
+10. **review 修正（F-13 review，對象 `fbca556`，2026-10-14）。由 orchestrator 依建議的預設決定；使用者可在 merge 前推翻。** review 沒有 Critical 或 Important；以下是它的 Minor M-1～M-3 與 M-5（M-4 是既有的 flaky 測試，不是 F-13 造成的，不處理）。沒有新字串：407 個 msgid，`.mo` 與 `a147fed` 的位元組相同；catalog 只有 `#:` 行改變。完整測試為 `Ran 1651`（1646 + 5）、`OK (skipped=6)`。
+    - **M-1（延後載入時的未預期錯誤）。** `load_startup_documents` 是以 post 的方式執行，例外原本只會送到打包版不存在的 stderr，留下一個空視窗、沒有任何提示。現在載入時的任何例外都以 ERROR 寫入 `dotexpress.gui`（`gui.log`），含 traceback（`Failed to load the workspace at startup`），並以既有字串 `The file cannot be read: {error}`／`無法讀取檔案：{error}` 顯示在屬於主視窗的「錯誤」框；視窗維持原狀（若沒有開啟任何文件，標題為 `DotExpress`），也不會再試一次載入。若這時視窗已關閉，只寫 log。
+    - **M-2（啟動提示框開著時登出）。** 在無效檔案對話框之後、「已復原文件」框之後、以及開啟第一份文件之後（它的「已取代字元」框，或預設文件的存檔錯誤），若 frame 在這期間已關閉（`_close_finished`），載入就停止：不再顯示後面的框、不寫入預設文件、不對已關閉的視窗更新標題或設定焦點。這細化了「風險」中的「延後載入前就關閉」：修正前，框返回後載入會繼續。
+    - **M-3（測試）。** 一個測試在「已復原文件」框裡再呼叫一次 `load_startup_documents`，確認不會載入第二次，所以旗標必須在載入之前設定（review 存活的 mutant R1）。
+    - **M-5（紀錄）。** `auto-results.md` 的項目 127 只引用存在的 log：正式結果是 `auto127r3-f13.log`（20 次中 20 次結束碼 0）與 `auto127r4-f12b-f13.log`（20 次中 1 次 `0xC0000374`）；這 40 次都刪除了 probe 檔。較早幾輪的 log 仍在；以它們算出的合計標為補充資料，N-f12b 的分母更正為 40（不是 41）。
+    - **手動項目 131**（NVDA）可改用含這些修正的 `D:\dxtest\N-f13b\DotExpress.exe`；仍不勾選，留給使用者。
 
 ## 與 F-14 的關係
 
@@ -383,7 +389,7 @@ F-14（`D:/workspace/DotExpress-f14`）從同一個 `main`（`a147fed`）平行�
 ## 風險
 
 - **文件載入前視窗已可見**（低）：主視窗會有一瞬間是空的，標題 `DotExpress`。這一瞬間按的鍵作用在空視窗上，就像「全部刪除」之後。載入通常在第一個使用者輸入到達前就已排入。
-- **延後載入前就關閉**（低）：由 `_close_finished` 防護（測試 B3）。啟動提示框開著時收到 WM_QUERYENDSESSION，行為與現在相同：frame 的關閉處理以當時已載入的內容執行。
+- **延後載入前就關閉**（低）：由 `_close_finished` 防護（測試 B3）。啟動提示框開著時收到 WM_QUERYENDSESSION，行為與現在相同：frame 的關閉處理以當時已載入的內容執行。框返回後，載入就停止（規劃後的修正 10，review M-2）。
 - **GUI 輔助程式**（中，機械性）：在新版上，先前所有的啟動輔助程式都會太早返回。啟動相關項目由項目 126 與新的輔助程式處理；其他會啟動程式的回歸腳本必須改用 `f13gui.start`，或等文件載入完成。
 - **end-session 路徑**（低）：「wx 在 WM_ENDSESSION 時呼叫 `OnExit`」是閱讀 wx 原始碼的判斷，不是實測。若那時沒有呼叫 `OnExit`，D3 對登出沒有作用，項目 127 會出現和 N-f12b 一樣的結束碼。即使如此，測試仍釘住 `OnExit` 的規則，這個規則也涵蓋無法否決的關閉之後的一般結束。
 - **記憶體沒有釋放**（無）：程序在 `OnExit` 之後就結束。

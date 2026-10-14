@@ -195,7 +195,7 @@ class DocumentControllerOwnershipTest(unittest.TestCase):
         "_initialize_conversion_state",
         "_apply_initial_settings",
         "_bind_events",
-        "_load_startup_documents",
+        "_show_empty_startup_state",
     )
 
     def test_frame_creates_its_controller_before_building_the_menu_bar(self) -> None:
@@ -214,6 +214,22 @@ class DocumentControllerOwnershipTest(unittest.TestCase):
         self.assertIsInstance(seen[0], gui.DocumentController)
         self.assertIs(frame._document_controller, seen[0])
         self.assertEqual(seen[0].documents, [])
+
+    def test_building_the_frame_does_not_load_the_workspace(self) -> None:
+        # F-13 (D2): BrailleApp.OnInit posts load_startup_documents after Show; the frame
+        # starts with empty editors and the title DotExpress.
+        steps = Mock()
+        with (
+            patch.object(gui.BrailleFrame, "_initialize_frame"),
+            patch.multiple(gui.BrailleFrame, **{name: DEFAULT for name in self.STARTUP_STEPS[:-1]}),
+            patch.object(gui.BrailleFrame, "_clear_document_editors", steps.clear_editors),
+            patch.object(gui.BrailleFrame, "_update_window_title", steps.update_title),
+            patch.object(gui.BrailleFrame, "_load_workspace_documents_at_startup", steps.load_workspace),
+            patch.object(gui.BrailleFrame, "load_startup_documents", steps.load_startup_documents, create=True),
+        ):
+            gui.BrailleFrame(None, runtime=Mock(), paths=make_paths(), config_store=Mock())
+
+        self.assertEqual(steps.mock_calls, [call.clear_editors(), call.update_title()])
 
     def test_initialize_state_keeps_the_frame_controller(self) -> None:
         frame = object.__new__(gui.BrailleFrame)
@@ -708,6 +724,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
         frame = Mock()
         frame.Show.side_effect = record("show")
+        frame.load_startup_documents.side_effect = record("load")
         return {
             "prepare_application_directories": prepare,
             "cleanup_dual_view_html": record("cleanup"),
@@ -718,15 +735,25 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
     def test_app_startup_runs_steps_in_contract_order(self) -> None:
         order: list[str] = []
+        posted = DeferredCalls()
+
+        def call_after(fn, *args, **kwargs) -> None:
+            order.append("post")
+            posted(fn, *args, **kwargs)
 
         with ExitStack() as stack:
             for name, fake in self._startup_recorders(order).items():
                 stack.enter_context(patch.object(gui, name, side_effect=fake))
+            stack.enter_context(patch.object(gui.wx, "CallAfter", call_after))
             message_box = stack.enter_context(patch.object(gui, "message_box"))
             result = gui.BrailleApp().OnInit()
 
         self.assertTrue(result)
-        self.assertEqual(order, ["prepare", "cleanup", "runtime", "frame", "show", "client_init"])
+        # F-13 (D2): the workspace load is posted after Show and runs in a later turn of the
+        # main loop, when the main window is visible; its boxes are owned by a shown window.
+        self.assertEqual(order, ["prepare", "cleanup", "runtime", "frame", "show", "post", "client_init"])
+        self.assertEqual(posted.run_all(), 1)
+        self.assertEqual(order[-1], "load")
         message_box.assert_not_called()
 
     def test_app_stops_before_cleanup_when_validation_fails(self) -> None:
@@ -2257,6 +2284,68 @@ class DocumentWorkspaceFlowsCharacterizationTest(unittest.TestCase):
         # Both staged twins duplicate a recovered document and are removed; the invalid
         # bad.dep is not a temporary file and stays.
         self.assertEqual(self._listing(), ["alpha.dep", "bad.dep", "beta.dep"])
+
+    def test_startup_load_shows_the_boxes_in_order_and_focuses_the_source_editor_last(self) -> None:
+        # F-13 (D2): load_startup_documents, posted after Show, keeps the order of the startup
+        # boxes: the invalid files, the recovered documents, then the replaced characters of
+        # the first document; the focus goes to the source editor at the end.
+        self._interrupted_rename("alpha", "gamma", "a\x00", 60)
+        (self.workspace / "bad.dep").write_bytes(b"not a zip")
+        frame = self._make_workspace_frame()
+
+        frame.load_startup_documents()
+
+        recovered = gui._(
+            "DotExpress was interrupted while saving or renaming a document. These documents were "
+            "recovered:\n\n{names}\n\nCheck that their content is what you expect."
+        ).format(names="alpha")
+        self.assertEqual(
+            self.events,
+            [
+                ("InvalidWorkspaceFilesDialog", [self.workspace / "bad.dep"]),
+                ("MessageBox", recovered, gui._("Documents Recovered"), gui.wx.OK | gui.wx.ICON_INFORMATION, frame),
+                ("title", "alpha - DotExpress"),
+                self._nul_notice("alpha", 1, frame),
+                ("title", "alpha - DotExpress"),
+                ("title", "alpha - DotExpress"),
+                ("focus", "input"),
+            ],
+        )
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+        self.assertEqual(self._listing(), ["alpha.dep", "bad.dep"])
+
+    def test_startup_load_runs_once(self) -> None:
+        # F-13 (D2): a second call (the posted call is made once) changes nothing.
+        self._write_packages(Document("alpha", "a", "1"))
+        frame = self._make_workspace_frame()
+        frame.load_startup_documents()
+        self.assertEqual(self.events, [("title", "alpha - DotExpress")] * 3 + [("focus", "input")])
+        self.events.clear()
+        frame.input_txt.value = "edited"
+
+        frame.load_startup_documents()
+
+        self.assertEqual(self.events, [])
+        self.assertEqual(frame.input_txt.value, "edited")
+        self.assertEqual(frame._document_controller.document_names, ["alpha"])
+
+    def test_startup_load_after_the_window_closed_does_nothing(self) -> None:
+        # F-13 (D2): a close or a logoff before the posted load ran loads nothing and shows no box.
+        self._write_packages(Document("alpha", "a", "1"))
+        for closed, events, names in (
+            (False, [("title", "alpha - DotExpress")] * 3 + [("focus", "input")], ["alpha"]),
+            (True, [], []),
+        ):
+            with self.subTest(closed=closed):
+                self.events.clear()
+                frame = self._make_workspace_frame()
+                frame._close_finished = closed
+
+                frame.load_startup_documents()
+
+                self.assertEqual(self.events, events)
+                self.assertEqual(frame._document_controller.document_names, names)
+                self.assertEqual(self._listing(), ["alpha.dep"])
 
     # --- save --------------------------------------------------------------
 

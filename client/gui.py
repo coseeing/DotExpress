@@ -119,6 +119,8 @@ class BrailleFrame(wx.Frame):
 	# Class attributes, so that frames built without __init__ (tests) have them too (F-7, M-5).
 	_closing = False
 	_close_finished = False
+	# load_startup_documents has run (F-13 D2).
+	_startup_documents_loaded = False
 	# The first settings save problem of the session was shown (F-12 D6).
 	_settings_save_problem_reported = False
 
@@ -142,7 +144,7 @@ class BrailleFrame(wx.Frame):
 		self._initialize_conversion_state()
 		self._apply_initial_settings(initial_settings)
 		self._bind_events()
-		self._load_startup_documents()
+		self._show_empty_startup_state()
 
 	def _initialize_frame(self) -> None:
 		self.SetSize((900, 600))
@@ -241,7 +243,21 @@ class BrailleFrame(wx.Frame):
 		self.Bind(wx.EVT_ACTIVATE, self.on_frame_activate)
 		self.Bind(wx.EVT_CLOSE, self._on_close)
 
-	def _load_startup_documents(self) -> None:
+	def _show_empty_startup_state(self) -> None:
+		"""The window before the workspace is loaded: empty editors, the title DotExpress (F-13 D2)."""
+		self._clear_document_editors()
+		self._update_window_title()
+
+	def load_startup_documents(self) -> None:
+		"""Load the workspace and show its startup boxes (F-13 D2, F-8b review M-8).
+
+		BrailleApp.OnInit posts this after Show, so that the boxes are owned by a visible
+		window. It runs once, and not after the window has closed (a close or a logoff
+		before the posted call ran).
+		"""
+		if self._startup_documents_loaded or self._close_finished:
+			return
+		self._startup_documents_loaded = True
 		self._clear_document_editors()
 		self._load_workspace_documents_at_startup()
 		self._update_window_title()
@@ -1296,6 +1312,9 @@ class BrailleApp(wx.App):
 			config_store=config_store,
 		)
 		self.frame.Show()
+		# The workspace is loaded once the main window is visible, so that NVDA and Alt+Tab
+		# find the startup boxes (F-13 D2, F-8b review M-8).
+		wx.CallAfter(self.frame.load_startup_documents)
 		start_client_init_background(config_store)
 		return True
 

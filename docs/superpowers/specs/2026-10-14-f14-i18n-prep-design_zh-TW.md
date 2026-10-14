@@ -29,6 +29,22 @@ F-14 是 `docs/superpowers/history/2026-10-14-01-handoff/HANDOFF.md` 第 1 節�
 
 非目標：切換語言的功能本身（選單、設定、重建視窗）；在 HTML 中逐段標示英文的 `lang`；修改 `braille/tables/__tables.py`；F-13 的項目。
 
+## 規劃後的修正（F-14，2026-10-14）
+
+依 `main` `a147fed` 的程式碼重新檢查：清單（`about.py`、`dictionaries/entries.py`、`settings/dialogs.py` 共 15 個載入時呼叫；`braille/tables/__tables.py` 198 個）、決定 D1–D8、前後對照表與測試計畫都成立，另有以下細化。plan（`docs/superpowers/plans/2026-10-14-f14-i18n-prep.md`）的「Spec Corrections and Refinements」一節是同一份清單。
+
+1. **基準與數量。** 在 `a147fed`（`HEAD:client` `a967d8d4`）上完整測試為 `Ran 1632`、`OK (skipped=6)`；catalog 有 407 個 msgid、26 筆 obsolete。F-14 新增 20 個測試、修改 7 個：步驟 1 後 `Ran 1637`（新增 5），步驟 2 後 `1648`（新增 11；修改 2：About 測試、`test_uses_title_for_accessible_label`；以及 consumer 守門測試的集合），步驟 3 後 `1651`（新增 3；3 個匯出測試、`test_dual_view_html` 與 golden 測試的 render 呼叫），步驟 4 後 `1652`（新增 1；`test_each_kind_of_problem_gives_its_reason`、字串測試、`test_config` 的備份測試）。spec 估計約 30 個。
+2. **Catalog。** 步驟 1 不動 catalog（`i18n.py` 沒有 msgid）。步驟 2–4 會移動 msgid 上方的行數，所以每一步都重新產生範本與 `.po`；任何 commit 之後都沒有過期的 `#:` 參照，不需要另外的 `chore:` commit。步驟 2 的 `msgmerge` 也會把 F-12 修正 commit 寫成一行的一個 msgstr（「無法寫入檔案」的原因）折成兩行（F-13 也一樣）。步驟 2、3 之後 `.mo` 與 `a147fed` 的位元組完全相同。
+3. **D8 的實作。** `msgmerge` 把 N1 配對到 F-12 的「無法寫入檔案（權限）」字串、把 N2 配對到字串 22，兩者都是 `#, fuzzy`（修正前 406 個已翻譯、2 個 fuzzy）。一次性工具 `set_msgstr.py` 寫入表中的兩個 msgstr（各一行；`msgmerge` 會保持原樣，第二次 `msgmerge` 不再變動）並清掉 fuzzy：408 個已翻譯、0 fuzzy。字串 22 成為 N2 的 fuzzy 來源，所以它**不會**變成 obsolete，而是直接消失，obsolete 維持 **26** 筆（spec 寫 27）。msgid 集合等於 `a147fed` 的加上 N1、N2，減去字串 22。
+4. **使用者的決定（2026-10-14）。** Q1：N1 採用表中較長的版本，一字不改（`檔案已損壞，而且在取代它之前無法先備份為「{backup}」。檔案或備份檔可能正被其他程式使用，或你沒有該資料夾的寫入權限。請關閉其他程式後再試一次。`），N2 照表。Q2：使用者已把 `about.py` 的版本號更新 commit 到 `main`（`7db6538`、`2053646`：`version` 與 `version_detailed` = `"1.8"`），「Merge 前提」不再需要 stash。F-14 不動 `about.py` 第 4–8 行（本分支上是 `"1.2"`）；本分支與 `main` `2053646` 的 `git merge-tree` 沒有衝突，與 F-13 分支只有兩個 catalog 衝突，依「與 F-13 的關係」重新產生，不手動合併。
+5. **B1 的實作。** About 測試的版本號從 `about.version` 與 `about.version_detailed` 讀取，而不是寫死 `1.2 (1.2)`，所以 merge `main` 的 1.8 之後仍是綠燈；其餘 zh_TW 文字是字面值。GUI 項目 143 (a) 在 `N-f14`（由本分支建置）上仍預期 `版本：1.2 (1.2)`。
+6. **D5 的實作。** AST 守門測試斷言「載入時有翻譯呼叫的檔案」正好是 `["braille/tables/__tables.py"]`（原因寫在常數旁邊），而不是經過允許清單過濾；掃描函式本身用一段程式碼測試每一種呼叫（模組層級、類別本體、預設參數、decorator、lambda 預設值；不含函式與 lambda 本體；`translations.gettext` 這類屬性呼叫也算）。它和 catalog 測試一樣跳過產生出來的 `braille/liblouis/`。保留 import 探測：一個子程序（`-B`）把 `i18n._` 換成記錄器後 import `main.py` 以外的所有 client 模組（約 5 秒）；沒有安裝 wx 的環境會略過。
+7. **D3、D4 測試的實作。** 沒有任何 wx stub 能建立 `AddSymbolDialog`，所以它的測試用真正的 `__init__`，把模組的 `wx` 換成 `MagicMock`，讀取傳給 `wx.Choice` 的 `choices`。設定測試用現有的 `build_panel` 建立三個面板，分類清單則在不經建構子建立的對話框上呼叫 `_build_layout`。`test_uses_title_for_accessible_label` 現在預期 `轉譯`（D4 之後它的 title 是 msgid）。
+8. **E 測試的實作。** 一個表格式測試含十個錯誤：六個存取錯誤（`PermissionError`；`os.replace` 丟出、帶兩個檔名的 `[WinError 5]`；winerror 32；winerror 33；只有 winerror 5；errno `EACCES`）得到 N1，其他四個（`ENOSPC`、`EIO`、`IsADirectoryError`、`ValueError`）得到 N2；訊息框裡都沒有 `k3j9x2`、`.tmp`、`WinError`、`Errno`、`詳細資訊`。`test_config` 的備份測試另外確認 ERROR 紀錄的 `exc_info` 就是 problem 的錯誤。
+9. **變異檢查：20 個 mutant**，即 spec 的清單，只改一項：第 20 個改為「守門測試跳過整個 `braille/`」（守門測試沒有可放寬的允許清單；跳過該資料夾會漏掉 `__tables.py`，而守門測試預期找到它）。
+10. **commit 主旨**以 `(F-14)` 結尾；步驟 2 的 commit 內文註明 F-12 review M-7。
+11. **Windows 項目。** 141、142 是修正項目（兩個版本都跑），143、144 是回歸項目（只跑 `N-f14`）。142 原封不動重跑 F-12 的 `item114.py` (b)。GUI 腳本放在 `docs/superpowers/history/2026-10-14-03-f14-i18n-prep/auto/`。
+
 ## 與 F-13 的關係
 
 F-13（行為與 NVDA，worktree `D:\workspace\DotExpress-f13`，branch `fix/f13-behavior-nvda`）從同一個 `main` `a147fed` 平行進行，很可能先 merge。之後 F-14 的 plan 把 `main` merge 進自己的 branch，重新取得下列行號（行號只供定位；程式碼以函式名稱指稱），並重跑完整測試。

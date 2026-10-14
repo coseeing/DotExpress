@@ -315,14 +315,27 @@ class TranslationTest(unittest.TestCase):
             'DotExpress cannot save its settings to "{path}". Changes to the settings apply until DotExpress is closed, '
             "but they are not kept. This message is not shown again until DotExpress is started again.\n\n{reason}"
         )
-        backup = 'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}'
+        # F-14 (D7): the reasons of a failed backup replace F-12's "Details: {error}" text.
+        backup_access = (
+            'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. '
+            "The file or the backup copy may be in use by another program, or you may not have permission "
+            "to write to the folder. Close the other program and try again."
+        )
+        backup_other = (
+            'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. '
+            "Check that the disk has free space and that you can write to the folder."
+        )
         expected = {
             "Settings Not Saved": "設定未儲存",
             message: (
                 "DotExpress 無法將設定儲存到「{path}」。設定的變更在關閉 DotExpress 之前有效，但不會保留。"
                 "在下次啟動 DotExpress 之前，不會再顯示這則訊息。\n\n{reason}"
             ),
-            backup: "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。詳細資訊：{error}",
+            backup_access: (
+                "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。檔案或備份檔可能正被其他程式使用，"
+                "或你沒有該資料夾的寫入權限。請關閉其他程式後再試一次。"
+            ),
+            backup_other: "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。請確認磁碟還有可用空間，且你有該資料夾的寫入權限。",
         }
         translation = i18n.load_translation()
 

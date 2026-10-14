@@ -893,7 +893,7 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: dialog.py:59 dialog.py:124 gui.py:538 settings/dialogs.py:146
+#: dialog.py:59 dialog.py:124 gui.py:549 settings/dialogs.py:146
 #: settings/dialogs.py:297 ui/message_box.py:29
 msgid "Cancel"
 msgstr ""
@@ -913,8 +913,8 @@ msgstr ""
 
 #: dialog.py:78 dialog.py:567 dialog.py:606 dialog.py:897
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
-#: documents/export_coordinator.py:145 gui.py:503 gui.py:788 gui.py:1104
-#: gui.py:1116 ui/conversion_presenter.py:298
+#: documents/export_coordinator.py:145 gui.py:514 gui.py:799 gui.py:1115
+#: gui.py:1127 ui/conversion_presenter.py:298
 msgid "Error"
 msgstr ""
 
@@ -1358,7 +1358,7 @@ msgstr ""
 msgid "This file type cannot be imported."
 msgstr ""
 
-#: documents/workspace.py:466 gui.py:773
+#: documents/workspace.py:466 gui.py:784
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr ""
@@ -1370,7 +1370,7 @@ msgid ""
 "file is not in the document list."
 msgstr ""
 
-#: documents/workspace_service.py:272 gui.py:521 gui.py:531
+#: documents/workspace_service.py:272 gui.py:532 gui.py:542
 #, python-brace-format
 msgid "Failed to save document: {error}"
 msgstr ""
@@ -1395,11 +1395,11 @@ msgstr ""
 msgid "Braille Result"
 msgstr ""
 
-#: gui.py:253 gui.py:1182
+#: gui.py:253 gui.py:1193
 msgid "File"
 msgstr ""
 
-#: gui.py:266 gui.py:1182 settings/dialogs.py:359
+#: gui.py:266 gui.py:1193 settings/dialogs.py:359
 msgid "Translation"
 msgstr ""
 
@@ -1424,26 +1424,36 @@ msgstr ""
 msgid "Failed to open dual view: {error}"
 msgstr ""
 
-#: gui.py:477
+#: gui.py:480
 #, python-brace-format
 msgid ""
 "The file is damaged, and a backup copy could not be saved as \"{backup}\" "
-"before replacing it. Details: {error}"
+"before replacing it. The file or the backup copy may be in use by another "
+"program, or you may not have permission to write to the folder. Close the "
+"other program and try again."
 msgstr ""
 
-#: gui.py:481
+#: gui.py:486
+#, python-brace-format
+msgid ""
+"The file is damaged, and a backup copy could not be saved as \"{backup}\" "
+"before replacing it. Check that the disk has free space and that you can "
+"write to the folder."
+msgstr ""
+
+#: gui.py:492
 msgid ""
 "The file cannot be written. It may be in use by another program, or you may "
 "not have permission to write to it. Close the other program and try again."
 msgstr ""
 
-#: gui.py:486
+#: gui.py:497
 msgid ""
 "The file cannot be written. Check that the disk has free space and that you "
 "can write to the folder."
 msgstr ""
 
-#: gui.py:489
+#: gui.py:500
 #, python-brace-format
 msgid ""
 "DotExpress cannot save its settings to \"{path}\". Changes to the settings "
@@ -1453,48 +1463,48 @@ msgid ""
 "{reason}"
 msgstr ""
 
-#: gui.py:492
+#: gui.py:503
 msgid "Settings Not Saved"
 msgstr ""
 
-#: gui.py:532
+#: gui.py:543
 msgid "Cannot Save Document"
 msgstr ""
 
-#: gui.py:536
+#: gui.py:547
 msgid ""
 "Changes made since the last successful save have not been saved. If you "
 "close without saving, these changes will be lost."
 msgstr ""
 
-#: gui.py:538
+#: gui.py:549
 msgid "&Retry"
 msgstr ""
 
-#: gui.py:538
+#: gui.py:549
 msgid "Close &Without Saving"
 msgstr ""
 
-#: gui.py:545
+#: gui.py:556
 #, python-brace-format
 msgid "Failed to open website: {error}"
 msgstr ""
 
-#: gui.py:548
+#: gui.py:559
 msgid "About DotExpress"
 msgstr ""
 
-#: gui.py:561
+#: gui.py:572
 #, python-brace-format
 msgid "Unable to open text processing script: {error}"
 msgstr ""
 
-#: gui.py:562 settings/dialogs.py:125 settings/dialogs.py:165
+#: gui.py:573 settings/dialogs.py:125 settings/dialogs.py:165
 #: ui/translation_menu.py:10
 msgid "Text Processing"
 msgstr ""
 
-#: gui.py:668
+#: gui.py:679
 #, python-brace-format
 msgid ""
 "Some characters in document \"{name}\" cannot be shown ({count} in all). "
@@ -1505,23 +1515,23 @@ msgid ""
 "one appears in the braille as an escape code."
 msgstr ""
 
-#: gui.py:673
+#: gui.py:684
 msgid "Characters Replaced"
 msgstr ""
 
-#: gui.py:737
+#: gui.py:748
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr ""
 
-#: gui.py:783
+#: gui.py:794
 #, python-brace-format
 msgid ""
 "Choose another name, or move or delete that file. Workspace folder:\n"
 "{folder}"
 msgstr ""
 
-#: gui.py:817
+#: gui.py:828
 #, python-brace-format
 msgid ""
 "DotExpress was interrupted while saving or renaming a document. These "
@@ -1532,76 +1542,76 @@ msgid ""
 "Check that their content is what you expect."
 msgstr ""
 
-#: gui.py:820
+#: gui.py:831
 msgid "Documents Recovered"
 msgstr ""
 
-#: gui.py:878
+#: gui.py:889
 msgid "Add Document"
 msgstr ""
 
-#: gui.py:894
+#: gui.py:905
 msgid "Rename Document"
 msgstr ""
 
-#: gui.py:918
+#: gui.py:929
 #, python-brace-format
 msgid "Do you want to delete document \"{name}\"?"
 msgstr ""
 
-#: gui.py:919
+#: gui.py:930
 msgid "Confirm Delete Document"
 msgstr ""
 
-#: gui.py:928 gui.py:955
+#: gui.py:939 gui.py:966
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr ""
 
-#: gui.py:947
+#: gui.py:958
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr ""
 
-#: gui.py:948
+#: gui.py:959
 msgid "Confirm Delete All"
 msgstr ""
 
-#: gui.py:981
+#: gui.py:992
 msgid "Import Document"
 msgstr ""
 
-#: gui.py:1001
+#: gui.py:1012
 msgid "Import Issues"
 msgstr ""
 
-#: gui.py:1002
+#: gui.py:1013
 msgid "Some files were skipped during import."
 msgstr ""
 
-#: gui.py:1115
+#: gui.py:1126
 #, python-brace-format
 msgid "Failed to open the dictionary editor: {error}"
 msgstr ""
 
-#: gui.py:1240
+#: gui.py:1251
 msgid "Export Document"
 msgstr ""
 
-#: gui.py:1250
+#: gui.py:1261
 msgid "Export All Documents"
 msgstr ""
 
-#: gui.py:1259
+#: gui.py:1270
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr ""
 
-#: gui.py:1262
+#: gui.py:1273
 msgid "Confirm Overwrite"
 msgstr ""
 
-#: gui.py:1268
+#: gui.py:1279
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1612,7 +1622,7 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: gui.py:1271
+#: gui.py:1282
 msgid "Startup Error"
 msgstr ""
 

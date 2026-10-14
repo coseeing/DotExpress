@@ -473,9 +473,20 @@ class BrailleFrame(wx.Frame):
 			else:
 				reason = _("The file cannot be read: {error}").format(error=problem.error)
 		elif problem.kind is ConfigSaveProblemKind.BACKUP_FAILED:
-			reason = _(
-				'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. Details: {error}'
-			).format(backup=problem.backup_path, error=problem.error)
+			# Not the operating system's text: it holds the random name of the temporary file;
+			# config.log keeps it (F-14 D7). Reading config.json for the copy can fail too.
+			if is_access_error(problem.error):
+				reason = _(
+					'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. '
+					"The file or the backup copy may be in use by another program, or you may not have permission "
+					"to write to the folder. Close the other program and try again."
+				)
+			else:
+				reason = _(
+					'The file is damaged, and a backup copy could not be saved as "{backup}" before replacing it. '
+					"Check that the disk has free space and that you can write to the folder."
+				)
+			reason = reason.format(backup=problem.backup_path)
 		elif is_access_error(problem.error):
 			reason = _(
 				"The file cannot be written. It may be in use by another program, or you may not have "

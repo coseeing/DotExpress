@@ -7,9 +7,14 @@ are Windows' common buttons, which Windows labels in the system language.
 
 from __future__ import annotations
 
+import re
+
 import wx
 
 from i18n import _
+
+# The access key a zh_TW label adds after its text, "(&S)".
+_ACCESS_KEY_SUFFIX = re.compile(r"\(&[^)]\)")
 
 
 def message_box(message: str, caption: str, style: int, parent: wx.Window | None = None) -> int:
@@ -40,15 +45,24 @@ def confirm_box(
     cancel_label: str,
     parent: wx.Window | None = None,
 ) -> bool:
-    """Ask before something that changes or loses the user's work; True only for the OK button.
+    """Ask before something that changes or loses the user's work; True only for ``ok_label``.
 
-    A warning box with the buttons ``ok_label`` and ``cancel_label``; Cancel is the
-    default, and Esc, Alt+F4 and the close button answer it too (F-11 D1, D7). A Yes/No
-    box would ignore Esc and Alt+F4. It is wx's generic dialog, not the native task
-    dialog of ``message_box``: shown from a modal dialog, a task dialog with its own
-    button labels answers Alt+F4 with its first button (measured with wx 4.2.5 on
-    Windows 11 while planning F-11), here the one that changes the user's work.
+    The system Yes/No warning box, like the other confirmations, with ``ok_label`` on Yes
+    and ``cancel_label`` on No; No, the button that keeps the user's work, is the default,
+    so Enter answers it. Esc, Alt+F4 and the close button do nothing in this box (F-15).
+
+    The labels must not have an access key, so any "&" is dropped, with a "(&X)" suffix as
+    the zh_TW catalog writes one. In the native task dialog Alt+<key> presses the button
+    whose access-key character code equals the key's virtual-key code: Alt+F4 presses an
+    "s" button, Alt+F10 a "y" one, Alt+Numpad4 a "d" one. Without access keys no Alt+key
+    presses a button (F-15 probe, docs/superpowers/history/2026-10-15-01-f15-system-confirm-boxes/).
+    F-11's wx generic dialog, which this replaces, answered Esc and Alt+F4 with Cancel.
     """
-    with wx.GenericMessageDialog(parent, message, caption, wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING) as dialog:
-        dialog.SetOKCancelLabels(ok_label, cancel_label)
-        return dialog.ShowModal() == wx.ID_OK
+    with wx.MessageDialog(parent, message, caption, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING) as dialog:
+        dialog.SetYesNoLabels(_without_access_key(ok_label), _without_access_key(cancel_label))
+        return dialog.ShowModal() == wx.ID_YES
+
+
+def _without_access_key(label: str) -> str:
+    """``label`` without "&": a "(&X)" access-key suffix goes whole (F-15)."""
+    return _ACCESS_KEY_SUFFIX.sub("", label).replace("&", "")

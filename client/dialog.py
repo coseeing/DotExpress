@@ -591,8 +591,8 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 		if self._model.has_changes() and not confirm_box(
 			_('Do you want to discard the changes you made to dictionary "{name}"?').format(name=self.dictionary_path.stem),
 			_("Unsaved Changes"),
-			_("&Discard Changes"),
-			_("&Back to Editing"),
+			_("Discard Changes"),
+			_("Back to Editing"),
 			parent=self,
 		):
 			self._restore_focus(focused)
@@ -619,8 +619,8 @@ class DictionaryEntriesDialog(ContextManagedDialog, wx.Dialog):
 		return confirm_box(
 			message,
 			_("Remove Rows That Cannot Be Shown"),
-			_("Remove and &Save"),
-			_("&Back to Editing"),
+			_("Remove and Save"),
+			_("Back to Editing"),
 			parent=self,
 		)
 

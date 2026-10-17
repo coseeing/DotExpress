@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import unicodedata
 from collections import defaultdict
 from io import StringIO
 from typing import Mapping, Optional
@@ -256,6 +257,10 @@ class LanguageDetector(object):
 					if c.isspace():
 						sb.write(c)
 						continue
+					# F-16：組合符號（Unicode 類別 M）不切換語言，跟隨目前的語言
+					if self._is_combining_mark(c):
+						sb.write(c)
+						continue
 					if "\u2800" <= c <= "\u28ff":
 						sb.write(c)
 						continue
@@ -313,11 +318,18 @@ class LanguageDetector(object):
 	def _is_non_detecting_character(self, c):
 		if c.isspace() or "\u2800" <= c <= "\u28ff":
 			return True
+		if self._is_combining_mark(c):
+			return True
 		block = ord(c) >> BLOCK_RSHIFT
 		try:
 			return BLOCKS[block] is None
 		except IndexError:
 			return True
+
+	@staticmethod
+	def _is_combining_mark(c):
+		# F-16：Mn、Mc、Me 類別的組合符號
+		return unicodedata.category(c).startswith("M")
 
 	def _find_language_for_character(self, c, curLang, tmpLang):
 		if c in self.char_langinfo:

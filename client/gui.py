@@ -13,7 +13,6 @@ from conversion.contracts import TranslationRuntime
 from adapters.translation.provider import build_default_translation_runtime
 from conversion.math_service import latex_to_mathml
 from conversion.service import ConversionRequest
-from conversion.preprocessing.user_script import preprocessing_script_path
 from dictionaries.entry_list_model import DictionaryEntryListModel
 from dictionaries.manager import dictionary_path_for_name
 from dictionaries.presenter import DictionaryManagementPresenter
@@ -81,6 +80,7 @@ from dialog import (
 	DocumentNameDialog,
 	FileIssuesDialog,
 	InvalidWorkspaceFilesDialog,
+	ScriptManagementDialog,
 )
 from settings.view import (
 	ViewSettings,
@@ -89,7 +89,7 @@ from settings.view import (
 	save_view_settings,
 )
 from settings.state import DotExpressSettingsSnapshot
-from settings.dialogs import DotExpressSettingsDialog, TextProcessingDialog, TranslationSettingsPanel
+from settings.dialogs import DotExpressSettingsDialog, TranslationSettingsPanel
 from settings.options import BRAILLE_FONT_SIMBRAILLE, VIEW_SCHEME_OPTIONS
 
 
@@ -293,7 +293,7 @@ class BrailleFrame(wx.Frame):
 		translation_handlers = {
 			"convert": self.on_convert,
 			"dual_view": self.on_open_dual_view,
-			"text_processing": self.on_open_text_processing,
+			"scripts": self.on_open_script_management,
 			"settings": self.on_open_settings,
 			"dictionaries": self.on_open_dictionary_management,
 		}
@@ -612,19 +612,11 @@ class BrailleFrame(wx.Frame):
 	def on_open_dual_view(self, _evt) -> None:
 		self._open_dual_view_in_browser()
 
-	def on_open_text_processing(self, _event) -> None:
-		try:
-			TextProcessingDialog.show_singleton(
-				parent=self,
-				script_path=preprocessing_script_path(self.dictionary_dir),
-			)
-		except OSError as error:
-			message_box(
-				_("Unable to open text processing script: {error}").format(error=error),
-				_("Text Processing"),
-				wx.OK | wx.ICON_ERROR,
-				parent=self,
-			)
+	def on_open_script_management(self, _event) -> None:
+		"""The modal Script Management dialog, with the active script selected (F-18 D7)."""
+		selected_name = self._script_presenter.refresh(self.translation_settings.selected_script)
+		with ScriptManagementDialog(self, self._script_presenter, selected_name) as dialog:
+			dialog.ShowModal()
 
 	def on_frame_activate(self, event: wx.ActivateEvent) -> None:
 		viewer = self._dual_view_frame

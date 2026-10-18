@@ -254,9 +254,10 @@ class TranslationTest(unittest.TestCase):
         translation = i18n.load_translation()
         translated = [translation.gettext(label) for label in labels]
 
+        # F-18 (D9): the script editor asks before discarding changes, as the dictionary editor does.
         self.assertEqual(
             translated,
-            ["放棄變更", "返回編輯", "移除並儲存", "返回編輯"],
+            ["放棄變更", "返回編輯", "移除並儲存", "返回編輯", "放棄變更", "返回編輯"],
         )
         self.assertEqual([label for label in labels + translated if "&" in label], [])
 
@@ -734,10 +735,7 @@ class ExtractionMarkerTest(unittest.TestCase):
         "Convert",
         "Settings",
         "Dictionary Management...",
-        "Text Processing",
-        "Text Processing Python Code",
-        "Unable to open text processing script: {error}",
-        "Unable to save text processing script: {error}",
+        # F-18 removed the Text Processing dialog and its four strings.
         "Text processing failed: {error}",
         "The script must define exactly one top-level synchronous main function.",
         "main must define exactly one positional parameter and no other parameters.",
@@ -772,7 +770,7 @@ class ExtractionMarkerTest(unittest.TestCase):
                     ):
                         extracted.add(node.args[0].value)
 
-        self.assertEqual(len(self.FORMER_MARKER_MSGIDS), 44)
+        self.assertEqual(len(self.FORMER_MARKER_MSGIDS), 40)
         self.assertEqual(sorted(set(self.FORMER_MARKER_MSGIDS) - extracted), [])
 
     def test_export_summary_and_conversion_fallback_texts_are_marked_where_defined(self) -> None:

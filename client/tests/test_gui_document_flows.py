@@ -543,30 +543,25 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
 
 
 class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
-    def test_open_text_processing_uses_dictionary_directory_script(self) -> None:
+    def test_open_script_management_shows_the_presenter_on_the_active_script(self) -> None:
+        # F-18 (D7, D11): modal, the focus on the active script.
         frame = object.__new__(gui.BrailleFrame)
-        frame.dictionary_dir = Path("dictionary")
-        with patch.object(gui.TextProcessingDialog, "show_singleton") as show:
-            frame.on_open_text_processing(None)
-        show.assert_called_once_with(
-            parent=frame,
-            script_path=Path("dictionary/preprocessing.py"),
-        )
+        frame.translation_settings = TranslationSettings("unicode", 40, "default", "upper")
+        frame._script_presenter = Mock()
+        frame._script_presenter.refresh.return_value = "upper"
+        with patch.object(gui, "ScriptManagementDialog") as dialog_class:
+            frame.on_open_script_management(None)
 
-    def test_open_text_processing_reports_read_error(self) -> None:
-        frame = object.__new__(gui.BrailleFrame)
-        frame.dictionary_dir = Path("dictionary")
-        with (
-            patch.object(gui.TextProcessingDialog, "show_singleton", side_effect=OSError("denied")),
-            patch.object(gui, "message_box") as message_box,
-        ):
-            frame.on_open_text_processing(None)
-        message_box.assert_called_once_with(
-            gui._("Unable to open text processing script: {error}").format(error="denied"),
-            gui._("Text Processing"),
-            gui.wx.OK | gui.wx.ICON_ERROR,
-            parent=frame,
-        )
+        frame._script_presenter.refresh.assert_called_once_with("upper")
+        dialog_class.assert_called_once_with(frame, frame._script_presenter, "upper")
+        dialog_class.return_value.__enter__.return_value.ShowModal.assert_called_once_with()
+
+    def test_the_text_processing_dialog_and_its_handler_are_gone(self) -> None:
+        # Check the class and the module: the wx stub makes missing instance attributes look present.
+        self.assertFalse(hasattr(gui.BrailleFrame, "on_open_text_processing"))
+        for name in ("TextProcessingDialog", "preprocessing_script_path"):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(gui, name))
 
     def test_app_builds_runtime_and_passes_it_to_frame(self) -> None:
         runtime = Mock()
@@ -1642,7 +1637,7 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
         for name in (
             "on_convert",
             "on_open_dual_view",
-            "on_open_text_processing",
+            "on_open_script_management",
             "on_open_dictionary_management",
             "on_open_settings",
             "on_open_coseeing_website",
@@ -1672,8 +1667,8 @@ class DocumentMenuAndExportCharacterizationTest(unittest.TestCase):
                 ("frame", "Bind", "EVT_MENU", frame.on_convert, "menu3:T[Convert]"),
                 ("menu3", "Append", -1, "T[Dual View]"),
                 ("frame", "Bind", "EVT_MENU", frame.on_open_dual_view, "menu3:T[Dual View]"),
-                ("menu3", "Append", -1, "T[Text Processing]"),
-                ("frame", "Bind", "EVT_MENU", frame.on_open_text_processing, "menu3:T[Text Processing]"),
+                ("menu3", "Append", -1, "T[Script Management...]"),
+                ("frame", "Bind", "EVT_MENU", frame.on_open_script_management, "menu3:T[Script Management...]"),
                 ("menu3", "Append", -1, "T[Dictionary Management...]"),
                 ("frame", "Bind", "EVT_MENU", frame.on_open_dictionary_management, "menu3:T[Dictionary Management...]"),
                 ("menu3", "Append", -1, "T[Settings]"),
@@ -5983,18 +5978,6 @@ class ViewFontSizeSyncCharacterizationTest(unittest.TestCase):
         )
         self.assertEqual(dialog.snapshot.view, ViewSettings(13, "light", "simbraille"))
 
-    def test_an_open_text_processing_dialog_is_left_alone(self) -> None:
-        frame = self.make_frame()
-        text_dialog = Mock()
-        with (
-            patch.object(gui.TextProcessingDialog, "_instance", text_dialog),
-            self.open_dialog(None),
-            patch.object(gui, "save_view_settings", return_value=None) as save,
-        ):
-            frame.on_editor_mousewheel(self.wheel(120))
-
-        save.assert_called_once_with(frame._config_store, ViewSettings(13, "dark", "default"))
-        self.assertEqual(text_dialog.mock_calls, [])
 
 
 class ApplicationPathsWiringCharacterizationTest(unittest.TestCase):

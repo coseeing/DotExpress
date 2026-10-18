@@ -20,22 +20,6 @@ NO_PROCESSING_SCRIPT_NAME = "no-processing"
 NO_PROCESSING_SCRIPT = "def main(input: str) -> str:\n    return input\n"
 SCRIPT_SUFFIX = ".py"
 
-# The single script of the Text Processing dialog, next to the dictionaries (before F-18).
-PREPROCESSING_FILENAME = "preprocessing.py"
-DEFAULT_PREPROCESSING_SCRIPT = NO_PROCESSING_SCRIPT
-
-
-def preprocessing_script_path(dictionary_dir: Path | str) -> Path:
-    return Path(dictionary_dir) / PREPROCESSING_FILENAME
-
-
-def load_preprocessing_script(path: Path | str) -> str:
-    source_path = Path(path)
-    try:
-        return source_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return DEFAULT_PREPROCESSING_SCRIPT
-
 
 def _is_str_annotation(annotation: ast.expr) -> bool:
     """Whether ``annotation`` is ``str`` or the quoted ``"str"`` (F-18 D5, O2)."""
@@ -97,9 +81,6 @@ def save_script(path: Path | str, source: str) -> None:
     validate_script(source, filename=str(destination))
     destination.parent.mkdir(parents=True, exist_ok=True)
     write_text_atomically(destination, lambda stream: stream.write(source), encoding="utf-8", newline="")
-
-
-save_preprocessing_script = save_script
 
 
 def execute_script(path: Path | str, input_text: str) -> str:

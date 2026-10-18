@@ -5,14 +5,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from conversion.preprocessing import user_script
 from conversion.preprocessing.user_script import (
-    DEFAULT_PREPROCESSING_SCRIPT,
     NO_PROCESSING_SCRIPT,
     NO_PROCESSING_SCRIPT_NAME,
     SCRIPT_SUFFIX,
     execute_script,
-    load_preprocessing_script,
-    preprocessing_script_path,
     read_script_source,
     save_script,
     validate_script,
@@ -34,13 +32,19 @@ class UserPreprocessingScriptTest(unittest.TestCase):
         self.directory = Path(self._tmpdir.name)
         self.path = self.directory / "upper.py"
 
-    def test_path_uses_dictionary_directory(self) -> None:
-        self.assertEqual(preprocessing_script_path(self.directory), self.directory / "preprocessing.py")
-
-    def test_missing_file_loads_identity_script_without_creating_file(self) -> None:
-        path = preprocessing_script_path(self.directory)
-        self.assertEqual(load_preprocessing_script(path), DEFAULT_PREPROCESSING_SCRIPT)
-        self.assertFalse(path.exists())
+    def test_the_single_script_next_to_the_dictionaries_is_gone(self) -> None:
+        # F-18 (D-A): dictionary/preprocessing.py is not read, so nothing names it any more.
+        for name in (
+            "PREPROCESSING_FILENAME",
+            "DEFAULT_PREPROCESSING_SCRIPT",
+            "preprocessing_script_path",
+            "load_preprocessing_script",
+            "save_preprocessing_script",
+            "execute_preprocessing_script",
+            "validate_preprocessing_script",
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(user_script, name))
 
     def test_no_processing_is_the_identity_script_of_the_spec(self) -> None:
         # F-18 (D-D): the text the user gave, also the template of a new script.

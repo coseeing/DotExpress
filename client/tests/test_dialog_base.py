@@ -145,6 +145,19 @@ class NameDialogMessagesTest(unittest.TestCase):
 
         self.assertEqual(translate.call_args_list, [call("P2-1 test: {name} is reserved"), call("P2-1 test: empty")])
 
+    def test_reserved_without_a_fixed_name_shows_the_name_typed(self) -> None:
+        # F-18 (D4): three script names are reserved; the message repeats the one typed.
+        messages = NameDialogMessages(
+            empty="e",
+            too_long="t",
+            invalid="i",
+            reserved='Script name "{name}" is reserved.',
+            reserved_name=None,
+        )
+
+        self.assertEqual(messages.message_for("reserved", "不處理"), "腳本名稱「不處理」為保留名稱。")
+        self.assertEqual(TEST_MESSAGES.message_for("reserved", "typed"), "P2-1 test: default is reserved")
+
     def test_messages_are_frozen(self) -> None:
         with self.assertRaises(dataclasses.FrozenInstanceError):
             TEST_MESSAGES.empty = "changed"
@@ -163,6 +176,14 @@ class NameDialogBaseTest(unittest.TestCase):
                 with self.subTest(base=base.__name__, code=code):
                     dialog = make_name_dialog(base, raising(NameValidationError(code, "English")), "x")
                     self.assertEqual(dialog._validate_name("x"), message)
+
+    def test_the_reserved_message_gets_the_name_typed_without_spaces(self) -> None:
+        messages = dataclasses.replace(TEST_MESSAGES, reserved_name=None)
+        for base in DIALOG_BASES:
+            with self.subTest(base=base.__name__):
+                dialog = make_name_dialog(base, raising(NameValidationError("reserved", "English")), " No Processing")
+                dialog.name_messages = messages
+                self.assertEqual(dialog._validate_name(" No Processing"), "P2-1 test: No Processing is reserved")
 
     def test_a_plain_value_error_is_reported_as_invalid(self) -> None:
         for base in DIALOG_BASES:

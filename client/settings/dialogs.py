@@ -2,17 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
 import wx
 from wx.lib.scrolledpanel import ScrolledPanel
 
 from braille.tables import listTables
-from conversion.preprocessing.user_script import (
-    NO_PROCESSING_SCRIPT_NAME,
-    load_preprocessing_script,
-    save_preprocessing_script,
-)
+from conversion.preprocessing.user_script import NO_PROCESSING_SCRIPT_NAME
 from i18n import N_, _
 from text_scripts.actions import script_display_name
 from ui.dialog_base import SingletonDialogMixin
@@ -115,81 +110,6 @@ class SettingsDialog(wx.Dialog):
 _DEAD_WINDOW_ERROR_TYPES = tuple(
     error_type for error_type in (getattr(wx, "PyDeadObjectError", None),) if error_type is not None
 )
-
-
-class TextProcessingDialog(SingletonDialogMixin, SettingsDialog):
-    _instance: "TextProcessingDialog | None" = None
-    dead_window_error_types = _DEAD_WINDOW_ERROR_TYPES
-
-    def __init__(self, parent, *, script_path: Path | str) -> None:
-        self.script_path = Path(script_path)
-        source = load_preprocessing_script(self.script_path)
-        super().__init__(parent, title=_("Text Processing"))
-        self._build_layout(source)
-        self.SetMinSize(self.MIN_SIZE)
-        self.SetSize(self.INITIAL_SIZE)
-        self.CentreOnParent()
-
-    def _build_layout(self, source: str) -> None:
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        self.editor = wx.TextCtrl(
-            self,
-            value=source,
-            style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_DONTWRAP,
-        )
-        self.editor.SetName(_("Text Processing Python Code"))
-        font = self.editor.GetFont()
-        font.SetFamily(wx.FONTFAMILY_TELETYPE)
-        self.editor.SetFont(font)
-        sizer.Add(self.editor, 1, wx.EXPAND | wx.ALL, 8)
-
-        buttons = wx.BoxSizer(wx.HORIZONTAL)
-        ok_button = wx.Button(self, wx.ID_OK, _("OK"))
-        cancel_button = wx.Button(self, wx.ID_CANCEL, _("Cancel"))
-        apply_button = wx.Button(self, wx.ID_APPLY, _("Apply"))
-        ok_button.Bind(wx.EVT_BUTTON, self.on_ok)
-        cancel_button.Bind(wx.EVT_BUTTON, self.on_cancel)
-        apply_button.Bind(wx.EVT_BUTTON, self.on_apply)
-        for button in (ok_button, cancel_button, apply_button):
-            buttons.Add(button, 0, wx.ALL, 5)
-        sizer.Add(buttons, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
-        self.SetSizer(sizer)
-
-    def on_apply(self, event=None) -> bool:
-        try:
-            save_preprocessing_script(self.script_path, self.editor.GetValue())
-        except (OSError, SyntaxError, ValueError) as error:
-            display_error = _(str(error)) if isinstance(error, ValueError) else error
-            message_box(
-                _("Unable to save text processing script: {error}").format(
-                    error=display_error
-                ),
-                _("Text Processing"),
-                wx.OK | wx.ICON_ERROR,
-                parent=self,
-            )
-            self.editor.SetFocus()
-            return False
-        return True
-
-    def on_ok(self, event=None) -> None:
-        if self.on_apply():
-            self._destroy()
-
-    def on_cancel(self, event=None) -> None:
-        self._destroy()
-
-    @classmethod
-    def show_singleton(
-        cls,
-        *,
-        parent,
-        script_path: Path | str,
-    ) -> "TextProcessingDialog":
-        existing = cls._raise_existing()
-        if existing is not None:
-            return existing
-        return cls._show_new(cls(parent, script_path=script_path))
 
 
 class MultiCategorySettingsDialog(SettingsDialog):

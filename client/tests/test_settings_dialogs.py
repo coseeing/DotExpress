@@ -141,112 +141,12 @@ class SettingsPanelTest(unittest.TestCase):
         self.assertEqual(SettingsPanelAccessible(panel).GetDescription(0), (wx.ACC_OK, ""))
 
 
-class TextProcessingDialogTest(unittest.TestCase):
-    def make_dialog(self):
-        from settings.dialogs import TextProcessingDialog
+class TextProcessingDialogRemovedTest(unittest.TestCase):
+    def test_the_text_processing_dialog_is_gone(self) -> None:
+        # F-18 (D11): Script Management (dialog.py) replaces it.
+        from settings import dialogs
 
-        dialog = object.__new__(TextProcessingDialog)
-        dialog.script_path = Path("dictionary/preprocessing.py")
-        dialog.editor = Mock()
-        dialog.Destroy = Mock()
-        return dialog
-
-    def test_initial_size_title_and_accessible_editor_name(self) -> None:
-        from settings.dialogs import TextProcessingDialog
-
-        with (
-            patch(
-                "settings.dialogs.load_preprocessing_script",
-                return_value="def main(text):\n    return text\n",
-            ),
-            patch("settings.dialogs._", side_effect=lambda text: text),
-        ):
-            dialog = TextProcessingDialog(
-                None,
-                script_path=Path("dictionary/preprocessing.py"),
-            )
-
-        self.assertEqual(dialog.size, (720, 440))
-        self.assertEqual(dialog.title, "Text Processing")
-        self.assertEqual(dialog.editor.GetName(), "Text Processing Python Code")
-
-    def test_apply_saves_editor_source(self) -> None:
-        dialog = self.make_dialog()
-        dialog.editor.GetValue.return_value = "def main(text):\n    return text\n"
-        with patch("settings.dialogs.save_preprocessing_script") as save:
-            self.assertTrue(dialog.on_apply())
-        save.assert_called_once_with(dialog.script_path, dialog.editor.GetValue.return_value)
-
-    def test_apply_failure_keeps_dialog_open_and_focuses_editor(self) -> None:
-        dialog = self.make_dialog()
-        dialog.editor.GetValue.return_value = "def main(:\n"
-        with (
-            patch(
-                "settings.dialogs.save_preprocessing_script",
-                side_effect=SyntaxError("invalid syntax"),
-            ),
-            patch("settings.dialogs.message_box") as message_box,
-        ):
-            self.assertFalse(dialog.on_apply())
-        dialog.Destroy.assert_not_called()
-        dialog.editor.SetFocus.assert_called_once_with()
-        message_box.assert_called_once_with(
-            i18n._("Unable to save text processing script: {error}").format(error="invalid syntax"),
-            i18n._("Text Processing"),
-            wx.OK | wx.ICON_ERROR,
-            parent=dialog,
-        )
-
-    def test_ok_destroys_only_after_successful_apply(self) -> None:
-        dialog = self.make_dialog()
-        dialog.on_apply = Mock(return_value=True)
-        dialog._destroy = Mock()
-        dialog.on_ok()
-        dialog._destroy.assert_called_once_with()
-
-    def test_cancel_does_not_save(self) -> None:
-        dialog = self.make_dialog()
-        dialog._destroy = Mock()
-        with patch("settings.dialogs.save_preprocessing_script") as save:
-            dialog.on_cancel()
-        save.assert_not_called()
-        dialog._destroy.assert_called_once_with()
-
-    def test_show_singleton_reuses_live_dialog(self) -> None:
-        from settings.dialogs import TextProcessingDialog
-
-        existing = Mock()
-        original = TextProcessingDialog._instance
-        TextProcessingDialog._instance = existing
-        try:
-            result = TextProcessingDialog.show_singleton(
-                parent=Mock(),
-                script_path=Path("dictionary/preprocessing.py"),
-            )
-        finally:
-            TextProcessingDialog._instance = original
-
-        self.assertIs(result, existing)
-        existing.Iconize.assert_called_once_with(False)
-        existing.Raise.assert_called_once_with()
-        existing.SetFocus.assert_called_once_with()
-
-    def test_show_singleton_reraises_unexpected_existing_dialog_error(self) -> None:
-        from settings.dialogs import TextProcessingDialog
-
-        existing = Mock()
-        existing.Iconize.side_effect = RuntimeError("unexpected")
-        original = TextProcessingDialog._instance
-        TextProcessingDialog._instance = existing
-        try:
-            with self.assertRaisesRegex(RuntimeError, "unexpected"):
-                TextProcessingDialog.show_singleton(
-                    parent=Mock(),
-                    script_path=Path("dictionary/preprocessing.py"),
-                )
-            self.assertIs(TextProcessingDialog._instance, existing)
-        finally:
-            TextProcessingDialog._instance = original
+        self.assertFalse(hasattr(dialogs, "TextProcessingDialog"))
 
 
 class MultiCategorySettingsDialogTest(unittest.TestCase):
@@ -786,16 +686,6 @@ class _SingletonCharacterization:
         self.assertEqual(other.mock_calls, [])
 
 
-class TextProcessingSingletonTest(_SingletonCharacterization, unittest.TestCase):
-    def dialog_class(self):
-        from settings.dialogs import TextProcessingDialog
-
-        return TextProcessingDialog
-
-    def show_kwargs(self) -> dict:
-        return {"parent": "parent-window", "script_path": "dictionary/preprocessing.py"}
-
-
 class DotExpressSettingsSingletonTest(_SingletonCharacterization, unittest.TestCase):
     def setUp(self) -> None:
         self.snapshot = make_snapshot()
@@ -852,28 +742,6 @@ class DotExpressSettingsSingletonTest(_SingletonCharacterization, unittest.TestC
 
         self.assertEqual(existing.mock_calls, [])
         self.assertEqual(events, [])
-
-
-class SingletonSlotIndependenceTest(unittest.TestCase):
-    def test_the_two_singleton_dialogs_keep_separate_slots(self) -> None:
-        from settings.dialogs import DotExpressSettingsDialog, TextProcessingDialog
-
-        text_dialog = Mock()
-        settings_dialog = object.__new__(DotExpressSettingsDialog)
-        settings_dialog.Destroy = Mock()
-        with (
-            patch.object(TextProcessingDialog, "_instance", text_dialog),
-            patch.object(DotExpressSettingsDialog, "_instance", settings_dialog),
-        ):
-            self.assertIs(
-                TextProcessingDialog.show_singleton(parent=None, script_path="dictionary/preprocessing.py"),
-                text_dialog,
-            )
-            settings_dialog._destroy()
-            self.assertIsNone(DotExpressSettingsDialog._instance)
-            self.assertIs(TextProcessingDialog._instance, text_dialog)
-
-        settings_dialog.Destroy.assert_called_once_with()
 
 
 # --- P2-3 characterization: the option lists as the settings panels show them.

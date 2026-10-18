@@ -93,7 +93,7 @@ Written to `$T/tools/` in Task 0 by the block script: `brief.py` (F-12's, also m
 
 ### Task 0: Baseline (no commit)
 
-- [ ] **Step 1: Check the starting point.**
+- [x] **Step 1: Check the starting point.**
 
 ```bash
 git -C $REPO status --short -- client docs scripts
@@ -113,7 +113,7 @@ f691b2517f1974645d495bccc593085087962a09
 a615c7e9405157ae2c6f397360a35f66859dd716
 ```
 
-- [ ] **Step 2: The git-ignored runtime the tests load.** A worktree is made without the generated liblouis DLL and tables, `louis_helper.py`, MathCAT and the submodule's `configure.ac`; the guarded copies below bring them from the main checkout, as F-3's Task 0 did (in a worktree that has them already they do nothing). Never stage these files.
+- [x] **Step 2: The git-ignored runtime the tests load.** A worktree is made without the generated liblouis DLL and tables, `louis_helper.py`, MathCAT and the submodule's `configure.ac`; the guarded copies below bring them from the main checkout, as F-3's Task 0 did (in a worktree that has them already they do nothing). Never stage these files.
 
 ```bash
 test -e $REPO/client/braille/liblouis.dll || cp $MAIN/client/braille/liblouis.dll $REPO/client/braille/
@@ -141,7 +141,7 @@ present: include/liblouis/configure.ac
 louis_helper.py is the vendored file
 ```
 
-- [ ] **Step 3: Create the throwaway tools** in `$T/tools/` (outside the repo, never committed).
+- [x] **Step 3: Create the throwaway tools** in `$T/tools/` (outside the repo, never committed).
 
 File: `$T/tools/brief.py`
 
@@ -606,7 +606,7 @@ File: `$T/tools/apply_blocks.py`
 Usage: python apply_blocks.py <plan.md> <repo> <T> "<task>" "<step>"
   for example: python apply_blocks.py plan.md D:/workspace/DotExpress-f18 <T> "Task 1" "Step 1"
 
-The step is the "- [ ] **Step N" (or ticked "- [x]") item under the "### Task N" heading. A File: block is
+The step is the "- [x] **Step N" (or ticked "- [x]") item under the "### Task N" heading. A File: block is
 written as is (a path starting with $T goes under <T>, any other path under <repo>); an
 Edit: block is the line "Edit: `path`" and the next two fenced blocks, the old text and
 its replacement. The old text must occur exactly once in the file at that point
@@ -706,7 +706,7 @@ wrote $T/tools/apply_blocks.py
 
 From then on apply every step's blocks with `apply_blocks.py`, for example `$PY $T/tools/apply_blocks.py "$PLAN" $REPO $T "Task 1" "Step 1"`; it prints `N blocks applied`.
 
-- [ ] **Step 4: Baseline: full suite, focused modules, fixtures, msgids, catalogs, tree, application folders.**
+- [x] **Step 4: Baseline: full suite, focused modules, fixtures, msgids, catalogs, tree, application folders.**
 
 ```bash
 $PY -B -X utf8 -m unittest discover -s tests 2>&1 | $PY $T/tools/brief.py
@@ -745,7 +745,7 @@ worktree application folders checked
 
 ### Task 1: Keep text-processing scripts in a script folder with a stricter signature rule (D1, D2, D4-D6)
 
-- [ ] **Step 1: Red: Test Plan A and B.** `test_user_preprocessing_script.py` (4 spaces) is rewritten for `validate_script`, `read_script_source`, `save_script` and `execute_script` (a script folder file `upper.py`; the annotation rule with its two new msgids; the BOM; no fallback for a missing or undecodable file); the two legacy tests (`test_path_uses_dictionary_directory`, `test_missing_file_loads_identity_script_without_creating_file`) stay until Task 3 (Spec Corrections 2). New `test_text_scripts_manager.py`: the folder (No Processing created once, never rewritten, listed first), the names (reserved in any case), create, import (suffix, encoding, rule, source that cannot be opened, original bytes, taken name), rename, delete, export (No Processing writes its text), the actions table, the status and the reasons. `test_app_paths.py`: the `script` folder after `dictionary`, and the script functions' folder parameters.
+- [x] **Step 1: Red: Test Plan A and B.** `test_user_preprocessing_script.py` (4 spaces) is rewritten for `validate_script`, `read_script_source`, `save_script` and `execute_script` (a script folder file `upper.py`; the annotation rule with its two new msgids; the BOM; no fallback for a missing or undecodable file); the two legacy tests (`test_path_uses_dictionary_directory`, `test_missing_file_loads_identity_script_without_creating_file`) stay until Task 3 (Spec Corrections 2). New `test_text_scripts_manager.py`: the folder (No Processing created once, never rewritten, listed first), the names (reserved in any case), create, import (suffix, encoding, rule, source that cannot be opened, original bytes, taken name), rename, delete, export (No Processing writes its text), the actions table, the status and the reasons. `test_app_paths.py`: the `script` folder after `dictionary`, and the script functions' folder parameters.
 
 Edit: `client/tests/test_app_paths.py`
 
@@ -1664,7 +1664,7 @@ Ran 13 tests
 FAILED (failures=1, errors=4)
 ```
 
-- [ ] **Step 2: Green: the contract, the script folder, the manager, the actions and the status** (`user_script.py`, `manager.py`, `app_paths.py`, `file_targets.py` 4 spaces; `actions.py`, `read_problems.py` tabs).
+- [x] **Step 2: Green: the contract, the script folder, the manager, the actions and the status** (`user_script.py`, `manager.py`, `app_paths.py`, `file_targets.py` 4 spaces; `actions.py`, `read_problems.py` tabs).
 
 Edit: `client/.gitignore`
 
@@ -2359,7 +2359,7 @@ Ran 93 tests
 FAILED (failures=5)
 ```
 
-- [ ] **Step 3: Regenerate the catalogs** (5 new msgids; `msgmerge` pairs three of them with old strings as fuzzy entries, which `set_msgstr.py` replaces).
+- [x] **Step 3: Regenerate the catalogs** (5 new msgids; `msgmerge` pairs three of them with old strings as fuzzy entries, which `set_msgstr.py` replaces).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -2415,7 +2415,7 @@ msgfmt exit 0
 source msgids: 415 sha256 80bf5628b545f091f8ce72e20456c6bb52e27fa04a736e3bfafced6bbebebe06
 ```
 
-- [ ] **Step 4: Green: the modules, the full suite.**
+- [x] **Step 4: Green: the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_user_preprocessing_script tests.test_text_scripts_manager tests.test_app_paths tests.test_dictionary_manager tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -2431,7 +2431,7 @@ Ran 1725 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git -C $REPO add client/.gitignore client/app_paths.py client/conversion/preprocessing/user_script.py client/dictionaries/manager.py client/shared/file_targets.py client/text_scripts/__init__.py client/text_scripts/actions.py client/text_scripts/manager.py client/text_scripts/read_problems.py client/tests/test_app_paths.py client/tests/test_text_scripts_manager.py client/tests/test_user_preprocessing_script.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -2465,7 +2465,7 @@ Expected:
 
 ### Task 2: Select the text-processing script in Settings and run it at conversion (D3, D4, D10)
 
-- [ ] **Step 1: Red: Test Plan E, F and the frame part of G.** `test_config.py`: `selected_script` round trip, its default, a non-string value; the setter list of the save-problem tests. `test_translation_settings.py`: load, normalize (an unlisted script becomes No Processing) and save with four keys and the first problem. `test_settings_dialogs.py`: the Translation panel's fourth row 「文字處理腳本」 lists 「不處理」 first and round-trips the internal name; the panel description; `script_names` in the dialog's arguments and owners. `test_conversion_text_pipeline.py`: `script_path=None` runs no script and still maps characters. `test_conversion_service.py`: the scripts move to a `script` folder and reach the request as `script_path`; the legacy `dictionary/preprocessing.py` is not run; a missing script fails at the text-processing stage; No Processing equals the identity script. `test_gui_document_flows.py`: `_initialize_state` patches `gui.ScriptManagementPresenter`; the request carries `None` for No Processing and `script/<name>.py` otherwise; `get_script_names_for_dialog`; `_set_active_script` and `_set_active_dictionary` keep each other's setting; the save problem is reported once for a script too; Settings gets `script_names`; the frame under one root creates `script/no-processing.py` and reads `selected_script`. New `test_text_scripts_presenter.py`: `refresh` creates No Processing, lists it first and resolves the preferred name.
+- [x] **Step 1: Red: Test Plan E, F and the frame part of G.** `test_config.py`: `selected_script` round trip, its default, a non-string value; the setter list of the save-problem tests. `test_translation_settings.py`: load, normalize (an unlisted script becomes No Processing) and save with four keys and the first problem. `test_settings_dialogs.py`: the Translation panel's fourth row 「文字處理腳本」 lists 「不處理」 first and round-trips the internal name; the panel description; `script_names` in the dialog's arguments and owners. `test_conversion_text_pipeline.py`: `script_path=None` runs no script and still maps characters. `test_conversion_service.py`: the scripts move to a `script` folder and reach the request as `script_path`; the legacy `dictionary/preprocessing.py` is not run; a missing script fails at the text-processing stage; No Processing equals the identity script. `test_gui_document_flows.py`: `_initialize_state` patches `gui.ScriptManagementPresenter`; the request carries `None` for No Processing and `script/<name>.py` otherwise; `get_script_names_for_dialog`; `_set_active_script` and `_set_active_dictionary` keep each other's setting; the save problem is reported once for a script too; Settings gets `script_names`; the frame under one root creates `script/no-processing.py` and reads `selected_script`. New `test_text_scripts_presenter.py`: `refresh` creates No Processing, lists it first and resolves the preferred name.
 
 Edit: `client/tests/test_config.py`
 
@@ -3969,7 +3969,7 @@ Ran 444 tests
 FAILED (failures=5, errors=86)
 ```
 
-- [ ] **Step 2: Green: the setting, the Settings choice, the request path and the frame** (`config.py`, `settings/translation.py`, `settings/dialogs.py`, `conversion/*.py` 4 spaces; `gui.py`, `text_scripts/presenter.py` tabs).
+- [x] **Step 2: Green: the setting, the Settings choice, the request path and the frame** (`config.py`, `settings/translation.py`, `settings/dialogs.py`, `conversion/*.py` 4 spaces; `gui.py`, `text_scripts/presenter.py` tabs).
 
 Edit: `client/config.py`
 
@@ -4809,7 +4809,7 @@ class ScriptManagementPresenter:
 		return script_path_for_name(name, self._script_dir)
 ````
 
-- [ ] **Step 3: Regenerate the catalogs** (2 new msgids; the old panel description becomes the fuzzy base of the new one and leaves).
+- [x] **Step 3: Regenerate the catalogs** (2 new msgids; the old panel description becomes the fuzzy base of the new one and leaves).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -4858,7 +4858,7 @@ msgfmt exit 0
 source msgids: 416 sha256 da10e661fb446762088c3bc1b345e73be332c2c57912efe6f8dd934b4eb47877
 ```
 
-- [ ] **Step 4: Green: the modules, the full suite.**
+- [x] **Step 4: Green: the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_config tests.test_translation_settings tests.test_settings_dialogs tests.test_conversion_text_pipeline tests.test_conversion_service tests.test_gui_document_flows tests.test_text_scripts_presenter tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -4874,7 +4874,7 @@ Ran 1748 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git -C $REPO add client/config.py client/conversion/output.py client/conversion/preprocessing/user_script.py client/conversion/text/pipeline.py client/gui.py client/settings/dialogs.py client/settings/translation.py client/text_scripts/presenter.py client/tests/test_config.py client/tests/test_conversion_service.py client/tests/test_conversion_text_pipeline.py client/tests/test_gui_document_flows.py client/tests/test_settings_dialogs.py client/tests/test_text_scripts_presenter.py client/tests/test_translation_settings.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -4911,7 +4911,7 @@ ef352d3c9d121f629192431ce10031bd33aec7f1
 
 ### Task 3: Replace Text Processing with Script Management (D7-D9, D11)
 
-- [ ] **Step 1: Red: Test Plan C, D and the rest of G.** `test_text_scripts_presenter.py` (tabs): the flows through a fake view (Add: name, then the template, nothing written before a save, a taken name asks again, a file written meanwhile; Edit: the file's text, an invalid script opens, an unreadable one is explained; Delete: the question, the neighbour above, the active one becomes No Processing; Rename: the active name follows; Import: each error text, the original bytes, a taken name; Export: the suggested file names). New `test_script_dialogs.py` (tabs): the management dialog's statuses, reason row, selection, availability, handlers and view methods; the name dialog's messages (the reserved one with the name as typed); the editor built for real against fake widgets (title, 「Python 程式碼」, Apply, the failure box and focus, OK, the discard question only after a change, line ends). `test_dialog_base.py`: `reserved_name=None`. `test_gui_document_flows.py`: the menu item and `on_open_script_management`; the Text Processing tests go. `test_settings_dialogs.py`: the Text Processing tests go (one test checks the class is gone). `test_user_preprocessing_script.py`: the two legacy tests become one that checks the old names are gone. `test_translation_menu.py`, `test_i18n.py` (Spec Corrections 10), `wx_stub.py`.
+- [x] **Step 1: Red: Test Plan C, D and the rest of G.** `test_text_scripts_presenter.py` (tabs): the flows through a fake view (Add: name, then the template, nothing written before a save, a taken name asks again, a file written meanwhile; Edit: the file's text, an invalid script opens, an unreadable one is explained; Delete: the question, the neighbour above, the active one becomes No Processing; Rename: the active name follows; Import: each error text, the original bytes, a taken name; Export: the suggested file names). New `test_script_dialogs.py` (tabs): the management dialog's statuses, reason row, selection, availability, handlers and view methods; the name dialog's messages (the reserved one with the name as typed); the editor built for real against fake widgets (title, 「Python 程式碼」, Apply, the failure box and focus, OK, the discard question only after a change, line ends). `test_dialog_base.py`: `reserved_name=None`. `test_gui_document_flows.py`: the menu item and `on_open_script_management`; the Text Processing tests go. `test_settings_dialogs.py`: the Text Processing tests go (one test checks the class is gone). `test_user_preprocessing_script.py`: the two legacy tests become one that checks the old names are gone. `test_translation_menu.py`, `test_i18n.py` (Spec Corrections 10), `wx_stub.py`.
 
 Edit: `client/tests/test_dialog_base.py`
 
@@ -6758,7 +6758,7 @@ Ran 474 tests
 FAILED (failures=12, errors=81)
 ```
 
-- [ ] **Step 2: Green: the flows, the three dialogs, the menu, and the removal of Text Processing** (`text_scripts/presenter.py`, `dialog.py`, `gui.py` tabs; the others 4 spaces).
+- [x] **Step 2: Green: the flows, the three dialogs, the menu, and the removal of Text Processing** (`text_scripts/presenter.py`, `dialog.py`, `gui.py` tabs; the others 4 spaces).
 
 Edit: `client/conversion/preprocessing/user_script.py`
 
@@ -7866,7 +7866,7 @@ Edit: `client/ui/translation_menu.py`
         ("settings", N_("Settings")),
 ````
 
-- [ ] **Step 3: Regenerate the catalogs** (26 new msgids, 4 removed; Spec Corrections 9).
+- [x] **Step 3: Regenerate the catalogs** (26 new msgids, 4 removed; Spec Corrections 9).
 
 ```bash
 (cd $REPO && cmd //c 'scripts\generate-pot.bat'); echo "generate-pot exit $?"
@@ -7905,7 +7905,7 @@ msgfmt exit 0
 source msgids: 438 sha256 06f59dc2c79f4eebaad88b4b62a35a5b72cd462db7ea0685a0e2ffa54cc7d64a
 ```
 
-- [ ] **Step 4: Green: the modules, the full suite.**
+- [x] **Step 4: Green: the modules, the full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_text_scripts_presenter tests.test_script_dialogs tests.test_dialog_base tests.test_gui_document_flows tests.test_settings_dialogs tests.test_user_preprocessing_script tests.test_translation_menu tests.test_i18n 2>&1 | $PY $T/tools/brief.py
@@ -7921,7 +7921,7 @@ Ran 1788 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git -C $REPO add client/conversion/preprocessing/user_script.py client/dialog.py client/gui.py client/settings/dialogs.py client/text_scripts/presenter.py client/ui/dialog_base.py client/ui/translation_menu.py client/tests/test_dialog_base.py client/tests/test_gui_document_flows.py client/tests/test_i18n.py client/tests/test_script_dialogs.py client/tests/test_settings_dialogs.py client/tests/test_text_scripts_presenter.py client/tests/test_translation_menu.py client/tests/test_user_preprocessing_script.py client/tests/wx_stub.py client/locales/dotexpress.pot client/locales/zh_TW/LC_MESSAGES/dotexpress.po client/locales/zh_TW/LC_MESSAGES/dotexpress.mo
@@ -7961,7 +7961,7 @@ c825cb3bf2746815ebf3a76d995472cd3f0e2ef5
 
 Each step is a criterion of the spec's Acceptance Criteria.
 
-- [ ] **Step 1: Criterion 1, full suite.**
+- [x] **Step 1: Criterion 1, full suite.**
 
 ```bash
 $PY -B -X utf8 -m unittest discover -s tests 2>&1 | $PY $T/tools/brief.py
@@ -7974,7 +7974,7 @@ Ran 1788 tests
 OK (skipped=6)
 ```
 
-- [ ] **Step 2: Criterion 2, the focused modules.**
+- [x] **Step 2: Criterion 2, the focused modules.**
 
 ```bash
 $PY -B -X utf8 -m unittest tests.test_user_preprocessing_script tests.test_text_scripts_manager tests.test_text_scripts_presenter tests.test_script_dialogs tests.test_config tests.test_translation_settings tests.test_settings_dialogs tests.test_conversion_text_pipeline tests.test_conversion_service tests.test_gui_document_flows tests.test_translation_menu tests.test_app_paths 2>&1 | $PY $T/tools/brief.py
@@ -7987,7 +7987,7 @@ Ran 556 tests
 OK
 ```
 
-- [ ] **Step 3: The shuffled module order, three seeds** (one process each).
+- [x] **Step 3: The shuffled module order, three seeds** (one process each).
 
 ```bash
 $PY -B -X utf8 $T/tools/shuffle_harness.py 18 1018 2018
@@ -8001,7 +8001,7 @@ seed 1018: ran=1788 failures=0 errors=0 skipped=6 []
 seed 2018: ran=1788 failures=0 errors=0 skipped=6 []
 ```
 
-- [ ] **Step 4: Criterion 3, catalogs.** A fresh template differs from the committed one only in `POT-Creation-Date`; 438 msgids, all translated, 0 fuzzy, 28 obsolete; the `.mo` is what `msgfmt` builds from the `.po`; against `cb07a37` the msgid set gains the spec's 33 strings and loses its 5.
+- [x] **Step 4: Criterion 3, catalogs.** A fresh template differs from the committed one only in `POT-Creation-Date`; 438 msgids, all translated, 0 fuzzy, 28 obsolete; the `.mo` is what `msgfmt` builds from the `.po`; against `cb07a37` the msgid set gains the spec's 33 strings and loses its 5.
 
 ```bash
 (cd $REPO && cmd //c "scripts\\generate-pot.bat $(cygpath -w $T/fresh.pot)"); echo "generate-pot exit $?"
@@ -8066,7 +8066,7 @@ old 410 new 438
 - 'Unable to save text ' ... 'Unable to save text processing script: {error}'
 ```
 
-- [ ] **Step 5: Criteria 4-6: fixtures, untouched files, application folders.**
+- [x] **Step 5: Criteria 4-6: fixtures, untouched files, application folders.**
 
 ```bash
 git -C $REPO show HEAD:client/tests/fixtures/translation_golden.json | sha256sum
@@ -8090,7 +8090,7 @@ worktree application folders checked
 main checkout checked
 ```
 
-- [ ] **Step 6: Criterion 7, mutation check** (20 mutants, Spec Corrections 11; a few minutes). Each mutant must be caught by at least one test.
+- [x] **Step 6: Criterion 7, mutation check** (20 mutants, Spec Corrections 11; a few minutes). Each mutant must be caught by at least one test.
 
 ```bash
 $PY -B $T/tools/f18_mutants.py $REPO/client $T/mutants; echo "mutants exit $?"
@@ -8127,13 +8127,13 @@ mutants exit 0
 
 Rules as in F-13/F-14 (HANDOFF 2026-10-18-01 sections 4.6, 4.7 and 5). Not part of the replay.
 
-- [ ] **Step 1: Build** (PowerShell, in the worktree, with at least 2 GB free on C: and 600 MB available memory). The main checkout's venv is put first on `PATH`; `scripts\build-dotexpress.bat` calls `pyinstaller` from `PATH`. Nothing in the build changes for `script\`: `prepare_application_directories` creates it next to the exe at startup, as `dictionary\` (spec "Packaging"). Copy `client\dist\DotExpress.exe` to a new `D:\dxtest\N-f18`.
+- [x] **Step 1: Build** (PowerShell, in the worktree, with at least 2 GB free on C: and 600 MB available memory). The main checkout's venv is put first on `PATH`; `scripts\build-dotexpress.bat` calls `pyinstaller` from `PATH`. Nothing in the build changes for `script\`: `prepare_application_directories` creates it next to the exe at startup, as `dictionary\` (spec "Packaging"). Copy `client\dist\DotExpress.exe` to a new `D:\dxtest\N-f18`.
 
-- [ ] **Step 2: Write the GUI scripts** into `docs/superpowers/history/2026-10-18-02-f18-script-management/auto/` (tabs): `safe_run.py` and `f13gui.py` (F-13's start helper), `run_item.sh` (accepts only `D:\dxtest\auto*` folders, waits for 600 MB, puts the stand-in `chrome.exe` first on `PATH`, removes only the `_MEI*` folders its own processes made, as F-13's `mei_poll.ps1` records them), and one script per item.
+- [x] **Step 2: Write the GUI scripts** into `docs/superpowers/history/2026-10-18-02-f18-script-management/auto/` (tabs): `safe_run.py` and `f13gui.py` (F-13's start helper), `run_item.sh` (accepts only `D:\dxtest\auto*` folders, waits for 600 MB, puts the stand-in `chrome.exe` first on `PATH`, removes only the `_MEI*` folders its own processes made, as F-13's `mei_poll.ps1` records them), and one script per item.
 
-- [ ] **Step 3: The items** (Git Bash, from the repository root), each in a fresh `D:\dxtest\auto<N>-f18` folder on `D:\dxtest\N-f18\DotExpress.exe`; item 147 (the legacy script) also on `D:\dxtest\N-f14b` for the old behaviour. Read each log against Step 4 before the next run.
+- [x] **Step 3: The items** (Git Bash, from the repository root), each in a fresh `D:\dxtest\auto<N>-f18` folder on `D:\dxtest\N-f18\DotExpress.exe`; item 147 (the legacy script) also on `D:\dxtest\N-f14b` for the old behaviour. Read each log against Step 4 before the next run.
 
-- [ ] **Step 4: Expected behaviour.**
+- [x] **Step 4: Expected behaviour.**
 
 | # | Spec | Steps | Expected on N-f18 |
 | --- | --- | --- | --- |
@@ -8153,8 +8153,15 @@ Rules as in F-13/F-14 (HANDOFF 2026-10-18-01 sections 4.6, 4.7 and 5). Not part 
 
 Manual for the user (NVDA), unchecked: **159** Script Management and Settings (the rows read as name and status, the disabled buttons, the reason field, the Settings choice 「文字處理腳本 下拉式方塊 不處理」); **160** the editor (the title as the script name, 「Python 程式碼」, the discard question read in full).
 
-- [ ] **Step 5: Record and commit the results.** Write `docs/superpowers/history/2026-10-18-02-f18-script-management/auto-results.md` in the style of F-14's (zh-TW): the build, the method, then one row per item (146-158) with ✔/△/✘ and the result. Any deviation from Step 4 is reported, not explained away. End with a section **「仍需人工（使用者）」** for items 159-160 (unchecked). Add **Implementation Notes** at the end of this plan, then commit the history folder and this plan (docs only; `HEAD:client` stays `c825cb3b`).
+- [x] **Step 5: Record and commit the results.** Write `docs/superpowers/history/2026-10-18-02-f18-script-management/auto-results.md` in the style of F-14's (zh-TW): the build, the method, then one row per item (146-158) with ✔/△/✘ and the result. Any deviation from Step 4 is reported, not explained away. End with a section **「仍需人工（使用者）」** for items 159-160 (unchecked). Add **Implementation Notes** at the end of this plan, then commit the history folder and this plan (docs only; `HEAD:client` stays `c825cb3b`).
 
-## Implementation Notes
+## Implementation Notes (2026-10-18)
 
-Written after Task 5.
+Planning and implementation were one run, by one agent (the orchestrator's rule since F-11).
+
+1. **Commits and trees** (`HEAD:client` of each, equal to the Expected Counts): plan `0049399`; Task 1 `1a10232` `39db6b1856c8aa24e53e931f2d101838c08f94de` (`Ran 1725`); Task 2 `fa16143` `ef352d3c9d121f629192431ce10031bd33aec7f1` (`1748`); Task 3 `b84b3fe` `c825cb3bf2746815ebf3a76d995472cd3f0e2ef5` (`1788`); then the fix of note 4, `2e5057f` `c9b6ef97d4ed27835c829a77e53c8494dca4b8e1` (`1788`, one test changed). No commit has a `Co-Authored-By` line. The fixture sha256s of `HEAD` are unchanged. The full suite in the worktree after the fix: `Ran 1788`, `OK (skipped=6)`; 438 msgids, all translated, 0 fuzzy, 28 obsolete.
+2. **Replays.** The code was written first on a dev clone (`$SP/f18dev`, red then green per task). Its Task 2 was amended afterwards (an unused `TranslationSettings` import in `gui.py`) without regenerating the catalogs, so the first replay (`r1`) gave other tree ids for Tasks 2 and 3: only the `#:` line numbers of the `.pot` and `.po` differed. `r1`'s commits became the development history; its Task 3 was amended twice (the new dialog test module looked up `dialog.ScriptEditorDialog` at import, so its red run crashed instead of listing failures; three blank lines left in `user_script.py`), and the blocks were generated again from that history. The record replay `r2` filled the expected blocks; the check replay `r3` had one mismatch, a temporary folder in a `WindowsPath` repr (forward slashes) that `brief.py` did not mask, so `brief.py` masks it now (Throwaway Tooling). The record replay `r4` recorded a flaky zip-timestamp failure of `test_rename_to_a_name_whose_package_is_on_disk_asks_again` in Task 3 Step 4 (Global Constraints), replaced by the clean result; the check replay `r5` on a fresh clone matched every other block. Landing in the worktree ran the same harness on `D:\workspace\DotExpress-f18` after the plan commit (`apply_blocks.py` for every step, the plan's own commit commands): 0 mismatches over all 23 blocks, including the full runs, the three tree ids, the three shuffled orders and the 20 mutants.
+3. **Builds.** `D:\dxtest\N-f18\DotExpress.exe` from `b84b3fe` (48,822,215 bytes, sha256 `A143B617...78CBA7`) and, after note 4, `D:\dxtest\N-f18b\DotExpress.exe` from `2e5057f` (48,822,842 bytes, sha256 `D1C9BFFEF05B0EABF3938638F7A375ACC1EBEFD7768F7AD8655942633E71123C`); PyInstaller 6.21.0, `Build complete!`; the `text_scripts` modules and `shared.file_targets` are in the analysis. Nothing in the build script changed: `script\` is created next to the exe at startup (item 146).
+4. **Deviation: the editor's accessible name.** GUI item 149 on `N-f18` read the editor's UIA name as `RichEdit Control`: `SetName` does not reach a screen reader (the removed Text Processing dialog had the same code). Commit `2e5057f` adds the label 「Python 程式碼」 right before the editor (an existing msgid), as Dictionary Management's reason field gets its name from the label before it (F-6 D3); red first (`test_script_dialogs`' build test), the catalogs change only in `#:` lines and the `.mo` keeps its bytes. On `N-f18b` the name is 「Python 程式碼」 (items 149, 150, 156). The label is visible above the code.
+5. **GUI items.** The record is `docs/superpowers/history/2026-10-18-02-f18-script-management/auto-results.md`: items 146-158 on `N-f18b` all as Step 4 expects; 147 also on `N-f14b` (the old build runs the legacy script), 158 (a) also on `N-f14b` (identical Braille). Items 159-160 (NVDA) are manual and stay unchecked; their folder `D:\dxtest\manual159-f18` is prepared by `auto/manual159.py`. The `_MEI*` folders of ended processes were removed by `run_item.sh` (one per killed run); no other `%TEMP%` content was touched.
+6. **Left for the user.** GUI items 159-160 (NVDA); the orchestrator's review and merge; D-E to D-H and O1-O9 (orchestrator defaults); the user-visible defaults this plan chose (Spec Corrections 5-9 and note 4: No Processing always 「可使用」, the add-race message inside the save box, the selection after Delete, the editor buttons from the standard sizer, 28 obsolete catalog entries kept, the visible 「Python 程式碼」 label); the clean-up of `D:\dxtest\auto*-f18*`, `N-f18` and the scratch clones.

@@ -38,7 +38,7 @@ from text_scripts.manager import (
 	script_exists,
 	script_path_for_name,
 )
-from text_scripts.read_problems import describe_script_problem, describe_unreadable_script, log_script_read_error
+from text_scripts.read_problems import describe_script_problem, describe_unreadable_script
 
 SaveScript = Callable[[str], None]
 _T = TypeVar("_T")
@@ -147,14 +147,17 @@ class ScriptManagementPresenter:
 		return name
 
 	def edit(self, view: ScriptManagementView, name: str) -> str | None:
-		"""Read the file again and open the editor; an invalid script opens too (F-18 D8.2)."""
+		"""Read the file again and open the editor; an invalid script opens too (F-18 D8.2).
+
+		A file that cannot be read is explained, not logged: the returned name makes the list
+		read every script again, which logs it once (F-18 review M-3).
+		"""
 		if is_no_processing_script(name):
 			return None
 		path = self.script_path(name)
 		try:
 			source = read_script_source(path)
 		except Exception as error:
-			log_script_read_error(path, error)
 			view.show_error(describe_unreadable_script(name, error))
 			return name
 		view.edit_script(name, source, lambda text: save_script(path, text))

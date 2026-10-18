@@ -267,7 +267,8 @@ class PresenterEditTest(PresenterTestCase):
 		(self.script_dir / "cp950.py").write_bytes(NOT_UTF8)
 		view = FakeView()
 
-		with self.assertLogs("dotexpress.gui", "ERROR"):
+		# Not logged here: the list's refresh after Edit reads the file and logs it (F-18 review M-3).
+		with self.assertNoLogs("dotexpress.gui", "ERROR"):
 			self.assertEqual(presenter.edit(view, "cp950"), "cp950")
 
 		self.assertEqual(view.calls, [("error", f"無法讀取腳本「cp950」。\n\n{NOT_UTF8_REASON}")])

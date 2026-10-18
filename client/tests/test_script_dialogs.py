@@ -286,6 +286,25 @@ class ScriptHandlersTest(ManagementTestCase):
 		self.assertEqual(self.rows(target)[2], ["upper", "格式不正確"])
 		self.assertEqual(target.list_ctrl.calls, ["SetFocus"])
 
+	def test_editing_a_script_that_cannot_be_read_logs_it_once(self):
+		# F-18 review M-3: the presenter explains it and the refresh logs it; not both.
+		from text_scripts.presenter import ScriptManagementPresenter
+
+		self.write("upper", NOT_UTF8)
+		presenter = ScriptManagementPresenter(self.script_dir, get_active_name=lambda: "no-processing", set_active_name=Mock())
+		presenter.refresh("upper")
+		target = self.make_dialog(presenter.script_names, presenter)
+		target.show_error = Mock()
+		with self.assertLogs(LOGGER, "ERROR"):
+			target.refresh_scripts(presenter.script_names, "upper")
+
+		with self.assertLogs(LOGGER, "ERROR") as logs:
+			target._on_edit_clicked(Mock())
+
+		self.assertEqual(len(logs.records), 1, logs.output)
+		target.show_error.assert_called_once()
+		self.assertEqual(target.list_ctrl.calls, ["SetFocus"])
+
 	def test_add_delete_rename_and_import_refresh_with_the_name_they_return_and_focus_the_list(self):
 		# F-18 review I-1: back in the list, as after Edit, never on a button that may be disabled.
 		for action, handler, selected in (

@@ -95,10 +95,18 @@ class ScriptFolderTest(ScriptFolderTestCase):
         (self.script_dir / "notes.txt").write_text("x", encoding="utf-8")
         (self.script_dir / "folder.py").mkdir()
 
-        self.assertEqual(list_script_names(self.script_dir), ["alpha"])
+        self.assertEqual(list_script_names(self.script_dir), ["no-processing", "alpha"])
 
-    def test_a_missing_folder_lists_nothing(self) -> None:
-        self.assertEqual(list_script_names(self.script_dir), [])
+    def test_no_processing_is_listed_whatever_its_file(self) -> None:
+        # F-18 review M-5: a fixed entry, not a file that happens to exist; conversion never reads it.
+        self.assertEqual(list_script_names(self.script_dir), ["no-processing"])
+        self.write_script("alpha")
+        self.assertEqual(list_script_names(self.script_dir), ["no-processing", "alpha"])
+        (self.script_dir / "no-processing.py").mkdir()
+
+        self.assertEqual(ensure_no_processing_script(self.script_dir), self.script_dir / "no-processing.py")
+        self.assertEqual(list_script_names(self.script_dir), ["no-processing", "alpha"])
+        self.assertEqual(resolve_selected_script(list_script_names(self.script_dir), "gone"), "no-processing")
 
     def test_a_name_maps_to_a_python_file(self) -> None:
         self.assertEqual(script_path_for_name("臺灣", self.script_dir), self.script_dir / "臺灣.py")
@@ -271,7 +279,7 @@ class RenameDeleteExportTest(ScriptFolderTestCase):
 
         rename_script(self.script_dir, "upper", "Upper")
 
-        self.assertEqual(list_script_names(self.script_dir), ["Upper"])
+        self.assertEqual(list_script_names(self.script_dir), ["no-processing", "Upper"])
 
     def test_delete_removes_a_script_and_refuses_no_processing(self) -> None:
         ensure_no_processing_script(self.script_dir)

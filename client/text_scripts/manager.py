@@ -59,13 +59,15 @@ def ensure_no_processing_script(script_dir: Path) -> Path:
 
 
 def list_script_names(script_dir: Path) -> list[str]:
-    """No Processing first, then the other scripts in the order of the dictionaries (F-18 D1, O1)."""
+    """No Processing first, then the other scripts in the order of the dictionaries (F-18 D1, O1).
+
+    No Processing is always listed, whatever ``no-processing.py`` is or whether it exists:
+    conversion never reads it (F-18 D4, review M-5).
+    """
     directory = Path(script_dir)
-    if not directory.exists():
-        return []
-    stems = [path.stem for path in directory.glob(f"*{SCRIPT_SUFFIX}") if path.is_file()]
+    stems = [path.stem for path in directory.glob(f"*{SCRIPT_SUFFIX}") if path.is_file()] if directory.is_dir() else []
     others = sorted((stem for stem in stems if not is_no_processing_script(stem)), key=lambda name: (name.casefold(), name))
-    return ([NO_PROCESSING_SCRIPT_NAME] if len(others) < len(stems) else []) + others
+    return [NO_PROCESSING_SCRIPT_NAME, *others]
 
 
 def normalize_script_name(name: str) -> str:

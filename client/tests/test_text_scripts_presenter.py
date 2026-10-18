@@ -101,6 +101,15 @@ class PresenterRefreshTest(PresenterTestCase):
 		self.assertEqual(presenter.refresh("upper"), "upper")
 		self.assertEqual(presenter.refresh("gone"), "no-processing")
 
+	def test_no_processing_stays_first_when_its_file_is_a_folder(self):
+		# F-18 review M-5: otherwise Settings would select the first user script instead.
+		self.write_script("upper")
+		(self.script_dir / "no-processing.py").mkdir()
+		presenter = ScriptManagementPresenter(self.script_dir, get_active_name=lambda: "no-processing", set_active_name=Mock())
+
+		self.assertEqual(presenter.refresh("no-processing"), "no-processing")
+		self.assertEqual(presenter.script_names, ["no-processing", "upper"])
+
 	def test_the_names_are_a_copy_and_a_name_maps_to_its_file(self):
 		presenter = self.make_presenter("upper")
 

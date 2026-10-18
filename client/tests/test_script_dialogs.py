@@ -465,6 +465,7 @@ FLAG_NAMES = (
 	"CLOSE",
 	"ICON_ERROR",
 	"VERTICAL",
+	"TOP",
 )
 FLAGS = types.SimpleNamespace(**{name: 1 << index for index, name in enumerate(FLAG_NAMES)})
 ID_OK, ID_CANCEL, ID_APPLY, ID_CLOSE = 5100, 5101, 5102, 5103
@@ -550,6 +551,7 @@ class _EditorHarness:
 			FONTFAMILY_TELETYPE="TELETYPE",
 			Window=types.SimpleNamespace(FindFocus=lambda: self.focus),
 			BoxSizer=lambda _orientation: Mock(),
+			StaticText=lambda _parent, label="": self.log.append(("StaticText", label)),
 			TextCtrl=self._text_ctrl,
 		)
 		harness = self
@@ -607,7 +609,10 @@ class ScriptEditorBuildTest(unittest.TestCase):
 		harness = _EditorHarness(self, source=source)
 
 		self.assertEqual(harness.built[0], ("Dialog.__init__", "parent", "upper", FLAGS.DEFAULT_DIALOG_STYLE | FLAGS.RESIZE_BORDER))
-		self.assertEqual(harness.built[1], ("TextCtrl", source, FLAGS.TE_MULTILINE | FLAGS.TE_RICH2 | FLAGS.TE_DONTWRAP))
+		# The label right before the editor is its accessible name, as the reason row's label in
+		# Dictionary Management is (F-6 D3); SetName alone does not reach UIA (GUI item 149).
+		self.assertEqual(harness.built[1], ("StaticText", "Python 程式碼"))
+		self.assertEqual(harness.built[2], ("TextCtrl", source, FLAGS.TE_MULTILINE | FLAGS.TE_RICH2 | FLAGS.TE_DONTWRAP))
 		self.assertIn(("SetFont", ("TELETYPE",)), harness.built)
 		self.assertIn(("CreateButtonSizer", FLAGS.OK | FLAGS.CANCEL | FLAGS.APPLY), harness.built)
 		self.assertEqual(harness.built[-3:], [("SetMinSize", (520, 300)), ("SetSize", (720, 440)), ("SetFocus", "editor")])

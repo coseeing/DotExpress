@@ -959,7 +959,7 @@ msgid "Source text \"{identifier}\" already exists."
 msgstr "來源文字「{identifier}」已存在。"
 
 #: dialog.py:89 dialog.py:578 dialog.py:617 dialog.py:910 dialog.py:1211
-#: dialog.py:1303 documents/export_coordinator.py:103
+#: dialog.py:1307 documents/export_coordinator.py:103
 #: documents/export_coordinator.py:113 documents/export_coordinator.py:145
 #: gui.py:565 gui.py:851 gui.py:1179 gui.py:1191 ui/conversion_presenter.py:308
 msgid "Error"
@@ -1092,15 +1092,15 @@ msgstr ""
 msgid "Do you want to discard the changes you made to dictionary \"{name}\"?"
 msgstr "要放棄對字典「{name}」所做的變更嗎？"
 
-#: dialog.py:604 dialog.py:1323
+#: dialog.py:604 dialog.py:1327
 msgid "Unsaved Changes"
 msgstr "尚未儲存的變更"
 
-#: dialog.py:605 dialog.py:1324
+#: dialog.py:605 dialog.py:1328
 msgid "Discard Changes"
 msgstr "放棄變更"
 
-#: dialog.py:606 dialog.py:634 dialog.py:1325
+#: dialog.py:606 dialog.py:634 dialog.py:1329
 msgid "Back to Editing"
 msgstr "返回編輯"
 
@@ -1213,16 +1213,16 @@ msgstr "狀態"
 msgid "Why this script cannot be used:"
 msgstr "無法使用的原因："
 
-#: dialog.py:1265
+#: dialog.py:1266 dialog.py:1269
 msgid "Python Code"
 msgstr "Python 程式碼"
 
-#: dialog.py:1302 text_scripts/presenter.py:192
+#: dialog.py:1306 text_scripts/presenter.py:192
 #, python-brace-format
 msgid "Failed to save script: {error}"
 msgstr "儲存腳本失敗：{error}"
 
-#: dialog.py:1322
+#: dialog.py:1326
 #, python-brace-format
 msgid "Do you want to discard the changes you made to script \"{name}\"?"
 msgstr "要放棄對腳本「{name}」所做的變更嗎？"

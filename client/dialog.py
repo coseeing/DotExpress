@@ -1260,8 +1260,12 @@ class ScriptEditorDialog(ContextManagedDialog, wx.Dialog):
 
 	def _build_ui(self, source: str) -> None:
 		sizer = wx.BoxSizer(wx.VERTICAL)
+		# The title names the script, the label the code (F-18 O9). Created right before the
+		# editor, the label is its accessible name, as the reason row's label in Dictionary
+		# Management is (F-6 D3): SetName alone does not reach a screen reader.
+		label = wx.StaticText(self, label=_("Python Code"))
+		sizer.Add(label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
 		self.editor = wx.TextCtrl(self, value=source, style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_DONTWRAP)
-		# The title names the script (F-18 O9).
 		self.editor.SetName(_("Python Code"))
 		font = self.editor.GetFont()
 		font.SetFamily(wx.FONTFAMILY_TELETYPE)

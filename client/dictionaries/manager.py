@@ -7,13 +7,12 @@ write leaves the target as it was (or absent) and no temporary file.
 from __future__ import annotations
 
 import csv
-import errno
-import os
 from pathlib import Path
 import shutil
 from typing import BinaryIO, TextIO
 
 from shared.atomic_write import write_bytes_atomically, write_text_atomically
+from shared.file_targets import is_same_file, refuse_folder_target
 from shared.name_validation import MAX_NAME_LENGTH, normalize_base_name
 
 DEFAULT_DICTIONARY_NAME = "default"
@@ -124,33 +123,16 @@ def rename_dictionary(dictionary_dir: Path, source_name: str, new_name: str) -> 
     destination_normalized = normalize_dictionary_name(new_name)
     source_path = dictionary_path_for_name(source_normalized, dictionary_dir)
     destination_path = dictionary_path_for_name(destination_normalized, dictionary_dir)
-    if destination_path.exists() and not _is_same_file(source_path, destination_path):
+    if destination_path.exists() and not is_same_file(source_path, destination_path):
         raise FileExistsError(f"Dictionary '{destination_normalized}' already exists.")
     source_path.rename(destination_path)
     return destination_path
 
 
-def _is_same_file(source: Path, destination: Path) -> bool:
-    """Whether ``destination`` names ``source`` itself: a case-only rename on a
-    case-insensitive file system, such as ``alpha`` to ``Alpha`` on Windows (F-W6, F-11 D10).
-
-    Another file that only differs in case (a case-sensitive file system) is not the same file.
-    """
-    try:
-        return os.path.samefile(source, destination)
-    except OSError:
-        return False
-
-
 def export_dictionary(dictionary_dir: Path, name: str, destination_path: Path | str) -> Path:
     source_path = dictionary_path_for_name(name.strip(), dictionary_dir)
     destination = Path(destination_path)
-    if destination.is_dir():
-        # The error copying onto a folder gave, as documents.workspace.write_export_text
-        # gives for a BRL or HTML export, not a failed replace naming the temporary file.
-        if os.name == "nt":
-            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(destination))
-        raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(destination))
+    refuse_folder_target(destination)
     # An existing file there is replaced only once the copy is complete and synced.
     write_bytes_atomically(destination, lambda stream: _copy_file_into(source_path, stream))
     return destination

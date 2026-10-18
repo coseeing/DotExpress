@@ -13,13 +13,14 @@ class ApplicationPaths:
     root: Path
     config: Path
     dictionary: Path
+    script: Path
     workspace: Path
     log: Path
     dual_view: Path
 
     @property
     def writable_directories(self) -> tuple[Path, ...]:
-        return (self.root, self.dictionary, self.workspace, self.log, self.dual_view)
+        return (self.root, self.dictionary, self.script, self.workspace, self.log, self.dual_view)
 
 
 class ApplicationDataError(OSError):
@@ -41,6 +42,7 @@ def build_application_paths(root: Path | None = None) -> ApplicationPaths:
         root=application_root,
         config=application_root / "config.json",
         dictionary=application_root / "dictionary",
+        script=application_root / "script",
         workspace=application_root / "workspace",
         log=application_root / "log",
         dual_view=application_root / "dual_view",

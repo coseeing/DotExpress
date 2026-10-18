@@ -866,20 +866,28 @@ msgstr ""
 msgid "The selected translation table could not translate this text."
 msgstr ""
 
-#: conversion/preprocessing/user_script.py:40
+#: conversion/preprocessing/user_script.py:64
 msgid "The script must define exactly one top-level synchronous main function."
 msgstr ""
 
-#: conversion/preprocessing/user_script.py:49
+#: conversion/preprocessing/user_script.py:74
 msgid ""
 "main must define exactly one positional parameter and no other parameters."
 msgstr ""
 
 #: conversion/preprocessing/user_script.py:76
+msgid "The parameter of main must be annotated as str, or not annotated."
+msgstr ""
+
+#: conversion/preprocessing/user_script.py:78
+msgid "The return value of main must be annotated as str, or not annotated."
+msgstr ""
+
+#: conversion/preprocessing/user_script.py:126
 msgid "main is not callable."
 msgstr ""
 
-#: conversion/preprocessing/user_script.py:79
+#: conversion/preprocessing/user_script.py:129
 #, python-brace-format
 msgid "main must return str, got {type}."
 msgstr ""
@@ -1212,6 +1220,7 @@ msgid ""
 msgstr ""
 
 #: dictionaries/read_problems.py:50 documents/import_problems.py:38 gui.py:498
+#: text_scripts/read_problems.py:60
 msgid ""
 "The file cannot be opened. It may be in use by another program, or you may "
 "not have permission to read it. Close the other program and try again."
@@ -1225,7 +1234,7 @@ msgid ""
 msgstr ""
 
 #: dictionaries/read_problems.py:57 documents/import_problems.py:54 gui.py:271
-#: gui.py:502
+#: gui.py:502 text_scripts/read_problems.py:64
 #, python-brace-format
 msgid "The file cannot be read: {error}"
 msgstr ""
@@ -1337,7 +1346,7 @@ msgstr ""
 msgid "The file is damaged or is not in the expected format."
 msgstr ""
 
-#: documents/import_problems.py:53
+#: documents/import_problems.py:53 text_scripts/read_problems.py:52
 msgid ""
 "The file is not saved as UTF-8 text. Save it again as UTF-8, for example "
 "with Save As in Notepad."
@@ -1745,6 +1754,19 @@ msgstr ""
 
 #: settings/options.py:89
 msgid "Math Translation Table"
+msgstr ""
+
+#: text_scripts/manager.py:26
+msgid "No Processing"
+msgstr ""
+
+#: text_scripts/manager.py:104
+msgid "Only Python files (.py) can be imported."
+msgstr ""
+
+#: text_scripts/read_problems.py:70
+#, python-brace-format
+msgid "Script \"{name}\" cannot be read."
 msgstr ""
 
 #: ui/action_menu.py:26

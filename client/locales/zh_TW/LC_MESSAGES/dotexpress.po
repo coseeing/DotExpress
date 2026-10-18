@@ -1998,12 +1998,12 @@ msgid "Convert"
 msgstr "執行轉換"
 
 #: ui/translation_menu.py:10
-msgid "Script Management..."
-msgstr "腳本管理..."
-
-#: ui/translation_menu.py:11
 msgid "Dictionary Management..."
 msgstr "字典管理..."
+
+#: ui/translation_menu.py:11
+msgid "Script Management..."
+msgstr "腳本管理..."
 
 #: ui/translation_menu.py:12
 msgid "Settings"

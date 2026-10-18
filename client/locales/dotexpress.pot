@@ -1928,11 +1928,11 @@ msgid "Convert"
 msgstr ""
 
 #: ui/translation_menu.py:10
-msgid "Script Management..."
+msgid "Dictionary Management..."
 msgstr ""
 
 #: ui/translation_menu.py:11
-msgid "Dictionary Management..."
+msgid "Script Management..."
 msgstr ""
 
 #: ui/translation_menu.py:12

@@ -374,7 +374,7 @@ All `.py` msgids, marked with `N_` where they are defined at module level and tr
 
 **Removed (no source reference left, 5):** `Text Processing`, `Text Processing Python Code`, `Unable to save text processing script: {error}`, `Unable to open text processing script: {error}`, `Translation output mode, width, and dictionary options`.
 
-Expected total: 410 + 33 - 5 = **438 msgids**, all translated, 0 fuzzy. Workflow: HANDOFF section 5. Run `scripts\generate-pot.bat`, then `msgmerge`, then fill in the msgstr values (replace any fuzzy match `msgmerge` invents, for example `Script` matched to `Dictionary`, and drop `#, fuzzy` / `#|`), then `msgfmt --check --statistics`. `POT-Creation-Date` stays `2026-10-10 12:00+0800`. Obsolete `#~` entries are not kept (as in earlier tasks).
+Expected total: 410 + 33 - 5 = **438 msgids**, all translated, 0 fuzzy. Workflow: HANDOFF section 5. Run `scripts\generate-pot.bat`, then `msgmerge`, then fill in the msgstr values (replace any fuzzy match `msgmerge` invents, for example `Script` matched to `Dictionary`, and drop `#, fuzzy` / `#|`), then `msgfmt --check --statistics`. `POT-Creation-Date` stays `2026-10-10 12:00+0800`. Obsolete `#~` entries are not kept (as in earlier tasks). Corrected by plan Spec Corrections 9: the earlier tasks kept `msgmerge`'s obsolete entries, and so does F-18 (28 `#~` entries).
 
 ## Accessibility (NVDA)
 
@@ -504,28 +504,28 @@ Rules as in F-13/F-14 (HANDOFF sections 4.6 and 4.7):
 - Each item runs in its own `D:/dxtest/auto<item>-f18` folder, using `safe_run.py` and `f13gui.start`.
 - Check memory before each item, and put the stand-in `chrome.exe` on `PATH`.
 - **No script reads or writes the clipboard.** Code goes into the editor by UIA `ValuePattern.SetValue` or by `type_keys`, never Ctrl+V. File names go into file dialogs by typing.
-- Item numbers are proposals (150+); the plan may renumber.
+- Item numbers are proposals (150+); the plan may renumber. The plan renumbered them (plan Spec Corrections 12): the table below now uses the numbers of `auto-results.md`, 146-158, and the manual items are 159-160.
 
 | # | Class | Steps | Expected on N-f18 |
 | --- | --- | --- | --- |
-| 150 | fix | Fresh folder, start | `script\no-processing.py` exists with the exact text; Translation menu shows 「腳本管理...」 where 「文字處理」 was; Settings > Translation shows 「文字處理腳本」 = 「不處理」 |
-| 151 | fix | Upgrade: folder with `config.json` from N-f14b and `dictionary\preprocessing.py` whose `main` returns `input.upper()`; convert `abc` | output is the Braille of `abc` in lower case (script not run); `preprocessing.py` bytes unchanged; `config.json` gains `selected_script` only after a Settings Apply |
-| 152 | fix | Script Management: select 「不處理」 | Delete, Rename and Edit disabled; Export enabled; list text 「不處理」 「可使用」 |
-| 153 | fix | Add `upper`: name prompt, editor title `upper`, template text present; replace with an upper-casing `main`; OK; select it in Settings; convert `abc` | `script\upper.py` holds the text; output of `ABC` |
-| 154 | fix | Add `bad`, type `def main(a, b): return a`, Apply | box 「儲存腳本失敗：main 必須恰好定義一個位置參數，且不得有其他參數。」; focus back in editor; no `bad.py`; Cancel → discard question; 放棄變更 closes; list has no `bad` |
-| 155 | fix | Add with annotation `def main(x: int) -> str` | box with the parameter-annotation message |
-| 156 | fix | Import `upper2.py` (valid), `x.txt` typed by name, `cp950.py`, `bad.py` (syntax error) | the first is imported (bytes equal); the other three each give 「匯入腳本失敗：…」 with the right reason; nothing copied |
-| 157 | fix | Import a name that exists | 「腳本「upper」已存在。」, the name prompt again |
-| 158 | fix | Rename the active `upper` to `Upper2`; Settings shows it; Delete it (Yes) | after Delete Settings shows 「不處理」; conversion unchanged from No Processing |
-| 159 | fix | Export 「不處理」 after altering `script\no-processing.py` on disk | the exported file equals the canonical text; conversion still identity |
-| 160 | fix | Place `script\locked.py` held open with a deny-read share by a helper process, and `script\broken.py` with a syntax error; open Script Management | dialog opens; statuses 「無法讀取」 and 「格式不正確」; reason field text; Edit on `locked` shows 「無法讀取腳本「locked」。」 and the dialog stays; Edit on `broken` opens the editor |
-| 161 | fix | Select a user script, then delete its file outside the app, convert | 「文字處理失敗：…」 box; after restart Settings shows 「不處理」 |
-| 162 | regression | Dictionary Management full flow (F-6/F-11 items' scripts), conversion goldens on the exe (F-12 item 118), startup items (F-13 item 126 subset) | as in their logs |
+| 146 | fix | Fresh folder, start | `script\no-processing.py` exists with the exact text; Translation menu shows 「腳本管理...」 where 「文字處理」 was; Settings > Translation shows 「文字處理腳本」 = 「不處理」 |
+| 147 | fix | Upgrade: folder with `config.json` from N-f14b and `dictionary\preprocessing.py` whose `main` returns `input.upper()`; convert `abc` | output is the Braille of `abc` in lower case (script not run); `preprocessing.py` bytes unchanged; `config.json` gains `selected_script` only after a Settings Apply |
+| 148 | fix | Script Management: select 「不處理」 | Delete, Rename and Edit disabled; Export enabled; list text 「不處理」 「可使用」 |
+| 149 | fix | Add `upper`: name prompt, editor title `upper`, template text present; replace with an upper-casing `main`; OK; select it in Settings; convert `abc` | `script\upper.py` holds the text; output of `ABC` |
+| 150 | fix | Add `bad`, type `def main(a, b): return a`, Apply | box 「儲存腳本失敗：main 必須恰好定義一個位置參數，且不得有其他參數。」; focus back in editor; no `bad.py`; Cancel → discard question; 放棄變更 closes; list has no `bad` |
+| 151 | fix | Add with annotation `def main(x: int) -> str` | box with the parameter-annotation message |
+| 152 | fix | Import `upper2.py` (valid), `x.txt` typed by name, `cp950.py`, `bad.py` (syntax error) | the first is imported (bytes equal); the other three each give 「匯入腳本失敗：…」 with the right reason; nothing copied |
+| 153 | fix | Import a name that exists | 「腳本「upper」已存在。」, the name prompt again |
+| 154 | fix | Rename the active `upper` to `Upper2`; Settings shows it; Delete it (Yes) | after Delete Settings shows 「不處理」; conversion unchanged from No Processing |
+| 155 | fix | Export 「不處理」 after altering `script\no-processing.py` on disk | the exported file equals the canonical text; conversion still identity |
+| 156 | fix | Place `script\locked.py` held open with a deny-read share by a helper process, and `script\broken.py` with a syntax error; open Script Management | dialog opens; statuses 「無法讀取」 and 「格式不正確」; reason field text; Edit on `locked` shows 「無法讀取腳本「locked」。」 and the dialog stays; Edit on `broken` opens the editor |
+| 157 | fix | Select a user script, then delete its file outside the app, convert | 「文字處理失敗：…」 box; after restart Settings shows 「不處理」 |
+| 158 | regression | Dictionary Management full flow (F-6/F-11 items' scripts), conversion goldens on the exe (F-12 item 118), startup items (F-13 item 126 subset) | as in their logs |
 
-**Manual for the user (NVDA, items 163-164):**
+**Manual for the user (NVDA, items 159-160):**
 
-- 163: open Script Management and Settings. Does NVDA read the list rows (name and status), the disabled buttons and the reason field?
-- 164: the editor. Is the title read as the script name, is 「Python 程式碼」 announced, and is the discard question read in full?
+- 159: open Script Management and Settings. Does NVDA read the list rows (name and status), the disabled buttons and the reason field?
+- 160: the editor. Is the title read as the script name, is 「Python 程式碼」 announced, and is the discard question read in full?
 
 These stay unchecked for the user.
 

@@ -11,6 +11,7 @@ from typing import Optional
 from uuid import uuid4
 
 from conversion.math_braille_codes import DEFAULT_MATH_BRAILLE_TABLE, MATH_BRAILLE_TABLES  # noqa: F401  (re-exported)
+from conversion.preprocessing.user_script import NO_PROCESSING_SCRIPT_NAME
 from log import get_logger
 from shared.atomic_write import write_bytes_atomically, write_text_atomically
 
@@ -304,7 +305,7 @@ class ConfigStore:
     def set_selected_dictionary(self, dictionary_name: str) -> ConfigSaveProblem | None:
         return self._set_section_value(CONVERSION_SECTION, SELECTED_DICTIONARY_KEY, dictionary_name)
 
-    def get_selected_script(self, default: str = "no-processing") -> str:
+    def get_selected_script(self, default: str = NO_PROCESSING_SCRIPT_NAME) -> str:
         data = self._load()
         value = _get_section(data, CONVERSION_SECTION).get(SELECTED_SCRIPT_KEY)
         return value if isinstance(value, str) else default

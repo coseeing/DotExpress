@@ -2,7 +2,8 @@
 
 wx draws the OK button of a message box with a label from its own catalog, which
 DotExpress does not load, so ``wx.MessageBox`` shows an English "OK". Yes and No
-are Windows' common buttons, which Windows labels in the system language.
+are Windows' common buttons, which Windows labels in the system language with an
+access key ("&Yes"); the boxes here give them the translated labels without one (F-17).
 """
 
 from __future__ import annotations
@@ -21,19 +22,20 @@ def message_box(message: str, caption: str, style: int, parent: wx.Window | None
     """Show a message box like ``wx.MessageBox``: same arguments and return values.
 
     Returns ``wx.OK``, ``wx.YES``, ``wx.NO`` or ``wx.CANCEL``. An OK button (and a
-    Cancel button next to it) gets the translated label; a Yes/No box keeps the
-    system's labels.
+    Cancel button next to it) gets the translated label; so do Yes and No, without an
+    access key: Alt+F10 presses the system's "&Yes", as ``confirm_box`` explains (F-17).
 
     ``style`` goes to ``wx.MessageDialog`` unchanged. Unlike ``wx.MessageBox``, which
     adds ``wx.ICON_INFORMATION`` (``wx.ICON_QUESTION`` with ``wx.YES``) when the style
     has no icon, this adds none: give the icon in ``style``, as every caller does.
     """
     with wx.MessageDialog(parent, message, caption, style) as dialog:
-        if not style & wx.YES_NO:
-            if style & wx.CANCEL:
-                dialog.SetOKCancelLabels(_("OK"), _("Cancel"))
-            else:
-                dialog.SetOKLabel(_("OK"))
+        if style & wx.YES_NO:
+            dialog.SetYesNoLabels(_("Yes"), _("No"))
+        elif style & wx.CANCEL:
+            dialog.SetOKCancelLabels(_("OK"), _("Cancel"))
+        else:
+            dialog.SetOKLabel(_("OK"))
         answer = dialog.ShowModal()
     return {wx.ID_OK: wx.OK, wx.ID_YES: wx.YES, wx.ID_NO: wx.NO}.get(answer, wx.CANCEL)
 

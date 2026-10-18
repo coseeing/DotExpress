@@ -912,12 +912,12 @@ msgid "CSV files (*.csv)|*.csv"
 msgstr "CSV 檔案 (*.csv)|*.csv"
 
 #: dialog.py:58 dialog.py:123 settings/dialogs.py:145 settings/dialogs.py:295
-#: ui/message_box.py:34 ui/message_box.py:36
+#: ui/message_box.py:36 ui/message_box.py:38
 msgid "OK"
 msgstr "確定"
 
 #: dialog.py:59 dialog.py:124 gui.py:577 settings/dialogs.py:146
-#: settings/dialogs.py:297 ui/message_box.py:34
+#: settings/dialogs.py:297 ui/message_box.py:36
 msgid "Cancel"
 msgstr "取消"
 
@@ -1867,6 +1867,14 @@ msgstr "轉換完成。"
 #, python-brace-format
 msgid "Conversion completed. The result was saved to document \"{name}\"."
 msgstr "轉換完成。結果已儲存到文件「{name}」。"
+
+#: ui/message_box.py:34
+msgid "Yes"
+msgstr "是"
+
+#: ui/message_box.py:34
+msgid "No"
+msgstr "否"
 
 #: ui/translation_menu.py:8
 msgid "Convert"

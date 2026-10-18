@@ -116,7 +116,10 @@ class MessageBoxTest(unittest.TestCase):
         self.assertEqual([call[0] for call in self.calls], ["MessageDialog", "enter", "SetOKCancelLabels", "ShowModal", "exit"])
         self.assertEqual(result, wx.CANCEL)
 
-    def test_yes_no_box_keeps_the_system_labels(self) -> None:
+    def test_yes_no_box_sets_translated_labels_without_access_keys(self) -> None:
+        # F-17: the system's own "&Yes" is pressed by Alt+F10 (Alt+<key> presses the
+        # button whose access key has the key's code, see confirm_box), so the four
+        # Yes/No confirmations label both buttons themselves, with no "&".
         for style in (wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, wx.YES_NO | wx.ICON_WARNING):
             for answer, expected in ((wx.ID_YES, wx.YES), (wx.ID_NO, wx.NO)):
                 with self.subTest(style=style, answer=answer):
@@ -127,9 +130,16 @@ class MessageBoxTest(unittest.TestCase):
 
                     self.assertEqual(
                         self.calls,
-                        [("MessageDialog", None, "question", "caption", style), ("enter",), ("ShowModal",), ("exit",)],
+                        [
+                            ("MessageDialog", None, "question", "caption", style),
+                            ("enter",),
+                            ("SetYesNoLabels", "是", "否"),
+                            ("ShowModal",),
+                            ("exit",),
+                        ],
                     )
                     self.assertEqual(result, expected)
+        self.assertEqual((_("Yes"), _("No")), ("是", "否"))
 
     def test_unexpected_result_maps_to_cancel(self) -> None:
         for answer in (wx.ID_CANCEL, 12345):

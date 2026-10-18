@@ -28,8 +28,8 @@ After this task:
 
 - The Translation menu item 「文字處理」 becomes 「腳本管理...」, at the same position. It opens a modal Script Management dialog shaped like Dictionary Management.
 - The script used for conversion is chosen where the dictionary is chosen today: a new 「文字處理腳本」 choice in Settings > Translation, right below 「字典」 (D-C). It is saved in `config.json` as `conversion.selected_script`.
-- No Processing skips the script stage. The single `dictionary/preprocessing.py` is no longer read: no migration (D-A, decided by the user).
-- Conversion output with No Processing is identical to today's output without a `preprocessing.py`. The three fixtures keep their sha256.
+- No Processing runs its file `no-processing.py` like any other script (corrected by F-18b, see D4). The single `dictionary/preprocessing.py` is no longer read: no migration (D-A, decided by the user).
+- Conversion output with No Processing is identical to today's output without a `preprocessing.py`, because its code returns its input unchanged. The three fixtures keep their sha256.
 
 Non-goals: a code editor with syntax highlighting or line numbers; running a script on sample text from the editor; sandboxing scripts (D-H); a selection control inside Script Management (D-C, Q1); changing anything about dictionaries, apart from reusing their helpers.
 
@@ -150,7 +150,7 @@ Line numbers are from `67c2a97`. They are only for orientation.
 - `ApplicationPaths` gets `script = root / "script"`, and it is added to `writable_directories` after `dictionary`. From source this is `client/script/`. Frozen, it is `<exe folder>\script\`, created at startup like `dictionary\`. If it cannot be written, startup reports it as today (`ApplicationDataError`).
 - `client/.gitignore` gets `script/` next to `dictionary/`.
 - A script name maps to `<name>.py` in that folder, as a dictionary name maps to `<name>.csv`. Every stem of a `*.py` file there is a script. The internal name of No Processing is `no-processing`, so its file is `no-processing.py`.
-- `ensure_no_processing_script(script_dir)` creates `no-processing.py` with `NO_PROCESSING_SCRIPT` (today's `DEFAULT_PREPROCESSING_SCRIPT` text) when it is missing, through `write_text_atomically`. It is called on each refresh, like `ensure_default_dictionary`. An existing file is never rewritten (D4).
+- `ensure_no_processing_script(script_dir)` creates `no-processing.py` with `NO_PROCESSING_SCRIPT` (today's `DEFAULT_PREPROCESSING_SCRIPT` text) when it is missing, through `write_text_atomically`. It is called on each refresh, like `ensure_default_dictionary`. ~~An existing file is never rewritten (D4).~~ Corrected by F-18b: it also rewrites the file when its bytes differ from `NO_PROCESSING_SCRIPT`, and leaves it alone without raising when it cannot be replaced (D4).
 - **Order in every list:** No Processing first, then the user scripts sorted like dictionaries (`casefold`, then the name). No Processing's displayed name is not its file stem, so alphabetical order would put it in a confusing place (O1).
 
 ### D2. Module layout (reuse before duplication)
@@ -178,14 +178,27 @@ Line numbers are from `67c2a97`. They are only for orientation.
 - **Settings > Translation** gets a fourth row below `Dictionary`: label `Text Processing Script` (「文字處理腳本」) and a `wx.Choice` of the display names in D1 order. The first entry is 「不處理」. The panel keeps the internal names in a parallel list, as `dictionary_names`. `DotExpressSettingsDialog.__init__` gets `script_names`, and `gui.on_open_settings` passes `get_script_names_for_dialog()`. The panel description becomes `Translation output mode, width, dictionary, and text processing script options`.
 - The choice lists unreadable and invalid scripts too, as the dictionary choice lists unreadable dictionaries. Converting with one of them gives the text-processing error (D9).
 - **Script Management never changes the active script, except** that renaming the active script makes the new name active (twin of `plan_dictionary_state_after_rename`), and deleting it makes **No Processing** active (D8.3, O5).
-- `BrailleFrame` gets `script_dir`, a `_script_presenter` (built in `_initialize_state` next to the dictionary presenter, with `get_active_name` / `set_active_name=self._set_active_script`), `_set_active_script` (twin of `_set_active_dictionary`, reporting a save problem with `_report_settings_save_problem`), `get_script_names_for_dialog`, and `_get_selected_script_path() -> Path | None` (`None` for No Processing).
+- `BrailleFrame` gets `script_dir`, a `_script_presenter` (built in `_initialize_state` next to the dictionary presenter, with `get_active_name` / `set_active_name=self._set_active_script`), `_set_active_script` (twin of `_set_active_dictionary`, reporting a save problem with `_report_settings_save_problem`), `get_script_names_for_dialog`, and `_get_selected_script_path() -> Path | None` (`None` for No Processing). Corrected by F-18b: it returns `Path`, `script_dir / "<name>.py"` for every script including No Processing (D4).
 
-### D4. No Processing never runs a file (D-D)
+### D4. No Processing runs its file like any other script (D-D)
 
-- For the internal name `no-processing`, the request's `script_path` is `None`, and the script stage is skipped. The Bopomofo character map still runs, as today. The file `no-processing.py` is never read for conversion.
-- **Why not rewrite the file:** a file the user altered (or a damaged disk) cannot change the output of No Processing, and the app does not write a file at every start. Skipping the stage is also what keeps the fixtures identical: the output equals today's identity script without any `exec`.
-- The file is created when missing (D1), so that the folder shows the user what No Processing is. It is never rewritten: user bytes in it are left alone.
-- **Export of No Processing writes `NO_PROCESSING_SCRIPT`**, not the disk file. The exported file is always the documented content.
+**Corrected by F-18b (2026-10-18, decided by the user; merge `46f5b30`):** the user wanted No Processing's identity code to run through the same path as every script, so that there are no special branches for it. The text struck through below describes F-18 as first merged (`42da499`) and is kept for the record. Now:
+
+- Conversion runs `script/no-processing.py` like any other script. `ConversionRequest.script_path` is a required `Path` (no `None`), and `preprocess_source_text` always runs the script. The output is unchanged because the code returns its input unchanged, so the three fixtures keep their sha256.
+- `ensure_no_processing_script` rewrites `no-processing.py` with `NO_PROCESSING_SCRIPT` when it is missing or its bytes differ (including a BOM or CRLF copy of the text), at startup, when Settings opens and when Script Management opens. Conversion itself does not rewrite it, so an outside edit runs until the next of these points (orchestrator default; user may override). If the file cannot be replaced (a folder of that name, a read-only file), it is left alone without raising.
+- Export of No Processing copies the file on disk like any script (normally the exact text, because opening Script Management rewrites it first).
+- Its status is read from the file like any script. A file that cannot be read shows 「無法讀取」 with the reason row; converting with it then gives 「文字處理失敗：…」, and exporting it 「匯出腳本失敗：…」.
+- Unchanged: Rename, Delete and Edit stay disabled for it, its names stay reserved, and it is always listed first.
+
+F-18 as first merged (superseded):
+
+- ~~For the internal name~~ `no-processing`, the request's `script_path` is `None`, and the script stage is skipped. The Bopomofo character map still runs, as today. The file `no-processing.py` is never read for conversion.~~
+- ~~**Why not rewrite the file:** a file the user altered (or a damaged disk) cannot change the output of No Processing, and the app does not write a file at every start. Skipping the stage is also what keeps the fixtures identical: the output equals today's identity script without any `exec`.~~
+- ~~The file is created when missing (D1), so that the folder shows the user what No Processing is. It is never rewritten: user bytes in it are left alone.~~
+- ~~**Export of No Processing writes `NO_PROCESSING_SCRIPT`**, not the disk file. The exported file is always the documented content.~~
+
+Still valid:
+
 - Rename, Delete and Edit are disabled for it. Export is enabled.
 - Reserved names for user scripts, case-insensitive and after `strip()`: `no-processing`, the msgid `No Processing`, and its translation in the current language (「不處理」). The `reserved` message shows the name as typed. `NameDialogMessages` gets a way to format `{name}` with the typed name (for example `reserved_name=None` meaning "the typed name"); the dictionary message stays as it is.
 
@@ -273,7 +286,7 @@ Line numbers are from `67c2a97`. They are only for orientation.
    6. The imported script is selected in the list. The active script does not change.
 6. **Export** (any script).
    1. A `wx.FileDialog` (`FD_SAVE | FD_OVERWRITE_PROMPT`) titled `Export Script` (「匯出腳本」), with the same filter. The default file name is `<name>.py`, and `no-processing.py` for No Processing.
-   2. A user script's bytes are copied as they are, through `export_dictionary`'s twin: atomic, and a folder target is refused the same way. No Processing writes `NO_PROCESSING_SCRIPT`.
+   2. A user script's bytes are copied as they are, through `export_dictionary`'s twin: atomic, and a folder target is refused the same way. ~~No Processing writes `NO_PROCESSING_SCRIPT`.~~ Corrected by F-18b: No Processing's file is copied like any script (D4).
    3. An unreadable script still exports, or fails with `Failed to export script: {error}`, as a dictionary does.
 
 ### D9. The script editor (D-E)
@@ -295,6 +308,7 @@ Line numbers are from `67c2a97`. They are only for orientation.
 
 - `ConversionRequest` gets `script_path: Path | None = None` as its last field. `None` means No Processing. The default keeps `main.py`, the goldens and every test that builds a request without a script on today's output.
 - `preprocess_source_text(text, *, data_dir, script_path: Path | None, execute_script=execute_script, map_char=...)`. When `script_path is None` the script is not run, and the text goes straight to `map_char`. Otherwise it is run as today, and any failure becomes `TextProcessingError`.
+- Corrected by F-18b: `ConversionRequest.script_path` and `preprocess_source_text`'s `script_path` are a required `Path`; there is no `None` case, and the script always runs (D4).
 - `convert_text_with_alignment` passes `request.script_path`. It no longer derives a path from `request.dictionary_path.parent`.
 - `gui._build_conversion_request_for_text` passes `self._get_selected_script_path()`. The path is fixed when the job is built on the main thread (as the dictionary path is). The worker reads the file.
 - **A selected script that is missing, unreadable or invalid at conversion time** gives the existing `Text processing failed: {error}` box (stage `text_processing`, `format_conversion_error`). A missing file now fails with the `FileNotFoundError` text instead of silently running the identity script, as a missing dictionary fails today. No new string.
@@ -321,7 +335,7 @@ Scripts run with full Python privileges, in the DotExpress process, as today. Im
 | First start after the upgrade, no `preprocessing.py` | identity script | `script\no-processing.py` created; No Processing selected; same output |
 | First start after the upgrade, custom `preprocessing.py` | the custom script runs | **No Processing; the custom script no longer runs** (D-A, accepted by the user); the file is untouched |
 | Settings > Translation | output mode, width, dictionary | plus 「文字處理腳本」 (default 「不處理」) |
-| Convert with No Processing | the identity script runs | the stage is skipped; identical output |
+| Convert with No Processing | the identity script runs | `script\no-processing.py` runs (F-18 first skipped the stage; corrected by F-18b); identical output |
 | Convert with a user script | n/a | the script runs; errors as today's 「文字處理失敗：…」 |
 | The selected script deleted outside the app | n/a | No Processing at the next load or Settings Apply; during the session, 「文字處理失敗：…」 |
 | Cancel in the editor after typing | closes, changes lost | asks 「要放棄對腳本「X」所做的變更嗎？」 |
@@ -398,14 +412,14 @@ Each test is written red first where possible, against `67c2a97`.
 
 ### B. `tests/test_text_scripts_manager.py` (new; twin of `tests/test_dictionary_manager.py`)
 
-`ensure_no_processing_script` creates the file once and never rewrites an altered file. Other tests check:
+`ensure_no_processing_script` creates the file once and never rewrites an altered file (corrected by F-18b: it rewrites an altered file, leaves an exact one alone, and ignores a failed write). Other tests check:
 
 - the list order (No Processing first, then casefold order);
 - `normalize_script_name` (empty, too long, invalid, the three reserved forms in any case);
 - `create_script` / `script_exists`;
 - `import_script` (a `.py` suffix check including `.PY` and `.txt`; not UTF-8; a `PermissionError` becoming `ScriptImportSourceError`; invalid code; the original bytes copied; a taken name raising `FileExistsError`; nothing written on any error);
 - `rename_script` (refusing No Processing, a case-only rename, a taken name);
-- `export_script` (the bytes; a folder refused; No Processing exporting `NO_PROCESSING_SCRIPT` even when the disk file was altered);
+- `export_script` (the bytes; a folder refused; No Processing exporting `NO_PROCESSING_SCRIPT` even when the disk file was altered — corrected by F-18b: it copies the disk file);
 - `delete_script` (refusing No Processing);
 - `resolve_selected_script`.
 
@@ -440,15 +454,15 @@ Fake view. The cases:
 
 ### F. Conversion
 
-- `tests/test_conversion_text_pipeline.py`: `script_path=None` does not call `execute_script` and still maps characters. A path runs it.
+- `tests/test_conversion_text_pipeline.py`: `script_path=None` does not call `execute_script` and still maps characters. A path runs it. (Corrected by F-18b: there is no `None` case; the No Processing path runs its code. The tests that convert for real use `tests/script_support.py`'s `no_processing_script_path()`.)
 - `tests/test_conversion_service.py`: the tests at `:102-174` and `:517-539` write a script into a script folder and pass `script_path`. A new test: `dictionary/preprocessing.py` next to the dictionary is **not** run (D-A). A new test: a missing `script_path` gives stage `text_processing`.
-- The goldens and `test_main_demo` pass unchanged: no `script_path`, so `None`.
+- The goldens and `test_main_demo` pass unchanged: no `script_path`, so `None`. (Corrected by F-18b: they pass the No Processing path; `main.py` passes `script/no-processing.py`.)
 
 ### G. GUI wiring (`tests/test_gui_document_flows.py`, `tests/test_translation_menu.py`, `tests/test_app_paths.py`)
 
 - The menu list and bindings use `Script Management...` / `on_open_script_management`.
 - `on_open_script_management` refreshes with the active script and shows the dialog modally.
-- `_build_conversion_request_for_text` passes `None` for No Processing and `script_dir / "<name>.py"` otherwise.
+- `_build_conversion_request_for_text` passes `None` for No Processing and `script_dir / "<name>.py"` otherwise. (Corrected by F-18b: `script_dir / "<name>.py"` for every script.)
 - `_set_active_script` saves and reports a problem once.
 - `test_an_open_text_processing_dialog_is_left_alone` is removed with the dialog.
 - `ApplicationPaths.script` is in `writable_directories`, and `prepare_application_directories` creates it.
@@ -456,7 +470,7 @@ Fake view. The cases:
 
 ### Mutation check (the plan runs these; each must be caught)
 
-1. No Processing executes its file.
+1. No Processing executes its file. (Obsolete after F-18b: it now does by design.)
 2. The annotation check removed.
 3. The annotation check made mandatory.
 4. The `.py` suffix check removed.
@@ -469,7 +483,7 @@ Fake view. The cases:
 11. The legacy `dictionary/preprocessing.py` still runs.
 12. A missing script reads as identity.
 13. The reserved-name check made case-sensitive.
-14. `export` of No Processing reads the disk file.
+14. `export` of No Processing reads the disk file. (Obsolete after F-18b: it now does by design.)
 
 ### Counts
 

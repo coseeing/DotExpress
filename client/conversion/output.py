@@ -17,8 +17,8 @@ class ConversionRequest:
     translation_tables: dict[str, str]
     lang: str
     charset_maps: dict[str, str]
-    # The text-processing script to run; None is No Processing (F-18 D10).
-    script_path: Path | None = None
+    # The text-processing script to run, No Processing's file included (F-18 D10, F-18b).
+    script_path: Path
 
 
 @dataclass(frozen=True)

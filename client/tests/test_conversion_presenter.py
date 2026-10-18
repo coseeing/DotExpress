@@ -115,6 +115,7 @@ class ConversionPresenterTest(unittest.TestCase):
             translation_tables=dict(self.tables),
             lang="zh_TW",
             charset_maps={},
+            script_path=Path("script/no-processing.py"),
         )
 
     def _convert(self, request, *, runtime):

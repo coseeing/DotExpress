@@ -1083,7 +1083,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._config_store.get_lang.return_value = "zh_TW"
         frame._config_store.get_charset_maps.return_value = {"CJKCharactersLanguage": "zh"}
 
-        request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
+        request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"), Path("script/no-processing.py"))
 
         self.assertEqual(
             request.translation_tables,
@@ -1104,7 +1104,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
             frame.apply_settings_from_dialog(snapshot)
         frame._config_store.get_lang.return_value = "zh_TW"
         frame._config_store.get_charset_maps.return_value = {"CJKCharactersLanguage": "zh"}
-        request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
+        request = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"), Path("script/no-processing.py"))
 
         self.assertEqual(request.translation_tables, snapshot.translation_tables)
 
@@ -1117,8 +1117,8 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._config_store.get_lang.side_effect = ["en", "zh_TW"]
         frame._config_store.get_charset_maps.side_effect = [first_maps, second_maps]
 
-        first = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
-        second = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"))
+        first = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"), Path("script/no-processing.py"))
+        second = frame._build_conversion_request("source", "unicode", 40, Path("dictionary/default.csv"), Path("script/no-processing.py"))
 
         self.assertEqual((first.lang, first.charset_maps), ("en", first_maps))
         self.assertEqual((second.lang, second.charset_maps), ("zh_TW", second_maps))
@@ -1191,13 +1191,12 @@ class ScriptSelectionFrameTest(unittest.TestCase):
         frame.translation_tables = {"default": "zh-tw.ctb"}
         return frame
 
-    def test_no_processing_sends_no_script(self) -> None:
-        for name in ("no-processing", "No-Processing"):
-            with self.subTest(name=name):
-                frame = self._make_frame(name)
+    def test_no_processing_is_sent_by_its_path_like_any_script(self) -> None:
+        # F-18b: conversion runs no-processing.py; there is no skip for it.
+        frame = self._make_frame("no-processing")
 
-                self.assertIsNone(frame._get_selected_script_path())
-                self.assertIsNone(frame._build_conversion_request_for_text("text").script_path)
+        self.assertEqual(frame._get_selected_script_path(), Path("scripts/no-processing.py"))
+        self.assertEqual(frame._build_conversion_request_for_text("text").script_path, Path("scripts/no-processing.py"))
 
     def test_a_user_script_is_sent_by_its_path_in_the_script_folder(self) -> None:
         frame = self._make_frame("upper")
@@ -4155,6 +4154,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
         frame.translation_tables = dict(self.TABLES)
         frame.translation_settings = TranslationSettings("ascii", 32, "default")
         frame.dictionary_dir = self.root / "dictionary"
+        frame.script_dir = self.root / "script"
         frame._config_store = Mock(spec=gui.ConfigStore)
         frame._config_store.get_lang.return_value = self.LANG
         frame._config_store.get_charset_maps.return_value = dict(self.CHARSET_MAPS)
@@ -4233,6 +4233,7 @@ class ConversionExportFlowsCharacterizationTest(unittest.TestCase):
             translation_tables=self.TABLES,
             lang=self.LANG,
             charset_maps=self.CHARSET_MAPS,
+            script_path=self.root / "script" / "no-processing.py",
         )
 
     # --- manual conversion ---------------------------------------------------
@@ -5173,6 +5174,7 @@ class FrameConversionDelegationTest(unittest.TestCase):
         frame = self._make_frame()
         frame.translation_settings = TranslationSettings("ascii", 32, "math")
         frame.dictionary_dir = Path("dictionaries")
+        frame.script_dir = Path("scripts")
         frame._config_store = Mock(spec=gui.ConfigStore)
         frame._config_store.get_lang.return_value = "zh_TW"
         frame._config_store.get_charset_maps.return_value = {"CJKCharactersLanguage": "zh"}
@@ -5190,6 +5192,7 @@ class FrameConversionDelegationTest(unittest.TestCase):
                 translation_tables={"default": "zh-tw.ctb"},
                 lang="zh_TW",
                 charset_maps={"CJKCharactersLanguage": "zh"},
+                script_path=Path("scripts/no-processing.py"),
             ),
         )
 
@@ -6104,10 +6107,10 @@ class ApplicationPathsWiringCharacterizationTest(unittest.TestCase):
             patch("builtins.open", counting_open),
         ):
             os.environ.pop(config.LANG_ENV, None)
-            first = frame._build_conversion_request("x", "unicode", 40, Path("d.csv"))
+            first = frame._build_conversion_request("x", "unicode", 40, Path("d.csv"), Path("s.py"))
             reads_after_first = len(reads)
             self.write_config({"language": "ja"})
-            second = frame._build_conversion_request("x", "unicode", 40, Path("d.csv"))
+            second = frame._build_conversion_request("x", "unicode", 40, Path("d.csv"), Path("s.py"))
 
         self.assertEqual(first.lang, "en")
         self.assertEqual(first.charset_maps, {**config.DEFAULT_CHARSET_MAPS, "latinCharactersLanguage": "fr"})

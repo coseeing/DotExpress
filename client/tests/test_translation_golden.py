@@ -25,6 +25,7 @@ from conversion.wrapping import merge_translation_results, wrap_translation_resu
 from dual_view.html import render_dual_view_html
 from dual_view.model import build_dual_view_model
 from languageDetection.unicode_blocks import char_block
+from tests.script_support import no_processing_script_path
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -146,6 +147,7 @@ def snapshot_run(text: str, output_mode: str, width: int, dictionary_path: Path)
         translation_tables=dict(TRANSLATION_TABLES),
         lang=LANG,
         charset_maps=dict(DEFAULT_CHARSET_MAPS),
+        script_path=no_processing_script_path(),
     )
     output = convert_text_with_alignment(request, runtime=_runtime())
     results = list(output.translation_results)

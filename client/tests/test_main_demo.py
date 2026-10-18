@@ -30,6 +30,11 @@ class MainDemoTest(unittest.TestCase):
             convert.call_args.args[0].dictionary_path,
             dictionary_directory / "default.csv",
         )
+        # F-18b: the demo runs No Processing's file, as the app does.
+        self.assertEqual(
+            convert.call_args.args[0].script_path,
+            Path("C:/Portable/DotExpress/script/no-processing.py"),
+        )
         print_mock.assert_called_once_with("braille")
         runtime.close.assert_called_once_with()
 

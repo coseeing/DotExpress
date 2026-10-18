@@ -714,7 +714,8 @@ class ExportThroughConversionPresenterTest(unittest.TestCase):
             documents,
             runtime=object(),
             build_request=lambda raw_text: ConversionRequest(
-                raw_text, "unicode", 40, Path("d.csv"), Path("data"), {"default": "t"}, "zh_TW", {}
+                raw_text, "unicode", 40, Path("d.csv"), Path("data"), {"default": "t"}, "zh_TW", {},
+                script_path=Path("script/no-processing.py"),
             ),
             get_translation_tables=lambda: {"default": "t"},
             call_after=calls,

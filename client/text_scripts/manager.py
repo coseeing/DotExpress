@@ -2,7 +2,8 @@
 
 A script name maps to ``<name>.py`` in the script folder, as a dictionary name maps to
 ``<name>.csv``. ``no-processing.py`` is No Processing, the script that changes nothing:
-it is created when missing and never rewritten, and it cannot be renamed or deleted.
+it runs like any script, it is written again when it holds anything else (F-18b), and it
+cannot be renamed or deleted.
 Every file this module writes goes through ``shared.atomic_write`` (F-8).
 """
 
@@ -49,20 +50,32 @@ def script_path_for_name(name: str, script_dir: Path) -> Path:
 
 
 def ensure_no_processing_script(script_dir: Path) -> Path:
-    """Create ``no-processing.py`` with its text if it is missing; an existing file is left alone (F-18 D4)."""
+    """Write ``no-processing.py`` with its exact text when it is missing or holds anything else (F-18b).
+
+    Conversion runs it like any other script, so its bytes are put back on every refresh.
+    A file that cannot be replaced (a folder of that name, a read-only file) is left as it
+    is: No Processing is still listed, and converting with it gives the text-processing error.
+    """
     directory = Path(script_dir)
     directory.mkdir(parents=True, exist_ok=True)
     path = script_path_for_name(NO_PROCESSING_SCRIPT_NAME, directory)
-    if not path.exists():
+    try:
+        if path.read_bytes() == NO_PROCESSING_SCRIPT.encode("utf-8"):
+            return path
+    except OSError:
+        pass  # missing, a folder, or held by another program: try to write it
+    try:
         write_text_atomically(path, lambda stream: stream.write(NO_PROCESSING_SCRIPT), encoding="utf-8", newline="")
+    except OSError:
+        pass  # left as it is; Script Management shows why it cannot be used
     return path
 
 
 def list_script_names(script_dir: Path) -> list[str]:
     """No Processing first, then the other scripts in the order of the dictionaries (F-18 D1, O1).
 
-    No Processing is always listed, whatever ``no-processing.py`` is or whether it exists:
-    conversion never reads it (F-18 D4, review M-5).
+    No Processing is always listed, whatever ``no-processing.py`` is or whether it exists
+    (F-18 review M-5); a file that cannot be used shows as such in Script Management.
     """
     directory = Path(script_dir)
     stems = [path.stem for path in directory.glob(f"*{SCRIPT_SUFFIX}") if path.is_file()] if directory.is_dir() else []
@@ -137,13 +150,9 @@ def rename_script(script_dir: Path, source_name: str, new_name: str) -> Path:
 
 
 def export_script(script_dir: Path, name: str, destination_path: Path | str) -> Path:
-    """Copy a script's bytes to ``destination_path``; No Processing writes its text (F-18 D4)."""
+    """Copy a script's bytes to ``destination_path``, No Processing's too (F-18b)."""
     destination = Path(destination_path)
     refuse_folder_target(destination)
-    if is_no_processing_script(name):
-        # The documented content, whatever the file on disk holds.
-        write_text_atomically(destination, lambda stream: stream.write(NO_PROCESSING_SCRIPT), encoding="utf-8", newline="")
-        return destination
     source_path = script_path_for_name(name.strip(), script_dir)
     # An existing file there is replaced only once the copy is complete and synced.
     write_bytes_atomically(destination, lambda stream: stream.write(source_path.read_bytes()))

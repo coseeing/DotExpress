@@ -33,7 +33,7 @@ from documents.workspace import (
     unlisted_entry_reason,
 )
 from documents.workspace_service import DocumentWorkspaceService
-from text_scripts.manager import is_no_processing_script, script_path_for_name
+from text_scripts.manager import script_path_for_name
 from text_scripts.presenter import ScriptManagementPresenter
 from ui.action_menu import get_document_menu_enabled_state
 from ui.conversion_presenter import ConversionPresenter
@@ -552,12 +552,9 @@ class BrailleFrame(wx.Frame):
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
 
-	def _get_selected_script_path(self) -> Path | None:
-		"""The selected script's file; ``None`` for No Processing, whose file is never run (F-18 D4)."""
-		name = self.translation_settings.selected_script
-		if is_no_processing_script(name):
-			return None
-		return script_path_for_name(name, self.script_dir)
+	def _get_selected_script_path(self) -> Path:
+		"""The selected script's file, No Processing's too: every script runs (F-18b)."""
+		return script_path_for_name(self.translation_settings.selected_script, self.script_dir)
 
 	def _show_file_error(self, message: str, error: Exception) -> None:
 		message_box(
@@ -668,7 +665,7 @@ class BrailleFrame(wx.Frame):
 		output_mode: str,
 		width: int,
 		dictionary_path: Path,
-		script_path: Path | None = None,
+		script_path: Path,
 	) -> ConversionRequest:
 		return ConversionRequest(
 			raw_text=raw_text,

@@ -19,7 +19,7 @@ class TranslationSettings:
     output_mode: str
     width: int
     selected_dictionary: str
-    # The text-processing script (F-18 D3); No Processing skips the script stage.
+    # The text-processing script (F-18 D3); No Processing's file runs like any other (F-18b).
     selected_script: str = NO_PROCESSING_SCRIPT_NAME
 
 

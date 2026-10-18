@@ -19,6 +19,7 @@ except Exception as exc:
 from adapters.translation.provider import build_default_translation_runtime
 from config import DEFAULT_CHARSET_MAPS, DEFAULT_TRANSLATION_TABLES
 from conversion.service import ConversionRequest, convert_text_with_alignment
+from tests.script_support import no_processing_script_path
 
 
 CLIENT_DIR = Path(__file__).resolve().parents[1]
@@ -56,6 +57,7 @@ class CombiningMarkDictionaryConversionTest(unittest.TestCase):
 				translation_tables={**DEFAULT_TRANSLATION_TABLES, "en": "en-ueb-g2.ctb"},
 				lang="zh_TW",
 				charset_maps=dict(DEFAULT_CHARSET_MAPS),
+				script_path=no_processing_script_path(),
 			),
 			runtime=self.runtime,
 		)

@@ -73,15 +73,39 @@ class ScriptFolderTest(ScriptFolderTestCase):
         self.assertEqual(path.read_bytes(), b"def main(input: str) -> str:\n    return input\n")
         self.assertEqual(self.listing(), ["no-processing.py"])
 
-    def test_ensure_never_rewrites_an_existing_file(self) -> None:
-        # F-18 (D4): user bytes in no-processing.py are left alone; conversion never reads them.
-        altered = self.write_script("no-processing", b"def main(text):\n    return text.upper()\n")
+    def test_ensure_rewrites_a_file_that_holds_anything_else(self) -> None:
+        # F-18b: conversion runs no-processing.py like any script, so its bytes are put back.
+        for data in (
+            b"def main(text):\n    return text.upper()\n",
+            b"\xef\xbb\xbf" + NO_PROCESSING_SCRIPT.encode("utf-8"),
+            NO_PROCESSING_SCRIPT.replace("\n", "\r\n").encode("utf-8"),
+            b"",
+        ):
+            with self.subTest(data=data):
+                altered = self.write_script("no-processing", data)
+
+                self.assertEqual(ensure_no_processing_script(self.script_dir), altered)
+
+                self.assertEqual(altered.read_bytes(), b"def main(input: str) -> str:\n    return input\n")
+                self.assertEqual(self.listing(), ["no-processing.py"])
+
+    def test_ensure_leaves_a_file_with_the_exact_text_alone(self) -> None:
+        ensure_no_processing_script(self.script_dir)
 
         with patch("os.replace") as replace:
             ensure_no_processing_script(self.script_dir)
 
         replace.assert_not_called()
+
+    def test_ensure_gives_up_quietly_when_the_file_cannot_be_written(self) -> None:
+        # F-18b: the list still shows No Processing; converting with it gives the text-processing error.
+        altered = self.write_script("no-processing", b"def main(text):\n    return text.upper()\n")
+
+        with patch("os.replace", side_effect=PermissionError(errno.EACCES, "denied")):
+            self.assertEqual(ensure_no_processing_script(self.script_dir), altered)
+
         self.assertEqual(altered.read_bytes(), b"def main(text):\n    return text.upper()\n")
+        self.assertEqual(self.listing(), ["no-processing.py"])
 
     def test_no_processing_comes_first_and_the_others_in_dictionary_order(self) -> None:
         # F-18 (D1, O1): not alphabetical for No Processing; the others casefold, then the name.
@@ -98,7 +122,8 @@ class ScriptFolderTest(ScriptFolderTestCase):
         self.assertEqual(list_script_names(self.script_dir), ["no-processing", "alpha"])
 
     def test_no_processing_is_listed_whatever_its_file(self) -> None:
-        # F-18 review M-5: a fixed entry, not a file that happens to exist; conversion never reads it.
+        # F-18 review M-5: a fixed entry, not a file that happens to exist. A folder of that
+        # name cannot be replaced (F-18b): ensure leaves it, and No Processing is still listed.
         self.assertEqual(list_script_names(self.script_dir), ["no-processing"])
         self.write_script("alpha")
         self.assertEqual(list_script_names(self.script_dir), ["no-processing", "alpha"])
@@ -312,14 +337,19 @@ class RenameDeleteExportTest(ScriptFolderTestCase):
                 self.assertEqual((export_dir / f"{name}.py").read_bytes(), data)
         self.assertEqual(self.listing(export_dir), ["bom.py", "cp950.py"])
 
-    def test_export_of_no_processing_writes_its_text_not_the_file(self) -> None:
-        # F-18 (D4): the documented content, even after the disk file was altered.
-        self.write_script("no-processing", b"def main(text):\n    return text.upper()\n")
+    def test_export_of_no_processing_copies_its_file_like_any_script(self) -> None:
+        # F-18b: no fixed text; the file is rewritten before Script Management lists it.
+        ensure_no_processing_script(self.script_dir)
         destination = self.root / "no-processing.py"
 
         export_script(self.script_dir, "no-processing", destination)
 
         self.assertEqual(destination.read_bytes(), b"def main(input: str) -> str:\n    return input\n")
+        (self.script_dir / "no-processing.py").write_bytes(b"def main(text):\n    return text.upper()\n")
+
+        export_script(self.script_dir, "no-processing", destination)
+
+        self.assertEqual(destination.read_bytes(), b"def main(text):\n    return text.upper()\n")
 
     def test_export_onto_a_folder_fails_as_a_dictionary_export_does(self) -> None:
         self.write_script("upper")

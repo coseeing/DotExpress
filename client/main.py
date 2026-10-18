@@ -3,7 +3,9 @@ from pathlib import Path
 from adapters.translation.provider import build_default_translation_runtime
 from app_paths import build_application_paths
 from config import DEFAULT_TRANSLATION_TABLES, ConfigStore
+from conversion.preprocessing.user_script import NO_PROCESSING_SCRIPT_NAME
 from conversion.service import ConversionRequest, convert_text_with_alignment
+from text_scripts.manager import script_path_for_name
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -31,6 +33,7 @@ def run_demo(text: str = SAMPLE_TEXT) -> None:
                 },
                 lang=config_store.get_lang(),
                 charset_maps=config_store.get_charset_maps(),
+                script_path=script_path_for_name(NO_PROCESSING_SCRIPT_NAME, paths.script),
             ),
             runtime=runtime,
         )

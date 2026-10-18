@@ -24,6 +24,7 @@ from dictionaries.name_prompt import prompt_dictionary_name_until_success
 from i18n import _
 from text_scripts.manager import (
 	ScriptImportSourceError,
+	check_import_suffix,
 	create_script,
 	delete_script,
 	ensure_no_processing_script,
@@ -202,6 +203,8 @@ class ScriptManagementPresenter:
 		if source_path is None:
 			return None
 		try:
+			# Refused before the name box; import_script checks it again (F-18 review M-2).
+			check_import_suffix(source_path)
 			path = self._prompt_name_until_success(
 				view,
 				_("Add Script"),

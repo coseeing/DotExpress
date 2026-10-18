@@ -91,6 +91,12 @@ def create_script(script_dir: Path, name: str, source: str) -> Path:
     return path
 
 
+def check_import_suffix(source_path: Path | str) -> None:
+    """``ValueError`` (a msgid) unless ``source_path`` ends in ``.py``, whatever its case (F-18 D8.5)."""
+    if Path(source_path).suffix.casefold() != SCRIPT_SUFFIX:
+        raise ValueError(N_("Only Python files (.py) can be imported."))
+
+
 def import_script(script_dir: Path, source_path: Path | str, name: str) -> Path:
     """Copy a ``.py`` file that passes the signature rule into the script folder (F-18 D8.5).
 
@@ -100,8 +106,7 @@ def import_script(script_dir: Path, source_path: Path | str, name: str) -> Path:
     bytes; nothing is written on any error.
     """
     source = Path(source_path)
-    if source.suffix.casefold() != SCRIPT_SUFFIX:
-        raise ValueError(N_("Only Python files (.py) can be imported."))
+    check_import_suffix(source)
     directory = Path(script_dir)
     directory.mkdir(parents=True, exist_ok=True)
     destination = script_path_for_name(normalize_script_name(name), directory)

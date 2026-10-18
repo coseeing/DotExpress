@@ -402,6 +402,24 @@ class PresenterImportTest(PresenterTestCase):
 		self.assertIsNone(presenter.import_from_file(view))
 		self.assertEqual(view.calls, [("choose_import", "匯入腳本")])
 
+	def test_a_file_that_is_not_python_is_refused_before_a_name_is_asked(self):
+		# F-18 review M-2: no name box for a file that cannot be imported whatever its name.
+		presenter = self.make_presenter()
+		view = FakeView(names=["notes"], import_path=self.source("notes.txt", UPPER.encode("utf-8")))
+
+		self.assertIsNone(presenter.import_from_file(view))
+
+		self.assertEqual(view.calls, [("choose_import", "匯入腳本"), ("error", "匯入腳本失敗：只能匯入 Python 檔案（.py）。")])
+		self.assertEqual(self.files(), ["no-processing.py"])
+
+	def test_the_suffix_check_ignores_case(self):
+		presenter = self.make_presenter()
+		view = FakeView(names=["upper"], import_path=self.source("UPPER.PY", UPPER.encode("utf-8")))
+
+		self.assertEqual(presenter.import_from_file(view), "upper")
+
+		self.assertEqual(view.calls, [("choose_import", "匯入腳本"), ("prompt", "新增腳本", "UPPER")])
+
 	def test_each_error_is_reported_and_nothing_is_copied(self):
 		cases = (
 			("x.txt", UPPER.encode("utf-8"), "匯入腳本失敗：只能匯入 Python 檔案（.py）。"),

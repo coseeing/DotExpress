@@ -151,10 +151,11 @@ def export_script(script_dir: Path, name: str, destination_path: Path | str) -> 
 
 
 def delete_script(script_dir: Path, name: str) -> None:
+    """Remove a script; one already removed by another program counts as deleted (F-18 review M-6)."""
     normalized = name.strip()
     if is_no_processing_script(normalized):
         raise ValueError("No Processing cannot be deleted.")
-    script_path_for_name(normalized, script_dir).unlink()
+    script_path_for_name(normalized, script_dir).unlink(missing_ok=True)
 
 
 def resolve_selected_script(names: list[str], saved_name: str | None) -> str:

@@ -291,6 +291,14 @@ class RenameDeleteExportTest(ScriptFolderTestCase):
 
         self.assertEqual(self.listing(), ["no-processing.py"])
 
+    def test_a_script_already_removed_counts_as_deleted(self) -> None:
+        # F-18 review M-6: removed by another program while the list showed it.
+        ensure_no_processing_script(self.script_dir)
+
+        delete_script(self.script_dir, "gone")
+
+        self.assertEqual(self.listing(), ["no-processing.py"])
+
     def test_export_copies_the_bytes(self) -> None:
         self.write_script("bom", BOM_SCRIPT)
         self.write_script("cp950", NOT_UTF8)

@@ -322,6 +322,18 @@ class PresenterDeleteTest(PresenterTestCase):
 		self.assertEqual(presenter.delete(FakeView(), "alpha"), "no-processing")
 		self.assertEqual(self.active, ["no-processing"])
 
+	def test_a_script_removed_outside_the_app_is_deleted_without_an_error(self):
+		# F-18 review M-6: no "[Errno 2]" box; the list is read again and the active script follows.
+		presenter = self.make_presenter("alpha", "beta", active="beta")
+		(self.script_dir / "beta.py").unlink()
+		view = FakeView()
+
+		self.assertEqual(presenter.delete(view, "beta"), "alpha")
+
+		self.assertEqual(view.calls, [("confirm", "要刪除腳本「beta」嗎？", "確認刪除腳本")])
+		self.assertEqual(presenter.script_names, ["no-processing", "alpha"])
+		self.assertEqual(self.active, ["no-processing"])
+
 	def test_a_failed_delete_is_reported(self):
 		presenter = self.make_presenter("alpha", active="alpha")
 		error = PermissionError(13, "Permission denied")

@@ -1172,15 +1172,16 @@ class ScriptManagementDialog(ContextManagedDialog, wx.Dialog):
 	def _on_delete_clicked(self, _event: wx.CommandEvent) -> None:
 		selected = self._get_selected_name()
 		if selected is not None:
-			self._refresh_after(self._actions.delete(self, selected))
+			# Back in the list: once No Processing is selected, Delete itself is disabled (F-18 review I-1).
+			self._refresh_after(self._actions.delete(self, selected), focus_list=True)
 
 	def _on_rename_clicked(self, _event: wx.CommandEvent) -> None:
 		selected = self._get_selected_name()
 		if selected is not None:
-			self._refresh_after(self._actions.rename(self, selected))
+			self._refresh_after(self._actions.rename(self, selected), focus_list=True)
 
 	def _on_import_clicked(self, _event: wx.CommandEvent) -> None:
-		self._refresh_after(self._actions.import_from_file(self))
+		self._refresh_after(self._actions.import_from_file(self), focus_list=True)
 
 	def _on_export_clicked(self, _event: wx.CommandEvent) -> None:
 		selected = self._get_selected_name()

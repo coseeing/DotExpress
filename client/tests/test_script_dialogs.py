@@ -286,7 +286,8 @@ class ScriptHandlersTest(ManagementTestCase):
 		self.assertEqual(self.rows(target)[2], ["upper", "格式不正確"])
 		self.assertEqual(target.list_ctrl.calls, ["SetFocus"])
 
-	def test_add_delete_rename_and_import_refresh_with_the_name_they_return(self):
+	def test_add_delete_rename_and_import_refresh_with_the_name_they_return_and_focus_the_list(self):
+		# F-18 review I-1: back in the list, as after Edit, never on a button that may be disabled.
 		for action, handler, selected in (
 			("add", "_on_add_clicked", None),
 			("delete", "_on_delete_clicked", "upper"),
@@ -303,7 +304,20 @@ class ScriptHandlersTest(ManagementTestCase):
 				expected = (action, target, selected) if selected else (action, target)
 				self.assertEqual(actions.calls, [expected])
 				self.assertEqual(target.list_ctrl.selected, 1)
-				self.assertEqual(target.list_ctrl.calls, ["SetFocus"] if action == "add" else [])
+				self.assertEqual(target.list_ctrl.calls, ["SetFocus"])
+
+	def test_deleting_the_first_user_script_leaves_the_focus_in_the_list_on_no_processing(self):
+		# F-18 review I-1: Delete is disabled once No Processing is selected; the focus must not stay on it.
+		actions = _FakeActions(self.script_dir, self.names, {"delete": "no-processing"})
+		target = self.make_dialog(self.names, actions)
+		target.refresh_scripts(self.names, "shout")
+
+		target._on_delete_clicked(Mock())
+
+		self.assertEqual(actions.calls, [("delete", target, "shout")])
+		self.assertEqual((target.list_ctrl.selected, target.list_ctrl.focused), (0, 0))
+		target.delete_button.Enable.assert_called_with(False)
+		self.assertEqual(target.list_ctrl.calls, ["SetFocus"])
 
 	def test_nothing_is_refreshed_when_an_action_returns_none_and_export_returns_nothing(self):
 		actions = _FakeActions(self.script_dir, self.names)

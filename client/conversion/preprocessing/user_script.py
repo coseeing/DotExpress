@@ -108,11 +108,6 @@ def execute_script(path: Path | str, input_text: str) -> str:
     return _run_script(read_script_source(source_path), source_path, input_text)
 
 
-def execute_preprocessing_script(path: Path | str, input_text: str) -> str:
-    source_path = Path(path)
-    return _run_script(load_preprocessing_script(source_path), source_path, input_text)
-
-
 def _run_script(source: str, source_path: Path, input_text: str) -> str:
     validate_script(source, filename=str(source_path))
     namespace = {

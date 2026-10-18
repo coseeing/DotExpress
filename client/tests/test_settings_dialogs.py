@@ -366,10 +366,12 @@ class TranslationSettingsPanelTest(unittest.TestCase):
         panel.width_spin = FakeSpin(52)
         panel.dictionary_choice = FakeChoice(1)
         panel.dictionary_names = ["default", "math"]
+        panel.script_choice = FakeChoice(1)
+        panel.script_names = ["no-processing", "upper"]
 
         result = panel.on_save(baseline)
 
-        self.assertEqual(result.translation, TranslationSettings("ascii", 52, "math"))
+        self.assertEqual(result.translation, TranslationSettings("ascii", 52, "math", "upper"))
         self.assertEqual(baseline.translation, TranslationSettings("unicode", 40, "default"))
 
 
@@ -522,6 +524,7 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
                 parent=None,
                 snapshot=make_snapshot(),
                 dictionary_names=["default"],
+                script_names=["no-processing"],
                 commit=Mock(),
             )
 
@@ -572,8 +575,8 @@ class SettingsTitlesFollowTheLanguageTest(unittest.TestCase):
 
     PANELS = {
         "TranslationSettingsPanel": (
-            ("轉譯", "轉譯輸出模式、寬度與字典選項"),
-            ("Translation", "Translation output mode, width, and dictionary options"),
+            ("轉譯", "轉譯輸出模式、寬度、字典與文字處理腳本選項"),
+            ("Translation", "Translation output mode, width, dictionary, and text processing script options"),
         ),
         "TranslationTablesPanel": (
             ("轉譯表", "不同語言的轉譯表對應"),
@@ -808,6 +811,7 @@ class DotExpressSettingsSingletonTest(_SingletonCharacterization, unittest.TestC
             "parent": "parent-window",
             "snapshot": self.snapshot,
             "dictionary_names": ["default", "math"],
+            "script_names": ["no-processing", "upper"],
             "commit": self.commit,
         }
 
@@ -966,7 +970,7 @@ def build_panel(
             translation_tables={} if tables is None else tables,
             view=view,
         )
-        owner = SimpleNamespace(snapshot=snapshot, dictionary_names=["default", "math"])
+        owner = SimpleNamespace(snapshot=snapshot, dictionary_names=["default", "math"], script_names=["no-processing", "upper"])
     with (
         patch.multiple(module.wx, Choice=RecordingChoice, SpinCtrl=RecordingSpin),
         patch.object(module, "listTables", Mock(return_value=list(table_list))),
@@ -1010,8 +1014,11 @@ class TranslationPanelOptionsTest(unittest.TestCase):
         panel = build_panel("TranslationSettingsPanel")
 
         rows = grid_rows(panel)
-        self.assertEqual([label for label, _control in rows], ["點字類型", "寬度", "字典"])
-        self.assertEqual([control for _label, control in rows], [panel.output_choice, panel.width_spin, panel.dictionary_choice])
+        self.assertEqual([label for label, _control in rows], ["點字類型", "寬度", "字典", "文字處理腳本"])
+        self.assertEqual(
+            [control for _label, control in rows],
+            [panel.output_choice, panel.width_spin, panel.dictionary_choice, panel.script_choice],
+        )
         self.assertEqual(panel.output_choice.items, ["Unicode", "ASCII"])
         self.assertEqual(panel.output_choice.items, [i18n._("Unicode"), i18n._("ASCII")])
 
@@ -1054,6 +1061,53 @@ class TranslationPanelOptionsTest(unittest.TestCase):
 
         panel.load_snapshot(translation_snapshot("unicode", 64))
         self.assertEqual((panel.output_choice.selection, panel.width_spin.value), (0, 64))
+
+
+class TranslationPanelScriptChoiceTest(unittest.TestCase):
+    """F-18 (D3): the text-processing script is chosen below the dictionary."""
+
+    def build(self, script_names, selected):
+        snapshot = DotExpressSettingsSnapshot.create(
+            translation=TranslationSettings("unicode", 40, "default", selected),
+            translation_tables={},
+            view=ViewSettings(12, "light", "simbraille"),
+        )
+        owner = SimpleNamespace(snapshot=snapshot, dictionary_names=["default"], script_names=script_names)
+        return build_panel("TranslationSettingsPanel", owner=owner)
+
+    def test_no_processing_is_listed_first_by_its_display_name(self) -> None:
+        panel = self.build(["no-processing", "upper", "中文"], "upper")
+
+        self.assertEqual(panel.script_choice.items, ["不處理", "upper", "中文"])
+        self.assertEqual(panel.script_choice.selection, 1)
+        self.assertEqual(panel.script_names, ["no-processing", "upper", "中文"])
+
+    def test_the_choice_round_trips_the_internal_name(self) -> None:
+        panel = self.build(["no-processing", "upper"], "no-processing")
+        baseline = translation_snapshot()
+        for selection, expected in ((0, "no-processing"), (1, "upper"), (-1, "no-processing"), (2, "no-processing")):
+            with self.subTest(selection=selection):
+                panel.script_choice.SetSelection(selection)
+                self.assertEqual(panel.on_save(baseline).translation.selected_script, expected)
+
+    def test_an_unknown_name_selects_no_processing_and_a_new_snapshot_reselects(self) -> None:
+        panel = self.build(["no-processing", "upper"], "missing")
+        self.assertEqual(panel.script_choice.selection, 0)
+
+        panel.load_snapshot(
+            DotExpressSettingsSnapshot.create(
+                translation=TranslationSettings("unicode", 40, "default", "upper"),
+                translation_tables={},
+                view=ViewSettings(12, "light", "simbraille"),
+            )
+        )
+        self.assertEqual(panel.script_choice.selection, 1)
+
+    def test_no_script_names_disable_the_choice(self) -> None:
+        panel = self.build([], "no-processing")
+
+        self.assertEqual((panel.script_choice.selection, panel.script_choice.enabled), (-1, False))
+        self.assertEqual(panel.on_save(translation_snapshot()).translation.selected_script, "no-processing")
 
 
 class ViewPanelOptionsTest(unittest.TestCase):

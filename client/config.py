@@ -26,6 +26,8 @@ TRANSLATION_TABLES_KEY = "translation_tables"
 OUTPUT_MODE_KEY = "output_mode"
 WIDTH_KEY = "width"
 SELECTED_DICTIONARY_KEY = "selected_dictionary"
+# The text-processing script; "no-processing" is No Processing (F-18 D3).
+SELECTED_SCRIPT_KEY = "selected_script"
 FONT_SIZE_KEY = "font_size"
 SCHEME_KEY = "scheme"
 BRAILLE_FONT_KEY = "braille_font"
@@ -301,6 +303,14 @@ class ConfigStore:
 
     def set_selected_dictionary(self, dictionary_name: str) -> ConfigSaveProblem | None:
         return self._set_section_value(CONVERSION_SECTION, SELECTED_DICTIONARY_KEY, dictionary_name)
+
+    def get_selected_script(self, default: str = "no-processing") -> str:
+        data = self._load()
+        value = _get_section(data, CONVERSION_SECTION).get(SELECTED_SCRIPT_KEY)
+        return value if isinstance(value, str) else default
+
+    def set_selected_script(self, script_name: str) -> ConfigSaveProblem | None:
+        return self._set_section_value(CONVERSION_SECTION, SELECTED_SCRIPT_KEY, script_name)
 
     def get_view_font_size(self, default: int = DEFAULT_VIEW_FONT_SIZE) -> int:
         data = self._load()

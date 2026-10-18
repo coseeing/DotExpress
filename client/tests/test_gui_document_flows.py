@@ -240,6 +240,7 @@ class DocumentControllerOwnershipTest(unittest.TestCase):
         frame._config_store = Mock(spec=gui.ConfigStore)
         with (
             patch.object(gui, "DictionaryManagementPresenter", return_value=Mock(dictionary_names=["default"])),
+            patch.object(gui, "ScriptManagementPresenter", return_value=Mock(script_names=["no-processing"])),
             patch.object(gui, "load_translation_settings", return_value=TranslationSettings("unicode", 40, "default")),
             patch.object(gui, "load_view_settings", return_value=ViewSettings(40, "light", "default")),
             patch.object(gui, "load_translation_tables", return_value={}),
@@ -314,6 +315,7 @@ class FrameWorkspaceServiceDelegationTest(unittest.TestCase):
         frame._config_store = Mock(spec=gui.ConfigStore)
         with (
             patch.object(gui, "DictionaryManagementPresenter", return_value=Mock(dictionary_names=["default"])),
+            patch.object(gui, "ScriptManagementPresenter", return_value=Mock(script_names=["no-processing"])),
             patch.object(gui, "load_translation_settings", return_value=TranslationSettings("unicode", 40, "default")),
             patch.object(gui, "load_view_settings", return_value=ViewSettings(40, "light", "default")),
             patch.object(gui, "load_translation_tables", return_value={}),
@@ -1007,8 +1009,9 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame = object.__new__(gui.BrailleFrame)
         frame._apply_editor_view_settings = Mock()
         frame.get_dictionary_names_for_dialog = Mock(return_value=["default", "math"])
+        frame.get_script_names_for_dialog = Mock(return_value=["no-processing", "upper"])
         snapshot = make_snapshot(
-            translation=TranslationSettings("ascii", 52, "math"),
+            translation=TranslationSettings("ascii", 52, "math", "upper"),
             tables={"default": "en-ueb-g1.ctb", "math": "Nemeth"},
             view=ViewSettings(18, "dark", "default"),
         )
@@ -1037,6 +1040,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame._config_store = Mock(spec=gui.ConfigStore)
         with (
             patch.object(gui, "DictionaryManagementPresenter", return_value=Mock(dictionary_names=["default"])),
+            patch.object(gui, "ScriptManagementPresenter", return_value=Mock(script_names=["no-processing"])),
             patch.object(
                 gui,
                 "load_translation_settings",
@@ -1067,6 +1071,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame.translation_settings = TranslationSettings("unicode", 40, "default")
         frame.view_settings = ViewSettings(40, "light", "default")
         frame.get_dictionary_names_for_dialog = Mock(return_value=["default"])
+        frame.get_script_names_for_dialog = Mock(return_value=["no-processing", "upper"])
         frame.translation_tables = {"default": "test-default.ctb", "math": "test-math.ctb"}
 
         snapshot = frame.get_settings_snapshot()
@@ -1095,6 +1100,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame = self._make_frame()
         frame._apply_editor_view_settings = Mock()
         frame.get_dictionary_names_for_dialog = Mock(return_value=["default"])
+        frame.get_script_names_for_dialog = Mock(return_value=["no-processing", "upper"])
         snapshot = make_snapshot(tables={"default": "test-default.ctb", "math": "test-math.ctb"})
 
         with patch.object(gui, "save_translation_settings", return_value=None), \
@@ -1162,6 +1168,7 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
         frame = object.__new__(gui.BrailleFrame)
         frame.get_settings_snapshot = Mock(return_value=make_snapshot())
         frame.get_dictionary_names_for_dialog = Mock(return_value=["default"])
+        frame.get_script_names_for_dialog = Mock(return_value=["no-processing", "upper"])
         frame.apply_settings_from_dialog = Mock()
 
         with patch.object(gui.DotExpressSettingsDialog, "show_singleton") as show:
@@ -1169,6 +1176,59 @@ class BrailleAppLifecycleTest(GuiDocumentFlowsTest):
 
         show.assert_called_once()
         self.assertIs(show.call_args.kwargs["initial_category"], TranslationSettingsPanel)
+        # F-18 (D3): the Translation panel lists the scripts.
+        self.assertEqual(show.call_args.kwargs["script_names"], ["no-processing", "upper"])
+
+
+class ScriptSelectionFrameTest(unittest.TestCase):
+    """F-18 (D3, D10): the selected script reaches the conversion request; No Processing is None."""
+
+    def _make_frame(self, script: str = "no-processing") -> gui.BrailleFrame:
+        frame = object.__new__(gui.BrailleFrame)
+        frame.translation_settings = TranslationSettings("unicode", 40, "default", script)
+        frame._script_presenter = Mock()
+        frame._config_store = Mock(spec=gui.ConfigStore)
+        frame._config_store.set_selected_script.return_value = None
+        frame._config_store.get_lang.return_value = "zh_TW"
+        frame._config_store.get_charset_maps.return_value = {}
+        frame.dictionary_dir = Path("dictionaries")
+        frame.script_dir = Path("scripts")
+        frame.translation_tables = {"default": "zh-tw.ctb"}
+        return frame
+
+    def test_no_processing_sends_no_script(self) -> None:
+        for name in ("no-processing", "No-Processing"):
+            with self.subTest(name=name):
+                frame = self._make_frame(name)
+
+                self.assertIsNone(frame._get_selected_script_path())
+                self.assertIsNone(frame._build_conversion_request_for_text("text").script_path)
+
+    def test_a_user_script_is_sent_by_its_path_in_the_script_folder(self) -> None:
+        frame = self._make_frame("upper")
+
+        request = frame._build_conversion_request_for_text("text")
+
+        self.assertEqual(request.script_path, Path("scripts/upper.py"))
+        self.assertEqual(request.dictionary_path, Path("dictionaries/default.csv"))
+
+    def test_script_names_for_dialog_refresh_with_the_active_script(self) -> None:
+        frame = self._make_frame("upper")
+        frame._script_presenter.script_names = ["no-processing", "upper"]
+
+        names = frame.get_script_names_for_dialog()
+
+        self.assertEqual(names, ["no-processing", "upper"])
+        frame._script_presenter.refresh.assert_called_once_with("upper")
+
+    def test_set_active_script_saves_it_and_keeps_the_other_settings(self) -> None:
+        frame = self._make_frame("upper")
+        frame.translation_settings = TranslationSettings("ascii", 52, "math", "upper")
+
+        frame._set_active_script("no-processing")
+
+        self.assertEqual(frame.translation_settings, TranslationSettings("ascii", 52, "math", "no-processing"))
+        frame._config_store.set_selected_script.assert_called_once_with("no-processing")
 
 
 class DictionaryManagementFrameTest(unittest.TestCase):
@@ -1328,6 +1388,7 @@ class DictionaryManagementFrameTest(unittest.TestCase):
             # A save that works: no settings save problem to report (F-12 D6).
             frame._config_store.set_selected_dictionary.return_value = None
             with (
+                patch.object(gui, "ScriptManagementPresenter", return_value=Mock(script_names=["no-processing"])),
                 patch.object(
                     gui,
                     "load_translation_settings",
@@ -1347,11 +1408,22 @@ class DictionaryManagementFrameTest(unittest.TestCase):
 
         self.assertIsInstance(presenter, gui.DictionaryManagementPresenter)
         self.assertEqual(presenter.dictionary_dir, dictionary_dir)
-        load_settings.assert_called_once_with(frame._config_store, ["alpha", "default"])
+        load_settings.assert_called_once_with(frame._config_store, ["alpha", "default"], ["no-processing"])
         self.assertEqual(selected, "default")
         self.assertEqual(remaining, ["default.csv"])
         frame._config_store.set_selected_dictionary.assert_called_once_with("default")
         self.assertEqual(frame.translation_settings, TranslationSettings("unicode", 40, "default"))
+
+    def test_set_active_dictionary_keeps_the_selected_script(self) -> None:
+        # F-18 (D3): the dictionary twin must not drop the script.
+        frame = self._make_frame()
+        frame.translation_settings = TranslationSettings("ascii", 52, "default", "upper")
+        frame._config_store = Mock(spec=gui.ConfigStore)
+        frame._config_store.set_selected_dictionary.return_value = None
+
+        frame._set_active_dictionary("math")
+
+        self.assertEqual(frame.translation_settings, TranslationSettings("ascii", 52, "math", "upper"))
 
     def test_frame_dictionary_callbacks_are_removed(self) -> None:
         # Check the class: the wx stub makes every missing instance attribute look present.
@@ -5535,6 +5607,7 @@ class SettingsSaveProblemFrameTest(unittest.TestCase):
         frame._config_store = config.ConfigStore(self.config_path)
         frame._apply_editor_view_settings = Mock()
         frame.get_dictionary_names_for_dialog = Mock(return_value=["default", "math"])
+        frame.get_script_names_for_dialog = Mock(return_value=["no-processing", "upper"])
         frame.translation_settings = TranslationSettings("unicode", 40, "default")
         frame.view_settings = ViewSettings(12, "light", "default")
         return frame
@@ -5564,13 +5637,14 @@ class SettingsSaveProblemFrameTest(unittest.TestCase):
 
     def test_font_size_and_dictionary_changes_report_through_the_same_flag(self) -> None:
         self.config_path.mkdir()
-        for first, second in (("font", "dictionary"), ("dictionary", "font")):
-            with self.subTest(first=first):
+        for first, second in (("font", "dictionary"), ("dictionary", "font"), ("script", "dictionary"), ("font", "script")):
+            with self.subTest(first=first, second=second):
                 self.boxes.clear()
                 frame = self._frame()
                 changes = {
                     "font": lambda: frame._set_view_font_size(20),
                     "dictionary": lambda: frame._set_active_dictionary("math"),
+                    "script": lambda: frame._set_active_script("upper"),
                 }
 
                 changes[first]()
@@ -5579,19 +5653,24 @@ class SettingsSaveProblemFrameTest(unittest.TestCase):
 
                 self.assertEqual(after_first, [self._box(frame, self.CANNOT_OPEN)])
                 self.assertEqual(self.boxes, after_first)
-                self.assertEqual(frame.view_settings.font_size, 20)
-                self.assertEqual(frame.translation_settings.selected_dictionary, "math")
+                if "font" in (first, second):
+                    self.assertEqual(frame.view_settings.font_size, 20)
+                if "dictionary" in (first, second):
+                    self.assertEqual(frame.translation_settings.selected_dictionary, "math")
+                if "script" in (first, second):
+                    self.assertEqual(frame.translation_settings.selected_script, "upper")
 
     def test_no_box_when_the_settings_are_saved(self) -> None:
         frame = self._frame()
 
-        frame.apply_settings_from_dialog(make_snapshot(translation=TranslationSettings("ascii", 52, "math")))
+        frame.apply_settings_from_dialog(make_snapshot(translation=TranslationSettings("ascii", 52, "math", "upper")))
         frame._set_view_font_size(20)
         frame._set_active_dictionary("default")
 
         self.assertEqual(self.boxes, [])
         saved = json.loads(self.config_path.read_text(encoding="utf-8"))
         self.assertEqual(saved["conversion"]["output_mode"], "ascii")
+        self.assertEqual(saved["conversion"]["selected_script"], "upper")
         self.assertEqual(saved["view"]["font_size"], 20)
 
     CANNOT_WRITE_ACCESS = "無法寫入檔案。檔案可能正被其他程式使用，或你沒有寫入權限。請關閉其他程式後再試一次。"
@@ -5961,6 +6040,7 @@ class ApplicationPathsWiringCharacterizationTest(unittest.TestCase):
                     "output_mode": "ascii",
                     "width": 52,
                     "selected_dictionary": "alpha",
+                    "selected_script": "upper",
                     "translation_tables": {"default": "en-ueb-g1.ctb"},
                 },
                 "view": {"font_size": 18, "scheme": "dark", "braille_font": "default"},
@@ -5968,6 +6048,8 @@ class ApplicationPathsWiringCharacterizationTest(unittest.TestCase):
         )
         (self.root / "dictionary").mkdir()
         (self.root / "dictionary" / "alpha.csv").write_text("text,braille,type\n", encoding="utf-8")
+        (self.root / "script").mkdir()
+        (self.root / "script" / "upper.py").write_text("def main(text):\n    return text.upper()\n", encoding="utf-8")
         frame = self.make_frame()
         frame._document_controller = DocumentController()
         frame._register_output_font = Mock(return_value=False)
@@ -5978,11 +6060,15 @@ class ApplicationPathsWiringCharacterizationTest(unittest.TestCase):
         self.assertEqual(frame._dictionary_presenter.dictionary_dir, self.root / "dictionary")
         self.assertTrue((self.root / "dictionary" / "default.csv").is_file())
         self.assertEqual(frame._workspace_service.workspace_dir, self.root / "workspace")
-        self.assertEqual(frame.translation_settings, TranslationSettings("ascii", 52, "alpha"))
+        # F-18 (D1, D3): the script folder is under the root too; No Processing is created there.
+        self.assertEqual(frame.script_dir, self.root / "script")
+        self.assertEqual(frame._script_presenter.script_dir, self.root / "script")
+        self.assertEqual(sorted(path.name for path in (self.root / "script").iterdir()), ["no-processing.py", "upper.py"])
+        self.assertEqual(frame.translation_settings, TranslationSettings("ascii", 52, "alpha", "upper"))
         self.assertEqual(frame.translation_tables, {**gui.DEFAULT_TRANSLATION_TABLES, "default": "en-ueb-g1.ctb"})
         self.assertEqual(view, ViewSettings(18, "dark", "default"))
         self.assertIs(frame.view_settings, view)
-        self.assertEqual(self.root_entries(), ["config.json", "dictionary"])
+        self.assertEqual(self.root_entries(), ["config.json", "dictionary", "script"])
 
     def test_selecting_a_dictionary_writes_the_config_file_under_the_root(self) -> None:
         frame = self.make_frame()

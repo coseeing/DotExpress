@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Callable
 
 from conversion.contracts import TranslationRuntime
-from conversion.preprocessing.user_script import preprocessing_script_path
 from conversion.text.char_maps import translate__mapping_char
 from conversion.text.pipeline import TextProcessingError, preprocess_source_text
 
@@ -18,6 +17,8 @@ class ConversionRequest:
     translation_tables: dict[str, str]
     lang: str
     charset_maps: dict[str, str]
+    # The text-processing script to run; None is No Processing (F-18 D10).
+    script_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,7 @@ def convert_text_with_alignment(
         text = preprocess_source_text(
             request.raw_text,
             data_dir=request.data_dir,
-            preprocessing_path=preprocessing_script_path(request.dictionary_path.parent),
+            script_path=request.script_path,
             map_char=map_char,
         )
     except TextProcessingError as error:

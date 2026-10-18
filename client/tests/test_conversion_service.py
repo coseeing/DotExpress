@@ -99,15 +99,20 @@ class ConversionServiceTest(unittest.TestCase):
             math_translator=math_translator or FakeMathTranslator(),
         )
 
+    def _script(self, name: str, source: str) -> Path:
+        # F-18 (D1): scripts live in their own folder, not next to the dictionary.
+        script_dir = self.test_dir / "script"
+        script_dir.mkdir(exist_ok=True)
+        path = script_dir / f"{name}.py"
+        path.write_text(source, encoding="utf-8")
+        return path
+
     def test_empty_source_does_not_read_or_execute_preprocessing_script(self) -> None:
         dictionary_dir = self.test_dir / "dictionary"
         dictionary_dir.mkdir()
         dictionary_path = dictionary_dir / "default.csv"
         self._write_csv(dictionary_path, ["text", "braille", "type"], [])
-        (dictionary_dir / "preprocessing.py").write_text(
-            "raise RuntimeError('must not run')\ndef main(text):\n    return text\n",
-            encoding="utf-8",
-        )
+        script_path = self._script("boom", "raise RuntimeError('must not run')\ndef main(text):\n    return text\n")
         request = ConversionRequest(
             raw_text="",
             output_mode="unicode",
@@ -117,6 +122,7 @@ class ConversionServiceTest(unittest.TestCase):
             translation_tables={"default": "table.ctb"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=script_path,
         )
 
         output = convert_text_with_alignment(request, runtime=self._runtime())
@@ -128,10 +134,7 @@ class ConversionServiceTest(unittest.TestCase):
         dictionary_dir.mkdir()
         dictionary_path = dictionary_dir / "default.csv"
         self._write_csv(dictionary_path, ["text", "braille", "type"], [])
-        (dictionary_dir / "preprocessing.py").write_text(
-            "def main(text):\n    return text.replace('raw', 'processed')\n",
-            encoding="utf-8",
-        )
+        script_path = self._script("processed", "def main(text):\n    return text.replace('raw', 'processed')\n")
         request = ConversionRequest(
             raw_text="raw",
             output_mode="unicode",
@@ -141,6 +144,7 @@ class ConversionServiceTest(unittest.TestCase):
             translation_tables={"default": "table.ctb"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=script_path,
         )
         runtime = self._runtime()
 
@@ -153,10 +157,7 @@ class ConversionServiceTest(unittest.TestCase):
         dictionary_dir.mkdir(exist_ok=True)
         dictionary_path = dictionary_dir / "default.csv"
         self._write_csv(dictionary_path, ["text", "braille", "type"], [])
-        (dictionary_dir / "preprocessing.py").write_text(
-            "def main(text):\n    raise RuntimeError('script boom')\n",
-            encoding="utf-8",
-        )
+        script_path = self._script("boom", "def main(text):\n    raise RuntimeError('script boom')\n")
         request = ConversionRequest(
             raw_text="raw",
             output_mode="unicode",
@@ -166,6 +167,7 @@ class ConversionServiceTest(unittest.TestCase):
             translation_tables={"default": "table.ctb"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=script_path,
         )
 
         with self.assertRaises(ConversionStageError) as context:
@@ -472,8 +474,10 @@ class DictionaryConversionTestCase(unittest.TestCase):
         self.dictionary_dir = self.test_dir / "dictionary"
         self.dictionary_dir.mkdir()
         self.dictionary_path = self.dictionary_dir / "default.csv"
+        self.script_dir = self.test_dir / "script"
+        self.script_dir.mkdir()
 
-    def _convert(self, raw_text: str, runtime: TranslationRuntime) -> ConversionOutput:
+    def _convert(self, raw_text: str, runtime: TranslationRuntime, script_path: Path | None = None) -> ConversionOutput:
         request = ConversionRequest(
             raw_text=raw_text,
             output_mode="unicode",
@@ -483,6 +487,7 @@ class DictionaryConversionTestCase(unittest.TestCase):
             translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=script_path,
         )
         return convert_text_with_alignment(request, runtime=runtime)
 
@@ -516,13 +521,14 @@ class DictionaryErrorTimingTest(DictionaryConversionTestCase):
 
     def test_failing_preprocessing_script_is_reported_before_a_broken_dictionary(self) -> None:
         self.dictionary_path.write_text("", encoding="utf-8")
-        (self.dictionary_dir / "preprocessing.py").write_text(
+        script_path = self.script_dir / "boom.py"
+        script_path.write_text(
             "def main(text):\n    raise RuntimeError('script boom')\n",
             encoding="utf-8",
         )
 
         with self.assertRaises(ConversionStageError) as context:
-            self._convert("abc", self._runtime())
+            self._convert("abc", self._runtime(), script_path)
 
         self.assertEqual(context.exception.stage, "text_processing")
         self.assertEqual(str(context.exception.error), "script boom")
@@ -536,12 +542,51 @@ class DictionaryErrorTimingTest(DictionaryConversionTestCase):
         self.dictionary_path.write_text("text,braille,type\n", encoding="utf-8")
         for source, message in cases:
             with self.subTest(source=source):
-                (self.dictionary_dir / "preprocessing.py").write_text(source, encoding="utf-8")
+                script_path = self.script_dir / "contract.py"
+                script_path.write_text(source, encoding="utf-8")
 
                 with self.assertRaises(ConversionStageError) as context:
-                    self._convert("abc", self._runtime())
+                    self._convert("abc", self._runtime(), script_path)
 
                 self.assertEqual(format_conversion_error(context.exception), message)
+
+    def test_the_legacy_script_next_to_the_dictionary_is_not_run(self) -> None:
+        # F-18 (D-A, D12): dictionary/preprocessing.py is no longer read.
+        self.dictionary_path.write_text("text,braille,type\n", encoding="utf-8")
+        legacy = self.dictionary_dir / "preprocessing.py"
+        legacy.write_text("def main(text):\n    raise RuntimeError('must not run')\n", encoding="utf-8")
+        runtime = self._runtime()
+
+        self._convert("abc", runtime)
+
+        self.assertEqual(runtime.text_translator.calls, [("abc", "zh-tw.ctb", "abc", False)])
+        self.assertEqual(legacy.read_text(encoding="utf-8"), "def main(text):\n    raise RuntimeError('must not run')\n")
+
+    def test_a_selected_script_that_is_missing_fails_at_the_text_processing_stage(self) -> None:
+        # F-18 (D10, O8): no identity fallback; the existing text-processing box.
+        self.dictionary_path.write_text("text,braille,type\n", encoding="utf-8")
+        missing = self.script_dir / "gone.py"
+
+        with self.assertRaises(ConversionStageError) as context:
+            self._convert("abc", self._runtime(), missing)
+
+        self.assertEqual(context.exception.stage, "text_processing")
+        self.assertIsInstance(context.exception.error, FileNotFoundError)
+        self.assertEqual(
+            format_conversion_error(context.exception),
+            f"文字處理失敗：[Errno 2] No such file or directory: {str(missing)!r}",
+        )
+
+    def test_no_processing_gives_the_output_of_the_identity_script(self) -> None:
+        # F-18 (D4): skipping the stage changes nothing, so the fixtures keep their bytes.
+        self.dictionary_path.write_text("text,braille,type\n甲,X,Braille\n", encoding="utf-8")
+        identity = self.script_dir / "identity.py"
+        identity.write_text("def main(input: str) -> str:\n    return input\n", encoding="utf-8")
+
+        skipped = self._convert("甲 abc $x$", self._runtime())
+        run = self._convert("甲 abc $x$", self._runtime(), identity)
+
+        self.assertEqual(skipped, run)
 
     def test_math_before_the_first_text_is_translated_before_the_dictionary_error(self) -> None:
         self.dictionary_path.write_text("", encoding="utf-8")

@@ -906,11 +906,11 @@ msgstr "main 的參數只能標註為 str，或不加標註。"
 msgid "The return value of main must be annotated as str, or not annotated."
 msgstr "main 的傳回值只能標註為 str，或不加標註。"
 
-#: conversion/preprocessing/user_script.py:126
+#: conversion/preprocessing/user_script.py:121
 msgid "main is not callable."
 msgstr "main 不是可以呼叫的函式。"
 
-#: conversion/preprocessing/user_script.py:129
+#: conversion/preprocessing/user_script.py:124
 #, python-brace-format
 msgid "main must return str, got {type}."
 msgstr "main 必須傳回 str，而不是 {type}。"
@@ -919,17 +919,17 @@ msgstr "main 必須傳回 str，而不是 {type}。"
 msgid "CSV files (*.csv)|*.csv"
 msgstr "CSV 檔案 (*.csv)|*.csv"
 
-#: dialog.py:58 dialog.py:123 settings/dialogs.py:145 settings/dialogs.py:295
+#: dialog.py:58 dialog.py:123 settings/dialogs.py:147 settings/dialogs.py:297
 #: ui/message_box.py:36 ui/message_box.py:38
 msgid "OK"
 msgstr "確定"
 
-#: dialog.py:59 dialog.py:124 gui.py:577 settings/dialogs.py:146
-#: settings/dialogs.py:297 ui/message_box.py:36
+#: dialog.py:59 dialog.py:124 gui.py:600 settings/dialogs.py:148
+#: settings/dialogs.py:299 ui/message_box.py:36
 msgid "Cancel"
 msgstr "取消"
 
-#: dialog.py:60 settings/dialogs.py:147 settings/dialogs.py:299
+#: dialog.py:60 settings/dialogs.py:149 settings/dialogs.py:301
 msgid "Apply"
 msgstr "套用"
 
@@ -944,8 +944,8 @@ msgstr "來源文字「{identifier}」已存在。"
 
 #: dialog.py:78 dialog.py:567 dialog.py:606 dialog.py:899
 #: documents/export_coordinator.py:103 documents/export_coordinator.py:113
-#: documents/export_coordinator.py:145 gui.py:542 gui.py:827 gui.py:1154
-#: gui.py:1166 ui/conversion_presenter.py:308
+#: documents/export_coordinator.py:145 gui.py:565 gui.py:859 gui.py:1187
+#: gui.py:1199 ui/conversion_presenter.py:308
 msgid "Error"
 msgstr "錯誤"
 
@@ -957,7 +957,7 @@ msgstr "編輯字典項目"
 msgid "Add Dictionary Entry"
 msgstr "新增字典項目"
 
-#: dialog.py:106 dialog.py:428 gui.py:203
+#: dialog.py:106 dialog.py:428 gui.py:212
 msgid "Source Text"
 msgstr "來源文字"
 
@@ -1012,7 +1012,7 @@ msgstr "文件名稱長度需為 1 到 32 個字元。"
 msgid "Document name is not a valid Windows file name."
 msgstr "文件名稱不是有效的 Windows 檔名。"
 
-#: dialog.py:272 gui.py:189
+#: dialog.py:272 gui.py:198
 msgid "Document Name"
 msgstr "文件名稱"
 
@@ -1136,7 +1136,7 @@ msgstr "第 {line} 列：「{text}」的注音「{bopomofo}」格式不正確"
 msgid "Dictionary Management"
 msgstr "字典管理"
 
-#: dialog.py:677 settings/dialogs.py:388
+#: dialog.py:677 settings/dialogs.py:392
 msgid "Dictionary"
 msgstr "字典"
 
@@ -1251,7 +1251,7 @@ msgstr ""
 "檔案不是以 UTF-8 儲存。請重新存成「CSV UTF-8 (逗號分隔)」格式，例如在 Excel "
 "中使用「另存新檔」。"
 
-#: dictionaries/read_problems.py:50 documents/import_problems.py:38 gui.py:498
+#: dictionaries/read_problems.py:50 documents/import_problems.py:38 gui.py:514
 #: text_scripts/read_problems.py:60
 msgid ""
 "The file cannot be opened. It may be in use by another program, or you may "
@@ -1267,8 +1267,8 @@ msgid ""
 "closed. Details: {error}"
 msgstr "檔案不是有效的 CSV 檔案。請檢查是否有未成對的引號。詳細資訊：{error}"
 
-#: dictionaries/read_problems.py:57 documents/import_problems.py:54 gui.py:271
-#: gui.py:502 text_scripts/read_problems.py:64
+#: dictionaries/read_problems.py:57 documents/import_problems.py:54 gui.py:280
+#: gui.py:518 text_scripts/read_problems.py:64
 #, python-brace-format
 msgid "The file cannot be read: {error}"
 msgstr "無法讀取檔案：{error}"
@@ -1327,7 +1327,7 @@ msgstr ""
 msgid "All Supported Files"
 msgstr "所有支援的檔案"
 
-#: documents/formats.py:114 gui.py:363
+#: documents/formats.py:114 gui.py:372
 msgid "No conversion data is available for this document."
 msgstr "此文件沒有可顯示的轉換資料。"
 
@@ -1410,7 +1410,7 @@ msgstr "這個 PDF 檔已加密，無法匯入。"
 msgid "This file type cannot be imported."
 msgstr "無法匯入這種類型的檔案。"
 
-#: documents/workspace.py:466 gui.py:812
+#: documents/workspace.py:466 gui.py:844
 #, python-brace-format
 msgid "Document \"{name}\" already exists."
 msgstr "文件「{name}」已存在。"
@@ -1423,7 +1423,7 @@ msgid ""
 msgstr ""
 "名稱「{name}」已被工作區資料夾中的「{file}」使用，但這個檔案不在文件清單中。"
 
-#: documents/workspace_service.py:272 gui.py:560 gui.py:570
+#: documents/workspace_service.py:272 gui.py:583 gui.py:593
 #, python-brace-format
 msgid "Failed to save document: {error}"
 msgstr "儲存文件失敗：{error}"
@@ -1432,52 +1432,52 @@ msgstr "儲存文件失敗：{error}"
 msgid "No supported browser or system HTML opener is available."
 msgstr "找不到可用的瀏覽器，也沒有可開啟 HTML 檔的系統程式。"
 
-#: gui.py:187
+#: gui.py:196
 msgid "Documents"
 msgstr "文件"
 
-#: gui.py:193
+#: gui.py:202
 msgid "Document List"
 msgstr "文件列表"
 
-#: gui.py:194
+#: gui.py:203
 msgid "Press the Applications key to open the menu."
 msgstr "可按快顯鍵開啟選單。"
 
-#: gui.py:208
+#: gui.py:217
 msgid "Braille Result"
 msgstr "點字結果"
 
-#: gui.py:281 gui.py:1240
+#: gui.py:290 gui.py:1273
 msgid "File"
 msgstr "檔案"
 
-#: gui.py:294 gui.py:1240 settings/dialogs.py:359
+#: gui.py:303 gui.py:1273 settings/dialogs.py:361
 msgid "Translation"
 msgstr "轉譯"
 
-#: gui.py:298
+#: gui.py:307
 msgid "Coseeing Website"
 msgstr "Coseeing 網站"
 
-#: gui.py:301
+#: gui.py:310
 msgid "About"
 msgstr "關於"
 
-#: gui.py:304
+#: gui.py:313
 msgid "Help"
 msgstr "說明"
 
-#: gui.py:351 ui/translation_menu.py:9
+#: gui.py:360 ui/translation_menu.py:9
 msgid "Dual View"
 msgstr "雙視檢視"
 
-#: gui.py:386
+#: gui.py:395
 #, python-brace-format
 msgid "Failed to open dual view: {error}"
 msgstr "無法開啟雙視檢視：{error}"
 
-#: gui.py:508
+#: gui.py:524
 #, python-brace-format
 msgid ""
 "The file is damaged, and a backup copy could not be saved as \"{backup}\" "
@@ -1488,7 +1488,7 @@ msgstr ""
 "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。檔案或備份檔可能正被其"
 "他程式使用，或你沒有該資料夾的寫入權限。請關閉其他程式後再試一次。"
 
-#: gui.py:514
+#: gui.py:530
 #, python-brace-format
 msgid ""
 "The file is damaged, and a backup copy could not be saved as \"{backup}\" "
@@ -1498,7 +1498,7 @@ msgstr ""
 "檔案已損壞，而且在取代它之前無法先備份為「{backup}」。請確認磁碟還有可用空"
 "間，且你有該資料夾的寫入權限。"
 
-#: gui.py:520
+#: gui.py:536
 msgid ""
 "The file cannot be written. It may be in use by another program, or you may "
 "not have permission to write to it. Close the other program and try again."
@@ -1506,13 +1506,13 @@ msgstr ""
 "無法寫入檔案。檔案可能正被其他程式使用，或你沒有寫入權限。請關閉其他程式後再"
 "試一次。"
 
-#: gui.py:525
+#: gui.py:541
 msgid ""
 "The file cannot be written. Check that the disk has free space and that you "
 "can write to the folder."
 msgstr "無法寫入檔案。請確認磁碟還有可用空間，且你有該資料夾的寫入權限。"
 
-#: gui.py:528
+#: gui.py:544
 #, python-brace-format
 msgid ""
 "DotExpress cannot save its settings to \"{path}\". Changes to the settings "
@@ -1526,48 +1526,48 @@ msgstr ""
 "\n"
 "{reason}"
 
-#: gui.py:531
+#: gui.py:547
 msgid "Settings Not Saved"
 msgstr "設定未儲存"
 
-#: gui.py:571
+#: gui.py:594
 msgid "Cannot Save Document"
 msgstr "無法儲存文件"
 
-#: gui.py:575
+#: gui.py:598
 msgid ""
 "Changes made since the last successful save have not been saved. If you "
 "close without saving, these changes will be lost."
 msgstr "上次成功儲存之後的修改尚未儲存。如果不儲存就關閉，這些修改將會遺失。"
 
-#: gui.py:577
+#: gui.py:600
 msgid "&Retry"
 msgstr "重試(&R)"
 
-#: gui.py:577
+#: gui.py:600
 msgid "Close &Without Saving"
 msgstr "不儲存就關閉(&W)"
 
-#: gui.py:584
+#: gui.py:607
 #, python-brace-format
 msgid "Failed to open website: {error}"
 msgstr "開啟網站失敗：{error}"
 
-#: gui.py:587
+#: gui.py:610
 msgid "About DotExpress"
 msgstr "關於 DotExpress"
 
-#: gui.py:600
+#: gui.py:623
 #, python-brace-format
 msgid "Unable to open text processing script: {error}"
 msgstr "無法開啟文字處理程式：{error}"
 
-#: gui.py:601 settings/dialogs.py:125 settings/dialogs.py:165
+#: gui.py:624 settings/dialogs.py:127 settings/dialogs.py:167
 #: ui/translation_menu.py:10
 msgid "Text Processing"
 msgstr "文字處理"
 
-#: gui.py:707
+#: gui.py:739
 #, python-brace-format
 msgid ""
 "Some characters in document \"{name}\" cannot be shown ({count} in all). "
@@ -1582,16 +1582,16 @@ msgstr ""
 "\n"
 "轉換前請刪除或修改這些 {mark}，否則每一個都會在點字中變成一段跳脫碼。"
 
-#: gui.py:712
+#: gui.py:744
 msgid "Characters Replaced"
 msgstr "已取代字元"
 
-#: gui.py:776
+#: gui.py:808
 #, python-brace-format
 msgid "Failed to delete invalid workspace file: {error}"
 msgstr "刪除無效工作區文件失敗：{error}"
 
-#: gui.py:822
+#: gui.py:854
 #, python-brace-format
 msgid ""
 "Choose another name, or move or delete that file. Workspace folder:\n"
@@ -1600,7 +1600,7 @@ msgstr ""
 "請改用其他名稱，或將這個檔案移走或刪除。工作區資料夾：\n"
 "{folder}"
 
-#: gui.py:863
+#: gui.py:895
 #, python-brace-format
 msgid ""
 "DotExpress was interrupted while saving or renaming a document. These "
@@ -1616,76 +1616,76 @@ msgstr ""
 "\n"
 "請確認內容是否正確。"
 
-#: gui.py:866
+#: gui.py:898
 msgid "Documents Recovered"
 msgstr "已復原文件"
 
-#: gui.py:928
+#: gui.py:960
 msgid "Add Document"
 msgstr "新增文件"
 
-#: gui.py:944
+#: gui.py:976
 msgid "Rename Document"
 msgstr "重新命名文件"
 
-#: gui.py:968
+#: gui.py:1000
 #, python-brace-format
 msgid "Do you want to delete document \"{name}\"?"
 msgstr "要刪除文件「{name}」嗎？"
 
-#: gui.py:969
+#: gui.py:1001
 msgid "Confirm Delete Document"
 msgstr "確認刪除文件"
 
-#: gui.py:978 gui.py:1005
+#: gui.py:1010 gui.py:1037
 #, python-brace-format
 msgid "Failed to delete document: {error}"
 msgstr "刪除文件失敗：{error}"
 
-#: gui.py:997
+#: gui.py:1029
 msgid "Delete All will remove all documents. Do you want to continue?"
 msgstr "刪除全部會移除所有文件。要繼續嗎？"
 
-#: gui.py:998
+#: gui.py:1030
 msgid "Confirm Delete All"
 msgstr "確認刪除全部"
 
-#: gui.py:1031
+#: gui.py:1063
 msgid "Import Document"
 msgstr "匯入文件"
 
-#: gui.py:1051
+#: gui.py:1083
 msgid "Import Issues"
 msgstr "匯入問題"
 
-#: gui.py:1052
+#: gui.py:1084
 msgid "Some files were skipped during import."
 msgstr "匯入時有部分檔案被略過。"
 
-#: gui.py:1165
+#: gui.py:1198
 #, python-brace-format
 msgid "Failed to open the dictionary editor: {error}"
 msgstr "無法開啟字典編輯器：{error}"
 
-#: gui.py:1298
+#: gui.py:1331
 msgid "Export Document"
 msgstr "匯出文件"
 
-#: gui.py:1308
+#: gui.py:1341
 msgid "Export All Documents"
 msgstr "匯出全部文件"
 
-#: gui.py:1317
+#: gui.py:1350
 msgid ""
 "The destination folder already contains one or more files that would be "
 "overwritten. Do you want to overwrite all of them?"
 msgstr "目的資料夾中已有一個或多個檔案會被覆蓋。要全部覆蓋嗎？"
 
-#: gui.py:1320
+#: gui.py:1353
 msgid "Confirm Overwrite"
 msgstr "確認覆蓋"
 
-#: gui.py:1326
+#: gui.py:1359
 #, python-brace-format
 msgid ""
 "DotExpress cannot write to its application data directory:\n"
@@ -1702,82 +1702,88 @@ msgstr ""
 "\n"
 "{error}"
 
-#: gui.py:1329
+#: gui.py:1362
 msgid "Startup Error"
 msgstr "啟動錯誤"
 
-#: settings/dialogs.py:138
+#: settings/dialogs.py:140
 msgid "Text Processing Python Code"
 msgstr "文字處理 Python 程式"
 
-#: settings/dialogs.py:162
+#: settings/dialogs.py:164
 #, python-brace-format
 msgid "Unable to save text processing script: {error}"
 msgstr "無法儲存文字處理程式：{error}"
 
-#: settings/dialogs.py:249
+#: settings/dialogs.py:251
 msgid "&Categories:"
 msgstr "分類(&C)："
 
-#: settings/dialogs.py:270
+#: settings/dialogs.py:272
 msgid "Categories"
 msgstr "分類"
 
-#: settings/dialogs.py:361
-msgid "Translation output mode, width, and dictionary options"
-msgstr "轉譯輸出模式、寬度與字典選項"
+#: settings/dialogs.py:363
+msgid ""
+"Translation output mode, width, dictionary, and text processing script "
+"options"
+msgstr "轉譯輸出模式、寬度、字典與文字處理腳本選項"
 
-#: settings/dialogs.py:370
+#: settings/dialogs.py:374
 msgid "Braille Type"
 msgstr "點字類型"
 
-#: settings/dialogs.py:378
+#: settings/dialogs.py:382
 msgid "Width"
 msgstr "寬度"
 
-#: settings/dialogs.py:440
+#: settings/dialogs.py:397
+msgid "Text Processing Script"
+msgstr "文字處理腳本"
+
+#: settings/dialogs.py:466
 msgid "Translation Tables"
 msgstr "轉譯表"
 
-#: settings/dialogs.py:442
+#: settings/dialogs.py:468
 msgid "Translation table mappings for different languages"
 msgstr "不同語言的轉譯表對應"
 
-#: settings/dialogs.py:458
+#: settings/dialogs.py:484
 msgid "None selected"
 msgstr "未選擇"
 
-#: settings/dialogs.py:488
+#: settings/dialogs.py:514
 #, python-brace-format
 msgid "Please select a value for {field}."
 msgstr "請先選擇{field}。"
 
-#: settings/dialogs.py:559
+#: settings/dialogs.py:585
 msgid "View"
 msgstr "檢視"
 
-#: settings/dialogs.py:561
+#: settings/dialogs.py:587
 msgid ""
 "Font, font size, and color scheme for the main window input and output areas"
 msgstr "主視窗輸入與輸出區的字型、字體大小與配色"
 
-#: settings/dialogs.py:570
+#: settings/dialogs.py:596
 msgid "Font Size"
 msgstr "字型大小"
 
-#: settings/dialogs.py:580
+#: settings/dialogs.py:606
 msgid "Scheme"
 msgstr "配色"
 
-#: settings/dialogs.py:588
+#: settings/dialogs.py:614
 msgid "Braille Font"
 msgstr "點字字型"
 
-#: settings/dialogs.py:656
+#: settings/dialogs.py:682
 msgid "DotExpress Settings"
 msgstr "DotExpress 設定"
 
-#: settings/dialogs.py:657
+#: settings/dialogs.py:683
 #, python-brace-format
 msgid "DotExpress Settings: {category}"
 msgstr "DotExpress 設定：{category}"

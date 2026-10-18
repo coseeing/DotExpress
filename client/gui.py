@@ -34,6 +34,8 @@ from documents.workspace import (
     unlisted_entry_reason,
 )
 from documents.workspace_service import DocumentWorkspaceService
+from text_scripts.manager import is_no_processing_script, script_path_for_name
+from text_scripts.presenter import ScriptManagementPresenter
 from ui.action_menu import get_document_menu_enabled_state
 from ui.conversion_presenter import ConversionPresenter
 from ui.import_dialog import ALL_SUPPORTED_FILTER_INDEX, build_import_wildcard, get_import_filters
@@ -41,7 +43,6 @@ from ui.menu_builder import apply_document_menu_state, build_document_menu
 from ui.message_box import message_box
 from config import ConfigSaveProblem, ConfigSaveProblemKind, ConfigStore, DEFAULT_TRANSLATION_TABLES, is_access_error
 from settings.translation import (
-	TranslationSettings,
 	load_translation_settings,
 	normalize_translation_settings,
 	save_translation_settings,
@@ -159,9 +160,17 @@ class BrailleFrame(wx.Frame):
 			set_active_name=self._set_active_dictionary,
 		)
 		self._dictionary_presenter.refresh()
+		self.script_dir = self._paths.script
+		self._script_presenter = ScriptManagementPresenter(
+			self.script_dir,
+			get_active_name=lambda: self.translation_settings.selected_script,
+			set_active_name=self._set_active_script,
+		)
+		self._script_presenter.refresh()
 		self.translation_settings = load_translation_settings(
 			self._config_store,
 			self._dictionary_presenter.dictionary_names,
+			self._script_presenter.script_names,
 		)
 		self.translation_tables = load_translation_tables(self._config_store) or DEFAULT_TRANSLATION_TABLES.copy()
 		self._workspace_service = DocumentWorkspaceService(self._document_controller, self._paths.workspace)
@@ -444,10 +453,15 @@ class BrailleFrame(wx.Frame):
 		self._dictionary_presenter.refresh(self.translation_settings.selected_dictionary)
 		return self._dictionary_presenter.dictionary_names
 
+	def get_script_names_for_dialog(self) -> list[str]:
+		self._script_presenter.refresh(self.translation_settings.selected_script)
+		return self._script_presenter.script_names
+
 	def get_settings_snapshot(self) -> DotExpressSettingsSnapshot:
 		dictionary_names = self.get_dictionary_names_for_dialog()
+		script_names = self.get_script_names_for_dialog()
 		return DotExpressSettingsSnapshot.create(
-			normalize_translation_settings(self.translation_settings, dictionary_names),
+			normalize_translation_settings(self.translation_settings, dictionary_names, script_names),
 			self.translation_tables,
 			normalize_view_settings(self.view_settings),
 		)
@@ -457,7 +471,8 @@ class BrailleFrame(wx.Frame):
 		snapshot: DotExpressSettingsSnapshot,
 	) -> DotExpressSettingsSnapshot:
 		dictionary_names = self.get_dictionary_names_for_dialog()
-		translation = normalize_translation_settings(snapshot.translation, dictionary_names)
+		script_names = self.get_script_names_for_dialog()
+		translation = normalize_translation_settings(snapshot.translation, dictionary_names, script_names)
 		view = normalize_view_settings(snapshot.view)
 		tables = dict(snapshot.translation_tables)
 
@@ -475,12 +490,13 @@ class BrailleFrame(wx.Frame):
 		return DotExpressSettingsSnapshot.create(translation, tables, view)
 
 	def _set_active_dictionary(self, selected_name: str) -> None:
-		self.translation_settings = TranslationSettings(
-			output_mode=self.translation_settings.output_mode,
-			width=self.translation_settings.width,
-			selected_dictionary=selected_name,
-		)
+		self.translation_settings = replace(self.translation_settings, selected_dictionary=selected_name)
 		self._report_settings_save_problem(self._config_store.set_selected_dictionary(selected_name))
+
+	def _set_active_script(self, selected_name: str) -> None:
+		"""Make ``selected_name`` the script of the next conversions and save it (F-18 D3)."""
+		self.translation_settings = replace(self.translation_settings, selected_script=selected_name)
+		self._report_settings_save_problem(self._config_store.set_selected_script(selected_name))
 
 	def _report_settings_save_problem(self, problem: ConfigSaveProblem | None) -> None:
 		"""Show the first settings save problem of the session; later ones are only logged (F-12 D6).
@@ -535,6 +551,13 @@ class BrailleFrame(wx.Frame):
 
 	def _get_selected_dictionary_path(self) -> Path:
 		return dictionary_path_for_name(self.translation_settings.selected_dictionary, self.dictionary_dir)
+
+	def _get_selected_script_path(self) -> Path | None:
+		"""The selected script's file; ``None`` for No Processing, whose file is never run (F-18 D4)."""
+		name = self.translation_settings.selected_script
+		if is_no_processing_script(name):
+			return None
+		return script_path_for_name(name, self.script_dir)
 
 	def _show_file_error(self, message: str, error: Exception) -> None:
 		message_box(
@@ -647,7 +670,14 @@ class BrailleFrame(wx.Frame):
 		self.input_txt.SetInsertionPoint(0)
 		self.input_txt.ShowPosition(0)
 
-	def _build_conversion_request(self, raw_text: str, output_mode: str, width: int, dictionary_path: Path) -> ConversionRequest:
+	def _build_conversion_request(
+		self,
+		raw_text: str,
+		output_mode: str,
+		width: int,
+		dictionary_path: Path,
+		script_path: Path | None = None,
+	) -> ConversionRequest:
 		return ConversionRequest(
 			raw_text=raw_text,
 			output_mode=output_mode,
@@ -657,6 +687,7 @@ class BrailleFrame(wx.Frame):
 			translation_tables=self.translation_tables.copy(),
 			lang=self._config_store.get_lang(),
 			charset_maps=self._config_store.get_charset_maps(),
+			script_path=script_path,
 		)
 
 	def _build_conversion_request_for_text(self, raw_text: str) -> ConversionRequest:
@@ -666,6 +697,7 @@ class BrailleFrame(wx.Frame):
 			settings.output_mode,
 			settings.width,
 			self._get_selected_dictionary_path(),
+			self._get_selected_script_path(),
 		)
 
 	def _format_batch_issue_lines(self, issues: list[BatchIssue]) -> list[str]:
@@ -1081,6 +1113,7 @@ class BrailleFrame(wx.Frame):
 			parent=self,
 			snapshot=self.get_settings_snapshot(),
 			dictionary_names=self.get_dictionary_names_for_dialog(),
+			script_names=self.get_script_names_for_dialog(),
 			commit=self.apply_settings_from_dialog,
 			initial_category=TranslationSettingsPanel,
 		)

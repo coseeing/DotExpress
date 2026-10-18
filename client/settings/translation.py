@@ -8,7 +8,9 @@ from config import (
     DEFAULT_CONVERSION_WIDTH,
     DEFAULT_OUTPUT_MODE,
 )
+from conversion.preprocessing.user_script import NO_PROCESSING_SCRIPT_NAME
 from dictionaries.actions import resolve_dictionary_selection
+from text_scripts.manager import resolve_selected_script
 from .options import CONVERSION_WIDTH_RANGE, OUTPUT_MODE_OPTIONS, normalize_option_value
 
 
@@ -17,12 +19,15 @@ class TranslationSettings:
     output_mode: str
     width: int
     selected_dictionary: str
+    # The text-processing script (F-18 D3); No Processing skips the script stage.
+    selected_script: str = NO_PROCESSING_SCRIPT_NAME
 
 
 DEFAULT_TRANSLATION_SETTINGS = TranslationSettings(
     output_mode=DEFAULT_OUTPUT_MODE,
     width=DEFAULT_CONVERSION_WIDTH,
     selected_dictionary="default",
+    selected_script=NO_PROCESSING_SCRIPT_NAME,
 )
 
 
@@ -41,6 +46,7 @@ def _normalize_width(width: int) -> int:
 def normalize_translation_settings(
     settings: TranslationSettings,
     dictionary_names: list[str],
+    script_names: list[str],
 ) -> TranslationSettings:
     return TranslationSettings(
         output_mode=_normalize_output_mode(settings.output_mode),
@@ -49,24 +55,31 @@ def normalize_translation_settings(
             dictionary_names,
             settings.selected_dictionary,
         ),
+        selected_script=resolve_selected_script(script_names, settings.selected_script),
     )
 
 
-def load_translation_settings(store: ConfigStore, dictionary_names: list[str]) -> TranslationSettings:
+def load_translation_settings(
+    store: ConfigStore,
+    dictionary_names: list[str],
+    script_names: list[str],
+) -> TranslationSettings:
     settings = TranslationSettings(
         output_mode=store.get_output_mode(DEFAULT_OUTPUT_MODE),
         width=store.get_conversion_width(DEFAULT_CONVERSION_WIDTH),
         selected_dictionary=store.get_selected_dictionary(DEFAULT_TRANSLATION_SETTINGS.selected_dictionary),
+        selected_script=store.get_selected_script(DEFAULT_TRANSLATION_SETTINGS.selected_script),
     )
-    return normalize_translation_settings(settings, dictionary_names)
+    return normalize_translation_settings(settings, dictionary_names, script_names)
 
 
 def save_translation_settings(store: ConfigStore, settings: TranslationSettings) -> ConfigSaveProblem | None:
-    """Save the three settings, each one even if another fails; the first problem, or ``None`` (F-12 D6)."""
+    """Save the four settings, each one even if another fails; the first problem, or ``None`` (F-12 D6)."""
     problems = (
         store.set_output_mode(settings.output_mode),
         store.set_conversion_width(settings.width),
         store.set_selected_dictionary(settings.selected_dictionary),
+        store.set_selected_script(settings.selected_script),
     )
     return next((problem for problem in problems if problem is not None), None)
 

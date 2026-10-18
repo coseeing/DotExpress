@@ -9,10 +9,12 @@ from wx.lib.scrolledpanel import ScrolledPanel
 
 from braille.tables import listTables
 from conversion.preprocessing.user_script import (
+    NO_PROCESSING_SCRIPT_NAME,
     load_preprocessing_script,
     save_preprocessing_script,
 )
 from i18n import N_, _
+from text_scripts.actions import script_display_name
 from ui.dialog_base import SingletonDialogMixin
 from ui.message_box import message_box
 from .options import (
@@ -358,11 +360,13 @@ class TableOption:
 class TranslationSettingsPanel(SettingsPanel):
     title = N_("Translation")
     panel_description = N_(
-        "Translation output mode, width, and dictionary options"
+        "Translation output mode, width, dictionary, and text processing script options"
     )
 
     def make_settings(self) -> None:
         self.dictionary_names = list(self.owner.dictionary_names)
+        # Internal names; the choice shows their display names (F-18 D3).
+        self.script_names = list(self.owner.script_names)
         settings = self.owner.snapshot.translation
         grid = wx.FlexGridSizer(0, 2, 8, 8)
         grid.AddGrowableCol(1, 1)
@@ -390,23 +394,31 @@ class TranslationSettingsPanel(SettingsPanel):
         grid.Add(dictionary_label, 0, wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.dictionary_choice, 1, wx.EXPAND)
 
+        script_label = wx.StaticText(self, label=_("Text Processing Script"))
+        self.script_choice = wx.Choice(self, choices=[script_display_name(name) for name in self.script_names])
+        grid.Add(script_label, 0, wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.script_choice, 1, wx.EXPAND)
+
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 12)
         self.SetSizer(sizer)
         self._select_output_mode(settings.output_mode)
         self._select_dictionary(settings.selected_dictionary)
+        self._select_script(settings.selected_script)
 
     def load_snapshot(self, snapshot: DotExpressSettingsSnapshot) -> None:
         settings = snapshot.translation
         self.width_spin.SetValue(CONVERSION_WIDTH_RANGE.clamp(settings.width))
         self._select_output_mode(settings.output_mode)
         self._select_dictionary(settings.selected_dictionary)
+        self._select_script(settings.selected_script)
 
     def on_save(self, snapshot: DotExpressSettingsSnapshot) -> DotExpressSettingsSnapshot:
         value = TranslationSettings(
             output_mode=self._selected_output_mode(),
             width=self.width_spin.GetValue(),
             selected_dictionary=self._selected_dictionary(),
+            selected_script=self._selected_script(),
         )
         return snapshot.with_translation(value)
 
@@ -421,6 +433,12 @@ class TranslationSettingsPanel(SettingsPanel):
             return self.dictionary_names[0]
         return self.dictionary_names[index]
 
+    def _selected_script(self) -> str:
+        index = self.script_choice.GetSelection()
+        if index < 0 or index >= len(self.script_names):
+            return self.script_names[0] if self.script_names else NO_PROCESSING_SCRIPT_NAME
+        return self.script_names[index]
+
     def _select_output_mode(self, output_mode: str) -> None:
         self.output_choice.SetSelection(option_index(OUTPUT_MODE_OPTIONS, output_mode))
 
@@ -434,6 +452,14 @@ class TranslationSettingsPanel(SettingsPanel):
             0,
         )
         self.dictionary_choice.SetSelection(index)
+
+    def _select_script(self, script_name: str) -> None:
+        if not self.script_names:
+            self.script_choice.SetSelection(wx.NOT_FOUND)
+            self.script_choice.Disable()
+            return
+        index = self.script_names.index(script_name) if script_name in self.script_names else 0
+        self.script_choice.SetSelection(index)
 
 
 class TranslationTablesPanel(SettingsPanel):
@@ -669,11 +695,13 @@ class DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog
         *,
         snapshot: DotExpressSettingsSnapshot,
         dictionary_names: list[str],
+        script_names: list[str],
         commit: CommitSettings,
         initial_category=None,
     ) -> None:
         self.snapshot = snapshot.copied()
         self.dictionary_names = list(dictionary_names)
+        self.script_names = list(script_names)
         self.commit = commit
         super().__init__(
             parent,
@@ -742,6 +770,7 @@ class DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog
         parent,
         snapshot: DotExpressSettingsSnapshot,
         dictionary_names: list[str],
+        script_names: list[str],
         commit: CommitSettings,
         initial_category=None,
     ) -> "DotExpressSettingsDialog":
@@ -759,6 +788,7 @@ class DotExpressSettingsDialog(SingletonDialogMixin, MultiCategorySettingsDialog
                 parent,
                 snapshot=snapshot,
                 dictionary_names=dictionary_names,
+                script_names=script_names,
                 commit=commit,
                 initial_category=initial_category,
             )

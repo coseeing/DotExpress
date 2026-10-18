@@ -43,7 +43,7 @@ Non-goals: a code editor with syntax highlighting or line numbers; running a scr
   - It has exactly one positional parameter, with any name, and no other parameters (today's rule).
   - The type annotations `: str` and `-> str` are optional, so scripts written for today's rule keep working. If an annotation is present, it must be `str` (new).
   - The type of the return value is checked at run time, as today.
-- **D-C: selection mirrors the dictionary.** The Text Processing menu item becomes Script Management. "Mirror the dictionary selection flow" is applied to the flow as the code has it: the dictionary is chosen in Settings > Translation, not in Dictionary Management (Current State, "How the dictionary is selected"). The script is therefore chosen in Settings > Translation. See Q1: the user's wording ("inside Script Management") may assume otherwise.
+- **D-C: selection mirrors the dictionary.** The Text Processing menu item becomes Script Management. "Mirror the dictionary selection flow" is applied to the flow as the code has it: the dictionary is chosen in Settings > Translation, not in Dictionary Management (Current State, "How the dictionary is selected"). The script is therefore chosen in Settings > Translation. The user confirmed this in Q1 (2026-10-18): Script Management has no 「使用」 button.
 - **D-D: No Processing.** File `no-processing.py`, internal name `no-processing`, displayed through the msgid `No Processing` as 「不處理」.
 
 **Decided by orchestrator with the recommended default; user may override before merge:** D-E (Add and Edit), D-F (Import and Export), D-G (unreadable and invalid scripts), D-H (no security warning), and the smaller defaults O1-O9 under "Open Questions". Each one is written so that it can be changed in one place.
@@ -539,7 +539,7 @@ These stay unchecked for the user.
 
 ## Open Questions
 
-**Decided by the user (2026-10-18):** D-A (no migration), D-B, D-C, D-D.
+**Decided by the user (2026-10-18):** D-A (no migration), D-B, D-C, D-D, and Q1-Q4 below (the defaults of this spec were kept).
 
 **Decided by orchestrator with the recommended default; user may override before merge:**
 
@@ -557,12 +557,18 @@ These stay unchecked for the user.
 - **O8** A missing selected script fails at conversion instead of running the identity script.
 - **O9** The editor's accessible name is 「Python 程式碼」.
 
-**Questions for the user** (not blocking; the plan proceeds with the defaults):
+**Questions for the user** (answered before the plan):
 
 - **Q1. Where is the script selected?** In the code, the dictionary is **not** selected inside Dictionary Management. It is selected in 設定 > 轉譯 > 字典. "Mirroring the dictionary" therefore puts the script choice in 設定 > 轉譯 (「文字處理腳本」), and that is what this spec does. If the user wants to pick the active script inside Script Management instead (for example a 「使用」 button, or the active script marked in the list), that is an extra design. Say so before the plan.
+  - **Decided by the user (2026-10-18):** the script is selected in 設定 > 轉譯, in 「文字處理腳本」 next to the dictionary choice, as proposed. Script Management only manages scripts (Add, Edit, Rename, Delete, Import, Export). There is no 「使用」 button.
 - **Q2.** The stale `dictionary/preprocessing.py` is left alone silently. Show a one-time notice? (Default: no.)
+  - **Decided by the user (2026-10-18):** no message (the default is kept).
 - **Q3.** Add a warning on Import that scripts run with full privileges? (Default: no.)
+  - **Decided by the user (2026-10-18):** no security warning on Import (the default is kept).
 - **Q4.** O5: after deleting the active script, No Processing (this spec) or the dictionary's neighbour rule?
+  - **Decided by the user (2026-10-18):** deleting the active script makes No Processing active, as this spec says.
+
+The remaining orchestrator defaults (D-E to D-H, O1 to O9) stay as written above.
 
 ## Out of Scope / Follow-ups
 

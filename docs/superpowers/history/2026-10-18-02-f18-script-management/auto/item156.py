@@ -6,6 +6,8 @@ lockshare.py, share "none"); script\broken.py has a syntax error. Script Managem
 the rows; `locked` selected: the reason field; 編輯: the box (the dialog stays); `broken`
 selected: the reason field; 編輯: the editor opens with the file's text; 取消 (no change)
 closes it at once. The helper is ended afterwards.
+Since the review fixes (N-f18c): the gui.log lines added by the 編輯 of `locked` (review M-3:
+one, from the refresh after the box; two before) and the focus after the box.
 """
 import os
 import sys
@@ -30,8 +32,11 @@ try:
 	H.select(mgr, "locked")
 	print("156 locked reason:", H.reason(mgr))
 	print("156 locked buttons:", H.buttons(mgr))
+	lines_before = len(H.script_log_lines(d))
 	H.press(mgr, "編輯", wait=1)
 	print("156 locked edit:", H.box(app, d))
+	time.sleep(1)
+	print("156 gui.log lines added by the edit of locked:", H.script_log_lines(d)[lines_before:], "focus", H.focus())
 	print("156 windows after the box:", H.windows(app, w))
 	H.select(mgr, "broken")
 	print("156 broken reason:", H.reason(mgr))

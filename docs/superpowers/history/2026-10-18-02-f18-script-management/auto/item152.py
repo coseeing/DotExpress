@@ -7,6 +7,9 @@ error). 152: each one through 匯入, the file dialog and the name prompt (its n
 the box, and the script folder (upper2.py with the same bytes, nothing else copied).
 153: script\upper.py exists; import upper.py as `upper`: the box, then the name prompt
 again (its name), closed with 取消.
+Since the review fixes (N-f18c): 匯入 is pressed with the keyboard focus on it, the name
+prompt is optional (review M-2: x.txt is refused before it), and the focus is logged after
+each import (review I-1: back in the list after a successful one).
 """
 import os
 import sys
@@ -32,10 +35,13 @@ app, w, shown = H.start(d)
 print(f"152 start: shown {shown} docs {D.docs(w)}")
 mgr = H.open_manager(app, w)
 for name, _data in SOURCES:
-	H.press(mgr, "匯入", wait=1)
+	H.press_focused(mgr, "匯入", wait=1)
 	H.file_dialog(app, w, H.IMPORT, os.path.join(d, "source", name))
-	shown_name = H.name_prompt(app, w, H.ADD, os.path.splitext(name)[0])
-	print(f"152 {name}: name prompt {shown_name!r}, box {H.box(app, d, timeout=4)}")
+	if H.maybe_window(app, w, H.ADD, timeout=3) is None:
+		shown_name = "<no name prompt>"
+	else:
+		shown_name = H.name_prompt(app, w, H.ADD, os.path.splitext(name)[0])
+	print(f"152 {name}: name prompt {shown_name!r}, box {H.box(app, d, timeout=4)}, focus {H.focus()}")
 files = H.script_files(d)
 print("152 script folder:", sorted(files), "upper2.py has the source's bytes:", files.get("upper2.py") == UPPER2)
 print("152 rows:", H.rows(mgr), "selected", H.selected_row(mgr))
@@ -49,6 +55,7 @@ if again is None:
 else:
 	print("153 name prompt again with:", repr(again.child_window(class_name="Edit").wrapper_object().window_text()))
 	H.press(again, "取消", "Cancel")
+print("153 focus after 取消:", H.focus())
 print("153 script\\upper.py unchanged:", H.script_files(d).get("upper.py") == H.UPPER)
 H.press(mgr, "關閉", "Close")
 H.close(app, w, d)

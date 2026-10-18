@@ -136,6 +136,21 @@ def press(win, *labels, wait=1.5):
 	time.sleep(wait)
 
 
+def press_focused(win, *labels, wait=1.5):
+	"""Give the button the keyboard focus first, as a keyboard user does, then press it (review I-1)."""
+	button = X.btn(win, *labels)
+	button.set_keyboard_focus()
+	time.sleep(0.3)
+	button.click()
+	time.sleep(wait)
+
+
+def script_log_lines(d):
+	"""The lines of <d>\\log\\gui.log that name a script, without their time stamps."""
+	data = A.read(os.path.join(d, "log", "gui.log")) or b""
+	return [line.split("] ", 1)[-1] for line in data.decode("utf-8", "replace").splitlines() if "script" in line]
+
+
 def name_prompt(app, w, title, name, timeout=10):
 	"""The name dialog ``title``: its name field, then ``name`` typed in (WM_SETTEXT) and 確定."""
 	dialog = X.wait_window(app, w, title, timeout)

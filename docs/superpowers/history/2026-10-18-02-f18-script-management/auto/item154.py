@@ -10,6 +10,8 @@ config.json; Settings shows 「不處理」; `abc` converted again (No Processin
 not as `ABC`).
 155: Export 「不處理」: the file dialog's default name, a path under <d>\export; the file
 holds the documented text, not the altered one; no-processing.py keeps the altered bytes.
+Since the review fixes (N-f18c): 重新命名 and 刪除 are pressed with the keyboard focus on
+them, and the focus and the buttons are logged after each (review I-1: back in the list).
 """
 import json
 import os
@@ -38,9 +40,10 @@ print("154 equals the Braille of ABC:", before == reference_upper)
 
 mgr = H.open_manager(app, w)
 H.select(mgr, "upper")
-H.press(mgr, "重新命名", wait=1)
+H.press_focused(mgr, "重新命名", wait=1)
 print("154 rename prompt shows:", repr(H.name_prompt(app, w, H.RENAME, "Upper2")))
 print("154 rows after the rename:", H.rows(mgr), "selected", H.selected_row(mgr))
+print("154 focus after the rename:", H.focus())
 print("154 config.json conversion:", H.config(d))
 H.press(mgr, "關閉", "Close")
 dialog = H.settings(app, w)
@@ -49,9 +52,10 @@ H.press(dialog, "取消", "Cancel")
 
 mgr = H.open_manager(app, w)
 H.select(mgr, "Upper2")
-H.press(mgr, "刪除", wait=1)
+H.press_focused(mgr, "刪除", wait=1)
 print("154 delete:", H.box_press(app, d, "是"))
 print("154 rows after the delete:", H.rows(mgr), "selected", H.selected_row(mgr))
+print("154 focus after the delete:", H.focus(), "buttons", H.buttons(mgr))
 print("154 config.json conversion:", H.config(d))
 print("154 script folder:", sorted(H.script_files(d)))
 H.press(mgr, "關閉", "Close")

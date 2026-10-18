@@ -1,6 +1,7 @@
 #!/bin/bash
-# Usage: run_item.sh <label> <script> <build: new|first|old> [script args...]
-# label names the folder and the log: D:\dxtest\auto<label>-f18b (N-f18b, the final build),
+# Usage: run_item.sh <label> <script> <build: fix|new|first|old> [script args...]
+# label names the folder and the log: D:\dxtest\auto<label>-f18c (N-f18c, the build of the
+# review fixes), auto<label>-f18b (N-f18b, the build that was reviewed),
 # auto<label>-f18 (N-f18, the build before the editor label fix) or auto<label>-f14b-f18
 # (N-f14b, the build before F-18); script is a path relative to this folder.
 # Refuses a folder that is not D:\dxtest\auto*-f18 or one that exists, stops if C: has less
@@ -13,16 +14,17 @@ F13="$HERE/../../2026-10-14-02-f13-behavior-nvda/auto"
 UIA=${UIA:-/c/Users/tseng/AppData/Local/Temp/claude/D--workspace-DotExpress/0b4f3b5f-e5f4-4ab9-ac1d-e0bf74afa4a1/scratchpad/uia/Scripts/python.exe}
 LABEL=$1; SCRIPT=$2; BUILD=$3; shift 3
 case "$BUILD" in
+  fix) EXE='D:\dxtest\N-f18c\DotExpress.exe'; SUF=-f18c ;;
   new) EXE='D:\dxtest\N-f18b\DotExpress.exe'; SUF=-f18b ;;
   first) EXE='D:\dxtest\N-f18\DotExpress.exe'; SUF=-f18 ;;
   old) EXE='D:\dxtest\N-f14b\DotExpress.exe'; SUF=-f14b-f18 ;;
-  *) echo "build must be new, first or old"; exit 2 ;;
+  *) echo "build must be fix, new, first or old"; exit 2 ;;
 esac
 NAME="auto${LABEL}${SUF}"
 FOLDER=$(cygpath -w "/d/dxtest/${NAME}")
 LOG="/d/dxtest/${NAME}.log"
 case "$FOLDER" in
-  'D:\dxtest\auto'*'-f18'|'D:\dxtest\auto'*'-f18b') echo "folder ${FOLDER} exe ${EXE}" ;;
+  'D:\dxtest\auto'*'-f18'|'D:\dxtest\auto'*'-f18b'|'D:\dxtest\auto'*'-f18c') echo "folder ${FOLDER} exe ${EXE}" ;;
   *) echo "unexpected folder '${FOLDER}'; nothing was run"; exit 2 ;;
 esac
 if [ -e "/d/dxtest/${NAME}" ]; then echo "${FOLDER} exists already; nothing was run"; exit 2; fi

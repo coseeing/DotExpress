@@ -139,3 +139,36 @@ plan 與實作另外決定的（plan Spec Corrections 5–9、Implementation Not
 11. 編輯無法讀取的腳本時，錯誤框關閉後焦點回到清單。
 12. 腳本管理開啟時每個使用者腳本都會被讀取並編譯一次（不執行）；無法讀取的每次重新整理都記一行 log。
 13. 設定對話框開著時在腳本管理改名或刪除作用中腳本，之後設定按確定會回到「不處理」（M-1，spec Risks 已寫）。
+
+## 修正記錄
+
+- 日期：2026-10-18，修正 agent（Opus 5.5）。worktree `D:\workspace\DotExpress-f18`、分支 `fix/f18-script-management`，範圍 `fe2ee67..`（7 個修正 commit 加本記錄所在的文件 commit）。每一項都先改測試（紅燈），再改程式；沒有 merge、沒有 push、commit 沒有 `Co-Authored-By`。
+- GUI 結果見 `auto-results.md` 的「review 修正後（N-f18c）」。
+
+| 發現 | 處理 | commit |
+| --- | --- | --- |
+| I-1 | `_on_delete_clicked`、`_on_rename_clicked`、`_on_import_clicked` 改為 `_refresh_after(..., focus_list=True)`，和新增、編輯一致；動作回傳 `None`（取消、失敗）時不重新整理，焦點留在仍可用的按鈕上（不變）。測試：`test_script_dialogs` 四個動作都斷言 `SetFocus`，另加「刪除第一個使用者腳本後選取「不處理」、刪除停用、焦點回到清單」。GUI：N-f18c 重新命名後焦點在清單項目 `Upper2`、成功匯入後在 `upper2`、刪除後在新選取的列（`gone`、`alpha`、「不處理」）。修正前的實測（N-f18b，`auto154r2-f18b`）：重新命名後焦點在「重新命名」按鈕；刪除唯一的使用者腳本後焦點**沒有**停在被停用的「刪除」，而是被 wx 移到「匯入」按鈕——所以使用者不會卡住，但仍要自己回到清單；這項實際上介於 Important 與 Minor 之間，修正照 review 的建議做。 | `1ac006d` |
+| M-2 | `text_scripts.manager.check_import_suffix` 從 `import_script` 抽出；`presenter.import_from_file` 在檔案對話框之後、名稱框之前先呼叫，錯誤沿用同一個 msgid（「只能匯入 Python 檔案（.py）。」，不新增字串）；`import_script` 仍保留檢查。測試：非 `.py` 不出現名稱框、`.PY` 不分大小寫照常匯入。GUI 152：`x.txt` 沒有名稱框，直接顯示訊息。 | `0706fe6` |
+| M-3 | `presenter.edit` 讀檔失敗時只顯示錯誤框、不記 log；回傳的名稱讓清單重新整理，`read_script_status` 記一次。移除不再使用的 `log_script_read_error` import。測試：presenter 的 `assertNoLogs`；`test_script_dialogs` 以真正的 presenter 對話框按「編輯」只記一行。GUI 156：編輯 `locked` 新增 1 行（修正前 2 行），整個項目 3 行（修正前 4 行）。 | `8a1d075` |
+| M-5 | `list_script_names` 一律回傳 `["no-processing", *others]`，不再用數量間接判斷；資料夾不存在時也回傳 `["no-processing"]`（原本是 `[]`；presenter 一定先 `ensure` 才列出，所以沒有可見差異）。`no-processing.py` 是資料夾時 `ensure` 仍不重建、不記 log（「不處理」不讀檔、狀態永遠「可使用」、轉換不讀它，記 log 沒有用處，所以沒做 review 說的「可以記 log」）。測試：manager 三個斷言改為含「不處理」，新增資料夾／不存在的測試；presenter 新增資料夾的測試。GUI 154b：資料夾時清單與設定都以「不處理」為第一項並選取（修正前清單沒有「不處理」）。 | `d6bb570` |
+| M-6 | 照 review 的第一個建議：`delete_script` 改用 `unlink(missing_ok=True)`，已被程式外刪除的腳本視為刪除成功：不顯示「[Errno 2]」框、清單重新讀取、選取上一列；若它是作用中腳本，和一般刪除一樣改為「不處理」。只改腳本，字典的刪除不變。測試：manager 刪除不存在的腳本不出錯；presenter 程式外刪除後按刪除只有確認框、名單更新、作用中改為「不處理」。GUI 154b：沒有錯誤框，`config.json` 改為 `no-processing`（修正前出現「無法刪除腳本：[WinError 2] …」，清單與 `config.json` 都沒變）。 | `408fb40` |
+| M-7 | spec 的 Windows 項目表改為實際編號 146–158、手動項目 159–160，並註明依 plan Spec Corrections 12 改號；spec 的目錄段落註明依 Spec Corrections 9 保留 28 筆 `#~` 舊字串。`config.get_selected_script` 的預設改為 `NO_PROCESSING_SCRIPT_NAME`：`config` 本來就 import `conversion.math_braille_codes`，`conversion.preprocessing.user_script` 只依賴 `i18n` 與 `shared.atomic_write`，沒有循環 import，所以算是簡單的修改。 | `998f085` |
+| 目錄 | 修正讓 `dialog.py`、`text_scripts/*.py` 的行號改變，重新產生模板並 `msgmerge`：只有 `#:` 行號不同，msgid 仍為 438 個、28 筆 `#~`；`msgfmt --check --statistics`＝438 translated（0 fuzzy、0 untranslated），第二次 `msgmerge` 沒有變化，重新編譯的 `.mo` 與已提交的位元組相同（所以 `.mo` 沒有變更）；`POT-Creation-Date` 仍為 `2026-10-10 12:00+0800`。 | `b07234c` |
+
+### 維持原狀的發現（使用者尚未確認的預設）
+
+- **M-1（設定對話框開著時在腳本管理改名／刪除作用中腳本，之後設定按「確定」會改回「不處理」）**：不改。這是字典既有的模式（字典會回到 `default`），spec「Risks」已說明；要修需要同步已開啟的設定面板，超出這次修正範圍。列為使用者尚未確認的預設。
+- **M-4（在編輯器儲存會把 CRLF 換成 LF）**：不改。舊的「文字處理」對話框行為相同，Python 不在意換行。列為使用者尚未確認的預設。
+- 這次修正新增的使用者可見預設：已在程式外刪除的腳本按「刪除」視為刪除成功、不提示（M-6）；失敗或取消的匯入、重新命名、刪除之後焦點仍留在按下的按鈕（按鈕仍可用）。
+
+### 驗證
+
+| 項目 | 結果 |
+| --- | --- |
+| 完整測試（worktree `client\`，`D:\workspace\DotExpress\client\.venv\Scripts\python.exe -B -X utf8 -m unittest discover -s tests`） | `Ran 1795 tests`、`OK (skipped=6)`（修正前 1788；新增 7 個） |
+| fixture blob sha256 | 三個值與 HANDOFF 第 5 節相同：`e67d95a1…11ccd`、`f493da52…66cf2`、`8dc8572e…2a80e` |
+| 不能改的檔案 | `git diff 67c2a97..HEAD -- client/tests/fixtures client/braille scripts` 沒有差異 |
+| 打包 | `D:\dxtest\N-f18c\DotExpress.exe`（`b07234c`，48,823,692 bytes，sha256 `4D920C0D…5FF8B`） |
+| GUI（N-f18c） | 152、153、154、155、154b（新增）、156、158（回歸）全部符合；對照用 N-f18b 跑了 `auto154r2-f18b`、`auto154b-f18b` |
+| 剪貼簿 | 修改與新增的 GUI 腳本只用 `WM_SETTEXT`、按鈕點擊、UIA invoke 與 `set_keyboard_focus`，沒有讀寫剪貼簿 |
+| 沒有跑 | NVDA 手動項目 159–160（使用者的） |

@@ -17,6 +17,8 @@ from conversion.service import (
     translate_with_language,
     translate_with_language_segments,
 )
+from tests.script_support import no_processing_script_path
+from text_scripts.manager import ensure_no_processing_script
 from translate import TranslationResult
 from ui.conversion_presenter import format_conversion_error
 
@@ -70,6 +72,7 @@ class ConversionServiceTest(unittest.TestCase):
             translation_tables={"default": "zh-tw.ctb"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=no_processing_script_path(),
         )
 
     def _write_csv(self, path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
@@ -318,6 +321,7 @@ class ConversionServiceTest(unittest.TestCase):
             translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=no_processing_script_path(),
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -384,6 +388,7 @@ class ConversionServiceTest(unittest.TestCase):
             translation_tables={"default": "zh-tw.ctb"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=no_processing_script_path(),
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -401,6 +406,7 @@ class ConversionServiceTest(unittest.TestCase):
             translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=no_processing_script_path(),
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -419,6 +425,7 @@ class ConversionServiceTest(unittest.TestCase):
             translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=no_processing_script_path(),
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -452,6 +459,7 @@ class ConversionServiceTest(unittest.TestCase):
             translation_tables={"default": "zh-tw.ctb"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
+            script_path=no_processing_script_path(),
         )
         output = convert_text_with_alignment(request, runtime=self._runtime())
 
@@ -476,6 +484,7 @@ class DictionaryConversionTestCase(unittest.TestCase):
         self.dictionary_path = self.dictionary_dir / "default.csv"
         self.script_dir = self.test_dir / "script"
         self.script_dir.mkdir()
+        self.no_processing = ensure_no_processing_script(self.script_dir)
 
     def _convert(self, raw_text: str, runtime: TranslationRuntime, script_path: Path | None = None) -> ConversionOutput:
         request = ConversionRequest(
@@ -487,7 +496,7 @@ class DictionaryConversionTestCase(unittest.TestCase):
             translation_tables={"default": "zh-tw.ctb", "math": "Nemeth"},
             lang=LANG,
             charset_maps=CHARSET_MAPS,
-            script_path=script_path,
+            script_path=script_path or self.no_processing,
         )
         return convert_text_with_alignment(request, runtime=runtime)
 
@@ -577,16 +586,23 @@ class DictionaryErrorTimingTest(DictionaryConversionTestCase):
             f"文字處理失敗：[Errno 2] No such file or directory: {str(missing)!r}",
         )
 
-    def test_no_processing_gives_the_output_of_the_identity_script(self) -> None:
-        # F-18 (D4): skipping the stage changes nothing, so the fixtures keep their bytes.
+    def test_no_processing_runs_its_file_and_leaves_the_text_unchanged(self) -> None:
+        # F-18b: no-processing.py runs like any script; its text returns the input, so the
+        # fixtures keep their bytes.
         self.dictionary_path.write_text("text,braille,type\n甲,X,Braille\n", encoding="utf-8")
-        identity = self.script_dir / "identity.py"
-        identity.write_text("def main(input: str) -> str:\n    return input\n", encoding="utf-8")
+        runtime = self._runtime()
 
-        skipped = self._convert("甲 abc $x$", self._runtime())
-        run = self._convert("甲 abc $x$", self._runtime(), identity)
+        self._convert("甲 abc $x$", runtime, self.no_processing)
 
-        self.assertEqual(skipped, run)
+        self.assertEqual([call[0] for call in runtime.text_translator.calls], ["X", " abc "])
+        self.assertEqual(runtime.math_translator.calls, [("x", "Nemeth", LANG)])
+        # Whatever the file holds runs: an altered one changes the output until it is put back.
+        self.no_processing.write_text("def main(text):\n    return text.upper()\n", encoding="utf-8")
+        runtime = self._runtime()
+
+        self._convert("abc", runtime, self.no_processing)
+
+        self.assertEqual([call[0] for call in runtime.text_translator.calls], ["ABC"])
 
     def test_math_before_the_first_text_is_translated_before_the_dictionary_error(self) -> None:
         self.dictionary_path.write_text("", encoding="utf-8")

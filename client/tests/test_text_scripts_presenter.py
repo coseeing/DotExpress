@@ -101,6 +101,15 @@ class PresenterRefreshTest(PresenterTestCase):
 		self.assertEqual(presenter.refresh("upper"), "upper")
 		self.assertEqual(presenter.refresh("gone"), "no-processing")
 
+	def test_refresh_puts_back_an_altered_no_processing(self):
+		# F-18b: refresh runs at startup, when Settings opens and when Script Management opens.
+		altered = self.write_script("no-processing", UPPER)
+		presenter = ScriptManagementPresenter(self.script_dir, get_active_name=lambda: "no-processing", set_active_name=Mock())
+
+		presenter.refresh()
+
+		self.assertEqual(altered.read_bytes(), NO_PROCESSING_SCRIPT.encode("utf-8"))
+
 	def test_no_processing_stays_first_when_its_file_is_a_folder(self):
 		# F-18 review M-5: otherwise Settings would select the first user script instead.
 		self.write_script("upper")

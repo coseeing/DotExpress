@@ -1,4 +1,5 @@
 import csv
+import dataclasses
 import tempfile
 import unittest
 from collections import Counter
@@ -17,6 +18,8 @@ from conversion.text.pipeline import (
     preprocess_source_text,
     translate_plain_text_segment,
 )
+from tests.script_support import no_processing_script_path
+from text_scripts.manager import ensure_no_processing_script
 from translate import TranslationResult
 
 
@@ -97,27 +100,33 @@ class ConversionTextPipelineTest(unittest.TestCase):
                 ],
             )
 
-    def test_no_processing_runs_no_script_and_still_maps_characters(self) -> None:
-        # F-18 (D4): script_path None is No Processing.
-        def execute_script(_path: Path, _text: str) -> str:
-            raise AssertionError("No Processing must not run a script")
-
+    def test_no_processing_runs_its_file_like_any_script_and_still_maps_characters(self) -> None:
+        # F-18b: no skip; the real no-processing.py returns its input unchanged.
         events = []
 
         def map_char(text: str, **kwargs) -> str:
             events.append(("map", text, kwargs["dictionary_path"]))
             return "mapped"
 
-        result = preprocess_source_text(
-            "B",
-            data_dir=Path("data"),
-            script_path=None,
-            execute_script=execute_script,
-            map_char=map_char,
-        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script_path = ensure_no_processing_script(Path(temp_dir))
+            with patch("builtins.exec", wraps=exec) as run:
+                result = preprocess_source_text(
+                    "B ㄅ",
+                    data_dir=Path("data"),
+                    script_path=script_path,
+                    map_char=map_char,
+                )
 
         self.assertEqual(result, "mapped")
-        self.assertEqual(events, [("map", "B", Path("data") / "BopomofoChar2Braille.csv")])
+        self.assertEqual(events, [("map", "B ㄅ", Path("data") / "BopomofoChar2Braille.csv")])
+        self.assertEqual(run.call_count, 1)
+
+    def test_a_script_path_is_required(self) -> None:
+        # F-18b: no None for No Processing, in the request or in the pipeline.
+        self.assertIs(ConversionRequest.__dataclass_fields__["script_path"].default, dataclasses.MISSING)
+        with self.assertRaises(TextProcessingError):
+            preprocess_source_text("B", data_dir=Path("data"), script_path=None, map_char=lambda text, **_kwargs: text)
 
     def test_preprocess_source_text_preserves_script_exception(self) -> None:
         error = RuntimeError("script boom")
@@ -329,6 +338,7 @@ class DictionaryReadCountTest(unittest.TestCase):
             translation_tables=dict(READ_COUNT_TABLES),
             lang="zh_TW",
             charset_maps=dict(DEFAULT_CHARSET_MAPS),
+            script_path=no_processing_script_path(),
         )
         return service.convert_text_with_alignment(request, runtime=self._runtime())
 

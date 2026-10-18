@@ -8,6 +8,7 @@ from unittest.mock import patch
 import config
 from adapters.translation.contracts import TranslationRuntime
 from conversion.service import ConversionRequest, convert_text_with_alignment
+from tests.script_support import no_processing_script_path
 from translate import TranslationResult
 
 
@@ -77,6 +78,7 @@ class ConversionLanguageTest(unittest.TestCase):
             translation_tables=dict(TABLES),
             lang=lang,
             charset_maps=dict(config.DEFAULT_CHARSET_MAPS),
+            script_path=no_processing_script_path(),
         )
 
     def _convert(self, request: ConversionRequest, *, env_lang: str):

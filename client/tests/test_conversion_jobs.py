@@ -31,6 +31,7 @@ class ConversionJobRunnerTest(unittest.TestCase):
 			translation_tables={"default": "zh-tw.ctb", "math": "nemeth.ctb"},
 			lang="zh_TW",
 			charset_maps=dict(DEFAULT_CHARSET_MAPS),
+			script_path=Path("script/no-processing.py"),
 		)
 
 	def make_runner(self, *, converter):

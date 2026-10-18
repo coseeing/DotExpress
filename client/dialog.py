@@ -29,7 +29,7 @@ from dictionaries.read_problems import (
 from documents.workspace import normalize_document_name
 from i18n import N_, _
 from text_scripts.actions import get_script_action_availability, script_display_name
-from text_scripts.manager import is_no_processing_script, normalize_script_name, resolve_selected_script
+from text_scripts.manager import normalize_script_name, resolve_selected_script
 from text_scripts.presenter import SaveScript, ScriptManagementActions
 from text_scripts.read_problems import ScriptCheck, ScriptStatus, describe_script_problem, read_script_status
 from ui.dialog_base import ContextManagedDialog, NameDialogBase, NameDialogMessages
@@ -1080,12 +1080,10 @@ class ScriptManagementDialog(ContextManagedDialog, wx.Dialog):
 	def _load_script_checks(self) -> None:
 		"""Read and check every script on its own; one that fails never stops the dialog (F-18 D-G).
 
-		No Processing is ready whatever its file holds: conversion never reads it (F-18 D4).
+		No Processing included: conversion runs its file like any other (F-18b).
 		"""
 		self._script_checks = {
-			name: read_script_status(self._actions.script_path(name))
-			for name in self._script_names
-			if not is_no_processing_script(name)
+			name: read_script_status(self._actions.script_path(name)) for name in self._script_names
 		}
 
 	def refresh_scripts(self, script_names: list[str], preferred_name: str | None) -> None:

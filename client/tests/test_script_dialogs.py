@@ -14,6 +14,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from conversion.preprocessing.user_script import NO_PROCESSING_SCRIPT
 from i18n import _
 from tests import wx_stub
 from tests.file_log_isolation import isolate_file_logs
@@ -131,6 +132,8 @@ class ManagementTestCase(unittest.TestCase):
 		temp_dir = tempfile.TemporaryDirectory()
 		self.addCleanup(temp_dir.cleanup)
 		self.script_dir = Path(temp_dir.name)
+		# As the presenter's refresh leaves it before the dialog lists the scripts (F-18b).
+		self.write("no-processing", NO_PROCESSING_SCRIPT.encode("utf-8"))
 
 	def write(self, name, data=UPPER):
 		path = self.script_dir / f"{name}.py"
@@ -160,17 +163,39 @@ class ManagementTestCase(unittest.TestCase):
 
 
 class ScriptListTest(ManagementTestCase):
-	def test_no_processing_is_shown_translated_and_ready_without_reading_its_file(self):
-		# F-18 (D4): conversion never reads no-processing.py, so its bytes do not matter.
+	def test_no_processing_is_shown_translated_and_ready(self):
+		target = self.make_dialog(["no-processing"])
+
+		target.refresh_scripts(["no-processing"], "no-processing")
+
+		self.assertEqual(self.rows(target), [["不處理", "可使用"]])
+		self.assertFalse(target.problem_ctrl.shown)
+
+	def test_no_processing_gets_its_status_from_its_file_like_any_script(self):
+		# F-18b: conversion runs no-processing.py, so its status is read, not assumed.
 		self.write("no-processing", b"def main(:\n")
 		target = self.make_dialog(["no-processing"])
 
 		with patch.object(dialog, "read_script_status", wraps=dialog.read_script_status) as read:
 			target.refresh_scripts(["no-processing"], "no-processing")
 
-		read.assert_not_called()
-		self.assertEqual(self.rows(target), [["不處理", "可使用"]])
-		self.assertFalse(target.problem_ctrl.shown)
+		read.assert_called_once_with(self.script_dir / "no-processing.py")
+		self.assertEqual(self.rows(target), [["不處理", "格式不正確"]])
+		self.assertEqual(target.problem_ctrl.value, "invalid syntax (no-processing.py, line 1)")
+		self.assertEqual((target.problem_label.shown, target.problem_ctrl.shown), (True, True))
+
+	def test_no_processing_whose_file_is_a_folder_cannot_be_read(self):
+		# F-18 review M-5 with F-18b: listed first, and its status says why it cannot be used.
+		(self.script_dir / "no-processing.py").unlink()
+		(self.script_dir / "no-processing.py").mkdir()
+		target = self.make_dialog(["no-processing"])
+
+		with self.assertLogs(LOGGER, "ERROR") as logs:
+			target.refresh_scripts(["no-processing"], "no-processing")
+
+		self.assertEqual(self.rows(target), [["不處理", "無法讀取"]])
+		self.assertTrue(target.problem_ctrl.shown)
+		self.assertIn('"no-processing.py"', logs.output[0])
 
 	def test_each_script_shows_its_status(self):
 		# F-18 (D7, O6): Ready, Unreadable, Not Valid.

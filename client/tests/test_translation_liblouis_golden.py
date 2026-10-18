@@ -31,6 +31,7 @@ from adapters.translation.provider import create_default_math_translator, create
 from config import DEFAULT_CHARSET_MAPS, DEFAULT_TRANSLATION_TABLES
 from conversion.service import ConversionRequest, convert_text_with_alignment, translate_with_language
 from conversion.wrapping import merge_translation_results
+from tests.script_support import no_processing_script_path
 
 
 CLIENT_DIR = Path(__file__).resolve().parents[1]
@@ -105,6 +106,7 @@ def _request(text: str, output_mode: str, width: int, tables: dict, dictionary_p
         translation_tables=dict(tables),
         lang=LANG,
         charset_maps=dict(DEFAULT_CHARSET_MAPS),
+        script_path=no_processing_script_path(),
     )
 
 

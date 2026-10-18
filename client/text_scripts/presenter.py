@@ -109,7 +109,7 @@ class ScriptManagementPresenter:
 		return list(self._script_names)
 
 	def refresh(self, preferred_name: str | None = None) -> str:
-		"""Read the folder again (No Processing is created if missing); the name to select."""
+		"""Read the folder again (No Processing is written again if missing or altered); the name to select."""
 		ensure_no_processing_script(self._script_dir)
 		self._script_names = list_script_names(self._script_dir)
 		return resolve_selected_script(self._script_names, preferred_name)

@@ -958,8 +958,8 @@ msgstr "關閉"
 msgid "Source text \"{identifier}\" already exists."
 msgstr "來源文字「{identifier}」已存在。"
 
-#: dialog.py:89 dialog.py:578 dialog.py:617 dialog.py:910 dialog.py:1211
-#: dialog.py:1307 documents/export_coordinator.py:103
+#: dialog.py:89 dialog.py:578 dialog.py:617 dialog.py:910 dialog.py:1212
+#: dialog.py:1308 documents/export_coordinator.py:103
 #: documents/export_coordinator.py:113 documents/export_coordinator.py:145
 #: gui.py:565 gui.py:851 gui.py:1179 gui.py:1191 ui/conversion_presenter.py:308
 msgid "Error"
@@ -985,7 +985,7 @@ msgstr "點字"
 msgid "Type"
 msgstr "類型"
 
-#: dialog.py:194 dialog.py:220 dialog.py:358 dialog.py:907 dialog.py:1208
+#: dialog.py:194 dialog.py:220 dialog.py:358 dialog.py:907 dialog.py:1209
 #: ui/conversion_presenter.py:203 ui/conversion_presenter.py:340
 #: ui/conversion_presenter.py:357
 msgid "Info"
@@ -1092,15 +1092,15 @@ msgstr ""
 msgid "Do you want to discard the changes you made to dictionary \"{name}\"?"
 msgstr "要放棄對字典「{name}」所做的變更嗎？"
 
-#: dialog.py:604 dialog.py:1327
+#: dialog.py:604 dialog.py:1328
 msgid "Unsaved Changes"
 msgstr "尚未儲存的變更"
 
-#: dialog.py:605 dialog.py:1328
+#: dialog.py:605 dialog.py:1329
 msgid "Discard Changes"
 msgstr "放棄變更"
 
-#: dialog.py:606 dialog.py:634 dialog.py:1329
+#: dialog.py:606 dialog.py:634 dialog.py:1330
 msgid "Back to Editing"
 msgstr "返回編輯"
 
@@ -1213,16 +1213,16 @@ msgstr "狀態"
 msgid "Why this script cannot be used:"
 msgstr "無法使用的原因："
 
-#: dialog.py:1266 dialog.py:1269
+#: dialog.py:1267 dialog.py:1270
 msgid "Python Code"
 msgstr "Python 程式碼"
 
-#: dialog.py:1306 text_scripts/presenter.py:192
+#: dialog.py:1307 text_scripts/presenter.py:196
 #, python-brace-format
 msgid "Failed to save script: {error}"
 msgstr "儲存腳本失敗：{error}"
 
-#: dialog.py:1326
+#: dialog.py:1327
 #, python-brace-format
 msgid "Do you want to discard the changes you made to script \"{name}\"?"
 msgstr "要放棄對腳本「{name}」所做的變更嗎？"
@@ -1880,51 +1880,51 @@ msgstr "數學轉譯表"
 msgid "No Processing"
 msgstr "不處理"
 
-#: text_scripts/manager.py:104
+#: text_scripts/manager.py:99
 msgid "Only Python files (.py) can be imported."
 msgstr "只能匯入 Python 檔案（.py）。"
 
-#: text_scripts/presenter.py:122 text_scripts/presenter.py:207
+#: text_scripts/presenter.py:123 text_scripts/presenter.py:213
 msgid "Add Script"
 msgstr "新增腳本"
 
-#: text_scripts/presenter.py:139 text_scripts/presenter.py:265
+#: text_scripts/presenter.py:140 text_scripts/presenter.py:271
 #, python-brace-format
 msgid "Script \"{name}\" already exists."
 msgstr "腳本「{name}」已存在。"
 
-#: text_scripts/presenter.py:166
+#: text_scripts/presenter.py:170
 #, python-brace-format
 msgid "Do you want to delete script \"{name}\"?"
 msgstr "要刪除腳本「{name}」嗎？"
 
-#: text_scripts/presenter.py:167
+#: text_scripts/presenter.py:171
 msgid "Confirm Delete Script"
 msgstr "確認刪除腳本"
 
-#: text_scripts/presenter.py:175
+#: text_scripts/presenter.py:179
 #, python-brace-format
 msgid "Failed to delete script: {error}"
 msgstr "無法刪除腳本：{error}"
 
-#: text_scripts/presenter.py:187
+#: text_scripts/presenter.py:191
 msgid "Rename Script"
 msgstr "重新命名腳本"
 
-#: text_scripts/presenter.py:201
+#: text_scripts/presenter.py:205
 msgid "Import Script"
 msgstr "匯入腳本"
 
-#: text_scripts/presenter.py:219 text_scripts/presenter.py:251
+#: text_scripts/presenter.py:225 text_scripts/presenter.py:257
 #, python-brace-format
 msgid "Failed to import script: {error}"
 msgstr "匯入腳本失敗：{error}"
 
-#: text_scripts/presenter.py:228
+#: text_scripts/presenter.py:234
 msgid "Export Script"
 msgstr "匯出腳本"
 
-#: text_scripts/presenter.py:234
+#: text_scripts/presenter.py:240
 #, python-brace-format
 msgid "Failed to export script: {error}"
 msgstr "匯出腳本失敗：{error}"

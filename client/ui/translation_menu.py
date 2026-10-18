@@ -7,7 +7,7 @@ def get_translation_menu_items() -> list[tuple[str, str]]:
     return [
         ("convert", N_("Convert")),
         ("dual_view", N_("Dual View")),
-        ("scripts", N_("Script Management...")),
         ("dictionaries", N_("Dictionary Management...")),
+        ("scripts", N_("Script Management...")),
         ("settings", N_("Settings")),
     ]

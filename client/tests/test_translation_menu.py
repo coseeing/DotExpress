@@ -10,8 +10,8 @@ class TranslationMenuTest(unittest.TestCase):
             [
                 ("convert", "Convert"),
                 ("dual_view", "Dual View"),
-                ("scripts", "Script Management..."),
                 ("dictionaries", "Dictionary Management..."),
+                ("scripts", "Script Management..."),
                 ("settings", "Settings"),
             ],
         )

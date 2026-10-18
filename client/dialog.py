@@ -28,10 +28,21 @@ from dictionaries.read_problems import (
 )
 from documents.workspace import normalize_document_name
 from i18n import N_, _
+from text_scripts.actions import get_script_action_availability, script_display_name
+from text_scripts.manager import is_no_processing_script, normalize_script_name, resolve_selected_script
+from text_scripts.presenter import SaveScript, ScriptManagementActions
+from text_scripts.read_problems import ScriptCheck, ScriptStatus, describe_script_problem, read_script_status
 from ui.dialog_base import ContextManagedDialog, NameDialogBase, NameDialogMessages
 from ui.message_box import confirm_box, message_box
 
 CSV_WILDCARD = N_("CSV files (*.csv)|*.csv")
+PYTHON_WILDCARD = N_("Python files (*.py)|*.py")
+# The Status column of Script Management (F-18 D7, O6); translated when shown.
+SCRIPT_STATUS_LABELS = {
+	ScriptStatus.READY: N_("Ready"),
+	ScriptStatus.UNREADABLE: N_("Unreadable"),
+	ScriptStatus.NOT_VALID: N_("Not Valid"),
+}
 # The hidden rows the box on OK lists by line; a count stands for the rest (F-11 D1).
 HIDDEN_ROWS_LISTED = 10
 
@@ -923,3 +934,407 @@ class DictionaryManagementDialog(ContextManagedDialog, wx.Dialog):
 			if file_dialog.ShowModal() != wx.ID_OK:
 				return None
 			return Path(file_dialog.GetPath())
+
+
+class ScriptNameDialog(_NameDialog):
+	"""The name prompt of Script Management: Add, Rename and Import (F-18 D8)."""
+
+	normalize_name = staticmethod(normalize_script_name)
+	name_messages = NameDialogMessages(
+		empty=N_("Please enter the script name."),
+		too_long=N_("Script name must be 1 to 32 characters."),
+		invalid=N_("Script name is not a valid Windows file name."),
+		reserved=N_('Script name "{name}" is reserved.'),
+		# The name as typed: three names are reserved, in any case (F-18 D4).
+		reserved_name=None,
+	)
+
+	def __init__(self, parent: wx.Window | None, title: str, initial_name: str = ""):
+		super().__init__(parent, title=title)
+
+		main_sizer = wx.BoxSizer(wx.VERTICAL)
+		grid = wx.FlexGridSizer(0, 2, 8, 8)
+		grid.AddGrowableCol(1, 1)
+
+		name_label = wx.StaticText(self, label=_("Script Name"))
+		self.name_ctrl = wx.TextCtrl(self)
+		grid.Add(name_label, 0, wx.ALIGN_CENTER_VERTICAL)
+		grid.Add(self.name_ctrl, 1, wx.EXPAND)
+		main_sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 12)
+
+		button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+		if button_sizer:
+			localize_standard_buttons(self, wx.OK | wx.CANCEL, button_sizer)
+			main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+			self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
+
+		finalize_dialog_layout(self, main_sizer)
+		self.name_ctrl.SetValue(initial_name)
+		self.name_ctrl.SetFocus()
+		self.name_ctrl.SelectAll()
+
+	def get_script_name(self) -> str:
+		return self.name_ctrl.GetValue().strip()
+
+
+class ScriptManagementDialog(ContextManagedDialog, wx.Dialog):
+	"""Passive view of Script Management (F-18 D7): runs ``actions`` and implements ``ScriptManagementView``.
+
+	Modal, the twin of ``DictionaryManagementDialog``; the editor opens over it and the
+	dialog stays open (F-18 O4).
+	"""
+
+	def __init__(
+		self,
+		parent: wx.Window | None,
+		actions: ScriptManagementActions,
+		selected_name: str,
+	):
+		super().__init__(
+			parent,
+			title=_("Script Management"),
+			style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+		)
+		self._actions = actions
+		self._script_names = list(actions.script_names)
+		self._selected_name = selected_name
+		# The status of each script, read on every refresh (F-18 D7, D-G).
+		self._script_checks: dict[str, ScriptCheck] = {}
+		self._build_ui()
+		self.refresh_scripts(self._script_names, selected_name)
+
+	def _build_ui(self) -> None:
+		main_sizer = wx.BoxSizer(wx.VERTICAL)
+		self.list_ctrl = CallbackVirtualListCtrl(
+			self,
+			self._get_item_text,
+			style=wx.LC_REPORT | wx.BORDER_SUNKEN | wx.LC_SINGLE_SEL | wx.LC_VIRTUAL,
+		)
+		self.list_ctrl.InsertColumn(0, _("Script"))
+		self.list_ctrl.InsertColumn(1, _("Status"))
+		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_selection_changed)
+		self.list_ctrl.Bind(wx.EVT_LIST_ITEM_DESELECTED, self._on_selection_changed)
+		self.list_ctrl.Bind(wx.EVT_SIZE, self._on_list_size)
+		main_sizer.Add(self.list_ctrl, 1, wx.EXPAND | wx.ALL, 12)
+
+		# Why the selected script cannot be used, as in Dictionary Management (F-6 D3): the next
+		# Tab stop after the list, its label the field's accessible name, multi-line so that it
+		# is a Tab stop, shown only while an unreadable or invalid script is selected.
+		self.problem_label = wx.StaticText(self, label=_("Why this script cannot be used:"))
+		self.problem_ctrl = wx.TextCtrl(
+			self,
+			style=wx.TE_MULTILINE | wx.TE_READONLY,
+			size=(-1, self.GetCharHeight() * 4),
+		)
+		main_sizer.Add(self.problem_label, 0, wx.LEFT | wx.RIGHT, 12)
+		main_sizer.Add(self.problem_ctrl, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+		self.problem_label.Hide()
+		self.problem_ctrl.Hide()
+		self.problem_ctrl.Bind(wx.EVT_SET_FOCUS, self._on_problem_focus)
+
+		button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+		self.add_button = wx.Button(self, label=_("Add"))
+		self.delete_button = wx.Button(self, label=_("Delete"))
+		self.rename_button = wx.Button(self, label=_("Rename"))
+		self.edit_button = wx.Button(self, label=_("Edit"))
+		self.import_button = wx.Button(self, label=_("Import"))
+		self.export_button = wx.Button(self, label=_("Export"))
+		for button in (
+			self.add_button,
+			self.delete_button,
+			self.rename_button,
+			self.edit_button,
+			self.import_button,
+			self.export_button,
+		):
+			button_sizer.Add(button, 0, wx.RIGHT, 8)
+		main_sizer.Add(button_sizer, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
+		button_bar = self.CreateButtonSizer(wx.CLOSE)
+		if button_bar:
+			localize_standard_buttons(self, wx.CLOSE, button_bar)
+			main_sizer.Add(button_bar, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+			self.Bind(wx.EVT_BUTTON, lambda _event: self.EndModal(wx.ID_CLOSE), id=wx.ID_CLOSE)
+
+		self.add_button.Bind(wx.EVT_BUTTON, self._on_add_clicked)
+		self.delete_button.Bind(wx.EVT_BUTTON, self._on_delete_clicked)
+		self.rename_button.Bind(wx.EVT_BUTTON, self._on_rename_clicked)
+		self.edit_button.Bind(wx.EVT_BUTTON, self._on_edit_clicked)
+		self.import_button.Bind(wx.EVT_BUTTON, self._on_import_clicked)
+		self.export_button.Bind(wx.EVT_BUTTON, self._on_export_clicked)
+
+		finalize_dialog_layout(self, main_sizer)
+		self._resize_columns()
+
+	def _get_item_text(self, item: int, column: int) -> str:
+		name = self._script_names[item]
+		if column == 0:
+			return script_display_name(name)
+		if column == 1:
+			return _(SCRIPT_STATUS_LABELS[self._script_check(name).status])
+		raise ValueError(f"Unknown column: {column}")
+
+	def _script_check(self, name: str | None) -> ScriptCheck:
+		return self._script_checks.get(name, ScriptCheck()) if name is not None else ScriptCheck()
+
+	def _load_script_checks(self) -> None:
+		"""Read and check every script on its own; one that fails never stops the dialog (F-18 D-G).
+
+		No Processing is ready whatever its file holds: conversion never reads it (F-18 D4).
+		"""
+		self._script_checks = {
+			name: read_script_status(self._actions.script_path(name))
+			for name in self._script_names
+			if not is_no_processing_script(name)
+		}
+
+	def refresh_scripts(self, script_names: list[str], preferred_name: str | None) -> None:
+		self._script_names = list(script_names)
+		self._load_script_checks()
+		self.list_ctrl.SetItemCount(len(self._script_names))
+		self.list_ctrl.Refresh()
+		selected = resolve_selected_script(self._script_names, preferred_name)
+		self._selected_name = selected
+		if selected in self._script_names:
+			index = self._script_names.index(selected)
+			self.list_ctrl.Select(index)
+			self.list_ctrl.Focus(index)
+		self._resize_columns()
+		self._update_button_states()
+		self._update_problem()
+
+	def _update_problem(self) -> None:
+		"""Show why the selected script cannot be used, or hide the reason row (F-6 D3 twin).
+
+		The text is selected, so a screen reader reads all of it when the field gets focus.
+		"""
+		error = self._script_check(self._get_selected_name()).error
+		if error is None:
+			self.problem_ctrl.ChangeValue("")
+		else:
+			self.problem_ctrl.ChangeValue(describe_script_problem(error))
+			self.problem_ctrl.SelectAll()
+		self.problem_label.Show(error is not None)
+		self.problem_ctrl.Show(error is not None)
+		self.Layout()
+
+	def _on_problem_focus(self, event: wx.FocusEvent) -> None:
+		self.problem_ctrl.SelectAll()
+		event.Skip()
+
+	def _resize_columns(self) -> None:
+		available_width = max(0, self.list_ctrl.GetClientSize().width)
+		if available_width == 0:
+			return
+		labels = [_("Status"), *(_(label) for label in SCRIPT_STATUS_LABELS.values())]
+		status_text_width = max(self.list_ctrl.GetTextExtent(label)[0] for label in labels)
+		status_width = min(available_width, max(96, status_text_width + 32))
+		self.list_ctrl.SetColumnWidth(0, max(0, available_width - status_width))
+		self.list_ctrl.SetColumnWidth(1, status_width)
+
+	def _on_list_size(self, event: wx.SizeEvent) -> None:
+		self._resize_columns()
+		event.Skip()
+
+	def _get_selected_name(self) -> str | None:
+		index = self.list_ctrl.GetFirstSelected()
+		if index == wx.NOT_FOUND or index >= len(self._script_names):
+			return None
+		return self._script_names[index]
+
+	def _update_button_states(self) -> None:
+		selected_name = self._get_selected_name() or self._selected_name or ""
+		availability = get_script_action_availability(self._script_names, selected_name)
+		self.add_button.Enable(True)
+		self.import_button.Enable(True)
+		self.delete_button.Enable(availability.delete)
+		self.rename_button.Enable(availability.rename)
+		self.edit_button.Enable(availability.edit)
+		self.export_button.Enable(availability.export)
+
+	def _on_selection_changed(self, event: wx.ListEvent) -> None:
+		selected_name = self._get_selected_name()
+		if selected_name is not None:
+			self._selected_name = selected_name
+		self._update_button_states()
+		self._update_problem()
+		event.Skip()
+
+	def _on_add_clicked(self, _event: wx.CommandEvent) -> None:
+		self._refresh_after(self._actions.add(self), focus_list=True)
+
+	def _on_edit_clicked(self, _event: wx.CommandEvent) -> None:
+		selected = self._get_selected_name()
+		if selected is not None:
+			# Back in the list after the editor, with the status read again (F-18 D8.2).
+			self._refresh_after(self._actions.edit(self, selected), focus_list=True)
+
+	def _on_delete_clicked(self, _event: wx.CommandEvent) -> None:
+		selected = self._get_selected_name()
+		if selected is not None:
+			# Back in the list: once No Processing is selected, Delete itself is disabled (F-18 review I-1).
+			self._refresh_after(self._actions.delete(self, selected), focus_list=True)
+
+	def _on_rename_clicked(self, _event: wx.CommandEvent) -> None:
+		selected = self._get_selected_name()
+		if selected is not None:
+			self._refresh_after(self._actions.rename(self, selected), focus_list=True)
+
+	def _on_import_clicked(self, _event: wx.CommandEvent) -> None:
+		self._refresh_after(self._actions.import_from_file(self), focus_list=True)
+
+	def _on_export_clicked(self, _event: wx.CommandEvent) -> None:
+		selected = self._get_selected_name()
+		if selected is not None:
+			self._actions.export_to_file(self, selected)
+
+	def _refresh_after(self, preferred_name: str | None, *, focus_list: bool = False) -> None:
+		if preferred_name is None:
+			return
+		self.refresh_scripts(self._actions.script_names, preferred_name)
+		if focus_list:
+			self.list_ctrl.SetFocus()
+
+	def prompt_script_name(self, title: str, initial_name: str) -> str | None:
+		with ScriptNameDialog(self, title, initial_name=initial_name) as name_dialog:
+			if name_dialog.ShowModal() != wx.ID_OK:
+				return None
+			return name_dialog.get_script_name()
+
+	def edit_script(self, title: str, source: str, save: SaveScript) -> None:
+		with ScriptEditorDialog(self, script_name=title, source=source, save=save) as editor:
+			editor.ShowModal()
+
+	def show_info(self, message: str) -> None:
+		message_box(message, _("Info"), wx.OK | wx.ICON_INFORMATION, parent=self)
+
+	def show_error(self, message: str) -> None:
+		message_box(message, _("Error"), wx.OK | wx.ICON_ERROR, parent=self)
+
+	def confirm(self, message: str, caption: str) -> bool:
+		return message_box(message, caption, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, parent=self) == wx.YES
+
+	def choose_import_path(self, title: str) -> Path | None:
+		with wx.FileDialog(
+			self,
+			title,
+			wildcard=_(PYTHON_WILDCARD),
+			style=wx.FD_OPEN,
+		) as file_dialog:
+			if file_dialog.ShowModal() != wx.ID_OK:
+				return None
+			return Path(file_dialog.GetPath())
+
+	def choose_export_path(self, title: str, default_file: str) -> Path | None:
+		with wx.FileDialog(
+			self,
+			title,
+			defaultFile=default_file,
+			wildcard=_(PYTHON_WILDCARD),
+			style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+		) as file_dialog:
+			if file_dialog.ShowModal() != wx.ID_OK:
+				return None
+			return Path(file_dialog.GetPath())
+
+
+class ScriptEditorDialog(ContextManagedDialog, wx.Dialog):
+	"""The code of one script (F-18 D9), titled with its name; the save goes through ``save``.
+
+	OK saves and closes, Apply saves; a failed save is explained and the focus goes back to
+	the code. Cancel, Esc and the close box ask before changes are lost, as the dictionary
+	editor does (F-11 D7, F-15).
+	"""
+
+	INITIAL_SIZE = (720, 440)
+	MIN_SIZE = (520, 300)
+
+	def __init__(self, parent: wx.Window | None, *, script_name: str, source: str, save: SaveScript):
+		super().__init__(parent, title=script_name, style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+		self._script_name = script_name
+		self._save = save
+		try:
+			self._build_ui(source)
+		except BaseException:
+			self.Destroy()
+			raise
+
+	def _build_ui(self, source: str) -> None:
+		sizer = wx.BoxSizer(wx.VERTICAL)
+		# The title names the script, the label the code (F-18 O9). Created right before the
+		# editor, the label is its accessible name, as the reason row's label in Dictionary
+		# Management is (F-6 D3): SetName alone does not reach a screen reader.
+		label = wx.StaticText(self, label=_("Python Code"))
+		sizer.Add(label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
+		self.editor = wx.TextCtrl(self, value=source, style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_DONTWRAP)
+		self.editor.SetName(_("Python Code"))
+		font = self.editor.GetFont()
+		font.SetFamily(wx.FONTFAMILY_TELETYPE)
+		self.editor.SetFont(font)
+		sizer.Add(self.editor, 1, wx.EXPAND | wx.ALL, 8)
+
+		button_bar = self.CreateButtonSizer(wx.OK | wx.CANCEL | wx.APPLY)
+		if button_bar:
+			localize_standard_buttons(self, wx.OK | wx.CANCEL | wx.APPLY, button_bar)
+			sizer.Add(button_bar, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+		# wx turns Esc and the close box into a click on the Cancel button (F-11 D7).
+		for button_id, handler in ((wx.ID_OK, self._on_ok), (wx.ID_CANCEL, self._on_cancel), (wx.ID_APPLY, self._on_apply)):
+			button = self.FindWindow(button_id)
+			if button:
+				button.Bind(wx.EVT_BUTTON, handler)
+
+		self.SetSizer(sizer)
+		self.SetMinSize(self.MIN_SIZE)
+		self.SetSize(self.INITIAL_SIZE)
+		self.CentreOnParent()
+		# What the control holds, which can differ from ``source`` in its line ends.
+		self._saved_text = self.editor.GetValue()
+		self.editor.SetInsertionPoint(0)
+		self.editor.SetFocus()
+
+	def has_changes(self) -> bool:
+		"""Whether the code differs from the last save, or from the text the editor opened with."""
+		return self.editor.GetValue() != self._saved_text
+
+	def _apply(self) -> bool:
+		text = self.editor.GetValue()
+		try:
+			self._save(text)
+		except (OSError, SyntaxError, ValueError) as error:
+			# A ValueError of the signature rule is a msgid (F-18 D5).
+			display_error = _(str(error)) if isinstance(error, ValueError) else error
+			message_box(
+				_("Failed to save script: {error}").format(error=display_error),
+				_("Error"),
+				wx.OK | wx.ICON_ERROR,
+				parent=self,
+			)
+			self.editor.SetFocus()
+			return False
+		self._saved_text = text
+		return True
+
+	def _on_apply(self, _event: wx.CommandEvent) -> None:
+		self._apply()
+
+	def _on_ok(self, event: wx.CommandEvent) -> None:
+		if self._apply():
+			event.Skip()
+
+	def _on_cancel(self, event: wx.CommandEvent) -> None:
+		focused = wx.Window.FindFocus()
+		if self.has_changes() and not confirm_box(
+			_('Do you want to discard the changes you made to script "{name}"?').format(name=self._script_name),
+			_("Unsaved Changes"),
+			_("Discard Changes"),
+			_("Back to Editing"),
+			parent=self,
+		):
+			self._restore_focus(focused)
+			return
+		event.Skip()
+
+	def _restore_focus(self, window: wx.Window | None) -> None:
+		"""Put the focus back where it was before the box (F-11 D7)."""
+		if window is not None and self.IsDescendant(window):
+			window.SetFocus()

@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Callable
 
 from conversion.contracts import TranslationRuntime
-from conversion.preprocessing.user_script import execute_preprocessing_script
+from conversion.preprocessing.user_script import execute_script
 from conversion.preprocessing.literal_braille import (
     build_literal_translation_result,
     is_unicode_braille,
@@ -24,12 +24,17 @@ def preprocess_source_text(
     text: str,
     *,
     data_dir: Path,
-    preprocessing_path: Path,
-    execute_script: ExecuteScript = execute_preprocessing_script,
+    script_path: Path | None,
+    execute_script: ExecuteScript = execute_script,
     map_char: Callable[..., str] = map_characters,
 ) -> str:
+    """The text after the selected script and the Bopomofo character map.
+
+    ``script_path`` ``None`` is No Processing: no script runs (F-18 D4). Any failure of a
+    script, including a missing or invalid file, is a ``TextProcessingError`` (F-18 D10).
+    """
     try:
-        processed_text = execute_script(preprocessing_path, text)
+        processed_text = text if script_path is None else execute_script(script_path, text)
     except BaseException as error:
         normalized_error = (
             error

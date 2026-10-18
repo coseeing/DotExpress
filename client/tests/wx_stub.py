@@ -381,6 +381,7 @@ _GUI_DIALOG_NAMES = (
     "DocumentNameDialog",
     "FileIssuesDialog",
     "InvalidWorkspaceFilesDialog",
+    "ScriptManagementDialog",
     "TranslationSettingsDialog",
     "TranslationTableDialog",
 )

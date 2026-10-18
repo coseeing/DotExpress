@@ -1,6 +1,7 @@
 build/
 dist/
 dictionary/
+script/
 log/
 .venv/
 workspace/

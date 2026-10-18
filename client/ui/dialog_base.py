@@ -36,16 +36,20 @@ class NameDialogMessages:
     too_long: str
     invalid: str
     reserved: str | None = None
-    reserved_name: str = ""
+    # The name ``reserved`` shows; ``None`` shows the name as typed (F-18 D4).
+    reserved_name: str | None = ""
 
-    def message_for(self, code: str) -> str:
-        """The translated message for a ``NameValidationError`` code; ``reserved`` may use ``{name}``."""
+    def message_for(self, code: str, name: str = "") -> str:
+        """The translated message for a ``NameValidationError`` code; ``reserved`` may use ``{name}``.
+
+        ``name`` is the name typed, without surrounding spaces.
+        """
         if code == "empty":
             return _(self.empty)
         if code == "too_long":
             return _(self.too_long)
         if code == "reserved" and self.reserved is not None:
-            return _(self.reserved).format(name=self.reserved_name)
+            return _(self.reserved).format(name=name if self.reserved_name is None else self.reserved_name)
         return _(self.invalid)
 
 
@@ -69,7 +73,7 @@ class NameDialogBase(ContextManagedDialog):
             code = error.code
         except ValueError:
             code = "invalid"
-        return None, self.name_messages.message_for(code)
+        return None, self.name_messages.message_for(code, candidate.strip())
 
     def _validate_name(self, candidate: str) -> str | None:
         return self._check_name(candidate)[1]

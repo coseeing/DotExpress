@@ -32,6 +32,7 @@ class ApplicationPathsTest(unittest.TestCase):
         self.assertEqual(paths.root, root)
         self.assertEqual(paths.config, root / "config.json")
         self.assertEqual(paths.dictionary, root / "dictionary")
+        self.assertEqual(paths.script, root / "script")
         self.assertEqual(paths.workspace, root / "workspace")
         self.assertEqual(paths.log, root / "log")
         self.assertEqual(paths.dual_view, root / "dual_view")
@@ -63,6 +64,17 @@ class ApplicationPathsTest(unittest.TestCase):
             self.assertEqual(prepared, paths)
             self.assertEqual(probed, list(paths.writable_directories))
             self.assertTrue(all(path.is_dir() for path in paths.writable_directories))
+
+    def test_the_script_folder_is_prepared_after_the_dictionary_folder(self) -> None:
+        # F-18 (D1): created at startup next to dictionary/, like it.
+        root = Path("C:/DotExpress")
+
+        paths = app_paths.build_application_paths(root)
+
+        self.assertEqual(
+            paths.writable_directories,
+            (root, root / "dictionary", root / "script", root / "workspace", root / "log", root / "dual_view"),
+        )
 
     def test_prepare_reports_the_exact_unwritable_directory(self) -> None:
         from tempfile import TemporaryDirectory
@@ -148,6 +160,7 @@ class ApplicationPathsApiTest(unittest.TestCase):
         import dictionaries.name_prompt as name_prompt
         import documents.workspace as workspace
         import dual_view.files as dual_view_files
+        import text_scripts.manager as scripts
 
         cases = (
             (manager.dictionary_path_for_name, "dictionary_dir"),
@@ -159,6 +172,15 @@ class ApplicationPathsApiTest(unittest.TestCase):
             (manager.export_dictionary, "dictionary_dir"),
             (manager.delete_dictionary, "dictionary_dir"),
             (name_prompt.rename_dictionary_after_name_prompt, "dictionary_dir"),
+            (scripts.script_path_for_name, "script_dir"),
+            (scripts.ensure_no_processing_script, "script_dir"),
+            (scripts.list_script_names, "script_dir"),
+            (scripts.script_exists, "script_dir"),
+            (scripts.create_script, "script_dir"),
+            (scripts.import_script, "script_dir"),
+            (scripts.rename_script, "script_dir"),
+            (scripts.export_script, "script_dir"),
+            (scripts.delete_script, "script_dir"),
             (workspace.ensure_workspace_directory, "workspace_dir"),
             (workspace.document_package_path_for_name, "workspace_dir"),
             (workspace.load_workspace_documents, "workspace_dir"),

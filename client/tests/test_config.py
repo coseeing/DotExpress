@@ -130,6 +130,25 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertEqual(self.store.get_selected_dictionary("default"), "math")
 
+    def test_selected_script_roundtrip_under_conversion_section(self) -> None:
+        # F-18 (D3): next to the dictionary; No Processing until one is saved.
+        self.assertEqual(config.SELECTED_SCRIPT_KEY, "selected_script")
+        self.assertEqual(self.store.get_selected_script(), "no-processing")
+
+        self.assertIsNone(self.store.set_selected_script("大寫"))
+
+        with open(self.store.path, "r", encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["conversion"], {"selected_script": "大寫"})
+        self.assertEqual(self.store.get_selected_script(), "大寫")
+
+    def test_a_selected_script_that_is_not_a_string_reads_as_the_default(self) -> None:
+        for value in (None, 3, ["upper"], {"name": "upper"}):
+            with self.subTest(value=value):
+                with open(self.store.path, "w", encoding="utf-8") as f:
+                    json.dump({"conversion": {"selected_script": value}}, f)
+                self.assertEqual(self.store.get_selected_script(), "no-processing")
+                self.assertEqual(self.store.get_selected_script("other"), "other")
+
     def test_view_settings_write_braille_font_and_keep_other_sections(self) -> None:
         with open(self.store.path, "w", encoding="utf-8") as f:
             json.dump(
@@ -766,6 +785,7 @@ class ConfigSaveProblemTest(unittest.TestCase):
         ("set_output_mode", ("ascii",)),
         ("set_conversion_width", (52,)),
         ("set_selected_dictionary", ("alpha",)),
+        ("set_selected_script", ("upper",)),
         ("set_translation_tables", ({"default": "zh-tw.ctb"},)),
         ("set_view_settings", (18, "dark", "default")),
     )

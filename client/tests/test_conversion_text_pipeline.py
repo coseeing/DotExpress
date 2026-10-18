@@ -83,7 +83,7 @@ class ConversionTextPipelineTest(unittest.TestCase):
             result = preprocess_source_text(
                 "B",
                 data_dir=data_dir,
-                preprocessing_path=directory / "preprocessing.py",
+                script_path=directory / "upper.py",
                 execute_script=execute_script,
                 map_char=map_char,
             )
@@ -92,10 +92,32 @@ class ConversionTextPipelineTest(unittest.TestCase):
             self.assertEqual(
                 events,
                 [
-                    ("script", directory / "preprocessing.py", "B"),
+                    ("script", directory / "upper.py", "B"),
                     ("map", "ㄅ"),
                 ],
             )
+
+    def test_no_processing_runs_no_script_and_still_maps_characters(self) -> None:
+        # F-18 (D4): script_path None is No Processing.
+        def execute_script(_path: Path, _text: str) -> str:
+            raise AssertionError("No Processing must not run a script")
+
+        events = []
+
+        def map_char(text: str, **kwargs) -> str:
+            events.append(("map", text, kwargs["dictionary_path"]))
+            return "mapped"
+
+        result = preprocess_source_text(
+            "B",
+            data_dir=Path("data"),
+            script_path=None,
+            execute_script=execute_script,
+            map_char=map_char,
+        )
+
+        self.assertEqual(result, "mapped")
+        self.assertEqual(events, [("map", "B", Path("data") / "BopomofoChar2Braille.csv")])
 
     def test_preprocess_source_text_preserves_script_exception(self) -> None:
         error = RuntimeError("script boom")
@@ -107,7 +129,7 @@ class ConversionTextPipelineTest(unittest.TestCase):
             preprocess_source_text(
                 "source",
                 data_dir=Path("data"),
-                preprocessing_path=Path("dictionary/preprocessing.py"),
+                script_path=Path("script/upper.py"),
                 execute_script=execute_script,
             )
 
@@ -121,7 +143,7 @@ class ConversionTextPipelineTest(unittest.TestCase):
             preprocess_source_text(
                 "source",
                 data_dir=Path("data"),
-                preprocessing_path=Path("dictionary/preprocessing.py"),
+                script_path=Path("script/upper.py"),
                 execute_script=execute_script,
             )
 
@@ -209,7 +231,9 @@ class ConversionTextPipelineTest(unittest.TestCase):
             data_dir.mkdir()
             dictionary_dir.mkdir()
             dictionary_path = self._write_csv(dictionary_dir, "default.csv", ["text", "braille", "type"], [])
-            (dictionary_dir / "preprocessing.py").write_text(
+            script_path = directory / "script" / "processed.py"
+            script_path.parent.mkdir()
+            script_path.write_text(
                 "def main(text):\n    return text.replace('raw', 'processed')\n",
                 encoding="utf-8",
             )
@@ -225,6 +249,7 @@ class ConversionTextPipelineTest(unittest.TestCase):
                 translation_tables={"default": "table.ctb"},
                 lang="en",
                 charset_maps=dict(DEFAULT_CHARSET_MAPS),
+                script_path=script_path,
             )
 
             translated_texts = []

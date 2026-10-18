@@ -141,112 +141,12 @@ class SettingsPanelTest(unittest.TestCase):
         self.assertEqual(SettingsPanelAccessible(panel).GetDescription(0), (wx.ACC_OK, ""))
 
 
-class TextProcessingDialogTest(unittest.TestCase):
-    def make_dialog(self):
-        from settings.dialogs import TextProcessingDialog
+class TextProcessingDialogRemovedTest(unittest.TestCase):
+    def test_the_text_processing_dialog_is_gone(self) -> None:
+        # F-18 (D11): Script Management (dialog.py) replaces it.
+        from settings import dialogs
 
-        dialog = object.__new__(TextProcessingDialog)
-        dialog.script_path = Path("dictionary/preprocessing.py")
-        dialog.editor = Mock()
-        dialog.Destroy = Mock()
-        return dialog
-
-    def test_initial_size_title_and_accessible_editor_name(self) -> None:
-        from settings.dialogs import TextProcessingDialog
-
-        with (
-            patch(
-                "settings.dialogs.load_preprocessing_script",
-                return_value="def main(text):\n    return text\n",
-            ),
-            patch("settings.dialogs._", side_effect=lambda text: text),
-        ):
-            dialog = TextProcessingDialog(
-                None,
-                script_path=Path("dictionary/preprocessing.py"),
-            )
-
-        self.assertEqual(dialog.size, (720, 440))
-        self.assertEqual(dialog.title, "Text Processing")
-        self.assertEqual(dialog.editor.GetName(), "Text Processing Python Code")
-
-    def test_apply_saves_editor_source(self) -> None:
-        dialog = self.make_dialog()
-        dialog.editor.GetValue.return_value = "def main(text):\n    return text\n"
-        with patch("settings.dialogs.save_preprocessing_script") as save:
-            self.assertTrue(dialog.on_apply())
-        save.assert_called_once_with(dialog.script_path, dialog.editor.GetValue.return_value)
-
-    def test_apply_failure_keeps_dialog_open_and_focuses_editor(self) -> None:
-        dialog = self.make_dialog()
-        dialog.editor.GetValue.return_value = "def main(:\n"
-        with (
-            patch(
-                "settings.dialogs.save_preprocessing_script",
-                side_effect=SyntaxError("invalid syntax"),
-            ),
-            patch("settings.dialogs.message_box") as message_box,
-        ):
-            self.assertFalse(dialog.on_apply())
-        dialog.Destroy.assert_not_called()
-        dialog.editor.SetFocus.assert_called_once_with()
-        message_box.assert_called_once_with(
-            i18n._("Unable to save text processing script: {error}").format(error="invalid syntax"),
-            i18n._("Text Processing"),
-            wx.OK | wx.ICON_ERROR,
-            parent=dialog,
-        )
-
-    def test_ok_destroys_only_after_successful_apply(self) -> None:
-        dialog = self.make_dialog()
-        dialog.on_apply = Mock(return_value=True)
-        dialog._destroy = Mock()
-        dialog.on_ok()
-        dialog._destroy.assert_called_once_with()
-
-    def test_cancel_does_not_save(self) -> None:
-        dialog = self.make_dialog()
-        dialog._destroy = Mock()
-        with patch("settings.dialogs.save_preprocessing_script") as save:
-            dialog.on_cancel()
-        save.assert_not_called()
-        dialog._destroy.assert_called_once_with()
-
-    def test_show_singleton_reuses_live_dialog(self) -> None:
-        from settings.dialogs import TextProcessingDialog
-
-        existing = Mock()
-        original = TextProcessingDialog._instance
-        TextProcessingDialog._instance = existing
-        try:
-            result = TextProcessingDialog.show_singleton(
-                parent=Mock(),
-                script_path=Path("dictionary/preprocessing.py"),
-            )
-        finally:
-            TextProcessingDialog._instance = original
-
-        self.assertIs(result, existing)
-        existing.Iconize.assert_called_once_with(False)
-        existing.Raise.assert_called_once_with()
-        existing.SetFocus.assert_called_once_with()
-
-    def test_show_singleton_reraises_unexpected_existing_dialog_error(self) -> None:
-        from settings.dialogs import TextProcessingDialog
-
-        existing = Mock()
-        existing.Iconize.side_effect = RuntimeError("unexpected")
-        original = TextProcessingDialog._instance
-        TextProcessingDialog._instance = existing
-        try:
-            with self.assertRaisesRegex(RuntimeError, "unexpected"):
-                TextProcessingDialog.show_singleton(
-                    parent=Mock(),
-                    script_path=Path("dictionary/preprocessing.py"),
-                )
-            self.assertIs(TextProcessingDialog._instance, existing)
-        finally:
-            TextProcessingDialog._instance = original
+        self.assertFalse(hasattr(dialogs, "TextProcessingDialog"))
 
 
 class MultiCategorySettingsDialogTest(unittest.TestCase):
@@ -366,10 +266,12 @@ class TranslationSettingsPanelTest(unittest.TestCase):
         panel.width_spin = FakeSpin(52)
         panel.dictionary_choice = FakeChoice(1)
         panel.dictionary_names = ["default", "math"]
+        panel.script_choice = FakeChoice(1)
+        panel.script_names = ["no-processing", "upper"]
 
         result = panel.on_save(baseline)
 
-        self.assertEqual(result.translation, TranslationSettings("ascii", 52, "math"))
+        self.assertEqual(result.translation, TranslationSettings("ascii", 52, "math", "upper"))
         self.assertEqual(baseline.translation, TranslationSettings("unicode", 40, "default"))
 
 
@@ -522,6 +424,7 @@ class DotExpressSettingsDialogFlowTest(unittest.TestCase):
                 parent=None,
                 snapshot=make_snapshot(),
                 dictionary_names=["default"],
+                script_names=["no-processing"],
                 commit=Mock(),
             )
 
@@ -572,8 +475,8 @@ class SettingsTitlesFollowTheLanguageTest(unittest.TestCase):
 
     PANELS = {
         "TranslationSettingsPanel": (
-            ("轉譯", "轉譯輸出模式、寬度與字典選項"),
-            ("Translation", "Translation output mode, width, and dictionary options"),
+            ("轉譯", "轉譯輸出模式、寬度、字典與文字處理腳本選項"),
+            ("Translation", "Translation output mode, width, dictionary, and text processing script options"),
         ),
         "TranslationTablesPanel": (
             ("轉譯表", "不同語言的轉譯表對應"),
@@ -783,16 +686,6 @@ class _SingletonCharacterization:
         self.assertEqual(other.mock_calls, [])
 
 
-class TextProcessingSingletonTest(_SingletonCharacterization, unittest.TestCase):
-    def dialog_class(self):
-        from settings.dialogs import TextProcessingDialog
-
-        return TextProcessingDialog
-
-    def show_kwargs(self) -> dict:
-        return {"parent": "parent-window", "script_path": "dictionary/preprocessing.py"}
-
-
 class DotExpressSettingsSingletonTest(_SingletonCharacterization, unittest.TestCase):
     def setUp(self) -> None:
         self.snapshot = make_snapshot()
@@ -808,6 +701,7 @@ class DotExpressSettingsSingletonTest(_SingletonCharacterization, unittest.TestC
             "parent": "parent-window",
             "snapshot": self.snapshot,
             "dictionary_names": ["default", "math"],
+            "script_names": ["no-processing", "upper"],
             "commit": self.commit,
         }
 
@@ -848,28 +742,6 @@ class DotExpressSettingsSingletonTest(_SingletonCharacterization, unittest.TestC
 
         self.assertEqual(existing.mock_calls, [])
         self.assertEqual(events, [])
-
-
-class SingletonSlotIndependenceTest(unittest.TestCase):
-    def test_the_two_singleton_dialogs_keep_separate_slots(self) -> None:
-        from settings.dialogs import DotExpressSettingsDialog, TextProcessingDialog
-
-        text_dialog = Mock()
-        settings_dialog = object.__new__(DotExpressSettingsDialog)
-        settings_dialog.Destroy = Mock()
-        with (
-            patch.object(TextProcessingDialog, "_instance", text_dialog),
-            patch.object(DotExpressSettingsDialog, "_instance", settings_dialog),
-        ):
-            self.assertIs(
-                TextProcessingDialog.show_singleton(parent=None, script_path="dictionary/preprocessing.py"),
-                text_dialog,
-            )
-            settings_dialog._destroy()
-            self.assertIsNone(DotExpressSettingsDialog._instance)
-            self.assertIs(TextProcessingDialog._instance, text_dialog)
-
-        settings_dialog.Destroy.assert_called_once_with()
 
 
 # --- P2-3 characterization: the option lists as the settings panels show them.
@@ -966,7 +838,7 @@ def build_panel(
             translation_tables={} if tables is None else tables,
             view=view,
         )
-        owner = SimpleNamespace(snapshot=snapshot, dictionary_names=["default", "math"])
+        owner = SimpleNamespace(snapshot=snapshot, dictionary_names=["default", "math"], script_names=["no-processing", "upper"])
     with (
         patch.multiple(module.wx, Choice=RecordingChoice, SpinCtrl=RecordingSpin),
         patch.object(module, "listTables", Mock(return_value=list(table_list))),
@@ -1010,8 +882,11 @@ class TranslationPanelOptionsTest(unittest.TestCase):
         panel = build_panel("TranslationSettingsPanel")
 
         rows = grid_rows(panel)
-        self.assertEqual([label for label, _control in rows], ["點字類型", "寬度", "字典"])
-        self.assertEqual([control for _label, control in rows], [panel.output_choice, panel.width_spin, panel.dictionary_choice])
+        self.assertEqual([label for label, _control in rows], ["點字類型", "寬度", "字典", "文字處理腳本"])
+        self.assertEqual(
+            [control for _label, control in rows],
+            [panel.output_choice, panel.width_spin, panel.dictionary_choice, panel.script_choice],
+        )
         self.assertEqual(panel.output_choice.items, ["Unicode", "ASCII"])
         self.assertEqual(panel.output_choice.items, [i18n._("Unicode"), i18n._("ASCII")])
 
@@ -1054,6 +929,53 @@ class TranslationPanelOptionsTest(unittest.TestCase):
 
         panel.load_snapshot(translation_snapshot("unicode", 64))
         self.assertEqual((panel.output_choice.selection, panel.width_spin.value), (0, 64))
+
+
+class TranslationPanelScriptChoiceTest(unittest.TestCase):
+    """F-18 (D3): the text-processing script is chosen below the dictionary."""
+
+    def build(self, script_names, selected):
+        snapshot = DotExpressSettingsSnapshot.create(
+            translation=TranslationSettings("unicode", 40, "default", selected),
+            translation_tables={},
+            view=ViewSettings(12, "light", "simbraille"),
+        )
+        owner = SimpleNamespace(snapshot=snapshot, dictionary_names=["default"], script_names=script_names)
+        return build_panel("TranslationSettingsPanel", owner=owner)
+
+    def test_no_processing_is_listed_first_by_its_display_name(self) -> None:
+        panel = self.build(["no-processing", "upper", "中文"], "upper")
+
+        self.assertEqual(panel.script_choice.items, ["不處理", "upper", "中文"])
+        self.assertEqual(panel.script_choice.selection, 1)
+        self.assertEqual(panel.script_names, ["no-processing", "upper", "中文"])
+
+    def test_the_choice_round_trips_the_internal_name(self) -> None:
+        panel = self.build(["no-processing", "upper"], "no-processing")
+        baseline = translation_snapshot()
+        for selection, expected in ((0, "no-processing"), (1, "upper"), (-1, "no-processing"), (2, "no-processing")):
+            with self.subTest(selection=selection):
+                panel.script_choice.SetSelection(selection)
+                self.assertEqual(panel.on_save(baseline).translation.selected_script, expected)
+
+    def test_an_unknown_name_selects_no_processing_and_a_new_snapshot_reselects(self) -> None:
+        panel = self.build(["no-processing", "upper"], "missing")
+        self.assertEqual(panel.script_choice.selection, 0)
+
+        panel.load_snapshot(
+            DotExpressSettingsSnapshot.create(
+                translation=TranslationSettings("unicode", 40, "default", "upper"),
+                translation_tables={},
+                view=ViewSettings(12, "light", "simbraille"),
+            )
+        )
+        self.assertEqual(panel.script_choice.selection, 1)
+
+    def test_no_script_names_disable_the_choice(self) -> None:
+        panel = self.build([], "no-processing")
+
+        self.assertEqual((panel.script_choice.selection, panel.script_choice.enabled), (-1, False))
+        self.assertEqual(panel.on_save(translation_snapshot()).translation.selected_script, "no-processing")
 
 
 class ViewPanelOptionsTest(unittest.TestCase):
